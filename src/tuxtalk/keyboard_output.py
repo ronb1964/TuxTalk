@@ -406,7 +406,7 @@ def type_text_raw(text: str) -> bool:
         if is_wayland_session():
             return paste_text(text)
         return paste_text_x11(text)
-    except (OSError, AttributeError) as e:
+    except OSError as e:
         # No libxkbcommon, or one older than 1.0 without the calls it needs.
         logger.error(f"Couldn't load libxkbcommon to work out the keys: {e}")
     if events is not None:

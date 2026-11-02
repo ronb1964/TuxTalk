@@ -722,9 +722,10 @@ def test_a_shortcut_on_a_layout_libxkbcommon_doesnt_know_uses_the_us_key(monkeyp
 def test_a_shortcut_with_an_old_libxkbcommon_uses_the_us_key(monkeypatch):
     """libxkbcommon before 1.0 lacks a function TuxTalk loads: Ctrl+Alt+V
     as a hotkey is resolved at service start, and must not stop it."""
-    def old_library():
-        raise AttributeError("xkb_keymap_key_get_mods_for_level")
-    monkeypatch.setattr(kl, "_lib", old_library)
+    class OldLibrary:
+        """No xkb_keymap_key_get_mods_for_level, nor anything else."""
+    monkeypatch.setattr(kl.C, "CDLL", lambda name: OldLibrary())
+    monkeypatch.setattr(kl, "_xkb", None)
     monkeypatch.setattr(kl, "active_layout", lambda: ("fr", "", ""))
     monkeypatch.setattr(kl, "_planners", {})
     assert kl.shortcut_keycode("v") == 47

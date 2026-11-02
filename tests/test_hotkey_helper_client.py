@@ -17,7 +17,8 @@ from tuxtalk import hotkeys, keyboard_devices
 from tuxtalk import keyboard_output
 from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
-from tuxtalk.hotkey_helper_client import HelperKeyboard, connect_helper, watch_specs
+from tuxtalk.hotkey_helper_client import (Asked, HelperKeyboard, KeyEvent, connect_helper,
+                                          watch_specs)
 from tuxtalk.hotkey_keys import track_modifier
 from tuxtalk import live_settings as live
 from tuxtalk import recording
@@ -344,7 +345,7 @@ def test_a_remappers_keyboard_not_held_isnt_logged_as_a_fault(tmp_path, caplog):
     import logging
     from collections import deque
     client = HelperKeyboard(str(tmp_path / "helper.sock"))
-    client.asked = deque(["HIDE"])
+    client.asked = deque([Asked("HIDE")])
     with caplog.at_level(logging.INFO):
         client._handle(["ERR", "listen-only", "keyboard"])
     assert not client.hidden
@@ -359,16 +360,78 @@ def test_only_a_hide_the_helper_said_ok_to_ends_a_compose(tmp_path, monkeypatch)
     left. One the helper hid is TuxTalk's to end."""
     from collections import deque
     from tuxtalk import modifier_hotkeys
-    monkeypatch.setattr(modifier_hotkeys, "_compose_begun", 97)
-    monkeypatch.setattr(modifier_hotkeys, "_compose_hidden", False)
+    press = modifier_hotkeys._ComposePress(7, RCTRL, False)
+    monkeypatch.setattr(modifier_hotkeys, "_compose", press)
     client = HelperKeyboard(str(tmp_path / "helper.sock"))
-    client.asked = deque(["HIDE"])
+    client.asked = deque([Asked("HIDE", {RCTRL}, 7)])
     client._handle(["ERR", "listen-only", "keyboard"])
-    assert not modifier_hotkeys._compose_hidden
-    client.asked = deque(["HIDE", "UNHIDE"])        # a toggle's stop tap lets go at once
+    assert not press.hidden
+    client.asked = deque([Asked("HIDE", {F8}, 7)])  # another key hidden: not this press
     client._handle(["OK", "HIDE"])
-    assert modifier_hotkeys._compose_hidden
+    assert not press.hidden
+    # A toggle's stop tap lets go at once.
+    client.asked = deque([Asked("HIDE", {RCTRL}, 7), Asked("UNHIDE")])
+    client._handle(["OK", "HIDE"])
+    assert press.hidden
     client.close()
+
+
+@pytest.fixture
+def compose_rig(tmp_path, monkeypatch):
+    """A client on one end of a socket pair, the helper's end returned to
+    answer by hand, with Right Ctrl the Compose key and the hold key; and
+    what TuxTalk's keyboard pressed."""
+    from tuxtalk import modifier_hotkeys
+    ours, helpers = socket.socketpair()
+    ours.setblocking(False)
+    client = HelperKeyboard(str(tmp_path / "helper.sock"))
+    client.sock = ours
+    monkeypatch.setattr(modifier_hotkeys, "_noted", ([client], frozenset({RCTRL})))
+    monkeypatch.setattr(modifier_hotkeys, "_compose_keys", frozenset({(RCTRL, False)}))
+    monkeypatch.setattr(modifier_hotkeys, "_compose", None)
+    monkeypatch.setattr(modifier_hotkeys, "_hidden", (frozenset({RCTRL}), ()))
+    monkeypatch.setattr(modifier_hotkeys, "_look_later", lambda press: None)
+    pressed = []
+    monkeypatch.setattr(modifier_hotkeys.virtual_keyboard, "send",
+                        lambda events, *a, **k: pressed.append(events) or True)
+
+    def key(value):
+        """The hotkey loop reads Right Ctrl go down (and asks the helper to
+        hide it) or come up."""
+        modifier_hotkeys.note_compose_key(KeyEvent(1, RCTRL, value), (RCTRL,))
+        if value:
+            client.write(1, RCTRL, 0)
+            client.grab()
+    yield client, helpers, key, pressed
+    helpers.close()
+    client.close()
+
+
+def test_a_hide_answered_after_its_release_was_read_still_ends_the_compose(compose_rig):
+    """The helper hid the press and sent its OK, but the release came in
+    first: the compose the press began was left, and swallowed the paste's
+    Ctrl+V."""
+    client, helpers, key, pressed = compose_rig
+    key(1)
+    helpers.sendall(b"OK HIDE\n")           # on its way, not taken in yet
+    key(0)
+    assert pressed == [[(RCTRL, 1), (RCTRL, 0)]]
+
+
+def test_a_late_ok_to_hiding_one_press_doesnt_confirm_the_next(compose_rig, monkeypatch):
+    """The OK to hiding a quick tap came in only after the next press: that
+    one was never hidden, and through kanata Compose pressed again for it
+    would come back as the dictation key."""
+    from tuxtalk import modifier_hotkeys
+    client, helpers, key, pressed = compose_rig
+    monkeypatch.setattr(modifier_hotkeys, "_ANSWER_WAIT_S", 0)
+    key(1)
+    key(0)                                  # no answer yet: its compose is left
+    modifier_hotkeys.note_compose_key(KeyEvent(1, RCTRL, 1), (RCTRL,))
+    helpers.sendall(b"OK HIDE\n")           # the first press's answer
+    client.active_keys()
+    key(0)
+    assert pressed == []
 
 def test_an_answer_out_of_step_isnt_taken_as_a_hide(tmp_path, caplog):
     """Each OK names its command; an OK WATCH where HIDE's answer was due
@@ -376,12 +439,12 @@ def test_an_answer_out_of_step_isnt_taken_as_a_hide(tmp_path, caplog):
     from collections import deque
     client = HelperKeyboard(str(tmp_path / "helper.sock"))
     try:
-        client.asked = deque(["HIDE"])
+        client.asked = deque([Asked("HIDE")])
         with caplog.at_level("WARNING", logger="tuxtalk.hotkey_helper_client"):
             client._handle(["OK", "WATCH"])
         assert client.hidden is False
         assert "answered OK WATCH to HIDE" in caplog.text
-        client.asked = deque(["HIDE"])
+        client.asked = deque([Asked("HIDE")])
         client._handle(["OK", "HIDE"])
         assert client.hidden is True
     finally:

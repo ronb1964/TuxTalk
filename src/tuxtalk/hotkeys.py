@@ -21,7 +21,6 @@ from . import (
     hotkey_keys,
     keyboard_devices,
     keyboard_grab,
-    keyboard_layout,
     modifier_hotkeys,
     notices,
     pipeline,
@@ -35,7 +34,8 @@ from . import live_settings as live
 from . import recording_state as rs
 from .beeps import CANCEL_BEEP
 from .config import Settings
-from .hotkey_keys import MODIFIER_CODES, check_modifiers_held, keys_down, track_modifier
+from .hotkey_keys import (MODIFIER_CODES, SHIFT_CODES, check_modifiers_held, keys_down,
+                          track_modifier)
 from .logger import setup_logger
 from .normalize import LINE_BREAK
 
@@ -163,8 +163,6 @@ def _forget_lost_presses(devices, keys) -> None:
 # missed key release can never make TuxTalk paste out of the blue later.
 PASTE_LAST_EXPIRY_S = 5.0
 
-_SHIFT_CODES = frozenset({ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT})
-
 # How long the end of a Shift+toggle edit waits for Shift to be let go.
 EDIT_SHIFT_WAIT_S = 2.0
 
@@ -172,7 +170,7 @@ EDIT_SHIFT_WAIT_S = 2.0
 def _held_shift(held_modifiers) -> set:
     """The Shift keys among *held_modifiers*: Shift + the dictation key starts
     a voice edit instead of a dictation."""
-    return set(held_modifiers) & _SHIFT_CODES
+    return set(held_modifiers) & SHIFT_CODES
 
 
 def _someone_elses_shortcut(held_modifiers) -> bool:
@@ -180,7 +178,7 @@ def _someone_elses_shortcut(held_modifiers) -> bool:
     for us (hotkey_claims.keys_to_claim: the plain key, and Shift with it
     when voice editing is on). Such a press reaches the app (Alt+F8 resizes
     the window on KDE and GNOME), so it mustn't start a dictation as well."""
-    allowed = _SHIFT_CODES if live.voice_editing else frozenset()
+    allowed = SHIFT_CODES if live.voice_editing else frozenset()
     return bool(set(held_modifiers) - allowed)
 
 
@@ -281,7 +279,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
     """
     if modifier_hotkeys.right_alt_alone(event, (hold_key, toggle_key), held_modifiers):
         modifier_hotkeys.guard_alt_tap()
-    modifier_hotkeys.note_compose_key(event, (hold_key, toggle_key))
+    modifier_hotkeys.note_compose_key(event, (hold_key, toggle_key), held_modifiers)
 
     if _on_test_or_combo(event, hold_key, toggle_key, voice_cmds_combo, paste_last_combo,
                          held_modifiers, devices, cfg):
@@ -451,7 +449,7 @@ def _stop_edit(shift, devices, cfg) -> bool:
     # that copies the selection would arrive as Ctrl+Shift+C. Hiding it
     # with injected key events, as the hold key does, would replay them
     # after a slow edit and start a new recording by itself.
-    if shift and not keyboard_grab.wait_for_keys_up(devices, _SHIFT_CODES, EDIT_SHIFT_WAIT_S):
+    if shift and not keyboard_grab.wait_for_keys_up(devices, SHIFT_CODES, EDIT_SHIFT_WAIT_S):
         recording.cancel_recording(rs.state.current, cfg.beeps, cfg.notify,
                                    "Voice edit cancelled: let go of Shift to finish it")
         return True
@@ -601,9 +599,7 @@ def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys") -> None:
     _helper_watch(devices, keys.hold_key, keys.toggle_key, keys.voice_cmds_combo,
                   keys.paste_last_combo)
     modifier_hotkeys.note(devices, keys.hold_key, keys.toggle_key)
-    modifier = {keys.hold_key, keys.toggle_key} & {ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT}
-    # Only asked when it can matter: the desktop can take a moment to answer.
-    modifier_hotkeys.note_compose_keys(keyboard_layout.compose_keys() if modifier else ())
+    modifier_hotkeys.read_compose_keys()
 
 
 def _read_key_events(devices, keys: "hotkey_keys.Hotkeys", held_modifiers, cfg: Settings, svc,

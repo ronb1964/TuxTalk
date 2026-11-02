@@ -46,6 +46,11 @@ EV_KEY, EV_SYN = 1, 0
 # What the loop reads: evdev.InputEvent's three fields that it uses.
 KeyEvent = namedtuple("KeyEvent", "type code value")
 
+# A command the helper hasn't answered yet; a HIDE notes the keys it hides
+# and the Compose press it's for (modifier_hotkeys.compose_press), which an
+# answer coming in after the next press must not confirm.
+Asked = namedtuple("Asked", "command codes press", defaults=((), None))
+
 # The protocol's modifier letters, by TuxTalk's modifier names.
 _MOD_LETTERS = {"CTRL": "C", "ALT": "A", "SHIFT": "S", "SUPER": "M"}
 
@@ -87,8 +92,8 @@ class HelperKeyboard:
         self.to_hide = []
         self.reconnect_at = 0.0
         self.helper_version = None
-        # Commands the helper hasn't answered yet, oldest first: an OK or
-        # ERR doesn't say which one it answers.
+        # Commands the helper hasn't answered yet (Asked), oldest first: an
+        # OK or ERR doesn't say which one it answers; the order does.
         self.asked = deque()
         # The helper said OK to the last HIDE, and no UNHIDE went since.
         self.hidden = False
@@ -143,14 +148,15 @@ class HelperKeyboard:
             self.queue.append(KeyEvent(EV_KEY, code, 0))
         self.held.clear()
 
-    def _send(self, line):
-        """Send one command line; False when the helper is gone."""
+    def _send(self, line, codes=(), press=None):
+        """Send one command line, noting *codes* and *press* for its answer
+        (Asked); False when the helper is gone."""
         with self._lock:
             if self.sock is None:
                 return False
             try:
                 self.sock.sendall(line.encode() + b"\n")
-                self.asked.append(line.split(" ", 1)[0])
+                self.asked.append(Asked(line.split(" ", 1)[0], codes, press))
                 return True
             except BlockingIOError:
                 # A handful of bytes to a local socket: only a stuck helper
@@ -220,23 +226,24 @@ class HelperKeyboard:
         """An OK or ERR, the answer to the oldest command not answered yet.
         An OK names its command: one that doesn't means the answers are out
         of step, and isn't taken as a hide."""
-        asked = self.asked.popleft() if self.asked else None
-        named = args[:1] == [asked]
+        asked = self.asked.popleft() if self.asked else Asked(None)
+        named = args[:1] == [asked.command]
         if ok and not named:
-            logger.warning(f"Hotkey helper answered OK {' '.join(args)} to {asked}")
-        if asked == "HIDE":
+            logger.warning(f"Hotkey helper answered OK {' '.join(args)} to {asked.command}")
+        if asked.command == "HIDE":
             if ok and named:
-                # The desktop was told it's up. The OK names no key: the
-                # press it confirms is the one waiting, normally its own.
-                modifier_hotkeys.note_compose_hidden()
+                # The desktop was told they're up. The answers come in the
+                # order asked, so this one is about the keys and the press
+                # its HIDE noted, however late it comes.
+                modifier_hotkeys.note_compose_hidden(asked.codes, asked.press)
             # An UNHIDE sent since has undone it already.
-            self.hidden = ok and named and "UNHIDE" not in self.asked
+            self.hidden = ok and named and all(a.command != "UNHIDE" for a in self.asked)
         if not ok and args[:1] == ["listen-only"]:
             # A remapper's keyboard (kanata), never held: its keys reach the
             # desktop as they are, as that setup means them to.
             logger.info(f"Hotkey helper didn't hide the key: {' '.join(args)}")
         elif not ok:
-            logger.warning(f"Hotkey helper refused {asked}: {' '.join(args)}")
+            logger.warning(f"Hotkey helper refused {asked.command}: {' '.join(args)}")
 
     # -- what hotkeys.run calls -------------------------------------------------
 
@@ -312,8 +319,25 @@ class HelperKeyboard:
                 raise OSError("the hotkey helper isn't connected")
             if not codes:
                 return
-            if not self._send("HIDE " + " ".join(map(str, codes))):
+            if not self._send("HIDE " + " ".join(map(str, codes)), frozenset(codes),
+                              modifier_hotkeys.compose_press()):
                 raise OSError("the hotkey helper went away")
+
+    def await_hide(self, press, timeout):
+        """Take in what the helper says until it has answered the HIDE sent
+        for Compose press *press* (Asked), or for *timeout* s: on the hotkey
+        loop, whose release of that press was read before the answer."""
+        give_up_at = time.monotonic() + timeout
+        while True:
+            with self._lock:
+                self._pump()
+                if all(a.press != press or a.command != "HIDE" for a in self.asked):
+                    return
+            if time.monotonic() >= give_up_at:
+                logger.info("Hotkey helper didn't answer in time whether it hid the "
+                            "Compose key; its compose is left")
+                return
+            time.sleep(0.005)
 
     def ungrab(self):
         with self._lock:

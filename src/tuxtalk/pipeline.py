@@ -16,6 +16,7 @@ from . import (
     engine,
     focused_window,
     last_dictation,
+    modifier_hotkeys,
     notices,
     recording,
     resampling,
@@ -177,6 +178,11 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # beep would sound like it worked.
         beeps.beep(beeps_on, *CANCEL_BEEP)
         notify_module.notify("Transcription failed", _shortened(str(e), 120))
+    finally:
+        if chunk_role != "middle":
+            # After the words, never before them: keyboard options changed
+            # since the start count from the next press of the key.
+            modifier_hotkeys.read_compose_keys()
 
 
 def _cancelled(job: _Job) -> bool:

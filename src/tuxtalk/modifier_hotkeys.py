@@ -7,14 +7,16 @@ Ctrl), its press begins a compose that would swallow the next keys typed.
 The hotkey loop notes its keyboards and dictation keys here, and typing
 asks before each key whether it must wait or end a compose first.
 """
+import itertools
 import threading
 import time
+from dataclasses import dataclass
 
 from evdev import ecodes
 
-from . import focused_window, virtual_keyboard
+from . import focused_window, keyboard_layout, virtual_keyboard
 from .config import HOTKEY_CHOICES
-from .hotkey_keys import MODIFIER_CODES, keys_down
+from .hotkey_keys import MODIFIER_CODES, SHIFT_CODES, keys_down
 from .keyboard_devices import is_keyboard_device
 from .logger import setup_logger
 
@@ -39,35 +41,29 @@ HELD_LIMIT_S = 30.0
 # Keys found stuck: the next keys give up at once while they stay down,
 # rather than each fallback (paste, then typing) waiting all over again.
 _stuck = set()
-# Right Ctrl or Right Alt when the keyboard options make it Compose, read
-# when the hotkey loop starts watching (note_compose_keys), not on each
-# press: the desktop can take a moment to answer.
+# Right Ctrl or Right Alt when the keyboard options make it Compose, as
+# (code, with Shift) pairs (keyboard_layout.compose_keys), read when the
+# hotkey loop starts watching and after each dictation (read_compose_keys),
+# not on each press: the desktop can take a moment to answer.
 _compose_keys = frozenset()
-# The Compose dictation key whose press began a compose in the focused app
-# that TuxTalk hasn't ended yet (note_compose_key); set on the hotkey loop,
-# ended there or by typing. Cleared only once the press that ends it has
-# gone, under _compose_lock, so typing that finds it set waits for that.
-# Lock order: _compose_lock, then virtual_keyboard's.
-_compose_begun = None
+# The press of a Compose dictation key that began a compose in the focused
+# app TuxTalk hasn't ended yet (note_compose_key), or None; set on the
+# hotkey loop, ended there or by typing. Cleared only once the press that
+# ends it has gone, under _compose_lock, so typing that finds it set waits
+# for that. Lock order: _compose_lock, then virtual_keyboard's.
+_compose = None
 _compose_lock = threading.Lock()
-# Hiding the press that began _compose_begun is known to have worked
-# (note_compose_hidden): only then does the desktop take the key to be up,
-# so a second press isn't dropped, and the key didn't come through a key
-# remapper, whose keyboard is never held (kanata takes TuxTalk's keyboard
-# too unless told not to, and would hand Compose pressed again back as the
-# dictation key: a recording that ends its own compose again, without end).
-# A press left to the desktop (the hotkey test, a tap that only holds a
-# send, the user's own shortcut, a tap already up when it was read) isn't.
-_compose_hidden = False
-# Tries left for the press that ends a compose, when sending it fails.
-_compose_tries = 0
+_compose_numbers = itertools.count(1)
+# How long a release waits for the hotkey helper's answer to hiding its
+# press, when that hasn't come in yet: it takes milliseconds.
+_ANSWER_WAIT_S = 0.25
 # How long the desktop gets to see a key it wasn't hidden from go up before
 # Compose is pressed again: a compositor drops a press of a key it holds
 # down, and reads a key event within a frame (16 ms at 60 Hz).
 _SETTLE_S = 0.05
 # Alt, Ctrl and Super: a key TuxTalk presses while one is down is a shortcut
 # (Alt+Space opens KRunner). Not Shift: Shift+Space is still a space.
-SHORTCUT_MODIFIERS = frozenset(MODIFIER_CODES - {ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT})
+SHORTCUT_MODIFIERS = frozenset(MODIFIER_CODES - SHIFT_CODES)
 # Key codes to the names Preferences shows ("Right Ctrl"), for the log.
 _NAMES = {ecodes.ecodes[key]: name for name, key in HOTKEY_CHOICES.items()}
 
@@ -94,14 +90,48 @@ def note_hidden(codes, keyboards=()) -> None:
     _hidden = (frozenset(codes), tuple(keyboards))
 
 
-def note_compose_hidden(codes=None) -> None:
-    """Hiding a press of *codes* worked: a grab TuxTalk holds caught them
-    still down on a keyboard it grabbed (never a remapper's), or (None) the
-    hotkey helper said OK to hiding the press. Its compose is TuxTalk's to
-    end (end_compose)."""
-    global _compose_hidden
-    if _compose_begun is not None and (codes is None or _compose_begun in codes):
-        _compose_hidden = True
+@dataclass(eq=False)
+class _ComposePress:
+    """One press of a Compose dictation key. *number* counts presses from
+    the start, so an answer about an earlier one confirms nothing here.
+
+    *hidden*: hiding the press is known to have worked (note_compose_hidden).
+    Only then does the desktop take the key to be up, so a second press
+    isn't dropped, and the key didn't come through a key remapper, whose
+    keyboard is never held (kanata takes TuxTalk's keyboard too unless told
+    not to, and would hand Compose pressed again back as the dictation key:
+    a recording that ends its own compose again, without end). A press left
+    to the desktop (the hotkey test, a tap that only holds a send, the
+    user's own shortcut, a tap already up when it was read) isn't.
+
+    *where*: the focused window soon after the press (_look_later), None
+    until known. *tries*: left for the press that ends the compose, when
+    sending it fails."""
+    number: int
+    code: int
+    shift: bool
+    hidden: bool = False
+    where: tuple | None = None
+    tries: int = 2
+
+
+def compose_press():
+    """The number of the press whose compose isn't ended yet, or None, for
+    an answer about hiding it (note_compose_hidden) to name."""
+    press = _compose
+    return None if press is None else press.number
+
+
+def note_compose_hidden(codes, number) -> None:
+    """Hiding press *number* (compose_press) of *codes* worked: a grab
+    TuxTalk holds caught them still down on a keyboard it grabbed (never a
+    remapper's), or the hotkey helper said OK to hiding them. That press's
+    compose is TuxTalk's to end (end_compose). Without the lock: set on the
+    press itself, so a late answer can't reach another, and the helper's
+    answer can come in on a thread holding virtual_keyboard's lock."""
+    press = _compose
+    if press is not None and press.number == number and press.code in codes:
+        press.hidden = True
 
 
 def _hidden_now():
@@ -159,7 +189,8 @@ def wait_while_held(destination=None):
     until none is and ends it (end_compose), which send runs with the
     keyboard free for other threads. It gives up after HELD_LIMIT_S and
     raises virtual_keyboard.GaveUp("key_held"). wait_while_held itself
-    returns None when neither is a dictation key.
+    returns None when neither is a dictation key and no compose is left to
+    end (one whose ending failed, from before the keys changed).
 
     *destination*, if given, says where the keys go (focused_window.destination: the
     focused window's class, which window it is, and whether the cursor is in
@@ -169,7 +200,7 @@ def wait_while_held(destination=None):
     out of date by then, and the user may have clicked into a password
     field meanwhile."""
     devices, modifiers = _noted
-    if not modifiers:
+    if not modifiers and _compose is None:
         return None
     keyboards = [d for d in list(devices) if is_keyboard_device(d)]
 
@@ -200,7 +231,7 @@ def wait_while_held(destination=None):
         if held():
             return wait
         _stuck.clear()
-        return end_compose if _compose_begun is not None else None
+        return end_compose if _compose is not None else None
     return before_press
 
 
@@ -218,32 +249,86 @@ def guard_alt_tap() -> None:
         pass            # logged by send, which let go of the Ctrl
 
 
-def note_compose_keys(codes) -> None:
+def read_compose_keys() -> None:
+    """Read which keys the keyboard options make Compose, for
+    note_compose_key: when the hotkey loop starts watching, and after each
+    dictation, so options changed meanwhile count from the next press
+    rather than the next start. Only when a dictation key is Right Ctrl or
+    Right Alt: the desktop can take a moment to answer."""
+    note_compose_keys(keyboard_layout.compose_keys() if _noted[1] else ())
+
+
+def note_compose_keys(bindings) -> None:
     """Remember which of Right Ctrl and Right Alt the keyboard options make
-    Compose (keyboard_layout.compose_keys), for note_compose_key. Another key
-    a desktop holds back from apps (Scroll Lock) begins no compose."""
+    Compose, as (code, with Shift) pairs (keyboard_layout.compose_keys), for
+    note_compose_key. Another key a desktop holds back from apps (Scroll
+    Lock) begins no compose."""
     global _compose_keys
-    _compose_keys = frozenset(codes) & {ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT}
+    keys = frozenset(b for b in bindings if b[0] in (ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT))
+    if keys != _compose_keys:
+        names = sorted(("Shift+" if shift else "") + _NAMES.get(code, str(code))
+                       for code, shift in keys)
+        logger.info(f"Compose among the dictation keys: {', '.join(names) or 'none'}")
+    _compose_keys = keys
 
 
-def note_compose_key(event, dictation_keys) -> None:
+def note_compose_key(event, dictation_keys, held_modifiers=frozenset()) -> None:
     """Where the keyboard options make a Right Ctrl or Right Alt dictation
-    key the Compose key (Pop!_OS makes Right Ctrl one), its press reaches the
-    focused app before TuxTalk can hide it and begins a compose there, which
-    swallows the next keys sent: a paste's Ctrl+V, or the first letters
-    typed. Compose pressed once more ends it, and is swallowed with it: no
-    compose begins with two. That press goes when the key is let go, or
-    before the first key typed while it's held (end_compose), once the
-    desktop has been told it's up: a compositor drops a second press of a key
-    it holds down. One per press: a toggle's start and stop taps each end
-    their own. Called before the press is hidden or acted on, so the compose
-    is known before anything is typed."""
-    global _compose_begun, _compose_hidden, _compose_tries
-    if event.value == 0 and event.code == _compose_begun:
+    key the Compose key (Pop!_OS makes Right Ctrl one), alone or with the
+    Shift in *held_modifiers*, its press reaches the focused app before
+    TuxTalk can hide it and begins a compose there, which swallows the next
+    keys sent: a paste's Ctrl+V, or the first letters typed. Compose pressed
+    once more ends it, and is swallowed with it: no compose begins with
+    two. That press goes when the key is let go, or before the first key
+    typed while it's held (end_compose), once the desktop has been told
+    it's up: a compositor drops a second press of a key it holds down. One
+    per press: a toggle's start and stop taps each end their own. Called
+    before the press is hidden or acted on, so the compose is known before
+    anything is typed."""
+    global _compose
+    press = _compose
+    if event.value == 0 and press is not None and event.code == press.code:
+        if not press.hidden:
+            _await_answer(press)
         end_compose()       # also once it's no longer a dictation key
-    elif event.value == 1 and event.code in dictation_keys and event.code in _compose_keys:
-        with _compose_lock:
-            _compose_begun, _compose_hidden, _compose_tries = event.code, False, 2
+    elif event.value == 1 and event.code in dictation_keys:
+        shift = bool(held_modifiers & SHIFT_CODES)
+        if (event.code, shift) in _compose_keys:
+            press = _ComposePress(next(_compose_numbers), event.code, shift)
+            with _compose_lock:
+                _compose = press
+            _look_later(press)
+
+
+def _await_answer(press) -> None:
+    """Give the hotkey helper a moment to answer whether it hid *press*,
+    when its release is read first: the press was hidden all the same, and
+    its compose would be left begun (HelperKeyboard.await_hide)."""
+    for keyboard in _keyboards():
+        await_hide = getattr(keyboard, "await_hide", None)
+        if await_hide is not None:
+            await_hide(press.number, _ANSWER_WAIT_S)
+
+
+def _look_later(press) -> None:
+    """Note which window has the focus for *press* (_moved), off the hotkey
+    loop: the tray can take a moment to answer, and the key isn't hidden
+    yet."""
+    def look():
+        press.where = focused_window.look()
+    threading.Thread(target=look, name="compose-look", daemon=True).start()
+
+
+def _moved(press) -> bool:
+    """Whether another window is known to have the focus since *press*
+    (held in one window, let go in another after a click): Compose pressed
+    again there would begin a compose in it. The one the press began stays
+    in the first window, out of reach."""
+    if press.where is None or not focused_window.changed(press.where, focused_window.look()):
+        return False
+    logger.info("Compose not pressed again: another window has the focus since the "
+                "dictation key went down")
+    return True
 
 
 def end_compose() -> None:
@@ -251,32 +336,37 @@ def end_compose() -> None:
     a compose that nothing has ended yet (note_compose_key). Typing that
     finds the compose begun waits here until it's ended.
 
-    Only for a press whose hiding is known to have worked (_compose_hidden
-    says why). A key no longer hidden (a toggle's stop tap lets go of the
-    grab as it's pressed) gets a moment to be seen going up first. A press
-    that didn't go out is tried once more, before the next key typed."""
-    global _compose_begun, _compose_tries
+    Only for a press whose hiding is known to have worked (_ComposePress
+    says why), in the window it went to. A key no longer hidden (a toggle's
+    stop tap lets go of the grab as it's pressed) gets a moment to be seen
+    going up first. A press that didn't go out is tried once more, before
+    the next key typed."""
+    global _compose
     with _compose_lock:
-        code = _compose_begun
-        if code is None:
+        press = _compose
+        if press is None:
             return
-        if not _compose_hidden:
-            _compose_begun = None
+        if not press.hidden or _moved(press):
+            _compose = None
             return
-        if code not in _hidden_now():
+        if press.code not in _hidden_now():
             time.sleep(_SETTLE_S)
-        _compose_tries -= 1
+        press.tries -= 1
+        # Shift too for a key that is Compose only with it: the desktop was
+        # told Shift went up with the press.
+        shift = [(ecodes.KEY_LEFTSHIFT, 1)] if press.shift else []
         try:
-            if not virtual_keyboard.send([(code, 1), (code, 0)]):
+            if not virtual_keyboard.send(shift + [(press.code, 1), (press.code, 0)]
+                                         + [(k, 0) for k, _ in shift]):
                 logger.error("Couldn't press Compose again to end the compose the dictation "
                              "key began; the first keys typed may be lost")
-                if _compose_tries > 0:
+                if press.tries > 0:
                     return
         except virtual_keyboard.StoppedPartway:
             # Not tried again: had it gone out, another would begin a compose.
             logger.warning("Compose pressed again went out only partly; the first keys "
                            "typed may be lost")
-        _compose_begun = None
+        _compose = None
 
 
 def _guard_if_alone(keyboards) -> None:

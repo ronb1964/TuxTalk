@@ -29,6 +29,7 @@ _MODIFIER_NAMES = {
     "ALT":   (ecodes.KEY_LEFTALT,   ecodes.KEY_RIGHTALT),
     "SUPER": (ecodes.KEY_LEFTMETA,  ecodes.KEY_RIGHTMETA),
 }
+SHIFT_CODES = frozenset(_MODIFIER_NAMES["SHIFT"])
 
 
 def keycode_from_name(name: str) -> int | None:

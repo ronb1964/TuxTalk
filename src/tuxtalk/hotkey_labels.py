@@ -42,10 +42,12 @@ def hotkey_label(key, altgr_types=None, compose=False):
 
 
 def _compose_names():
-    """The dictation keys the keyboard options make Compose, by name."""
+    """The dictation keys the keyboard options make Compose, by name. Not
+    one that is Compose only with Shift (Right Alt with
+    lv3:ralt_switch_multikey): on its own it's AltGr, and says so."""
     from .keyboard_layout import compose_keys
     from evdev import ecodes
-    codes = compose_keys()
+    codes = {code for code, shifted in compose_keys() if not shifted}
     return {name for name, code in HOTKEY_CHOICES.items() if ecodes.ecodes[code] in codes}
 
 
