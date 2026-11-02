@@ -81,6 +81,7 @@ def _lib():
             x.xkb_context_unref.argtypes = [P]
             x.xkb_keymap_new_from_names.restype = P
             x.xkb_keymap_new_from_names.argtypes = [P, C.POINTER(_RuleNames), C.c_int]
+            x.xkb_keymap_unref.argtypes = [P]
             x.xkb_keymap_min_keycode.argtypes = [P]
             x.xkb_keymap_max_keycode.argtypes = [P]
             x.xkb_keymap_num_levels_for_key.argtypes = [P, U32, U32]
@@ -174,12 +175,12 @@ class KeyPlanner:
         that is given none; "" is no options, whatever the environment says."""
         x = _lib()
         self.layout, self.variant, self.options = layout, variant or "", options
-        self.ctx = x.xkb_context_new(0)
+        ctx = x.xkb_context_new(0)
         names = _RuleNames(b"evdev", b"pc105", layout.encode(), self.variant.encode(),
                            None if options is None else options.encode())
-        self.keymap = x.xkb_keymap_new_from_names(self.ctx, C.byref(names), 0)
-        if not self.keymap:
-            x.xkb_context_unref(self.ctx)
+        keymap = x.xkb_keymap_new_from_names(ctx, C.byref(names), 0)
+        if not keymap:
+            x.xkb_context_unref(ctx)
             raise ValueError(f"unknown keyboard layout {layout}({variant})"
                              + (f" with options {options}" if options else ""))
         self._keys = {}         # keysym -> (evdev keycode, shift, altgr)
@@ -191,30 +192,35 @@ class KeyPlanner:
         # (evdev keycode, with Shift) of each key that is Compose: both for
         # compose:rctrl, only with Shift for lv3:ralt_switch_multikey.
         self.compose_keys = set()
-        self._index()
+        try:
+            self._index(keymap)
+        finally:
+            # All that's needed is indexed by now; planner_for keeps the
+            # planner for the session, and libxkbcommon's keymap needn't be.
+            x.xkb_keymap_unref(keymap)
+            x.xkb_context_unref(ctx)
 
-    def _index(self):
-        """Map every keysym to its cheapest key (_cost)."""
+    def _index(self, keymap):
+        """Map every keysym of *keymap* to its cheapest key (_cost)."""
         x = _lib()
-        shift = x.xkb_keymap_mod_get_index(self.keymap, b"Shift")
-        altgr = x.xkb_keymap_mod_get_index(self.keymap, b"Mod5")
+        shift = x.xkb_keymap_mod_get_index(keymap, b"Shift")
+        altgr = x.xkb_keymap_mod_get_index(keymap, b"Mod5")
         shift_bit = 1 << shift if shift != _INVALID_MOD else 0
         altgr_bit = 1 << altgr if altgr != _INVALID_MOD else 0
         allowed = shift_bit | altgr_bit
         altgr_keys = []
         # Keys past X11's last code (KEY_DOLLAR, KEY_EURO) never reach an X11
         # app: "$27.34" was typed as "27.34" in Claude Desktop.
-        last = min(x.xkb_keymap_max_keycode(self.keymap), _X11_MAX_KEYCODE)
-        for kc in range(x.xkb_keymap_min_keycode(self.keymap), last + 1):
-            for level in range(x.xkb_keymap_num_levels_for_key(self.keymap, kc, 0)):
+        last = min(x.xkb_keymap_max_keycode(keymap), _X11_MAX_KEYCODE)
+        for kc in range(x.xkb_keymap_min_keycode(keymap), last + 1):
+            for level in range(x.xkb_keymap_num_levels_for_key(keymap, kc, 0)):
                 syms = C.POINTER(C.c_uint32)()
-                found = x.xkb_keymap_key_get_syms_by_level(self.keymap, kc, 0, level,
-                                                           C.byref(syms))
+                found = x.xkb_keymap_key_get_syms_by_level(keymap, kc, 0, level, C.byref(syms))
                 if found != 1:
                     continue
                 sym = syms[0]
                 masks = (C.c_uint32 * 8)()
-                count = x.xkb_keymap_key_get_mods_for_level(self.keymap, kc, 0, level, masks, 8)
+                count = x.xkb_keymap_key_get_mods_for_level(keymap, kc, 0, level, masks, 8)
                 for i in range(count):
                     mask = masks[i]
                     if mask & ~allowed:
@@ -703,12 +709,20 @@ def compose_keys():
     (evdev code, with Shift) pairs (KeyPlanner.compose_keys): Right Ctrl
     with or without Shift on every Pop!_OS install (compose:rctrl), Shift+Right
     Alt alone with lv3:ralt_switch_multikey. Empty when the layout can't be
-    read."""
+    read. Asked after every dictation, so a failure is logged once
+    (_failures); and as the hotkeys start, which a bug here mustn't stop."""
     try:
         planner = planner_for(active_layout() or US)
     except (OSError, ValueError) as e:
-        logger.info(f"Could not tell which key is Compose: {e}")
+        if _failures.failed("compose keys", e):
+            logger.info(f"Could not tell which key is Compose: {e}")
         return frozenset()
+    except Exception as e:      # a bug of TuxTalk's own, not an old or missing library
+        if _failures.failed("compose keys", e):
+            logger.exception(f"Working out the Compose key failed: {e!r}")
+        return frozenset()
+    if _failures.worked("compose keys"):
+        logger.info("The Compose key can be told again")
     return frozenset(planner.compose_keys)
 
 
