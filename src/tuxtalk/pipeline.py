@@ -436,6 +436,8 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
     last_dictation.remember_shown(rs.state.last_inserted_text, chunked, outcome == "ok",
                                   job.message)
     job.message.ends_on = ends_unfinished(words.raw)
+    if outcome == "ok":
+        _keep_for_the_sentence(words, text, audio_f32, job)
     _after_the_words(outcome, words.said, words.press, words.space_left_off, job.chunk_role,
                      job.beeps_on, job.injection_mode, job.message)
     if outcome == "ok" and words.held_back:
@@ -451,23 +453,31 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
                taken_back=count_words(words.taken_back))
 
 
+def _keep_for_the_sentence(words: _Words, text: str, audio_f32, job: _Job) -> None:
+    """A Type at pause phrase went in, and its sentence goes on: the engine
+    hears all of it for its final mark (type_at_pause.keep_sentence_audio).
+    Kept before the key said after it is pressed: an Enter or Tab that goes
+    begins the next message (type_at_pause.start_afresh), and one that
+    doesn't (Claude Desktop's four spaces for Tab, a key that failed)
+    leaves this phrase in the sentence."""
+    if job.chunk_role == "middle" and (
+            words.held_mark is not None
+            or not text.rstrip().endswith(type_at_pause.SENTENCE_ENDS)):
+        type_at_pause.keep_sentence_audio(job.message, audio_f32)
+
+
 def _carry_on_after(words: _Words, text: str, audio_f32, job: _Job) -> None:
     """A Type at pause phrase went in: how the next phrase carries on from it."""
     if job.chunk_role == "middle" and not live.chunk_context_marks and not words.press:
         # Without the context pass the engine's own mark decides: after
         # a comma or none, the next chunk carries on lowercase.
         rs.state.continue_mid_sentence = not text.rstrip().endswith(type_at_pause.SENTENCE_ENDS)
-    if job.chunk_role == "middle" and not words.press and (
-            words.held_mark is not None
-            or not text.rstrip().endswith(type_at_pause.SENTENCE_ENDS)):
-        # Its sentence goes on: the engine hears all of it for its final
-        # mark. Not after Enter or Tab, which began the next message.
-        type_at_pause.keep_sentence_audio(job.message, audio_f32)
     if words.held_mark is not None:
-        # Only the end of the phrase is kept: the engine hears it with
-        # the start of the next one to decide the mark between them.
+        # Only the end of the phrase is kept, a copy, so the rest of it
+        # can go: the engine hears it with the start of the next one to
+        # decide the mark between them.
         job.message.held_mark = {"mark": words.held_mark,
-                                 "audio": audio_f32[-type_at_pause.context_samples():],
+                                 "audio": audio_f32[-type_at_pause.context_samples():].copy(),
                                  "raw": words.raw, "typed": rs.state.last_inserted_text,
                                  "where": rs.state.last_inserted_where,
                                  # No mark held: the period, if any, is the auto-period.
