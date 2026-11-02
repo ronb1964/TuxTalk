@@ -134,10 +134,77 @@ def test_great_quote_preserved():
     ("she said quote of the people quote", "She said \u201cof the people.\u201d"),
     ("please quote hello quote", "Please \u201chello.\u201d"),
     ("he said quote it was fine quote", "He said \u201cit was fine.\u201d"),
+    ("he said quote this quote", "He said \u201cthis.\u201d"),
+    ("please quote we will quote", "Please \u201cwe will.\u201d"),
+    ("quote me never quote", "\u201cMe never.\u201d"),
+    ("she said quote me you should not quote", "She said \u201cme you should not.\u201d"),
+    ("she said quote I don't want to quote", "She said \u201cI don't want to.\u201d"),
 ])
 def test_a_quotation_pairs_whatever_words_are_next_to_quote(said, written):
     """Words that could make "quote" the verb or the noun ("please", "won't",
-    "me") are often inside a quotation too: two quotes are still a pair."""
+    "me", "this") are often inside a quotation too: two quotes are still a pair."""
+    assert normalize_text(said) == written
+
+
+@pytest.mark.parametrize("said", [
+    "I want to quote him on that",
+    "I want to quote him on that.",
+    "quote of the day",
+    "don't quote me on that",
+    "I'd like to quote you on that",
+    "can you send me a quote for the job",
+    "the price quote and the insurance quote",
+    "I like to quote him and quote her",
+])
+def test_quote_said_as_a_word_is_typed_as_the_word(said):
+    typed = normalize_text(said)
+    assert '"' not in typed and "\u201c" not in typed and "\u201d" not in typed
+    assert typed.lower().count("quote") == said.lower().count("quote")
+
+
+@pytest.mark.parametrize("said, written", [
+    ("to quote Einstein quote imagination is everything quote",
+     "To quote Einstein \u201cimagination is everything.\u201d"),
+    ("To quote Einstein, quote, imagination is everything, quote.",
+     "To quote Einstein, \u201cimagination is everything.\u201d"),
+    ("quote me too quote then to quote Einstein", "\u201cMe too\u201d then to quote Einstein."),
+    ("I want to quote him he said quote hello quote", "I want to quote him he said \u201chello.\u201d"),
+    ("he said quote don't quote me quote", "He said \u201cdon't quote me.\u201d"),
+    ("that's a great quote he said quote thanks quote",
+     "That's a great quote he said \u201cthanks.\u201d"),
+])
+def test_a_quotation_next_to_the_word_quote_gets_its_marks(said, written):
+    """Of an odd number of quotes, one is the word: the one "to", "a great"
+    or "don't ... me" beside it points to."""
+    assert normalize_text(said) == written
+
+
+@pytest.mark.parametrize("said, written", [
+    ("he said quote hello unquote", "He said \u201chello.\u201d"),
+    ("he said quote hello end quote and left", "He said \u201chello\u201d and left."),
+    ("to quote Einstein quote imagination is everything unquote",
+     "To quote Einstein \u201cimagination is everything.\u201d"),
+    ("he said quote hello close quote", "He said \u201chello.\u201d"),
+    ("begin quote hello end quote", "\u201cHello.\u201d"),
+    ("open quote hello quote", "\u201cHello.\u201d"),
+    ("He said, quote, hello, unquote.", "He said, \u201chello.\u201d"),
+])
+def test_unquote_and_end_quote_close_what_quote_opened(said, written):
+    assert normalize_text(said) == written
+
+
+def test_quote_unquote_puts_the_next_word_in_quotes():
+    assert normalize_text("it was a quote unquote small problem") == \
+        "It was a \u201csmall\u201d problem."
+    assert normalize_text("it was quote unquote") == "It was quote unquote."
+
+
+@pytest.mark.parametrize("said, written", [
+    ("He said, quote, hello, quote.", "He said, \u201chello.\u201d"),
+    ("She said quote. Never. Quote.", "She said \u201cNever.\u201d"),
+])
+def test_the_engines_commas_and_stops_around_a_spoken_quote_go(said, written):
+    """Not 'He said, \u201c hello.\u201d' or '\u201cNever..\u201d'."""
     assert normalize_text(said) == written
 
 
