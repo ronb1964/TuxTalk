@@ -52,7 +52,7 @@ Claude, Anthropic's AI, writes the code. I test it and use it every day, and I h
 
 **Esc right after you let go.** It cancels the dictation now, and an automatic send with it, up until the text starts going in.
 
-**When the hotkey helper can't read your keyboard, TuxTalk says so.** Somebody on CachyOS had F8 do nothing at all, and the hotkey test said it was working. The helper (now 1.12) can use a keyboard it's only allowed to read, the hotkey test only says Working once dictation can really hear the key, and Report a Problem includes the helper's own log. It only asks you to update the helper where that matters.
+**Logitech keyboards work with the hotkey helper.** Somebody on CachyOS had F8 do nothing at all on an MX Keys, and the hotkey test said it was working. A Logitech receiver tells Linux its keyboards are mice too, and the helper skipped anything that looked like a mouse. The helper (now 1.13) reads them, and a keyboard it's only allowed to read too. The hotkey test only says Working once dictation can really hear the key, TuxTalk says so when the helper can't read your keyboard, and Report a Problem includes the helper's own log. It only asks you to update the helper where that matters.
 
 **Safer updates and graphics card.** A .deb or .rpm update is checked again somewhere only root can write before it's installed, the graphics engine only answers TuxTalk, and the CUDA download is pinned to the version we tested. The .rpm installs on openSUSE now, too. The [changelog](CHANGELOG.md) has the rest.
 

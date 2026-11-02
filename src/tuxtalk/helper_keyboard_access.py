@@ -1,10 +1,12 @@
-"""Which keyboards the hotkey helper may read but not write, judged from
-TuxTalk's side, as the user, who can't open the device nodes.
+"""Which keyboards an older hotkey helper leaves out, judged from TuxTalk's
+side, as the user, who can't open the device nodes.
 
-A hotkey helper before 1.12 opened keyboards read-write only, and skipped
-without a word one it may only read; 1.12 reads it (listen-only). So
-TuxTalk asks at start to update such a helper on a computer that has one
-(secure_input.misses_read_only_keyboard), and stays quiet elsewhere.
+A helper before 1.12 opened keyboards read-write only, and skipped without
+a word one it may only read; 1.12 reads it (listen-only). One before 1.13
+skipped a keyboard that's a mouse too, as a Logitech receiver makes its
+keyboards and mice. So TuxTalk asks at start to update such a helper on a
+computer that has such a keyboard (secure_input.missed_keyboard), and
+stays quiet elsewhere.
 
 The helper runs as a throwaway user (systemd's DynamicUser) with no
 capabilities, whose one group a device node can name is "input": what it
@@ -20,7 +22,8 @@ import grp
 import os
 import struct
 
-from .hotkey_helper import BTN_LEFT, LETTER_KEYS, REL_X, UDEV_DATA_DIR, udev_seat
+from .hotkey_helper import (BTN_LEFT, LETTER_KEYS, REL_X, SYS_CHAR_DIR, UDEV_DATA_DIR,
+                            made_through_uinput, udev_seat)
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -100,12 +103,47 @@ def _sysfs_bits(path):
 
 
 def _is_keyboard(sys_dir, name):
-    """Whether event node *name* has letter keys and isn't a mouse, as the
-    helper decides (hotkey_helper.check_keyboard), from sysfs."""
+    """Whether event node *name* has letter keys, as the helper decides
+    (hotkey_helper.check_keyboard), from sysfs."""
+    keys = _sysfs_bits(os.path.join(sys_dir, name, "device", "capabilities", "key")) or set()
+    return len(keys & LETTER_KEYS) >= 3
+
+
+def _is_mouse(sys_dir, name):
+    """Whether event node *name* has a mouse's motion and left button, as
+    the helper decides (Keyboard._probe), from sysfs."""
     caps = os.path.join(sys_dir, name, "device", "capabilities")
-    keys = _sysfs_bits(os.path.join(caps, "key")) or set()
-    mouse = BTN_LEFT in keys and REL_X in (_sysfs_bits(os.path.join(caps, "rel")) or ())
-    return len(keys & LETTER_KEYS) >= 3 and not mouse
+    return (BTN_LEFT in (_sysfs_bits(os.path.join(caps, "key")) or ())
+            and REL_X in (_sysfs_bits(os.path.join(caps, "rel")) or ()))
+
+
+def _event_nodes(input_dir):
+    """(path, stat) of each event node in *input_dir*; none when it can't be listed."""
+    try:
+        names = sorted(n for n in os.listdir(input_dir) if n.startswith("event"))
+    except OSError:
+        return []
+    found = []
+    for name in names:
+        node = os.path.join(input_dir, name)
+        try:
+            found.append((node, os.stat(node)))
+        except OSError:
+            continue                    # unplugged meanwhile
+    return found
+
+
+def keyboards_also_mice(input_dir="/dev/input", sys_dir="/sys/class/input",
+                        udev_dir=UDEV_DATA_DIR, char_dir=SYS_CHAR_DIR):
+    """The event nodes of seat0's keyboards that are mice too and no
+    program's (helpers before 1.13 read a remapper's already). Logitech
+    mice count: nothing tells them from a Logitech keyboard. The paths can
+    be moved for tests."""
+    return [node for node, st in _event_nodes(input_dir)
+            if _is_keyboard(sys_dir, os.path.basename(node))
+            and _is_mouse(sys_dir, os.path.basename(node))
+            and not made_through_uinput(st.st_rdev, char_dir)
+            and udev_seat(st.st_rdev, udev_dir) == "seat0"]
 
 
 def read_only_keyboards(input_dir="/dev/input", sys_dir="/sys/class/input", group="input",
@@ -114,16 +152,10 @@ def read_only_keyboards(input_dir="/dev/input", sys_dir="/sys/class/input", grou
     not write. The paths can be moved for tests."""
     try:
         gid = grp.getgrnam(group).gr_gid
-        names = sorted(n for n in os.listdir(input_dir) if n.startswith("event"))
-    except (KeyError, OSError):
+    except KeyError:
         return []
     found = []
-    for name in names:
-        node = os.path.join(input_dir, name)
-        try:
-            st = os.stat(node)
-        except OSError:
-            continue                    # unplugged meanwhile
+    for node, st in _event_nodes(input_dir):
         try:
             acl = _acl_of(node)
         except UnknownAccess as e:
@@ -133,7 +165,7 @@ def read_only_keyboards(input_dir="/dev/input", sys_dir="/sys/class/input", grou
             continue
         if (helper_may(st.st_mode, st.st_gid, acl, gid, READ)
                 and not helper_may(st.st_mode, st.st_gid, acl, gid, READ | WRITE)
-                and _is_keyboard(sys_dir, name)
+                and _is_keyboard(sys_dir, os.path.basename(node))
                 and udev_seat(st.st_rdev, udev_dir) == "seat0"):
             found.append(node)
     return found

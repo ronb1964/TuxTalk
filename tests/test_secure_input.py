@@ -181,13 +181,16 @@ def test_preferences_offers_the_helper_to_input_group_users(monkeypatch):
     assert prefs.fix_typing_button.label == "✓ Ready" and not prefs.fix_typing_button.sensitive
 
 
-def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False, read_only=()):
+def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False, read_only=(),
+                  also_mice=()):
     from tuxtalk import prefs_system_check as P, uinput_helper
 
     monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
     monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: in_group)
     monkeypatch.setattr("tuxtalk.helper_keyboard_access.read_only_keyboards",
                         lambda: read_only)
+    monkeypatch.setattr("tuxtalk.helper_keyboard_access.keyboards_also_mice",
+                        lambda: also_mice)
     monkeypatch.setattr(si, "running_version", lambda: running)
     monkeypatch.setattr(si, "is_installed", lambda: installed)
     prefs = P.SystemCheck(SimpleNamespace(config={}))
@@ -199,29 +202,32 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False, read_
 def test_only_an_older_helper_needs_an_update():
     """1.9, installed by test builds, and 1.10 are older than 1.11: the
     numbers after the dot are compared as numbers, not as text."""
-    assert hotkey_helper.VERSION == "1.12" and si.NEEDED_HELPER_VERSION == "1.11"
+    assert hotkey_helper.VERSION == "1.13" and si.NEEDED_HELPER_VERSION == "1.11"
     for running, older, needed in (("1.0", True, True), ("1.3", True, True),
                                    ("garbled", True, True), ("1.9", True, True),
                                    ("1.10", True, True), ("1.11", True, False),
-                                   (hotkey_helper.VERSION, False, False), ("1.13", False, False),
+                                   ("1.12", True, False),
+                                   (hotkey_helper.VERSION, False, False), ("1.14", False, False),
                                    ("9.0", False, False), (None, False, False)):
         assert si.is_older(running) is older, running
         assert si.needs_update(running) is needed, running
 
 
 def test_a_helper_only_older_than_the_one_shipped_is_offered_without_a_warning(monkeypatch):
-    """With no keyboard here that only 1.12 can read, 1.12 mostly adds what
-    System check and Report a Problem can say: its update is there for the
-    asking, and System check doesn't open itself to call that a problem."""
+    """With no keyboard here that only a newer helper reads, the update
+    mostly adds what System check and Report a Problem can say: it's there
+    for the asking, and System check doesn't open itself to call that a
+    problem."""
     P, prefs = _typing_prefs(monkeypatch, running="1.11")
     assert prefs.fix_typing_button.label == P.UPDATE_HELPER_LABEL and prefs.fix_typing_button.sensitive
     assert "✓ Ready" in prefs.typing_status_label.markup
-    assert "(1.11 → 1.12)" in prefs.typing_status_label.markup
+    assert f"(1.11 → {hotkey_helper.VERSION})" in prefs.typing_status_label.markup
     assert P._typing_state([])[3] is True
 
 
-def test_a_helper_too_old_for_a_read_only_keyboard_here_is_a_warning(monkeypatch):
-    P, prefs = _typing_prefs(monkeypatch, running="1.11", read_only=["/dev/input/event3"])
+@pytest.mark.parametrize("running, kind", [("1.11", "read_only"), ("1.12", "also_mice")])
+def test_a_helper_too_old_for_a_keyboard_here_is_a_warning(monkeypatch, running, kind):
+    P, prefs = _typing_prefs(monkeypatch, running=running, **{kind: ["/dev/input/event3"]})
     assert prefs.fix_typing_button.label == P.UPDATE_HELPER_LABEL
     assert "needs a newer hotkey helper" in prefs.typing_status_label.markup
     assert P._typing_state([])[3] is False
@@ -364,3 +370,24 @@ def test_an_install_that_ran_too_long_is_judged_by_the_helper_running(monkeypatc
     monkeypatch.setattr(si, "is_installed", lambda: True)
     monkeypatch.setattr(si, "running_version", lambda: running)
     assert si.install_with_pkexec() == result
+
+
+@pytest.mark.parametrize("running, read_only, also_mice, says", [
+    ("1.11", ["/dev/input/event3"], [], "can only be read"),
+    ("1.11", [], ["/dev/input/event5"], "both at once"),
+    ("1.12", [], ["/dev/input/event5"], "both at once"),
+    ("1.12", ["/dev/input/event3"], [], None),           # 1.12 reads that one
+    ("1.13", [], ["/dev/input/event5"], None),
+    (None, [], ["/dev/input/event5"], None)])
+def test_an_update_is_asked_for_only_where_a_keyboard_here_is_left_out(
+        monkeypatch, running, read_only, also_mice, says):
+    """A Logitech keyboard is a mouse too to Linux, and a helper before 1.13
+    left it out, so its F8 never reached TuxTalk (issue #26): there, and
+    where only 1.12 can read a keyboard, the update is asked for at start."""
+    monkeypatch.setattr("tuxtalk.helper_keyboard_access.read_only_keyboards",
+                        lambda: read_only)
+    monkeypatch.setattr("tuxtalk.helper_keyboard_access.keyboards_also_mice",
+                        lambda: also_mice)
+    reason = si.missed_keyboard(running)
+    assert (reason is None) is (says is None) and (says or "") in (reason or "")
+    assert si.needs_update(running) is (says is not None)

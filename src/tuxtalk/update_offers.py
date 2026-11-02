@@ -78,9 +78,8 @@ def helper_update_text(running) -> str:
     from . import secure_input
     from .hotkey_helper import VERSION
     keys = [key for key in secure_input.KEYS_SINCE if not secure_input.hears_key(running, key)]
-    if secure_input.misses_read_only_keyboard(running):
-        why = (". Your keyboard can only be read, and the hotkey helper you have can't use "
-               "such a keyboard, so your dictation keys don't work until it's updated.")
+    if missed := secure_input.missed_keyboard(running):
+        why = f". {missed}, so your dictation keys may not work until it's updated."
     elif keys:
         why = (f": until it's updated, {' and '.join(keys)} can't be dictation keys, and it "
                "misses this version's fixes.")

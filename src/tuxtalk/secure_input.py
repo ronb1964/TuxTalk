@@ -324,38 +324,48 @@ def is_older(running):
 # The oldest helper this TuxTalk works with as it should on any computer.
 # Raised only when a feature or fix everyone needs comes with a newer
 # helper, since TuxTalk then asks at every start to update it. A fix only
-# some computers need asks there alone (misses_read_only_keyboard); the
+# some computers need asks there alone (missed_keyboard); the
 # rest of a newer helper is offered in System check without asking.
 NEEDED_HELPER_VERSION = "1.11"
 
-# The first helper that reads a keyboard the input group may only read.
+# The first helpers that read a keyboard the ones before skipped without a
+# word: one the input group may only read, and one that's a mouse too.
 READ_ONLY_KEYBOARDS_SINCE = "1.12"
+KEYBOARDS_ALSO_MICE_SINCE = "1.13"
 
 
-def misses_read_only_keyboard(running):
-    """Whether the running helper (version *running*) is too old to read a
-    keyboard this computer has, one whose node may only be read."""
-    from .helper_keyboard_access import read_only_keyboards
-    return (running is not None and _version(running) < _version(READ_ONLY_KEYBOARDS_SINCE)
-            and bool(read_only_keyboards()))
+def missed_keyboard(running):
+    """Why the running helper (version *running*) leaves out a keyboard
+    this computer has, in one sentence without a full stop, or None when
+    it reads them all or none is running."""
+    if running is None:
+        return None
+    from . import helper_keyboard_access as access
+    if (_version(running) < _version(READ_ONLY_KEYBOARDS_SINCE)
+            and access.read_only_keyboards()):
+        return ("Your keyboard can only be read, and the hotkey helper on this computer "
+                "can't use such a keyboard")
+    if (_version(running) < _version(KEYBOARDS_ALSO_MICE_SINCE)
+            and access.keyboards_also_mice()):
+        return ("A keyboard or mouse here is both at once, as Logitech's are, and the "
+                "hotkey helper on this computer leaves such a device out")
+    return None
 
 
 def outdated_reason(running):
     """Why the running helper (version *running*) needs updating, in one
     sentence without a full stop, for the screens that offer it besides
     the question at start."""
-    if misses_read_only_keyboard(running):
-        return ("Your keyboard can only be read, and the hotkey helper on this computer "
-                "can't use such a keyboard")
-    return "The hotkey helper on this computer is too old for this TuxTalk"
+    return (missed_keyboard(running)
+            or "The hotkey helper on this computer is too old for this TuxTalk")
 
 
 def needs_update(running):
     """Whether this TuxTalk asks at start to update the running helper
-    (version *running*): it's older than NEEDED_HELPER_VERSION, or too old
-    for a keyboard here (misses_read_only_keyboard)."""
+    (version *running*): it's older than NEEDED_HELPER_VERSION, or leaves
+    out a keyboard here (missed_keyboard)."""
     return running is not None and (_version(running) < _version(NEEDED_HELPER_VERSION)
-                                    or misses_read_only_keyboard(running))
+                                    or missed_keyboard(running) is not None)
 
 
 # The dictation keys the first helpers didn't report, and the version that

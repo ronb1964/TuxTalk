@@ -1,8 +1,8 @@
-"""Which keyboards the hotkey helper may only read (helper_keyboard_access.py).
+"""Which keyboards an older hotkey helper leaves out (helper_keyboard_access.py):
+one it may only read (before 1.12) and one that's a mouse too (before 1.13).
 
-A helper before 1.12 skips such a keyboard without a word, so TuxTalk asks
-to update it where one is (secure_input.misses_read_only_keyboard), and
-nowhere else. Judged as the kernel would for the helper's throwaway user,
+Such a helper skips that keyboard without a word, so TuxTalk asks to update
+it where one is (secure_input.missed_keyboard), and nowhere else. Judged as the kernel would for the helper's throwaway user,
 whose only group a node can name is "input".
 """
 import grp
@@ -96,9 +96,9 @@ def test_keyboards_the_helper_may_only_read_are_found(nodes):
     read_only = make("event3", 0o640)
     make("event4", 0o660)                                   # writable: 1.11 reads it
     make("event5", 0o640, keys=[116])                       # a power button
-    make("event6", 0o640, keys=LETTERS + [0x110], rel=[0])  # a mouse
+    also_mouse = make("event6", 0o640, keys=LETTERS + [0x110], rel=[0])  # a Logitech one
     make("event7", 0o600)                                   # unreadable: 1.12 can't either
-    assert scan() == [read_only]
+    assert scan() == [read_only, also_mouse]
     assert scan("no-such-group") == []
 
 
@@ -144,3 +144,37 @@ def test_a_python_without_getxattr_judges_by_the_mode_bits(nodes, monkeypatch):
     read_only = make("event3", 0o640)
     monkeypatch.delattr(access.os, "getxattr")
     assert scan() == [read_only]
+
+
+def _also_mice(tmp_path, udev):
+    return access.keyboards_also_mice(str(tmp_path / "input"), str(tmp_path / "sys"),
+                                      str(udev), str(tmp_path / "char"))
+
+
+def test_keyboards_that_are_mice_too_are_found(nodes, tmp_path):
+    """A helper before 1.13 leaves out an MX Keys on a Unifying receiver,
+    whose node has a mouse's motion and left button too (issue #26)."""
+    make, _scan, udev = nodes
+    make("event3", 0o660)                                       # a plain keyboard
+    make("event4", 0o660, keys=[0x110, 0x111], rel=[0, 1])      # a plain mouse
+    mx_keys = make("event5", 0o660, keys=LETTERS + [0x110], rel=[0, 1, 6, 8])
+    assert _also_mice(tmp_path, udev) == [mx_keys]
+
+
+def test_a_programs_keyboard_and_mouse_is_no_reason_to_ask(nodes, tmp_path):
+    """Every helper since issue #23 reads a remapper's (kanata's)."""
+    make, _scan, udev = nodes
+    make("event5", 0o660, keys=LETTERS + [0x110], rel=[0])
+    rdev = os.stat(tmp_path / "input" / "event5").st_rdev
+    (tmp_path / "char").mkdir()
+    (tmp_path / "char" / f"{os.major(rdev)}:{os.minor(rdev)}").symlink_to(
+        "/sys/devices/virtual/input/input40/event20")
+    assert _also_mice(tmp_path, udev) == []
+
+
+def test_another_seats_keyboard_and_mouse_is_left_out(nodes, tmp_path):
+    make, _scan, udev = nodes
+    make("event5", 0o660, keys=LETTERS + [0x110], rel=[0])
+    rdev = os.stat(tmp_path / "input" / "event5").st_rdev
+    (udev / f"c{os.major(rdev)}:{os.minor(rdev)}").write_text("E:ID_SEAT=seat1\n")
+    assert _also_mice(tmp_path, udev) == []

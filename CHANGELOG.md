@@ -78,7 +78,15 @@ before 0.15.0, so older entries use that name.
   dictation keys can't work, the helper's log names each device it
   skipped and why, and Report a Problem says how many keyboards it reads
   (issue #26).
-- The hotkey helper (now 1.12) uses a keyboard it's only allowed to read
+- A Logitech keyboard on a Unifying receiver, like the MX Keys, did
+  nothing when you pressed F8: the receiver tells Linux the keyboard is a
+  mouse too, and the hotkey helper left out anything that looked like a
+  mouse (issue #26). It reads those now (helper 1.13), and TuxTalk asks
+  you to update the helper on a computer with one. Logitech mice look the
+  same, so they're read as well, but their movement never reaches the
+  helper. Without the helper (the older "input" group setup), F8 on such
+  a keyboard may still reach the window you're in.
+- The hotkey helper (now 1.13) uses a keyboard it's only allowed to read
   instead of skipping it, so the dictation keys work there. On such a
   keyboard it can't hide the held key from the window you're typing in,
   so it may repeat there.

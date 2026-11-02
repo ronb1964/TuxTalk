@@ -463,21 +463,54 @@ def test_keyboard_declaring_the_pointer_event_type_is_still_a_keyboard():
     })
 
     assert keyboard_devices.is_keyboard_device(k800) is True
+    assert keyboard_devices.is_keyboard_and_mouse(k800) is False
 
 
-def test_unifying_mouse_advertising_letter_keys_is_not_grabbed():
-    """Logitech MX Master / MX Ergo / MX Vertical mice.
+def _mx_keys():
+    """A Logitech MX Keys on a Unifying receiver, from a user's
+    /proc/bus/input/devices (issue #26): the receiver gives the keyboard a
+    mouse's motion, wheels and buttons."""
+    return FakeDevice("Logitech MX Keys", {
+        ecodes.EV_KEY: sorted(keyboard_devices.LETTER_KEYS)
+        + [ecodes.KEY_F8, ecodes.KEY_F9, ecodes.BTN_LEFT, ecodes.BTN_RIGHT],
+        ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y, ecodes.REL_HWHEEL, ecodes.REL_WHEEL]})
 
-    The same superset descriptor makes these mice claim all 26 letter keys and
-    all 12 F-keys. What actually distinguishes them is real pointer motion plus
-    mouse buttons. Grabbing them freezes the pointer for the whole recording.
-    """
-    mx = FakeDevice("Logitech MX Master", {
+
+def test_a_keyboard_a_logitech_receiver_makes_a_mouse_too_is_read():
+    """Left out as a mouse, an MX Keys's F8 never started a dictation
+    (issue #26)."""
+    assert keyboard_devices.is_keyboard_device(_mx_keys()) is True
+    assert keyboard_devices.is_keyboard_and_mouse(_mx_keys()) is True
+
+
+def test_a_logitech_mouse_claiming_letter_keys_is_read_but_never_grabbed():
+    """MX Master, MX Ergo and MX Vertical claim all the letter and F-keys,
+    just as an MX Keys claims a mouse's motion: no test tells them apart.
+    Grabbed for a recording, a mouse would freeze that long."""
+    mx = _HeldKeyboard("Logitech MX Master", {
         ecodes.EV_KEY: sorted(keyboard_devices.LETTER_KEYS) + [ecodes.KEY_F8, ecodes.BTN_LEFT, ecodes.BTN_RIGHT],
         ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y],
-    })
+    }, "/dev/input/event7", held=[])
+    real = _HeldKeyboard("USB Keyboard", keyboard()._caps, "/dev/input/event3")
+    assert keyboard_devices.is_keyboard_device(mx) is True
+    try:
+        keyboard_grab.grab_keyboards_hiding([real, mx], {ecodes.KEY_F8})
+        assert real.is_grabbed and not mx.is_grabbed and mx.written == []
+    finally:
+        keyboard_grab.release_all()
+        keyboard_grab._injected_pending.clear()
 
-    assert keyboard_devices.is_keyboard_device(mx) is False
+
+def test_the_mouse_motion_of_a_keyboard_and_mouse_is_kept_from_the_reader(monkeypatch):
+    """A Logitech mouse is read now: every movement would wake the
+    dictation service. Only a keyboard that's also a mouse is masked."""
+    masked = []
+    monkeypatch.setattr(keyboard_devices, "mask_to_keys", masked.append)
+    devices = {"/dev/input/event5": _mx_keys(), "/dev/input/event3": keyboard()}
+    for path, dev in devices.items():
+        dev.path, dev.fd = path, int(path[-1])
+    keyboard_devices.open_new_keyboards([], lambda: list(devices), devices.__getitem__)
+    assert masked == [5]
 
 
 def test_the_apps_own_virtual_keyboard_is_not_grabbed():
@@ -496,31 +529,16 @@ def _kanata():
                                  ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y, ecodes.REL_WHEEL]})
 
 
-def test_a_key_remappers_virtual_keyboard_is_read(monkeypatch):
+def test_a_key_remappers_virtual_keyboard_is_read():
     """kanata takes the real keyboards and passes every key on through its
     own, shaped like a mouse too: skipped, TuxTalk heard no key at all with
     it running (issue #23)."""
-    monkeypatch.setattr(keyboard_devices, "is_uinput_device", lambda path: True)
     assert keyboard_devices.is_keyboard_device(_kanata()) is True
-    assert keyboard_devices.is_remapper_keyboard(_kanata()) is True
+    assert keyboard_devices.is_keyboard_and_mouse(_kanata()) is True
 
 
-def test_a_real_keyboard_and_mouse_in_one_is_still_skipped(monkeypatch):
-    """The same shape from hardware is a Logitech receiver's mouse."""
-    monkeypatch.setattr(keyboard_devices, "is_uinput_device", lambda path: False)
-    assert keyboard_devices.is_keyboard_device(_kanata()) is False
-
-
-def test_a_plain_keyboard_is_no_remapper_keyboard(monkeypatch):
-    monkeypatch.setattr(keyboard_devices, "is_uinput_device", lambda path: True)
-    assert keyboard_devices.is_remapper_keyboard(keyboard("keyd virtual keyboard")) is False
-
-
-def test_the_apps_own_keyboard_is_skipped_though_a_program_made_it(monkeypatch):
-    from tuxtalk import virtual_keyboard
-    monkeypatch.setattr(keyboard_devices, "is_uinput_device", lambda path: True)
-    ours = FakeDevice(virtual_keyboard.NAME, virtual_keyboard._capabilities())
-    assert keyboard_devices.is_keyboard_device(ours) is False
+def test_a_plain_keyboard_is_no_keyboard_and_mouse():
+    assert keyboard_devices.is_keyboard_and_mouse(keyboard("keyd virtual keyboard")) is False
 
 
 class _HeldKeyboard(FakeDevice):
@@ -540,12 +558,10 @@ class _HeldKeyboard(FakeDevice):
         pass
 
 
-def test_a_key_remappers_keyboard_is_never_grabbed_or_written_to(monkeypatch):
+def test_a_key_remappers_keyboard_is_never_grabbed_or_written_to():
     """Held during a recording, kanata's keyboard would freeze the mouse
     and swallow what TuxTalk types meanwhile (Type at pause, typing while
     the key is held): kanata passes TuxTalk's own typing through it too."""
-    monkeypatch.setattr(keyboard_devices, "is_uinput_device",
-                        lambda path: path == "/dev/input/event18")
     real = _HeldKeyboard("USB Keyboard", keyboard()._caps, "/dev/input/event3")
     kanata = _HeldKeyboard("kanata", _kanata()._caps, "/dev/input/event18")
     try:
@@ -558,13 +574,11 @@ def test_a_key_remappers_keyboard_is_never_grabbed_or_written_to(monkeypatch):
 
 
 @pytest.mark.parametrize("real_keyboard", [False, True])
-def test_a_right_ctrl_held_through_a_remapper_is_never_called_hidden(monkeypatch, real_keyboard):
+def test_a_right_ctrl_held_through_a_remapper_is_never_called_hidden(real_keyboard):
     """kanata's keyboard isn't grabbed, so the desktop sees its Right Ctrl
     down: typing must wait for it, or the dictation turns into Ctrl
     shortcuts (Ctrl+W closes the tab). Also with another keyboard grabbed."""
     from tuxtalk import modifier_hotkeys
-    monkeypatch.setattr(keyboard_devices, "is_uinput_device",
-                        lambda path: path == "/dev/input/event18")
     kanata = _HeldKeyboard("kanata", _kanata()._caps, "/dev/input/event18",
                            held=[ecodes.KEY_RIGHTCTRL])
     real = _HeldKeyboard("USB Keyboard", keyboard()._caps, "/dev/input/event3", held=[])
@@ -576,18 +590,6 @@ def test_a_right_ctrl_held_through_a_remapper_is_never_called_hidden(monkeypatch
     finally:
         keyboard_grab.release_all()
         keyboard_grab._injected_pending.clear()
-
-
-@pytest.mark.parametrize("node,made", [
-    ("/sys/devices/virtual/input/input42", True),               # uinput: kanata
-    ("/sys/devices/virtual/misc/uhid/0005:046D:B023.0001/input/input23", False),  # BLE
-    ("/sys/devices/pci0000:00/0000:00:14.0/usb1/1-2/input/input7", False)])
-def test_a_program_made_device_is_told_by_where_sysfs_keeps_it(monkeypatch, node, made):
-    asked = []
-    monkeypatch.setattr(keyboard_devices.os.path, "realpath",
-                        lambda path: asked.append(path) or node)
-    assert keyboard_devices.is_uinput_device("/dev/input/event18") is made
-    assert asked == ["/sys/class/input/event18/device"]
 
 
 # --- the Voice Commands hotkey is a grab path too ---------------------------
@@ -1028,8 +1030,6 @@ def test_only_a_compose_key_caught_down_on_a_real_keyboard_is_ours_to_end(monkey
     hides it and TuxTalk ends the compose its press began; through kanata it
     can't, since kanata would hand Compose pressed again back as the key."""
     from tuxtalk import modifier_hotkeys
-    monkeypatch.setattr(keyboard_devices, "is_uinput_device",
-                        lambda path: path == "/dev/input/event18")
     press = modifier_hotkeys._ComposePress(1, ecodes.KEY_RIGHTCTRL, False)
     monkeypatch.setattr(modifier_hotkeys, "_compose", press)
     if through_kanata:

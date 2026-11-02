@@ -1,7 +1,10 @@
 """The hotkey helper (hotkey_helper.py): which input devices it reads as
 keyboards, what it says about those it leaves out, and how a keyboard it
 may only read is used (issue #26). The rest is in test_hotkey_helper.py."""
+import ctypes
+import errno
 import os
+import struct
 
 import pytest
 
@@ -17,23 +20,21 @@ F8, RCTRL, LSHIFT = 66, 97, 42
 _LETTERS = set(range(16, 26)) | set(range(30, 39))      # Q..P, A..L
 
 
-@pytest.mark.parametrize("pointer,uinput,name,read", [
-    (False, False, "USB Keyboard", True),
-    (True, False, "Logitech MX Master", False),         # a mouse claiming letter keys
-    (True, True, "kanata", True),                       # a remapper's keyboard (issue #23)
-    (False, True, "keyd virtual keyboard", True),
-    (True, True, hh.OWN_KEYBOARD_NAME, False)])         # the one TuxTalk types with
-def test_which_devices_are_read_as_keyboards(pointer, uinput, name, read):
-    assert _counts_as_keyboard(_LETTERS | {hh.BTN_LEFT}, pointer, uinput, name) is read
+@pytest.mark.parametrize("name,read", [
+    ("USB Keyboard", True),
+    ("kanata", True),                       # a remapper's keyboard (issue #23)
+    (hh.OWN_KEYBOARD_NAME, False)])         # the one TuxTalk types with
+def test_which_devices_are_read_as_keyboards(name, read):
+    assert _counts_as_keyboard(_LETTERS | {hh.BTN_LEFT}, name) is read
 
 
 def test_a_device_without_letter_keys_is_no_keyboard():
-    assert _counts_as_keyboard({hh.BTN_LEFT, 66}, False, False, "Power Button") is False
+    assert _counts_as_keyboard({hh.BTN_LEFT, 66}, "Power Button") is False
 
 
-def _counts_as_keyboard(keys, pointer, uinput, name):
+def _counts_as_keyboard(keys, name):
     try:
-        hh.check_keyboard(keys, pointer, uinput, name)
+        hh.check_keyboard(keys, name)
     except hh.Skipped:
         return False
     return True
@@ -88,11 +89,13 @@ class FakeEvdev:
 
     def __init__(self, keys, pointer=False, name="USB Keyboard"):
         self.keys, self.pointer, self.name = keys, pointer, name
-        self.grabs = []
+        self.grabs, self.masks = [], []
 
     def ioctl(self, fd, request, arg=0, mutate=False):
         if request == hh.EVIOCGRAB:
             self.grabs.append(arg)
+        elif request == hh.EVIOCSMASK:
+            self.masks.append(arg)
         elif request == hh.EVIOCGBIT(hh.EV_KEY, hh.KEY_BYTES):
             for code in self.keys:
                 arg[code // 8] |= 1 << code % 8
@@ -156,16 +159,12 @@ def test_a_device_that_cant_be_opened_is_logged_once_with_why(setup, monkeypatch
 
 
 @pytest.mark.parametrize("evdev, said", [
-    (FakeEvdev(_LETTERS | {hh.BTN_LEFT}, pointer=True, name="Logitech USB Receiver"),
-     "'Logitech USB Receiver' looks like a mouse"),
     (FakeEvdev({116}, name="Power Button"), None),                  # no letter keys
     (FakeEvdev(_LETTERS, name=hh.OWN_KEYBOARD_NAME), None),         # TuxTalk's own
 ])
 def test_a_device_left_out_is_logged_once_when_it_looks_like_a_keyboard(
         setup, monkeypatch, tmp_path, capsys, evdev, said):
-    """Power buttons and lid switches would fill the journal; a mouse with
-    letter keys is worth a line, since a keyboard taken for one is a
-    keyboard whose hotkeys never work."""
+    """Power buttons and lid switches would fill the journal."""
     helper, _kb, _connect, _say, _heard, _seat = setup
     node = _device(tmp_path / "input")
     monkeypatch.setattr(hh, "fcntl", evdev)
@@ -177,6 +176,50 @@ def test_a_device_left_out_is_logged_once_when_it_looks_like_a_keyboard(
         assert out.count(f"not watching {node}: {said}") == 1
     else:
         assert "not watching" not in out
+
+
+@pytest.mark.parametrize("name", ["Logitech MX Keys", "Logitech MX Master"])
+def test_a_keyboard_that_is_a_mouse_too_is_read_and_held(setup, monkeypatch, tmp_path, name):
+    """A Logitech receiver gives its keyboards a mouse's motion and buttons
+    (an MX Keys, issue #26) and its mice a keyboard's keys: left out as a
+    mouse, the keyboard's F8 never reached TuxTalk. Hardware, so a hotkey
+    pressed on it is held like any keyboard's; its motion is masked off."""
+    helper, _kb, _connect, _say, _heard, _seat = setup
+    node = _device(tmp_path / "input")
+    evdev = FakeEvdev(_LETTERS | {F8, hh.BTN_LEFT}, pointer=True, name=name)
+    monkeypatch.setattr(hh, "fcntl", evdev)
+    monkeypatch.setattr(hh, "made_through_uinput", lambda rdev: False)
+    helper.scan()
+    kb = helper.keyboards[str(node)]
+    assert kb.name == name and kb.listen_only is None
+    assert len(evdev.masks) == 1
+
+
+def test_a_programs_keyboard_and_mouse_in_one_is_never_held(setup, monkeypatch, tmp_path):
+    helper, _kb, _connect, _say, _heard, _seat = setup
+    node = _device(tmp_path / "input")
+    monkeypatch.setattr(hh, "fcntl", FakeEvdev(_LETTERS | {hh.BTN_LEFT}, pointer=True,
+                                               name="kanata"))
+    monkeypatch.setattr(hh, "made_through_uinput", lambda rdev: True)
+    helper.scan()
+    assert helper.keyboards[str(node)].listen_only == "a program's keyboard and mouse in one"
+
+
+def test_only_key_events_are_asked_of_the_kernel(monkeypatch):
+    """EVIOCSMASK on type 0 takes a bitmap of event types: EV_SYN and EV_KEY."""
+    asked = []
+    monkeypatch.setattr(hh.fcntl, "ioctl", lambda fd, request, arg: asked.append(arg))
+    hh.mask_to_keys(3)
+    kind, size, address = struct.unpack("IIQ", asked[0])
+    assert (kind, size) == (hh.EV_SYN, 8)
+    assert ctypes.string_at(address, size) == bytes([0b11, 0, 0, 0, 0, 0, 0, 0])
+
+
+def test_a_kernel_without_event_masks_still_reads_the_keyboard(monkeypatch):
+    def refuse(fd, request, arg):
+        raise OSError(errno.EINVAL, "Invalid argument")
+    monkeypatch.setattr(hh.fcntl, "ioctl", refuse)
+    hh.mask_to_keys(3)
 
 
 def test_another_seats_keyboard_is_logged_once(setup, monkeypatch, tmp_path, capsys):

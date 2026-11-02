@@ -308,6 +308,18 @@ def _no_followed_default_mic(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_keyboards_an_old_helper_misses(monkeypatch, request):
+    """No keyboard here that an older hotkey helper leaves out, unless a
+    test says so: the scans read this computer's /dev/input, where a
+    Logitech mouse would have every older helper asked to be updated.
+    test_helper_keyboard_access tests the scans themselves."""
+    if request.module.__name__.rpartition(".")[2] != "test_helper_keyboard_access":
+        from tuxtalk import helper_keyboard_access
+        monkeypatch.setattr(helper_keyboard_access, "read_only_keyboards", lambda: [])
+        monkeypatch.setattr(helper_keyboard_access, "keyboards_also_mice", lambda: [])
+
+
+@pytest.fixture(autouse=True)
 def _no_real_send_countdown(monkeypatch, request):
     """No floating label on the user's screen and no Enter left counting down
     between tests. Sends happen at once, on the test's thread, unless a test

@@ -61,7 +61,9 @@ keyboard to itself, so a held F8 doesn't auto-repeat into the window being
 dictated into. That's allowed once per press of a hotkey (never Esc) that is
 physically held, for one client at a time. It grabs the keyboard the press
 came from, and another real keyboard only if it holds a modifier reported
-with the press (Shift for a voice edit, on a split keyboard). It ends by
+with the press (Shift for a voice edit, on a split keyboard). One that's a
+mouse as well (a Logitech one: see check_keyboard) moves no pointer while
+it's held. It ends by
 itself as soon as that key comes up there, when someone else's session
 comes to the front, when the program that asked goes away, or after 15
 minutes at most. A press's release is reported from the keyboard it was
@@ -106,6 +108,7 @@ helper -> client
                                ERR listen-only keyboard
 Codes are Linux evdev key codes (linux/input-event-codes.h).
 """
+import array
 import errno
 import fcntl
 import os
@@ -117,7 +120,7 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.12"
+VERSION = "1.13"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"
@@ -178,6 +181,7 @@ def _ioc(direction, number, size):
 EVIOCGRAB = _ioc(1, 0x90, 4)
 EVIOCGID = _ioc(2, 0x02, 8)
 EVIOCSCLOCKID = _ioc(1, 0xA0, 4)
+EVIOCSMASK = _ioc(1, 0x93, 16)      # struct input_mask: type, codes_size, codes_ptr
 CLOCK_MONOTONIC = 1
 KEY_BYTES = KEY_MAX // 8 + 1
 
@@ -192,6 +196,24 @@ def EVIOCGKEY(length):
 
 def EVIOCGNAME(length):
     return _ioc(2, 0x06, length)
+
+
+# The event types a keyboard's reader needs, as EVIOCSMASK takes them (a
+# bitmap of types, a C long): the keys, and the reports that end them,
+# SYN_DROPPED included. Kept for good: the kernel is given its address.
+_KEYS_ONLY = array.array("B", [1 << EV_SYN | 1 << EV_KEY] + [0] * 7)
+
+
+def mask_to_keys(fd):
+    """Have the kernel pass the reader on *fd* nothing but key events. A
+    keyboard that's a mouse as well (check_keyboard) would otherwise wake
+    it at every movement of the mouse. A kernel before 4.4 can't: every
+    event is read then, and all but the keys passed over, as before."""
+    address, count = _KEYS_ONLY.buffer_info()
+    try:
+        fcntl.ioctl(fd, EVIOCSMASK, struct.pack("IIQ", EV_SYN, count, address))
+    except OSError:
+        pass
 
 
 # --- limits: nobody gets to make this helper do much work ----------------------------
@@ -412,18 +434,17 @@ def open_node(path):
 READ_ONLY = "it may only be read here"
 
 
-def check_keyboard(keys, pointer, uinput, name):
-    """Raise Skipped unless a device with the key codes *keys*, mouse motion
-    (*pointer*), made through uinput or not (*uinput*) and called *name*, is
-    a keyboard to read: it has letter keys, and it isn't a mouse claiming
-    them (a Logitech receiver) nor the keyboard TuxTalk types with. A uinput
-    one shaped like a mouse is read, and never held (Keyboard.listen_only):
-    kanata takes the real keyboards and passes every key on through one
-    (issue #23)."""
+def check_keyboard(keys, name):
+    """Raise Skipped unless a device with the key codes *keys* and called
+    *name* is a keyboard to read: it has letter keys, and it isn't the
+    keyboard TuxTalk types with. One that's a mouse as well is read too,
+    as libinput does: a Logitech receiver gives its keyboards a mouse's
+    movement and buttons, and its mice a keyboard's keys and lights, so
+    the two can't be told apart, and leaving them out left an MX Keys
+    unheard (issue #26). Its movement never reaches the helper
+    (mask_to_keys)."""
     if len(keys & LETTER_KEYS) < 3 or name == OWN_KEYBOARD_NAME:
         raise Skipped()
-    if pointer and not uinput:
-        raise Skipped(f"{name!r} looks like a mouse")
 
 
 # --- keyboards --------------------------------------------------------------------------
@@ -436,7 +457,7 @@ class Keyboard:
         have made it; *group*: device_group's answer; *listen_only*: why it
         is never held nor written to, or None."""
         self.path, self.fd, self.name, self.virtual, self.group = path, fd, name, virtual, group
-        # Two kinds. A program's keyboard shaped like a mouse (check_keyboard):
+        # Two kinds. A program's keyboard shaped like a mouse (_probe):
         # a remapper's, carrying the mouse's motion and the text TuxTalk
         # types; holding it would freeze the one and swallow the other. And
         # one opened read-only (open_node): writing to it fails, so its keys
@@ -464,6 +485,7 @@ class Keyboard:
             monotonic = True
         except OSError:
             monotonic = False
+        mask_to_keys(fd)
         try:
             keyboard = cls._probe(path, fd, read_only)
         except Skipped:
@@ -489,7 +511,7 @@ class Keyboard:
         name = bytearray(256)
         fcntl.ioctl(fd, EVIOCGNAME(len(name)), name, True)
         name = name.split(b"\0", 1)[0].decode("utf-8", "replace")
-        check_keyboard(keys, pointer, made_through_uinput(st.st_rdev), name)
+        check_keyboard(keys, name)
         seat = udev_seat(st.st_rdev)
         if seat != "seat0":
             raise Skipped(f"{name!r} is on {seat}, and only seat0's keyboards are read")
@@ -499,7 +521,7 @@ class Keyboard:
         virtual = struct.unpack("HHHH", ident)[0] == BUS_VIRTUAL or group.startswith("virtual:")
         state = bytearray(KEY_BYTES)
         fcntl.ioctl(fd, EVIOCGKEY(len(state)), state, True)
-        if pointer:
+        if pointer and made_through_uinput(st.st_rdev):
             listen_only = "a program's keyboard and mouse in one"
         else:
             listen_only = READ_ONLY if read_only else None
