@@ -1373,6 +1373,9 @@ def idle_service(monkeypatch):
 # The chat window the chat fixture dictates into.
 CHAT_WINDOW = ("brave-browser", ("tray", "{5c1d0e2a}"))
 
+# The notification's title when the user holds an automatic send.
+HELD_TITLE = "Not sent: you held it"
+
 
 @pytest.fixture
 def chat(monkeypatch, keyboard):

@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 from evdev import ecodes
 
-from conftest import CHAT_WINDOW as FIRST, held_timers, next_recording
+from conftest import CHAT_WINDOW as FIRST, HELD_TITLE, held_timers, next_recording
 from tuxtalk import (atspi_helper, compositor_focus, dbus_service, focused_window, history,
                      modifier_hotkeys, send_countdown)
 from tuxtalk import recording_state as rs
@@ -377,9 +377,6 @@ def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monk
     finally:
         rs.state.is_recording = False
         rs.state.current.stream = None
-
-
-HELD_TITLE = "Not sent: you held it"
 
 
 def counting_down(monkeypatch):

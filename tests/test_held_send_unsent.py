@@ -10,8 +10,7 @@ import types
 import pytest
 from evdev import ecodes
 
-from conftest import held_timers
-from test_send_destination import FIRST, HELD_TITLE
+from conftest import CHAT_WINDOW as FIRST, HELD_TITLE, held_timers
 from tuxtalk import (delivery, dictation_worker, focused_window, hotkeys, keyboard_grab,
                      modifier_hotkeys, recording, send_countdown)
 from tuxtalk import recording_state as rs
