@@ -79,6 +79,13 @@ before 0.15.0, so older entries use that name.
   to and checked again there before it's installed. The password prompt
   says it's running bash now, the same as when you set up the hotkey
   helper.
+- Dictating on the graphics card through Vulkan is safer. TuxTalk's
+  graphics engine only answers requests that carry a key TuxTalk makes
+  new every time it starts, so other users' programs and web pages can't
+  use it, and it no longer loads a model file some other program names.
+  If you already use Vulkan you keep dictating on the graphics card while
+  the 22 MB update downloads by itself, unless you turned off checking
+  for updates at start.
 - The CUDA download got whatever NVIDIA had last put on PyPI, so a new
   version reached you the day it came out, untried. It's pinned now to the
   version TuxTalk has been downloading and tested with, checked by its
