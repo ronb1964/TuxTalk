@@ -59,6 +59,7 @@ UNKNOWN_WINDOW_NOTICE = ("Not sent: TuxTalk can't tell which window has the focu
                          "Press Enter when you're ready.")
 OWN_WINDOW_NOTICE = "Not sent: a TuxTalk window has the focus."
 INCOMPLETE_NOTICE = "Not sent: part of the message didn't go in."
+CANCELLED_NOTICE = "Not sent: you pressed Esc."
 
 # Why an Enter wasn't sent: (what the log says after "Not sent: ", the notice).
 _NOT_SENT = {
@@ -67,6 +68,7 @@ _NOT_SENT = {
     "password": ("a password field has the focus now", PASSWORD_FIELD_NOT_SENT),
     "own_window": ("a TuxTalk window has the focus", OWN_WINDOW_NOTICE),
     "incomplete": ("part of the message didn't go in", INCOMPLETE_NOTICE),
+    "cancelled": ("Esc cancelled the dictation", CANCELLED_NOTICE),
     "typed_meanwhile": ("other keys went out while it was checked", HELD_NOTICE),
     "unknown_window": ("which window has the focus isn't known", UNKNOWN_WINDOW_NOTICE),
     "not_pressed": ("a dictation key stayed down, or the key couldn't be pressed", HELD_NOTICE),
@@ -113,8 +115,12 @@ def configure(cfg) -> None:
 
 # --- Where the Enter may go ---------------------------------------------------
 
-def _incomplete(message: Message) -> str | None:
-    """"incomplete" when part of *message* didn't go in, else None."""
+def _not_whole(message: Message) -> str | None:
+    """Why nothing may follow *message*'s words whatever the window:
+    "cancelled" when Esc cancelled it as its words went in, "incomplete"
+    when part of it didn't go in; else None."""
+    if message.cancelled:
+        return "cancelled"
     return None if message.complete else "incomplete"
 
 
@@ -223,7 +229,7 @@ def press_where_sent(key: str, why: str, message: Message, press) -> bool:
     it. *press* is as for send_automatically. Not pressed, the notice says
     why."""
     pending = {"to": message.to}
-    if not (refused := _incomplete(message)) and press(
+    if not (refused := _not_whole(message)) and press(
             key, why, claim=lambda: _claim(pending, spoken=True)):
         return True
     _say_not_sent(refused or pending.get("refused") or "not_pressed", key=key)
@@ -237,7 +243,7 @@ def type_where_sent(text: str, key: str, message: Message, type_more) -> str | N
     into=None) types onto the dictation, into the window *into* only. The
     typing's outcome, or None when it wasn't tried; either way not typed,
     the notice says why."""
-    why = _incomplete(message) or _why_not(message.to, focused_window.destination(), spoken=True)
+    why = _not_whole(message) or _why_not(message.to, focused_window.destination(), spoken=True)
     outcome = None if why else type_more(text, "type", into=message.to)
     if why or outcome == "moved":
         _say_not_sent(why or "switched", key=key)
@@ -265,7 +271,7 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
     # Nothing to count down to when no Enter could go: part of the message
     # is missing, the delivery saw the focus move, or the window can't be
     # told.
-    if reason := _incomplete(message) or _why_not(message.to, message.to):
+    if reason := _not_whole(message) or _why_not(message.to, message.to):
         _say_not_sent(reason)
         if reason == "unknown_window" and space:
             # No Enter could ever follow: the space goes in now, as with
@@ -455,7 +461,7 @@ def say_held_back(word: str, message: Message) -> None:
     (_say_not_sent), or it looks as if sending were off. Where the Enter
     couldn't have gone anyway (part of the message missing, another window
     in front), that reason is the one said."""
-    why = _incomplete(message) or _why_not(message.to, focused_window.destination())
+    why = _not_whole(message) or _why_not(message.to, focused_window.destination())
     if why:
         _say_not_sent(why)
         return

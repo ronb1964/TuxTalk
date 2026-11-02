@@ -89,6 +89,18 @@ def join_segments(texts) -> str:
 # Mirrors include/parakeet.h of whisper.cpp 1.9.5 (unchanged from 1.9.4), the version the engine is
 # built from (whisper_vulkan.ENGINE_VERSION). Recheck these when it changes.
 
+class EngineFailed(RuntimeError):
+    """The engine answered a request with an error: the message says which,
+    and holds no words."""
+
+
+def request_error(error: Exception) -> str:
+    """What the reply to a failed request says: the parent logs it, so
+    nothing that could hold a recognised word or one of Your Words, only
+    EngineFailed's own message or the error's type."""
+    return str(error) if isinstance(error, EngineFailed) else type(error).__name__
+
+
 class _ContextParams(C.Structure):
     _fields_ = [("use_gpu", C.c_bool), ("gpu_device", C.c_int)]
 
@@ -155,7 +167,7 @@ def load_engine(engine_dir, model, device, threads):
         samples = (C.c_float * count).from_buffer_copy(raw)
         result = lib.parakeet_full(ctx, params, samples, count)
         if result != 0:
-            raise RuntimeError(f"the engine failed to transcribe (code {result})")
+            raise EngineFailed(f"the engine failed to transcribe (code {result})")
         return join_segments(
             (lib.parakeet_full_get_segment_text(ctx, i) or b"").decode("utf-8", "replace")
             for i in range(lib.parakeet_full_n_segments(ctx)))
@@ -163,7 +175,7 @@ def load_engine(engine_dir, model, device, threads):
     def set_words(words):
         """Hand the engine the user's words as boost tables; the number it
         took, or None for an engine built without TuxTalk's word boost.
-        Raises RuntimeError when the engine refuses them."""
+        Raises EngineFailed when the engine refuses them."""
         try:
             setter = lib.parakeet_set_word_boost
         except AttributeError:
@@ -180,7 +192,7 @@ def load_engine(engine_dir, model, device, threads):
         n = setter(ctx, len(targets) - 1, ints(targets), len(positions) - 1, ints(positions),
                    len(pids), ints(pids), ints(nexts), (C.c_float * 6)(*settings), 6)
         if n < 0:
-            raise RuntimeError("the engine refused the word tables")
+            raise EngineFailed("the engine refused the word tables")
         return n
 
     return Engine(transcribe, set_words)
@@ -215,7 +227,7 @@ def main(argv):
             else:
                 write_reply(out, {"text": transcribe(raw)})
         except Exception as e:
-            write_reply(out, {"error": str(e)})
+            write_reply(out, {"error": request_error(e)})
     return 0
 
 

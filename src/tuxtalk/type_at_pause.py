@@ -395,7 +395,7 @@ def _heard_in_context(pending: dict, audio_f32, language):
         if found is not None:
             mark = found
     except Exception as e:
-        logger.warning(f"Couldn't hear the chunk boundary in context: {e}")
+        logger.warning(f"Couldn't hear the chunk boundary in context: {type(e).__name__}")
     return mark, joint
 
 
@@ -455,7 +455,10 @@ def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode,
     """Type at pause's recording ended in a pause, with nothing said after
     it: a held "no wait" is typed as said, the last phrase gets its mark,
     and "Send each dictation automatically" sends *message* if all of it
-    went in."""
+    went in. Nothing of it after Esc (recording.cancel_finishing)."""
+    if message.cancelled:
+        logger.info("Not finished: the recording was cancelled")
+        return
     unfinished_edit = _drop_unfinished_edit(message, beeps_on)
     if message.held_cue:
         cue, message.held_cue = message.held_cue, ""

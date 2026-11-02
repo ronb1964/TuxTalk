@@ -32,7 +32,7 @@ from . import recording_state as rs
 from .beeps import CANCEL_BEEP, READY_BEEP
 from .chunk_text import carry_question, engine_period, hold_back_boundary
 from .key_commands import auto_send, ends_unfinished, split_key_command
-from .logger import setup_logger
+from .logger import error_without_words, setup_logger
 from .window_classes import app_kind, is_document_window, pastes_broken
 
 logger = setup_logger(__name__)
@@ -172,7 +172,9 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if words.text:
             _deliver(words, audio_f32, job)
     except Exception as e:
-        logger.error(f"Transcription error: {e}", exc_info=True)
+        # The error's text can quote the words: the notice shows it to the
+        # user, and the log leaves it out.
+        logger.error(f"Transcription error: {error_without_words(e)}")
         # The cancel beep and a notice whatever the notifications setting,
         # like notices.report_undelivered: nothing was typed, and the "done"
         # beep would sound like it worked.
@@ -432,7 +434,7 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
         # The transcription worked; only getting it into the window
         # didn't, so this is reported as undelivered, not as a
         # "Transcription error".
-        logger.error(f"Injection error: {e}", exc_info=True)
+        logger.error(f"Injection error: {error_without_words(e)}")
         outcome = "failed"
         job.message.add(outcome, None)
     if outcome == "password_field":
@@ -440,6 +442,8 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
     last_dictation.remember_shown(rs.state.last_inserted_text, chunked, outcome == "ok",
                                   job.message)
     job.message.ends_on = ends_unfinished(words.raw)
+    if outcome == "ok":
+        _keep_for_the_sentence(words, text, audio_f32, job)
     _after_the_words(outcome, words.said, words.press, words.space_left_off, job.chunk_role,
                      job.beeps_on, job.injection_mode, job.message)
     if outcome == "ok" and words.held_back:
@@ -455,23 +459,31 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
                taken_back=count_words(words.taken_back))
 
 
+def _keep_for_the_sentence(words: _Words, text: str, audio_f32, job: _Job) -> None:
+    """A Type at pause phrase went in, and its sentence goes on: the engine
+    hears all of it for its final mark (type_at_pause.keep_sentence_audio).
+    Kept before the key said after it is pressed: an Enter or Tab that goes
+    begins the next message (type_at_pause.start_afresh), and one that
+    doesn't (Claude Desktop's four spaces for Tab, a key that failed)
+    leaves this phrase in the sentence."""
+    if job.chunk_role == "middle" and (
+            words.held_mark is not None
+            or not text.rstrip().endswith(type_at_pause.SENTENCE_ENDS)):
+        type_at_pause.keep_sentence_audio(job.message, audio_f32)
+
+
 def _carry_on_after(words: _Words, text: str, audio_f32, job: _Job) -> None:
     """A Type at pause phrase went in: how the next phrase carries on from it."""
     if job.chunk_role == "middle" and not live.chunk_context_marks and not words.press:
         # Without the context pass the engine's own mark decides: after
         # a comma or none, the next chunk carries on lowercase.
         rs.state.continue_mid_sentence = not text.rstrip().endswith(type_at_pause.SENTENCE_ENDS)
-    if job.chunk_role == "middle" and not words.press and (
-            words.held_mark is not None
-            or not text.rstrip().endswith(type_at_pause.SENTENCE_ENDS)):
-        # Its sentence goes on: the engine hears all of it for its final
-        # mark. Not after Enter or Tab, which began the next message.
-        type_at_pause.keep_sentence_audio(job.message, audio_f32)
     if words.held_mark is not None:
-        # Only the end of the phrase is kept: the engine hears it with
-        # the start of the next one to decide the mark between them.
+        # Only the end of the phrase is kept, a copy, so the rest of it
+        # can go: the engine hears it with the start of the next one to
+        # decide the mark between them.
         job.message.held_mark = {"mark": words.held_mark,
-                                 "audio": audio_f32[-type_at_pause.context_samples():],
+                                 "audio": audio_f32[-type_at_pause.context_samples():].copy(),
                                  "raw": words.raw, "typed": rs.state.last_inserted_text,
                                  "where": rs.state.last_inserted_where,
                                  # No mark held: the period, if any, is the auto-period.
@@ -501,7 +513,7 @@ def stop_recording(
     message = rec.message
     if rec.edit_mode:
         where = focused_window.look()       # the window the edit is for
-        dictation_worker.submit(lambda: voice_edit.transcribe_and_edit(
+        _finish(message, lambda: voice_edit.transcribe_and_edit(
             frames, rec_sr, beeps_on, language, injection_mode, message, where))
         return
     # Type at pause: the rest is the recording's last phrase, typed after
@@ -509,9 +521,24 @@ def stop_recording(
     chunk_role = "last" if rec.chunks_submitted else None
     if chunk_role:
         frames = recording.drop_speechless_rest(rec, frames)
-    dictation_worker.submit(lambda: transcribe_and_inject(
+    _finish(message, lambda: transcribe_and_inject(
         frames, rec_sr, beeps_on, smart_quotes, notify_on, language, auto_space,
         auto_period, injection_mode, chunk_role=chunk_role, message=message))
+
+
+def _finish(message, work) -> None:
+    """Queue *work*, the last part of *message*'s recording, on the dictation
+    worker. Until it's done, Esc cancels what of it is left
+    (recording.cancel_finishing): the key is up, but the words may not be
+    in yet, nor the automatic Enter after them."""
+    message.finishing = True
+
+    def run():
+        try:
+            work()
+        finally:
+            message.finishing = False
+    dictation_worker.submit(run)
 
 
 # Type at pause's phrases, cut while the recording goes on, are transcribed and

@@ -267,6 +267,11 @@ def test_with_whisper_the_period_stays_and_nothing_is_heard_again(pipeline, monk
     ("we meet at 5 p.m.", "we meet at 5 p.m.", False),
     ("and then...", "and then...", False),
     ("is that it.", "is that it period", False),          # a period the speaker dictated
+    ("it would be smart.", "it would be smart", True),    # the auto-period
+    ("should we ask Dr.", "should we ask Dr.", False),
+    ("apples, pears, etc.", "apples, pears, etc.", False),
+    ("is it still 3.14.", "is it still 3.14.", True),
+    ("is that right.", "is that right!", False),          # not the engine's period
 ])
 def test_only_a_period_the_engine_put_after_the_last_word_may_change(text, raw, ours):
     from tuxtalk.chunk_text import engine_period
@@ -313,3 +318,31 @@ def test_a_held_back_abbreviation_keeps_its_period(pipeline):
     type_chunk(frames_of(speech(3.0)), "middle")
     type_at_pause.end_in_a_pause(rs.state.current.message, False, True, True, "type", None)
     assert texts == [DECOY] and "?" not in "".join(typed)
+
+
+def test_a_long_phrase_isnt_kept_whole_while_the_next_is_awaited(pipeline):
+    """The mark held back after a phrase keeps only its last seconds, as a
+    copy: a slice would keep the whole phrase's audio alive with it."""
+    texts, typed = pipeline
+    texts.extend(["don't you think it would be smart to pick more."])
+    type_chunk(frames_of(speech(20.0)), "middle")
+    held = rs.state.current.message.held_mark["audio"]
+    assert held.base is None and len(held) == type_at_pause.context_samples()
+
+
+@pytest.mark.parametrize("key_goes", [True, False])
+def test_a_key_that_doesnt_end_the_message_leaves_the_phrase_in_the_sentence(
+        pipeline, monkeypatch, key_goes):
+    """"don't you think, press tab" in Claude Desktop types four spaces (or
+    the Tab didn't go): the message, and its sentence, go on, and the whole
+    pass must hear this phrase too. A Tab that went begins the next one."""
+    from tuxtalk import pipeline as dictation_pipeline
+    texts, typed = pipeline
+
+    def press_said(key, chunk_role, after_words=False, message=None):
+        if key_goes:
+            type_at_pause.start_afresh(message)
+    monkeypatch.setattr(dictation_pipeline, "press_said", press_said)
+    texts.extend(["don't you think press tab"])
+    type_chunk(frames_of(speech(1.0)), "middle")
+    assert bool(rs.state.current.message.sentence_audio) is not key_goes
