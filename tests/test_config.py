@@ -1,6 +1,6 @@
 """Tests for config module validation logic"""
 import pytest
-from tuxtalk.config import Settings, validate_config, ConfigError
+from tuxtalk.config import ConfigError, Settings, apply_toml, validate_config
 
 
 def test_valid_config():
@@ -220,3 +220,20 @@ def test_power_saving_default_follows_the_battery(monkeypatch):
     assert config.Settings().auto_timeout_enabled is True
     monkeypatch.setattr(config, "has_battery", lambda: False)
     assert config.Settings().auto_timeout_enabled is False
+
+
+def test_a_quoted_false_turns_a_setting_off_not_on():
+    """bool("false") is True: a hand-edited log_transcripts = "false" wrote
+    every dictation to the log."""
+    s = Settings()
+    assert apply_toml(s, {"log_transcripts": "false", "beeps": "TRUE"}) == []
+    assert s.log_transcripts is False and s.beeps is True
+    assert apply_toml(s, {"beeps": "loud"}) == ["beeps"]
+
+
+def test_a_quoted_whole_number_is_read_as_preferences_shows_it():
+    """auto_timeout_minutes = "5.0" was the default to the service but 5 in
+    Preferences: both read settings with apply_toml now."""
+    s = Settings()
+    assert apply_toml(s, {"auto_timeout_minutes": "5.0", "key_delay": "3"}) == []
+    assert s.auto_timeout_minutes == 5 and s.key_delay == 3

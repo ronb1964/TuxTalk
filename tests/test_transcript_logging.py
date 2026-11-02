@@ -234,15 +234,6 @@ def test_clear_log_says_when_it_could_not_erase(tmp_path):
     assert tlog.clear_log(tmp_path) is False
 
 
-def test_a_quoted_false_turns_a_setting_off_not_on():
-    """bool("false") is True: a hand-edited log_transcripts = "false" wrote
-    every dictation to the log."""
-    s = config.Settings()
-    assert config.apply_toml(s, {"log_transcripts": "false", "beeps": "TRUE"}) == []
-    assert s.log_transcripts is False and s.beeps is True
-    assert config.apply_toml(s, {"beeps": "loud"}) == ["beeps"]
-
-
 def test_prefs_has_clear_log_button(prefs_window, dialogs, monkeypatch):
     cleared = []
     monkeypatch.setattr(tlog, "clear_log", lambda: cleared.append(True) or True)
@@ -477,11 +468,3 @@ def test_the_graphics_helper_never_sends_back_the_words_of_a_failure():
     assert worker.request_error(KeyError("zanzibar")) == "KeyError"
     code = worker.EngineFailed("the engine failed to transcribe (code 3)")
     assert worker.request_error(code) == "the engine failed to transcribe (code 3)"
-
-
-def test_a_quoted_whole_number_is_read_as_preferences_shows_it():
-    """auto_timeout_minutes = "5.0" was the default to the service but 5 in
-    Preferences: both read settings with apply_toml now."""
-    s = config.Settings()
-    assert config.apply_toml(s, {"auto_timeout_minutes": "5.0", "key_delay": "3"}) == []
-    assert s.auto_timeout_minutes == 5 and s.key_delay == 3

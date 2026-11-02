@@ -408,3 +408,31 @@ def test_a_tab_said_mid_sentence_is_four_spaces_in_claude_desktop_however_it_typ
     assert delivery.inject_text("Name\taddress. ", mode) == "ok"
     assert typed == ["Name    address. "]
     assert rs.state.last_inserted_text == "Name    address. "
+
+
+def test_a_stalled_wtype_is_killed_and_reported(monkeypatch):
+    """wtype, used when TuxTalk can't make its virtual keyboard, has a time
+    limit: a compositor that stalls would otherwise freeze dictation with no
+    text and no error."""
+    monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype")
+    # No access to /dev/uinput: wtype is the way left to type.
+    from tuxtalk import virtual_keyboard
+    monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
+
+    killed = []
+
+    class HungProc:
+        returncode = None
+
+        def communicate(self, input=None, timeout=None):
+            if not killed:
+                raise subprocess.TimeoutExpired(cmd="wtype", timeout=timeout)
+            return (b"", b"")
+
+        def kill(self):
+            killed.append(True)
+
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: HungProc())
+
+    assert keyboard_output.type_text_raw("hello") is False
+    assert killed, "a hung wtype must be killed, not left typing later"

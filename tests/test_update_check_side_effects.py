@@ -1,4 +1,4 @@
-"""Three rules that share a theme: a slow operation must not act on stale state
+"""Two rules that share a theme: a slow operation must not act on stale state
 or wait forever.
 
 1. The daily update check spends up to ~30s on a network call, so it records
@@ -12,10 +12,6 @@ or wait forever.
    dialog forever. The child runs as root, a user process cannot kill it, and
    killing a package manager mid-transaction is far worse than waiting, so the
    process is left alone to finish.
-
-3. wtype, used when TuxTalk can't make its virtual keyboard, has a timeout
-   (killed and reaped after 20s); otherwise a compositor that stalls freezes dictation with
-   no text and no error.
 """
 
 import io
@@ -24,7 +20,6 @@ import subprocess
 import pytest
 
 from tuxtalk import config as config_module
-from tuxtalk import keyboard_output
 
 
 class TestRecordingTheUpdateCheck:
@@ -124,31 +119,6 @@ class TestPackageInstallIsBounded:
 
         assert ok is False
         assert "cancel" in message.lower()
-
-
-class TestWtypeIsBounded:
-    def test_a_stalled_wtype_is_killed_and_reported(self, monkeypatch):
-
-        monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype")
-        # No access to /dev/uinput: wtype is the way left to type.
-        from tuxtalk import virtual_keyboard
-        monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
-
-        killed = []
-
-        class HungProc:
-            returncode = None
-            def communicate(self, input=None, timeout=None):
-                if not killed:
-                    raise subprocess.TimeoutExpired(cmd="wtype", timeout=timeout)
-                return (b"", b"")
-            def kill(self):
-                killed.append(True)
-
-        monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: HungProc())
-
-        assert keyboard_output.type_text_raw("hello") is False
-        assert killed, "a hung wtype must be killed, not left typing later"
 
 
 def test_the_daily_check_records_its_time_on_gtks_thread(monkeypatch):
