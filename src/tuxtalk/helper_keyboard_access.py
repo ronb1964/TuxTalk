@@ -15,6 +15,7 @@ from the mode bits, the group's when the node belongs to "input" and the
 others' when it doesn't. Only keyboards on seat0 count, as the helper reads
 no other seat's.
 """
+import errno
 import grp
 import os
 import struct
@@ -59,16 +60,30 @@ def helper_may(mode, file_gid, acl, input_gid, wanted):
     return any(perms & wanted == wanted for tag, perms, _ in acl if tag == ACL_OTHER)
 
 
+# The answers that mean a node has no ACL, or its file system keeps none.
+_NO_ACL = {errno.ENODATA, errno.ENOTSUP, errno.EOPNOTSUPP}
+
+
+class UnknownAccess(Exception):
+    """A node's ACL couldn't be read: what the helper may do with it isn't known."""
+
+
 def _acl_of(node):
     """The ACL entries of *node*, or None when it has none (or the file
-    system keeps none): its mode bits then say it all."""
+    system keeps none): its mode bits then say it all. Raises
+    UnknownAccess when the ACL is there but can't be read: the mode's
+    group bits would then be the ACL's mask, not the group's own rights."""
     try:
         return parse_acl(os.getxattr(node, ACL_XATTR))
-    except OSError:
-        return None
+    except AttributeError:
+        return None                     # a Python without getxattr: the mode bits only
+    except OSError as e:
+        if e.errno in _NO_ACL:
+            return None
+        why = errno.errorcode.get(e.errno, e.errno)
+        raise UnknownAccess(f"{node}'s ACL couldn't be read ({why})") from e
     except ValueError as e:
-        logger.info(f"Unreadable ACL on {node}: {e}")
-        return None
+        raise UnknownAccess(f"{node} has an ACL that couldn't be understood: {e}") from e
 
 
 def _sysfs_bits(path):
@@ -109,7 +124,13 @@ def read_only_keyboards(input_dir="/dev/input", sys_dir="/sys/class/input", grou
             st = os.stat(node)
         except OSError:
             continue                    # unplugged meanwhile
-        acl = _acl_of(node)
+        try:
+            acl = _acl_of(node)
+        except UnknownAccess as e:
+            # Not asked about: a question that may not be needed every start
+            # is worse than a quiet one, and System check's update stays offered.
+            logger.info(f"Read-only keyboard check skipped one node: {e}")
+            continue
         if (helper_may(st.st_mode, st.st_gid, acl, gid, READ)
                 and not helper_may(st.st_mode, st.st_gid, acl, gid, READ | WRITE)
                 and _is_keyboard(sys_dir, name)

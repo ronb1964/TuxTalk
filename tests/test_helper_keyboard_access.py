@@ -121,3 +121,26 @@ def test_another_seats_keyboard_is_left_out(nodes):
     (udev / f"c{os.major(st.st_rdev)}:{os.minor(st.st_rdev)}").write_text(
         "E:ID_INPUT=1\nE:ID_SEAT=seat1\n")
     assert scan() == []
+
+
+def test_an_acl_that_cant_be_read_isnt_taken_for_no_acl(nodes, monkeypatch):
+    """A refused ACL read counted as "no ACL", so the mode's group bits (an
+    ACL's mask) said the helper could write a keyboard it could only read.
+    What can't be known isn't asked about; a node with no ACL still is."""
+    import errno
+    make, scan, _udev = nodes
+    refused = make("event3", 0o640)
+    plain = make("event4", 0o640)
+
+    def getxattr(node, name):
+        code = errno.EACCES if node == refused else errno.ENODATA
+        raise OSError(code, os.strerror(code))
+    monkeypatch.setattr(access.os, "getxattr", getxattr)
+    assert scan() == [plain]
+
+
+def test_a_python_without_getxattr_judges_by_the_mode_bits(nodes, monkeypatch):
+    make, scan, _udev = nodes
+    read_only = make("event3", 0o640)
+    monkeypatch.delattr(access.os, "getxattr")
+    assert scan() == [read_only]
