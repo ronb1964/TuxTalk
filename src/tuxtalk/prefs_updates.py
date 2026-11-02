@@ -517,8 +517,7 @@ class UpdatesTab(Tab):
         # (which fails on package installs, e.g. missing libfuse.so.2).
         from . import installation, update_install, update_ui
         install_type = installation.get_install_type()
-        guidance = update_ui.get_update_guidance(
-            install_type, latest, release.get("html_url", ""))
+        guidance = update_ui.get_update_guidance(install_type, latest)
 
         if has_update:
             method = guidance["update_method"]

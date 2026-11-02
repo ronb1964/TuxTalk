@@ -7,10 +7,6 @@ import os
 import subprocess
 from .logger import setup_logger
 
-# NVIDIA's CUDA libraries, downloaded once when CUDA is picked: the size
-# Preferences, System check, the setup choices and Help give.
-DOWNLOAD_SIZE_TEXT = "580 MB"
-
 logger = setup_logger(__name__)
 
 # Timeout constants (in seconds)

@@ -1,11 +1,18 @@
 """Where TuxTalk's own icon file is, for the windows that show it (the
-splash screen and About): inside the running AppImage, beside the source,
-where a .deb or .rpm put it, or where first run installed it for the user."""
+splash screen and About) and the start-at-login entry: inside the running
+AppImage, beside the source, where a .deb or .rpm put it, or where first run
+installed it for the user."""
 import os
 
 from .config import APP_ID
 
 _SCALABLE = f"share/icons/hicolor/scalable/apps/{APP_ID}.svg"
+
+
+def user_icon_file():
+    """Where first run puts the icon for the user (desktop_launcher's
+    install_app_icon), at its largest size."""
+    return os.path.expanduser("~/.local/share/icons/hicolor/256x256/apps/tuxtalk.png")
 
 
 def icon_files():
@@ -31,7 +38,7 @@ def icon_files():
         f"/usr/local/{_SCALABLE}",
         f"/usr/share/icons/hicolor/256x256/apps/{APP_ID}.png",
         f"/usr/share/pixmaps/{APP_ID}.png",
-        os.path.expanduser(f"~/.local/{_SCALABLE}"),
+        user_icon_file(),
     ]
     return paths
 

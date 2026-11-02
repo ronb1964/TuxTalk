@@ -145,7 +145,9 @@ def test_the_icon_goes_in_every_size_even_without_the_cache_tools(tmp_path, monk
     icons = tmp_path / ".local/share/icons/hicolor"
     assert sorted(p.parent.parent.name for p in icons.glob("*/apps/tuxtalk.png")) == [
         "128x128", "256x256", "32x32", "48x48", "64x64"]
-    assert desktop_launcher.installed_app_icon() == "tuxtalk"
+    from tuxtalk import app_icon       # where About, the splash and autostart look
+    assert app_icon.icon_files()[-1] == app_icon.user_icon_file()
+    assert (icons / "256x256/apps/tuxtalk.png").samefile(app_icon.user_icon_file())
 
 
 def _launcher(home, program):

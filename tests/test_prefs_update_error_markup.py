@@ -33,7 +33,7 @@ def test_versions_with_markup_characters_stay_readable(monkeypatch):
     from tuxtalk import installation, update_ui
     monkeypatch.setattr(installation, "get_install_type", lambda: "dev")
     monkeypatch.setattr(update_ui, "get_update_guidance",
-                        lambda kind, version, url="": {"update_method": "none"})
+                        lambda kind, version: {"update_method": "none"})
     shown = []
     hidden = SimpleNamespace(show=lambda: None, hide=lambda: None)
     d = SimpleNamespace(update_status_label=SimpleNamespace(set_markup=shown.append),

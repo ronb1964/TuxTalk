@@ -33,10 +33,10 @@ class Wheel(NamedTuple):
 
 # Pinned, as whisper_vulkan pins its engine: PyPI's newest could change the
 # wheels' layout or the driver they need, and would reach users untested.
-# CUDA 12.9 Update 1's runtime and the cuBLAS 12.9 build every download got
-# until a newer one came out. To move on, take a version's URL, SHA256 and
-# size from https://pypi.org/pypi/<name>/<version>/json, and dictate with a
-# Whisper model on CUDA with it before it ships.
+# CUDA 12.9 Update 1's runtime and cuBLAS 12.9, the builds TuxTalk is tested
+# with. To move on, take a version's URL, SHA256 and size from
+# https://pypi.org/pypi/<name>/<version>/json, and dictate with a Whisper
+# model on CUDA with it before it ships.
 CUDA_WHEELS = (
     Wheel("nvidia-cuda-runtime-cu12",
           "https://files.pythonhosted.org/packages/bc/46/"
@@ -50,6 +50,9 @@ CUDA_WHEELS = (
           "nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_x86_64.whl",
           "e4f53a8ca8c5d6e8c492d0d0a3d565ecb59a751b19cfdaa4f6da0ab2104c1702", 581240110),
 )
+# The download's size as Preferences, System check, the setup choices and
+# Help give it ("585 MB").
+DOWNLOAD_SIZE_TEXT = f"{round(sum(wheel.size for wheel in CUDA_WHEELS) / 1e6)} MB"
 
 # Room kept free beyond what the download or the libraries take.
 _SPARE_BYTES = 100 * 1024 * 1024
@@ -138,13 +141,14 @@ def _wheel_libraries(names, lib_path):
     return wanted
 
 
-def _unpack_wheel(wheel, so_files, report, done, of):
-    """Copy one wheel's libraries out, the bar moving through its share."""
-    wheel_file = os.path.basename(wheel.filename)
+def _unpack_wheel(archive, so_files, report, done, of):
+    """Copy one wheel's libraries out of its open *archive*, the bar moving
+    through its share."""
+    wheel_file = os.path.basename(archive.filename)
     logger.info(f"Extracting {wheel_file}...")
     for j, (member, target) in enumerate(so_files):
         os.makedirs(os.path.dirname(target), exist_ok=True)
-        with wheel.open(member) as source, open(target, 'wb') as dest:
+        with archive.open(member) as source, open(target, 'wb') as dest:
             shutil.copyfileobj(source, dest)
         os.chmod(target, 0o755)
         share = (done + (j + 1) / len(so_files)) / of
@@ -164,12 +168,12 @@ def _extract_wheels(wheel_paths, lib_path, report, cancel_event):
     import zipfile
     from .download_utils import free_space_bytes
     with contextlib.ExitStack() as stack:
-        wheels = []
+        archives = []
         for path in wheel_paths:
-            wheel = stack.enter_context(zipfile.ZipFile(path))
-            wheels.append((wheel, _wheel_libraries(wheel.namelist(), lib_path)))
-        need = sum(wheel.getinfo(member).file_size
-                   for wheel, so_files in wheels for member, _target in so_files)
+            archive = stack.enter_context(zipfile.ZipFile(path))
+            archives.append((archive, _wheel_libraries(archive.namelist(), lib_path)))
+        need = sum(archive.getinfo(member).file_size
+                   for archive, so_files in archives for member, _target in so_files)
         need += _SPARE_BYTES
         free = free_space_bytes(lib_path)
         if free and free < need:
@@ -178,10 +182,10 @@ def _extract_wheels(wheel_paths, lib_path, report, cancel_event):
             logger.error(f"{msg} (path: {lib_path})")
             raise _Stop(msg)
         report("Extracting CUDA libraries...", _DOWNLOAD_SHARE)
-        for i, (wheel, so_files) in enumerate(wheels):
+        for i, (archive, so_files) in enumerate(archives):
             _check_cancel(cancel_event, " during extraction")
-            _unpack_wheel(wheel, so_files, report, i, len(wheels))
-    logger.info(f"CUDA libraries installed: {sum(len(f) for _w, f in wheels)} "
+            _unpack_wheel(archive, so_files, report, i, len(archives))
+    logger.info(f"CUDA libraries installed: {sum(len(f) for _a, f in archives)} "
                 f"library files in {lib_path}")
 
 

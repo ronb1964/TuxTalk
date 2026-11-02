@@ -86,6 +86,17 @@ def is_extension_enabled() -> bool:
     return gnome_extensions.is_extension_enabled(EXTENSION_UUID)
 
 
+def menu_location() -> str:
+    """Where this desktop shows TuxTalk's menu, for the welcome screen's and
+    Setup Complete's tips: plain GNOME has no tray, so "the tray icon" sent
+    people looking for nothing."""
+    if is_extension_enabled():
+        return "its icon in the top bar"
+    if desktop_detect.tray_host_available():
+        return "its tray icon"
+    return "open TuxTalk again from your apps"
+
+
 def get_extension_status() -> dict:
     """Whether the extension can run here (GNOME), is installed and is
     enabled, for Preferences' extension status."""

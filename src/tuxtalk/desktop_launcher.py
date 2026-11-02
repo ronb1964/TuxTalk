@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from . import __version__, installation, menu_cache
+from .app_icon import user_icon_file
 from .autostart import desktop_exec_program
 from .logger import setup_logger
 
@@ -18,18 +19,6 @@ logger = setup_logger(__name__)
 
 # The Applications-menu entry first run writes (a hidden one before it).
 DESKTOP_FILE_PATH = os.path.expanduser("~/.local/share/applications/tuxtalk.desktop")
-
-
-def _app_icon_path() -> str:
-    """Where install_app_icon puts the icon its name stands for."""
-    return os.path.expanduser("~/.local/share/icons/hicolor/256x256/apps/tuxtalk.png")
-
-
-def installed_app_icon() -> Optional[str]:
-    """The icon name ("tuxtalk") once install_app_icon has put it in place,
-    else None. Only looks: installing refreshes icon caches, which can take
-    seconds, and the caller may be a window's thread."""
-    return "tuxtalk" if os.path.exists(_app_icon_path()) else None
 
 
 def _icon_source() -> Optional[str]:
@@ -53,7 +42,7 @@ def install_app_icon() -> Optional[str]:
     Several sizes from one file, since KDE looks for one of its own sizes
     and may not scale another."""
     import shutil
-    if os.path.exists(_app_icon_path()):
+    if os.path.exists(user_icon_file()):
         return "tuxtalk"
     source = _icon_source()
     if not source:

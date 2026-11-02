@@ -184,7 +184,7 @@ First run (since 0.14.2 it recommends one setup; CUDA is not offered here):
 Preferences and the rest:
 - [ ] Quit and restart finish what's typed: with music playing, dictate a long paragraph on the processor and Quit while it's being typed. The icon goes at once, the paragraph is typed to the end, the music plays again (log: "Quitting", then the tray's "D-Bus service unregistered"). Open TuxTalk right away: it starts once the old one has gone (log: "The running TuxTalk didn't answer; waiting in case it's quitting"). Restart Service mid-dictation: the dictation is typed, then dictation works again. Turn Dictation off and on quickly while a long one types: it comes back on. An update's Restart Now during a long dictation: the new version starts once the old one has gone. Uninstall (VM) during a dictation: it's typed before anything is removed. Uninstall (VM) with an unapplied change in Preferences: Preferences asks about it first; Keep Editing stops the uninstall with nothing removed
 - [ ] Dictation works in CPU mode (Device → CPU downloads the processor copy of Parakeet with a progress bar)
-- [ ] CUDA: Preferences → General → Change model, device or language → Device lists "CUDA (580 MB download, …)" on NVIDIA before anything is downloaded. Picking it asks, then shows a progress bar, then "Downloaded!". On Parakeet it then asks which Whisper model to use on CUDA, Large-v3 preselected (Keep Parakeet changes nothing, and the dropdown goes back); on a Whisper model it switches to "cuda" by itself. Either switch restarts dictation onto CUDA (check the log), and ~/.local/share/TuxTalk/cuda/lib holds cuda_runtime and cublas, no cudnn. A VM that downloaded CUDA with 0.18: after the first start of this version, lib/cudnn is gone (log: "Removed the cuDNN earlier versions downloaded with CUDA") and CUDA still dictates. Picking Large-v3 under Model before CUDA is downloaded downloads both and restarts dictation onto Large-v3 on CUDA by itself, without Apply. Advanced shows only the status line
+- [ ] CUDA: Preferences → General → Change model, device or language → Device lists "CUDA (585 MB download, …)" on NVIDIA before anything is downloaded. Picking it asks, then shows a progress bar, then "Downloaded!". On Parakeet it then asks which Whisper model to use on CUDA, Large-v3 preselected (Keep Parakeet changes nothing, and the dropdown goes back); on a Whisper model it switches to "cuda" by itself. Either switch restarts dictation onto CUDA (check the log), and ~/.local/share/TuxTalk/cuda/lib holds cuda_runtime and cublas, no cudnn. A VM that downloaded CUDA with 0.18: after the first start of this version, lib/cudnn is gone (log: "Removed the cuDNN earlier versions downloaded with CUDA") and CUDA still dictates. Picking Large-v3 under Model before CUDA is downloaded downloads both and restarts dictation onto Large-v3 on CUDA by itself, without Apply. Advanced shows only the status line
 - [ ] With Parakeet selected, the CUDA entry reads "CUDA (Parakeet runs on the processor)" and the warning under the settings is amber and bold
 - [ ] Dictation works on CUDA with a Whisper model (e.g. small)
 - [ ] AI self-corrections: turning it on downloads the model; "meet at three, no wait, four" types "meet at four"
@@ -290,8 +290,9 @@ The extension is downloaded from GitHub by users — if you forget it, users get
 
 **ALWAYS include SHA256SUMS.txt in the release** (generated automatically by
 `./build-release.sh` and updated by `./package-extension.sh`). The in-app
-updater downloads it to verify the AppImage before installing — without it,
-updates still work but skip the integrity check.
+updater checks the AppImage, .deb or .rpm against it before installing, and
+refuses an update whose release has no SHA256SUMS.txt or doesn't list the file:
+a release without it can't be installed from inside TuxTalk at all.
 
 **NEVER create a GitHub release before Ron has tested and approved.**
 
