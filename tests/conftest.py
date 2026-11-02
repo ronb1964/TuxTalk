@@ -1217,6 +1217,33 @@ class UrlResponse(io.BytesIO):
         return False
 
 
+class ShownWidget:
+    """A label or button with no window, keeping what it was last told to
+    show: its label, markup, text, whether it can be clicked and whether it
+    is visible (None until told)."""
+
+    def __init__(self):
+        self.label = self.markup = self.text = self.sensitive = self.visible = None
+
+    def set_label(self, label):
+        self.label = label
+
+    def get_label(self):
+        return self.label
+
+    def set_markup(self, markup):
+        self.markup = markup
+
+    def set_text(self, text):
+        self.text = text
+
+    def set_sensitive(self, sensitive):
+        self.sensitive = sensitive
+
+    def set_visible(self, visible):
+        self.visible = visible
+
+
 class AnyWidget:
     """Takes any widget call and returns another AnyWidget: GTK, for a test
     of what happens around the widgets rather than what they show."""

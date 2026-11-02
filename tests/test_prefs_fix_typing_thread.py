@@ -8,28 +8,10 @@ status check uses.
 import threading
 from types import SimpleNamespace
 
-import pytest
-
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-
-from tuxtalk import prefs_system_check as P  # noqa: E402
-from tuxtalk import uinput_helper  # noqa: E402
-from tuxtalk.prefs_system_check import SystemCheck  # noqa: E402
-
-
-class FakeButton:
-    def __init__(self):
-        self.label, self.sensitive = None, True
-
-    def set_label(self, text):
-        self.label = text
-
-    def get_label(self):
-        return self.label
-
-    def set_sensitive(self, value):
-        self.sensitive = value
+from conftest import ShownWidget
+from tuxtalk import prefs_system_check as P
+from tuxtalk import uinput_helper
+from tuxtalk.prefs_system_check import SystemCheck
 
 
 def test_pkexec_runs_off_the_gtk_thread_and_a_failure_resets_the_button(monkeypatch,
@@ -52,7 +34,7 @@ def test_pkexec_runs_off_the_gtk_thread_and_a_failure_resets_the_button(monkeypa
 
     d = SimpleNamespace(window=None, typing_status_label=SimpleNamespace(set_markup=lambda m: None))
     d._finish_fix_typing = lambda *a: SystemCheck._finish_fix_typing(d, *a)
-    button = FakeButton()
+    button = ShownWidget()
     # Checked again, the state offers the fix again.
     d._check_typing_status = lambda: (button.set_label(P.FIX_TYPING_LABEL),
                                       button.set_sensitive(True))
@@ -81,7 +63,7 @@ def test_update_hotkey_helper_leaves_dictation_running(monkeypatch):
     d._finish_update = lambda *a: SystemCheck._finish_update(d, *a)
     d._finish_fix_typing = lambda *a, **k: SystemCheck._finish_fix_typing(d, *a, **k)
     d._check_typing_status = lambda: None
-    button = FakeButton()
+    button = ShownWidget()
     button.set_label(P.UPDATE_HELPER_LABEL)
     SystemCheck._on_fix_typing_clicked(d, button)
     assert button.label == "Setting up..."

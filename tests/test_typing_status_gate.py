@@ -13,27 +13,7 @@ restart" and DISABLE the only button that would add them.
 """
 
 
-class _FakeLabel:
-    def __init__(self):
-        self.markup = None
-
-    def set_markup(self, m):
-        self.markup = m
-
-    def set_text(self, t):
-        self.markup = t
-
-
-class _FakeButton:
-    def __init__(self):
-        self.sensitive = None
-        self.label = None
-
-    def set_sensitive(self, v):
-        self.sensitive = v
-
-    def set_label(self, v):
-        self.label = v
+from conftest import ShownWidget
 
 
 def _prefs_with_perms(monkeypatch, *, all_ok, udev, in_group, hotkey_ok=False,
@@ -54,8 +34,8 @@ def _prefs_with_perms(monkeypatch, *, all_ok, udev, in_group, hotkey_ok=False,
                         lambda: (hotkey_ok, "reason"))
 
     prefs = prefs_mod.SystemCheck(SimpleNamespace(config={}))
-    prefs.typing_status_label = _FakeLabel()
-    prefs.fix_typing_button = _FakeButton()
+    prefs.typing_status_label = ShownWidget()
+    prefs.fix_typing_button = ShownWidget()
     return prefs
 
 
