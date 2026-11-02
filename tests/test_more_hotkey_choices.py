@@ -313,15 +313,30 @@ def test_a_compose_begun_by_a_key_no_longer_dictating_still_ends(service, right_
     assert COMPOSE_AGAIN in service
 
 
+class OldLibxkbcommon:
+    """libxkbcommon before 1.0: no xkb_keymap_key_get_mods_for_level, nor
+    any other function TuxTalk loads here."""
+
+
 def test_an_old_libxkbcommon_means_no_compose_key_not_a_crash(monkeypatch):
-    """Before 1.0 a function TuxTalk loads is missing, which raises
-    AttributeError; the service reads the Compose keys as it starts."""
-    def old():
-        raise AttributeError("xkb_keymap_key_get_mods_for_level")
-    monkeypatch.setattr(keyboard_layout, "planner_for", lambda names: old())
+    """The service reads the Compose keys as it starts."""
+    monkeypatch.setattr(keyboard_layout.C, "CDLL", lambda name: OldLibxkbcommon())
+    monkeypatch.setattr(keyboard_layout, "_xkb", None)
+    monkeypatch.setattr(keyboard_layout, "_planners", {})
     monkeypatch.setattr(keyboard_layout, "active_layout", lambda: None)
     assert keyboard_layout.compose_keys() == frozenset()
     assert keyboard_layout.altgr_characters() is None
+
+
+def test_a_planner_that_breaks_isnt_taken_for_an_old_libxkbcommon(monkeypatch):
+    """A bug in working out the keys (an AttributeError of TuxTalk's own)
+    shows in the log as one, not as a library too old to use."""
+    def broken(names):
+        raise AttributeError("'KeyPlanner' object has no attribute 'compose_keys'")
+    monkeypatch.setattr(keyboard_layout, "planner_for", broken)
+    monkeypatch.setattr(keyboard_layout, "active_layout", lambda: None)
+    with pytest.raises(AttributeError):
+        keyboard_layout.compose_keys()
 
 
 def test_the_compose_keys_are_read_when_the_keys_are_watched_not_on_each_press(monkeypatch):

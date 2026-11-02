@@ -69,30 +69,35 @@ class _RuleNames(C.Structure):
 
 
 def _lib():
-    """libxkbcommon with the signatures used here, loaded once."""
+    """libxkbcommon with the signatures used here, loaded once; OSError
+    when it's missing or too old to have them."""
     global _xkb
     if _xkb is None:
         x = C.CDLL("libxkbcommon.so.0")
         P, U32 = C.c_void_p, C.c_uint32
-        x.xkb_context_new.restype = P
-        x.xkb_context_new.argtypes = [C.c_int]
-        x.xkb_context_unref.argtypes = [P]
-        x.xkb_keymap_new_from_names.restype = P
-        x.xkb_keymap_new_from_names.argtypes = [P, C.POINTER(_RuleNames), C.c_int]
-        x.xkb_keymap_min_keycode.argtypes = [P]
-        x.xkb_keymap_max_keycode.argtypes = [P]
-        x.xkb_keymap_num_levels_for_key.argtypes = [P, U32, U32]
-        x.xkb_keymap_key_get_syms_by_level.argtypes = [P, U32, U32, U32,
-                                                       C.POINTER(C.POINTER(U32))]
-        x.xkb_keymap_key_get_mods_for_level.argtypes = [P, U32, U32, U32, C.POINTER(U32),
-                                                        C.c_size_t]
-        x.xkb_keymap_key_get_mods_for_level.restype = C.c_size_t
-        x.xkb_keymap_mod_get_index.argtypes = [P, C.c_char_p]
-        x.xkb_keymap_mod_get_index.restype = U32
-        x.xkb_utf32_to_keysym.argtypes = [U32]
-        x.xkb_utf32_to_keysym.restype = U32
-        x.xkb_keysym_to_utf32.argtypes = [U32]
-        x.xkb_keysym_to_utf32.restype = U32
+        try:
+            x.xkb_context_new.restype = P
+            x.xkb_context_new.argtypes = [C.c_int]
+            x.xkb_context_unref.argtypes = [P]
+            x.xkb_keymap_new_from_names.restype = P
+            x.xkb_keymap_new_from_names.argtypes = [P, C.POINTER(_RuleNames), C.c_int]
+            x.xkb_keymap_min_keycode.argtypes = [P]
+            x.xkb_keymap_max_keycode.argtypes = [P]
+            x.xkb_keymap_num_levels_for_key.argtypes = [P, U32, U32]
+            x.xkb_keymap_key_get_syms_by_level.argtypes = [P, U32, U32, U32,
+                                                           C.POINTER(C.POINTER(U32))]
+            x.xkb_keymap_key_get_mods_for_level.argtypes = [P, U32, U32, U32, C.POINTER(U32),
+                                                            C.c_size_t]
+            x.xkb_keymap_key_get_mods_for_level.restype = C.c_size_t
+            x.xkb_keymap_mod_get_index.argtypes = [P, C.c_char_p]
+            x.xkb_keymap_mod_get_index.restype = U32
+            x.xkb_utf32_to_keysym.argtypes = [U32]
+            x.xkb_utf32_to_keysym.restype = U32
+            x.xkb_keysym_to_utf32.argtypes = [U32]
+            x.xkb_keysym_to_utf32.restype = U32
+        except AttributeError as e:
+            # One before 1.0 lacks xkb_keymap_key_get_mods_for_level.
+            raise OSError(f"libxkbcommon is older than 1.0: {e}") from e
         _xkb = x
     return _xkb
 
@@ -683,8 +688,8 @@ def altgr_characters():
     types nothing listed here (US with lv3:ralt_switch)."""
     try:
         planner = planner_for(active_layout() or US)
-    except (OSError, ValueError, AttributeError) as e:     # AttributeError: libxkbcommon < 1.0
-        logger.debug(f"Could not tell whether Right Alt is AltGr: {e}")
+    except (OSError, ValueError) as e:
+        logger.info(f"Could not tell whether Right Alt is AltGr: {e}")
         return None
     found = planner.altgr_only("@€{}[]\\|~")
     return None if found is None else tuple(found[:2])
@@ -696,7 +701,7 @@ def compose_keys():
     compose:ralt. Empty when the layout can't be read."""
     try:
         planner = planner_for(active_layout() or US)
-    except (OSError, ValueError, AttributeError) as e:     # AttributeError: libxkbcommon < 1.0
+    except (OSError, ValueError) as e:
         logger.info(f"Could not tell which key is Compose: {e}")
         return frozenset()
     return frozenset(planner.compose_keys)
@@ -714,7 +719,7 @@ def shortcut_keycode(letter):
     if layout:
         try:
             entry = planner_for(layout)._keys.get(_lib().xkb_utf32_to_keysym(ord(letter)))
-        except (OSError, ValueError, AttributeError) as e:
+        except (OSError, ValueError) as e:
             # No libxkbcommon, one before 1.0 (lacking a function _lib
             # loads), or a layout it doesn't know: the US key, as typing
             # falls back to US there too.
