@@ -162,6 +162,10 @@ def get_package_asset(release: dict, install_type: str) -> Tuple[Optional[str], 
     return (None, None)
 
 
+# How long apt and zypper wait for another program's lock before giving up.
+LOCK_WAIT_S = 120
+
+
 def package_install_argv(install_type: str,
                          which: Optional[Callable[[str], Optional[str]]] = None):
     """The system package manager's command to install a package file named
@@ -170,19 +174,23 @@ def package_install_argv(install_type: str,
     if which is None:
         import shutil
         which = shutil.which
+    # Right after login the desktop's own updater (PackageKit, unattended
+    # upgrades) often holds the package manager's lock: dnf waits for it by
+    # itself, apt and zypper are told to, or they give up at once.
     if install_type == "rpm":
         if which("dnf"):
             return ["dnf", "install", "-y"]
         if which("zypper"):
             # TuxTalk's .rpm isn't signed; the SHA256 check vouches for it.
-            return ["zypper", "--non-interactive", "install", "--allow-unsigned-rpm"]
+            return ["env", f"ZYPP_LOCK_TIMEOUT={LOCK_WAIT_S}", "zypper", "--non-interactive",
+                    "install", "--allow-unsigned-rpm"]
         if which("rpm"):
             return ["rpm", "-U"]
     elif install_type == "deb":
         if which("apt"):
-            return ["apt", "install", "-y"]
+            return ["apt", "-o", f"DPkg::Lock::Timeout={LOCK_WAIT_S}", "install", "-y"]
         if which("apt-get"):
-            return ["apt-get", "install", "-y"]
+            return ["apt-get", "-o", f"DPkg::Lock::Timeout={LOCK_WAIT_S}", "install", "-y"]
         if which("dpkg"):
             return ["dpkg", "-i"]
     return None

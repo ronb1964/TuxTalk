@@ -29,6 +29,7 @@ import checks_dictation  # noqa: F401  (each module registers its checks in impo
 import checks_extension  # noqa: F401
 import checks_firstrun  # noqa: F401
 import checks_hotkeys  # noqa: F401
+import checks_package  # noqa: F401
 import checks_prefs  # noqa: F401
 import checks_send  # noqa: F401
 import checks_type_at_pause  # noqa: F401
@@ -44,7 +45,8 @@ RUNS = TOOLS / "runs"
 SECTION_ORDER = ["First run", "Preferences", "Dictation", "Words and numbers",
                  "Type at pause", "AI features", "Send automatically", "Sound and other windows",
                  "With the GNOME extension",
-                 "Hotkeys and keyboard layouts", "Parakeet update", "Uninstall"]
+                 "Hotkeys and keyboard layouts", "Parakeet update", "Uninstall",
+                 "Package update"]
 LOG_LINES = 25
 
 

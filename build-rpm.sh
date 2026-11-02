@@ -10,6 +10,8 @@
 # System deps are DECLARED (the bundle relies on the host's GTK stack). Fedora names:
 #   gtk3, libayatana-appindicator-gtk3 (tray), portaudio (mic), and /usr/bin/pactl
 #   by path (for turning other sounds down; Fedora's pulseaudio-utils has it).
+#   openSUSE provides gtk3 and portaudio under those names, but not the tray's:
+#   it has typelib(AyatanaAppIndicator3), so the tray is "one or the other".
 #   wl-clipboard IS bundled inside /opt/talktype, so it is not declared.
 #
 # Requires: fpm (gem install --user-install fpm) and rpmbuild (rpm-build package).
@@ -60,7 +62,7 @@ offline, on the processor or an NVIDIA, AMD or Intel graphics card." \
     --license "MIT" \
     --category "Applications/Multimedia" \
     --depends "gtk3" \
-    --depends "libayatana-appindicator-gtk3" \
+    --depends "(libayatana-appindicator-gtk3 or typelib(AyatanaAppIndicator3))" \
     --depends "portaudio" \
     --depends "/usr/bin/pactl" \
     --after-install "$POSTINST" \

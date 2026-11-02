@@ -122,12 +122,13 @@ def test_install_argv_rpm_prefers_dnf():
 def test_install_argv_rpm_falls_back_to_zypper():
     which = lambda c: "/usr/bin/zypper" if c == "zypper" else None
     argv = package_install_argv("rpm", which=which)
-    assert argv == ["zypper", "--non-interactive", "install", "--allow-unsigned-rpm"]
+    assert argv == ["env", "ZYPP_LOCK_TIMEOUT=120", "zypper", "--non-interactive", "install",
+                    "--allow-unsigned-rpm"]
 
 
 def test_install_argv_deb_prefers_apt():
     argv = package_install_argv("deb", which=lambda c: "/usr/bin/" + c)
-    assert argv == ["apt", "install", "-y"]
+    assert argv == ["apt", "-o", "DPkg::Lock::Timeout=120", "install", "-y"]
 
 
 def test_install_argv_deb_falls_back_to_dpkg():
@@ -139,3 +140,13 @@ def test_install_argv_deb_falls_back_to_dpkg():
 def test_install_argv_unsupported_returns_none():
     assert package_install_argv("aur", which=lambda c: None) is None
     assert package_install_argv("rpm", which=lambda c: None) is None
+
+
+def test_apt_and_zypper_wait_for_the_desktops_own_updater():
+    """Right after login PackageKit held zypper's lock in the openSUSE VM, and
+    the update failed at once ("System management is locked"); dnf waits by
+    itself."""
+    everything = lambda command: "/usr/bin/" + command
+    assert "DPkg::Lock::Timeout=120" in package_install_argv("deb", which=everything)
+    only_zypper = lambda command: "/usr/bin/zypper" if command == "zypper" else None
+    assert "ZYPP_LOCK_TIMEOUT=120" in package_install_argv("rpm", which=only_zypper)

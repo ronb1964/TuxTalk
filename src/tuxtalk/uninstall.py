@@ -41,8 +41,8 @@ from . import (ai_download, config, cosmic_hotkeys, custom_words,  # noqa: E402
                desktop_detect, extension_helper, file_transcribe, gnome_extensions,
                gnome_keybindings, installation, kwin_hotkeys, menu_cache, model_helper,
                parakeet_engine, rename_migration, secure_input, service_launcher,
-               settings_backup, single_instance, uinput_helper, whisper_vulkan,
-               ydotoold_leftovers)
+               settings_backup, single_instance, uinput_helper, update_install,
+               whisper_vulkan, ydotoold_leftovers)
 from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
 from .ui_style import message_dialog, show_message  # noqa: E402
 
@@ -368,12 +368,15 @@ def _package_lines(plan):
     """Shell lines removing TuxTalk's package; on failure they print
     PACKAGE_NOT_REMOVED and the package manager's last lines."""
     name = plan.package
+    # The desktop's own updater may hold the lock (update_install.LOCK_WAIT_S).
+    wait = update_install.LOCK_WAIT_S
     if plan.install_type == "deb":
-        command = f"DEBIAN_FRONTEND=noninteractive apt-get remove -y {name}"
+        command = (f"DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout={wait} "
+                   f"remove -y {name}")
     elif plan.install_type == "rpm":
         command = (f"if command -v dnf >/dev/null; then dnf remove -y {name}; "
                    "elif command -v zypper >/dev/null; then "
-                   f"zypper --non-interactive remove {name}; "
+                   f"ZYPP_LOCK_TIMEOUT={wait} zypper --non-interactive remove {name}; "
                    f"else rpm -e {name}; fi")
     else:
         command = f"pacman -R --noconfirm {name}"
