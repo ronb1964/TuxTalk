@@ -34,29 +34,35 @@ def build(layout, home=None, user=None) -> Report:
     cfg = load_config()
     home = home or os.path.expanduser("~")
     user = user or _user_name()
+    real_name = _real_name()
     log, words_left_out = hide_dictations(_log_tail())
-    # The user name only where a person's own words can be: a user called
+    # The names only where a person's own words can be: a user called
     # "mint" or "ubuntu" mustn't take the distro's name out of the facts.
     sections = (
         ("TuxTalk", scrub(_tuxtalk(cfg), home, None)),
         ("This computer", scrub(_computer(cfg, layout), home, None)),
-        ("Settings", scrub(_settings(cfg), home, user)),
-        (f"Log, the last {LOG_LINES} lines", scrub(log, home, user)),
+        ("Settings", scrub(_settings(cfg), home, user, real_name)),
+        (f"Log, the last {LOG_LINES} lines", scrub(log, home, user, real_name)),
     )
     text = "\n\n".join(f"## {title}\n{body}" for title, body in sections)
     return Report(text, words_left_out)
 
 
-def scrub(text, home, user) -> str:
-    """*text* with the home folder written as ~ and the user name taken out,
-    "Ron's headset" too. A one-letter name is left: a user called "a" or
-    "i" would have that word replaced all through the settings and the log."""
+def scrub(text, home, user, real_name="") -> str:
+    """*text* with the home folder written as ~, the user name taken out,
+    "Ron's headset" too, and each word of the account's *real_name*. A
+    one-letter name is left: a user called "a" or "i" would have that word
+    replaced all through the settings and the log. The real name's words go
+    only as written, capitalised: a "Will" mustn't take "will" out of the log."""
     home = (home or "").rstrip("/")
     if home:
         text = re.sub(rf"{re.escape(home)}(?![^/\s'\"])", "~", text)
     if user and len(user) > 1:
         text = re.sub(rf"(?<![A-Za-z0-9]){re.escape(user)}(?![A-Za-z0-9])", "<user>", text,
                       flags=re.IGNORECASE)
+    for word in (real_name or "").split():
+        if len(word) > 1:
+            text = re.sub(rf"(?<![A-Za-z0-9]){re.escape(word)}(?![A-Za-z0-9])", "<name>", text)
     return text
 
 
@@ -97,6 +103,16 @@ def hide_dictations(log):
         return line[:found.end()] + rest
     log = "\n".join(hide(line) for line in log.split("\n"))
     return log, hid > 0
+
+
+def _real_name():
+    """The account's full name ("Ron Brand"), the first field of its GECOS
+    entry, or "" when it has none."""
+    try:
+        import pwd
+        return pwd.getpwuid(os.getuid()).pw_gecos.split(",")[0].strip()
+    except (ImportError, KeyError):
+        return ""
 
 
 def _user_name():

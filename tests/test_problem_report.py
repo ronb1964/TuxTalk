@@ -29,6 +29,7 @@ def report(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", "LXQt")
     monkeypatch.setattr(problem_report, "os_name", lambda: "Fedora Linux 44 (LXQt)")
+    monkeypatch.setattr(problem_report, "_real_name", lambda: "")
     monkeypatch.setattr(desktop_detect, "get_desktop_environment", lambda: "unknown")
     monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("us", "", ""))
     monkeypatch.setattr(recommend, "detect_hardware",
@@ -80,6 +81,25 @@ def test_the_home_folder_and_user_name_are_taken_out(report):
 ])
 def test_the_home_folder_and_user_name_go_and_nothing_else(text, scrubbed):
     assert problem_report.scrub(text, "/home/ron", "ron") == scrubbed
+
+
+@pytest.mark.parametrize("text, scrubbed", [
+    ("Brand's AirPods", "<name>'s AirPods"),            # the user name is ronb1964
+    ("Ronald Brandt's mic", "Ronald Brandt's mic"),     # longer names stay
+    ("it will start", "it will start"),                 # only as written, capitalised
+])
+def test_the_accounts_real_name_goes_too(text, scrubbed):
+    """The user name alone left "Ron's AirPods" under the user ronb1964."""
+    assert problem_report.scrub(text, "/home/ronb1964", "ronb1964", "Ron Will Brand") == scrubbed
+
+
+def test_the_real_name_goes_from_the_settings_and_log(report, monkeypatch):
+    from tuxtalk import config
+    monkeypatch.setattr(problem_report, "_real_name", lambda: "Sterling Archer")
+    monkeypatch.setattr(config, "load_config",
+                        lambda: Settings(model="parakeet-v3", mic="Sterling's headset"))
+    text = report().text
+    assert "<name>'s headset" in text and "Sterling" not in text
 
 
 def test_a_fact_that_cant_be_read_doesnt_stop_the_rest(report, monkeypatch):
