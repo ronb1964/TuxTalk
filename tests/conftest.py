@@ -16,6 +16,7 @@ import time
 import types
 
 import gi
+import numpy as np
 import pytest
 
 # No program a test starts can reach the speakers, nor this one. Every
@@ -251,6 +252,25 @@ def next_recording(samplerate=16000):
                                           press_t0=time.time() - 10, samplerate=samplerate)
     type_at_pause.arm_chunker(rec)
     return rec
+
+
+_AUDIO_RNGS = []
+
+
+def audio_rng(seed):
+    """A random generator for a test file's made-up audio (room noise, the
+    noise over a voice), put back to *seed* before every test: a test then
+    hears the same audio alone, in its file, or after any other test, and a
+    failure seen once is seen again."""
+    rng = np.random.default_rng(seed)
+    _AUDIO_RNGS.append((rng, rng.bit_generator.state))
+    return rng
+
+
+@pytest.fixture(autouse=True)
+def _audio_rngs_from_their_seed():
+    for rng, state in _AUDIO_RNGS:
+        rng.bit_generator.state = state
 
 
 class InlineWorker:

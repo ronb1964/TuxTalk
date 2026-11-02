@@ -3,11 +3,12 @@ Speech is a person reading (type_at_pause_rig.speech)."""
 import numpy as np
 import pytest
 
+from conftest import audio_rng
 from type_at_pause_rig import speech as reading
 
 SR = 16000
 BLOCK = 320
-rng = np.random.default_rng(2)
+rng = audio_rng(2)
 
 
 def room(seconds, sr=SR):
