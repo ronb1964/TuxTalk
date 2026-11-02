@@ -99,8 +99,11 @@ chmod +x ~/AppImages/TuxTalk-v*.AppImage
 
 ### Step 4b: The VM Run, BEFORE Ron Is Asked for Anything
 Ron, 2026-10-31: the fresh start with him must not begin until everything
-Claude can test alone is done. Run the harness on all eight VMs, two runs
-side by side (each VM uses 8 GB):
+Claude can test alone is done. First build the .deb and .rpm from the new
+AppImage (`./build-deb.sh; ./build-rpm.sh`): the last check of a run
+(`package_update`) installs them through Download & Install's root script
+with apt, dnf and zypper, and skips without them. Then run the harness on
+all eight VMs, two runs side by side (each VM uses 8 GB):
 ```bash
 cd /home/ron/Projects/TuxTalk/tests/vm
 python3 -u run.py test kde suse mint debian --appimage ~/AppImages/TuxTalk-vX.X.X-x86_64.AppImage
