@@ -132,21 +132,15 @@ def _appimage_command(prefer_installed_appimage):
 
 
 def get_icon_path() -> str:
-    """Absolute path to the TuxTalk icon, or a system icon name as fallback."""
-    root = _project_root()
-    candidates = [
-        os.path.join(root, 'icons', 'OFFICIAL_ICON_DO_NOT_CHANGE.svg'),
-        os.path.join(os.path.dirname(sys.executable), '..', 'io.github.ronb1964.TuxTalk.svg'),
-        os.path.join(root, 'AppDir', 'io.github.ronb1964.TuxTalk.svg'),
-        '/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg',
-        '/usr/local/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg',
-    ]
-    for path in candidates:
-        if os.path.isfile(path) and not _in_running_appimage(os.path.abspath(path)):
-            return os.path.abspath(path)
-    # The user's icon folder instead: first run puts it there.
-    from .desktop_launcher import installed_app_icon
-    return installed_app_icon() or 'audio-input-microphone'
+    """The entry's icon: the first of app_icon's files that is still there at
+    login, else a system microphone. Not one of a running AppImage's own
+    files, nor one inside the Flatpak (/app), which the desktop can't see."""
+    from . import app_icon
+    for path in app_icon.icon_files():
+        if (os.path.isfile(path) and not _in_running_appimage(path)
+                and not path.startswith("/app/")):
+            return path
+    return 'audio-input-microphone'
 
 
 def _in_running_appimage(path) -> bool:
