@@ -613,10 +613,12 @@ def test_a_word_that_ends_the_pause_reaches_the_engine_whole(recording, monkeypa
                         lambda frames, *a, **k: heard.append(b"".join(frames)))
     monkeypatch.setattr(dictation_pipeline, "transcribe_and_inject",
                         lambda frames, *a, **k: heard.append(b"".join(frames)))
-    filled, _ = run_pauses(np.concatenate([speech(1.0), noise(2.0)]))
-    gap = filled[0] - 1.0 - 0.04            # the word 20 ms before, at a 20 ms block's end
-    audio = np.concatenate([speech(1.0), noise(gap), speech(1.0), noise(0.3)])
-    onset = int((1.0 + gap) * SR)
+    # The same reading and room up to the word, so the pause fills where it
+    # was measured: other noise could move it by one of the detector's frames.
+    before = np.concatenate([speech(1.0), noise(2.0)])
+    filled, _ = run_pauses(before)
+    onset = int((filled[0] - 0.04) * SR)    # the word 20 ms before, at a 20 ms block's end
+    audio = np.concatenate([before[:onset], speech(1.0), noise(0.3)])
     for i in range(0, len(audio), block):
         feed_block(audio[i:i + block])
     stop()
