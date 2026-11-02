@@ -185,6 +185,23 @@ def test_only_an_older_helper_needs_an_update():
         assert si.is_older(running) is wanted, running
 
 
+def test_a_helper_that_sees_no_keyboard_is_said_plainly(monkeypatch):
+    monkeypatch.setattr(si, "keyboards_watched", lambda: 0)
+    P, prefs = _typing_prefs(monkeypatch, running=hotkey_helper.VERSION)
+    assert "can't see your keyboard, so the dictation keys can't work" in \
+        prefs.typing_status_label.markup
+    assert "Report a Problem" in prefs.typing_status_label.markup
+    assert not prefs.fix_typing_button.sensitive and P._typing_state([])[3] is False
+
+
+@pytest.mark.parametrize("watched", [None, 1])          # None: a 1.11 helper, which doesn't say
+def test_a_helper_that_doesn_t_say_or_sees_a_keyboard_is_ready(monkeypatch, watched):
+    monkeypatch.setattr(si, "keyboards_watched", lambda: watched)
+    _P, prefs = _typing_prefs(monkeypatch, running=hotkey_helper.VERSION)
+    assert "✓ Ready" in prefs.typing_status_label.markup
+    assert "keyboard, so" not in prefs.typing_status_label.markup
+
+
 def test_a_newer_helper_than_this_tuxtalk_is_left_alone(monkeypatch):
     P, prefs = _typing_prefs(monkeypatch, running="9.0")
     assert prefs.fix_typing_button.label != P.UPDATE_HELPER_LABEL

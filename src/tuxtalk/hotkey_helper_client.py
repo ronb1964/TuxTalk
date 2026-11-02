@@ -73,6 +73,16 @@ def watch_specs(hold_key, toggle_key, esc_key, combos):
     return specs
 
 
+def _keyboards_said(words):
+    """The count in a hello's "keyboards=<n>", among the words after its
+    version, or None when it has none."""
+    for word in words:
+        key, _, value = word.partition("=")
+        if key == "keyboards" and value.isdigit():
+            return int(value)
+    return None
+
+
 class HelperKeyboard:
     """The hotkey helper, seen by hotkeys.run as one keyboard."""
 
@@ -92,6 +102,9 @@ class HelperKeyboard:
         self.to_hide = []
         self.reconnect_at = 0.0
         self.helper_version = None
+        # How many keyboards the helper reads, from its hello; None from a
+        # helper before 1.12, which doesn't say.
+        self.helper_keyboards = None
         # Commands the helper hasn't answered yet (Asked), oldest first: an
         # OK or ERR doesn't say which one it answers; the order does.
         self.asked = deque()
@@ -125,6 +138,7 @@ class HelperKeyboard:
             sock.close()
             return False
         self.helper_version = words[2] if len(words) > 2 else None
+        self.helper_keyboards = _keyboards_said(words[3:])
         sock.setblocking(False)
         self.sock, self.inbuf = sock, rest
         self.asked.clear()

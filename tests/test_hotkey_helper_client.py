@@ -504,3 +504,48 @@ def test_a_grab_with_nothing_let_up_hides_nothing(tmp_path):
     assert helpers.recv(100) == b"HIDE 66\n"
     helpers.close()
     client.close()
+
+
+def _helper_saying(path, hello):
+    """A stand-in helper at *path* that answers one connection's hello with
+    *hello*; the thread serving it."""
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(path)
+    server.listen()
+    server.settimeout(5)                    # a client that never comes can't hang the run
+
+    def serve():
+        with server:
+            conn, _ = server.accept()
+            with conn:
+                conn.recv(64)
+                conn.sendall(hello.encode() + b"\n")
+                conn.recv(64)               # until the client hangs up
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    return thread
+
+
+@pytest.mark.parametrize("hello, version, keyboards", [
+    ("HELLO 1 1.12 keyboards=2", "1.12", 2),
+    ("HELLO 1 1.12 keyboards=0", "1.12", 0),
+    ("HELLO 1 1.11", "1.11", None),             # before 1.12: no count, nothing claimed
+])
+def test_tuxtalk_learns_how_many_keyboards_the_helper_reads(tmp_path, monkeypatch, hello,
+                                                            version, keyboards):
+    from tuxtalk import secure_input
+    path = str(tmp_path / "helper.sock")
+    monkeypatch.setenv("TUXTALK_HOTKEYS_SOCKET", path)
+    for ask, wanted in ((secure_input.keyboards_watched, keyboards),
+                        (secure_input.running_version, version)):
+        thread = _helper_saying(path, hello)
+        try:
+            assert ask() == wanted
+        finally:
+            thread.join(5)
+            os.unlink(path)
+
+
+def test_a_real_helper_s_hello_reaches_tuxtalk_with_its_count(rig):
+    _helper, _kb, client, _loop, _calls = rig
+    assert client.helper_version == hh.VERSION and client.helper_keyboards == 1

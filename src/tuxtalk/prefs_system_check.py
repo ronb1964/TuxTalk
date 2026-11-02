@@ -21,6 +21,7 @@ FIX_TYPING_LABEL = "Fix Typing Permissions"
 SWITCH_TO_HELPER_LABEL = "Switch to Hotkey Helper"
 UPDATE_HELPER_LABEL = "Update Hotkey Helper"
 LEAVE_GROUP_LABEL = "Leave the 'input' Group"
+NO_KEYBOARD_LABEL = "No Keyboard Seen"
 
 # What the GNOME extension adds, shared by the install and success dialogs so
 # the two can't promise different things.
@@ -86,7 +87,12 @@ def _typing_state(refused_shortcuts):
 
 def _helper_state(refused_shortcuts):
     """_typing_state with the hotkey helper running."""
-    from . import uinput_helper
+    from . import secure_input, uinput_helper
+    if secure_input.keyboards_watched() == 0:
+        # A helper before 1.12 doesn't say (None): nothing is claimed then.
+        return (f'<span color="{WARNING_AMBER}">⚠ The hotkey helper can\'t see your keyboard, '
+                'so the dictation keys can\'t work. Help → Problems → Report a Problem '
+                'has its log</span>', NO_KEYBOARD_LABEL, False, False)
     if uinput_helper.check_user_in_input_group():
         return (f'<span color="{WARNING_AMBER}">⚠ TuxTalk uses its hotkey helper, but you\'re '
                 'still in the \'input\' group, so other programs can still read your '

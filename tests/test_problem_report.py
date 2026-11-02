@@ -57,6 +57,20 @@ def test_the_report_says_what_helps_find_a_problem(report):
         assert wanted in text
 
 
+def test_the_report_says_how_many_keyboards_the_helper_reads(report, monkeypatch):
+    """A helper that reads no keyboard (issue #26) answered as if all was
+    well; since 1.12 it says how many it reads. An older one says nothing more."""
+    from tuxtalk import secure_input
+    monkeypatch.setattr(secure_input, "running_version", lambda: "1.11")
+    monkeypatch.setattr(secure_input, "keyboards_watched", lambda: None)
+    assert "Hotkey helper: running, version 1.11\n" in report().text
+    monkeypatch.setattr(secure_input, "running_version", lambda: "1.12")
+    monkeypatch.setattr(secure_input, "keyboards_watched", lambda: 2)
+    assert "Hotkey helper: running, version 1.12, watching 2 keyboards\n" in report().text
+    monkeypatch.setattr(secure_input, "keyboards_watched", lambda: 0)
+    assert "Hotkey helper: running, version 1.12, watching 0 keyboards\n" in report().text
+
+
 def test_the_report_names_the_keyboard_options(report, monkeypatch):
     """They decide what Right Alt does, so a typing problem can hang on them."""
     from tuxtalk import keyboard_layout
