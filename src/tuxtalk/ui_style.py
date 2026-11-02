@@ -9,7 +9,6 @@ CSS. Duplicating the rule invites fixing it in one and forgetting the other.
 import ctypes
 import logging
 import os
-import re
 
 import gi
 
@@ -580,22 +579,6 @@ def message_dialog(closable=True, **kwargs):
     if not closable:
         dialog.set_deletable(False)
     return dialog
-
-
-# An emoji and what joins it (a variation selector, a zero-width joiner), then
-# the space after it, at the start of a line.
-_LEADING_ICON = re.compile(
-    r"^[\U0001F000-\U0001FAFF\u2300-\u23FF\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D]+\s*",
-    re.MULTILINE)
-
-
-def spoken_without_icons(label):
-    """Give *label* an accessible name without the emoji that start its
-    lines: a screen reader read "💡 How It Works" as "light bulb How It
-    Works". Sighted people still see the icon. For a label whose text is
-    set once; returns it."""
-    label.get_accessible().set_name(_LEADING_ICON.sub("", label.get_text()))
-    return label
 
 
 def close_on_escape(window):

@@ -19,7 +19,7 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
 from . import config, extension_helper
-from .ui_style import WARNING_AMBER, Fold, more_below_bar, show_message, spoken_without_icons
+from .ui_style import WARNING_AMBER, Fold, more_below_bar, show_message
 
 from .flatpak_welcome import (build_shortcut_setup_section, build_unsupported_desktop_section,
                               shortcut_support)
@@ -538,7 +538,6 @@ class WelcomeDialog:
         # How it works: the whole of what a new user needs to know.
         quickstart_label = Gtk.Label()
         quickstart_label.set_markup('<span size="large"><b>💡 How It Works</b></span>')
-        spoken_without_icons(quickstart_label)
         quickstart_label.set_halign(Gtk.Align.START)
         vbox.pack_start(quickstart_label, False, False, 5)
 
@@ -623,7 +622,6 @@ class WelcomeDialog:
 
             note = Gtk.Label()
             note.set_markup('<span>💡 <i>You can change these anytime in Preferences</i></span>')
-            spoken_without_icons(note)
             note.set_halign(Gtk.Align.START)
             note.set_margin_top(10)
             note.set_opacity(0.85)
@@ -797,7 +795,6 @@ class WelcomeDialog:
             '<span><i>💡 If you skip this, TuxTalk can\'t type into other apps, but every\n'
             '   dictation is kept in Recent Dictations in the TuxTalk menu to copy and '
             'paste.</i></span>')
-        spoken_without_icons(alt_note)
         alt_note.set_halign(Gtk.Align.START)
         alt_note.set_margin_start(10)
         alt_note.set_margin_top(8)
