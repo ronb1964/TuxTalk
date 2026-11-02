@@ -61,11 +61,17 @@ def _typing_state(refused_shortcuts):
     *refused_shortcuts* are the shortcuts the hotkey helper won't take."""
     from . import secure_input, uinput_helper
     from .hotkey_helper import VERSION as HELPER_VERSION
+    installed = secure_input.is_installed()
+    # Before the access check, which fails then too: Fix Typing and a
+    # restart wouldn't help. A helper before 1.12 doesn't say (None).
+    if installed and secure_input.keyboards_watched() == 0:
+        return (f'<span color="{WARNING_AMBER}">⚠ '
+                f'{GLib.markup_escape_text(uinput_helper.HELPER_SEES_NO_KEYBOARD)}</span>',
+                NO_KEYBOARD_LABEL, False, False)
     # Both halves, not just uinput: on Fedora a logind ACL can grant
     # /dev/uinput while /dev/input, which the hotkeys need, stays unreadable.
     has_access, _reason = uinput_helper.check_all_device_permissions()
     running = secure_input.running_version() if has_access else None
-    installed = secure_input.is_installed()
     versions = f'({GLib.markup_escape_text(running or "")} → {HELPER_VERSION})'
     if secure_input.needs_update(running) and installed:
         # A TuxTalk update brought a helper it needs: the old one keeps
@@ -95,12 +101,7 @@ def _typing_state(refused_shortcuts):
 
 def _helper_state(refused_shortcuts):
     """_typing_state with the hotkey helper running."""
-    from . import secure_input, uinput_helper
-    if secure_input.keyboards_watched() == 0:
-        # A helper before 1.12 doesn't say (None): nothing is claimed then.
-        return (f'<span color="{WARNING_AMBER}">⚠ The hotkey helper can\'t see your keyboard, '
-                'so the dictation keys can\'t work. Help → Problems → Report a Problem '
-                'has its log</span>', NO_KEYBOARD_LABEL, False, False)
+    from . import uinput_helper
     if uinput_helper.check_user_in_input_group():
         return (f'<span color="{WARNING_AMBER}">⚠ TuxTalk uses its hotkey helper, but you\'re '
                 'still in the \'input\' group, so other programs can still read your '

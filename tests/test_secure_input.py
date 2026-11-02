@@ -127,6 +127,7 @@ def test_a_running_helper_counts_as_hotkeys_working(monkeypatch):
 
     class Connected:
         sock = object()             # it answered
+        helper_keyboards = None     # a helper before 1.12 doesn't say how many it reads
 
         def close(self):
             pass
@@ -134,6 +135,24 @@ def test_a_running_helper_counts_as_hotkeys_working(monkeypatch):
     monkeypatch.setattr(uinput_helper, "_readable_keyboards", lambda: [])
     ok, reason = uinput_helper.check_input_read_permission()
     assert ok and "hotkey helper" in reason
+    Connected.helper_keyboards = 2
+    assert uinput_helper.check_input_read_permission()[0]
+
+
+def test_a_helper_that_reads_no_keyboard_doesnt_count_as_hotkeys_working(monkeypatch):
+    """Issue #26: it answered, so first run and the typing checks said the
+    hotkeys should work while it read no keyboard at all."""
+    from tuxtalk import uinput_helper, hotkey_helper_client
+
+    class Blind:
+        sock = object()
+        helper_keyboards = 0
+
+        def close(self):
+            pass
+    monkeypatch.setattr(hotkey_helper_client, "connect_helper", lambda: Blind())
+    ok, reason = uinput_helper.check_input_read_permission()
+    assert not ok and "can't see your keyboard" in reason
 
 
 def test_first_run_fix_with_the_helper_asks_for_no_restart(monkeypatch):
@@ -199,10 +218,16 @@ def test_a_helper_only_older_than_the_one_shipped_is_offered_without_a_warning(m
     assert P._typing_state([])[3] is True
 
 
-def test_a_helper_that_sees_no_keyboard_is_said_plainly(monkeypatch):
+@pytest.mark.parametrize("access", [True, False])
+def test_a_helper_that_sees_no_keyboard_is_said_plainly(monkeypatch, access):
+    """Not "Fix Typing and restart" either: with no keyboard read, the
+    access check fails too, and neither would help."""
+    from tuxtalk import uinput_helper
     monkeypatch.setattr(si, "keyboards_watched", lambda: 0)
     P, prefs = _typing_prefs(monkeypatch, running=hotkey_helper.VERSION)
-    assert "can't see your keyboard, so the dictation keys can't work" in \
+    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (access, ""))
+    prefs._show_typing_status()
+    assert "see your keyboard, so the dictation keys can" in \
         prefs.typing_status_label.markup
     assert "Report a Problem" in prefs.typing_status_label.markup
     assert not prefs.fix_typing_button.sensitive and P._typing_state([])[3] is False

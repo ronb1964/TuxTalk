@@ -110,6 +110,13 @@ def _readable_keyboards():
     return [dev.path for dev in keyboards]
 
 
+# Said by System check, the hotkey test and first run when the hotkey helper
+# answers but reads no keyboard (issue #26). Its journal names each device
+# it left out and why, and Report a Problem includes that.
+HELPER_SEES_NO_KEYBOARD = ("The hotkey helper can't see your keyboard, so the dictation keys "
+                           "can't work. Help → Problems → Report a Problem has its log")
+
+
 def check_input_read_permission():
     """(has_access, reason): whether the dictation service will hear the
     hotkeys, through the hotkey helper or from /dev/input itself."""
@@ -117,7 +124,10 @@ def check_input_read_permission():
     helper = connect_helper()
     if helper is not None:
         answering = helper.sock is not None
+        sees_none = helper.helper_keyboards == 0    # None: before 1.12 it doesn't say
         helper.close()
+        if answering and sees_none:
+            return (False, f"{HELPER_SEES_NO_KEYBOARD}.")
         if answering:
             return (True, "TuxTalk's hotkey helper reads the hotkeys. Hotkeys should work.")
         # The service keeps trying an installed helper (connect_helper)

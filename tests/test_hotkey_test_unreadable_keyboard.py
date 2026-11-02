@@ -144,6 +144,41 @@ def test_with_the_hotkey_helper_the_notice_asks_for_no_restart(monkeypatch):
     assert "Fix Typing Permissions" in notice and "restart" not in notice
 
 
+class _Notice:
+    """The dialog's notice label: what it shows, and whether."""
+    markup, shown = None, False
+
+    def set_markup(self, markup):
+        self.markup = markup
+
+    def show(self):
+        self.shown = True
+
+    def hide(self):
+        self.shown = False
+
+
+@pytest.mark.parametrize("keyboards, says", [
+    ("blind", "see your keyboard"),             # a 1.12 helper reading no keyboard
+    ("old", None),                              # a 1.11 helper doesn't say: as before
+    ("seeing", None),
+    ("none", "Fix Typing Permissions"),
+])
+def test_a_helper_that_sees_no_keyboard_gets_the_notice_not_silence(monkeypatch, keyboards,
+                                                                     says):
+    """Issue #26: the helper answered while reading no keyboard, and the
+    hotkey test said nothing about why no key ever worked."""
+    import threading
+    monkeypatch.setattr(uinput_helper, "input_group_pending_restart", lambda: False)
+    count = {"blind": 0, "old": None, "seeing": 2}.get(keyboards)
+    reading = [] if keyboards == "none" else [SimpleNamespace(helper_keyboards=count)]
+    dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice())
+    hkd.HotkeyTestDialog._show_reading(dialog, reading)
+    assert dialog.keyboard_notice.shown is bool(says)
+    if says:
+        assert says in dialog.keyboard_notice.markup
+
+
 @pytest.mark.parametrize("keyname, logged", [("F8", True), ("Right Ctrl", True),
                                              ("a", False), ("Return", False),
                                              ("space", False), ("BackSpace", False)])

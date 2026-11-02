@@ -94,6 +94,18 @@ def _hotkey_test_notice(service_can_read):
             "your computer.")
 
 
+def _reading_notice(keyboards):
+    """The notice for what the test reads, *keyboards*, or None when it
+    needs none: nothing to read, or only a hotkey helper that says it reads
+    no keyboard (one before 1.12 doesn't say)."""
+    if not keyboards:
+        return _hotkey_test_notice(False)
+    if all(getattr(k, "helper_keyboards", None) == 0 for k in keyboards):
+        from tuxtalk.uinput_helper import HELPER_SEES_NO_KEYBOARD
+        return f"{HELPER_SEES_NO_KEYBOARD}."
+    return None
+
+
 def _evdev():
     """evdev's (InputDevice, ecodes, list_devices), or None without evdev:
     the test then hears the keys through GTK alone."""
@@ -381,12 +393,12 @@ class HotkeyTestDialog:
         if self._stop.is_set():
             return False    # the window has closed
         self._reading_now = keyboards
-        if keyboards:
+        notice = _reading_notice(keyboards)
+        if notice is None:
             self.keyboard_notice.hide()
         else:
             self.keyboard_notice.set_markup(
-                f'<span color="#FF9800">'
-                f'{GLib.markup_escape_text(_hotkey_test_notice(False))}</span>')
+                f'<span color="#FF9800">{GLib.markup_escape_text(notice)}</span>')
             self.keyboard_notice.show()
         return False        # also run from GLib.idle_add: once
 
