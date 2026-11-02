@@ -9,7 +9,7 @@ import re
 import pytest
 
 from tuxtalk import (ai_cleanup, commands_reference, explain, help_text, key_commands, normalize,
-                     undo, voice_commands, voice_edit_rules, voice_navigation)
+                     spoken_quotes, undo, voice_commands, voice_edit_rules, voice_navigation)
 from tuxtalk.voice_commands_dialog import _build_markup
 
 PHRASES = [(c.kind, phrase) for s in commands_reference.SECTIONS for c in s.commands
@@ -20,11 +20,18 @@ def _plain(markup):
     return re.sub(r"<[^>]+>", "", markup)
 
 
+def _opened(phrase):
+    """What to say before *phrase*: a closing quote closes one that's open
+    ("unquote" with none open is the word)."""
+    return "open quote " if re.fullmatch(spoken_quotes.CLOSING, phrase) else ""
+
+
 @pytest.mark.parametrize("kind,phrase", PHRASES)
 def test_each_listed_phrase_is_recognised(kind, phrase, monkeypatch):
     if kind == "inline":
         # Said mid-sentence, the words turn into punctuation or formatting.
-        typed = normalize.normalize_text(f"apple {phrase} banana {phrase} cherry")
+        typed = normalize.normalize_text(
+            f"{_opened(phrase)}apple {phrase} banana {_opened(phrase)}{phrase} cherry")
         assert phrase not in typed.lower()
     elif kind == "key":
         key = "TAB" if "tab" in phrase else "ENTER"
@@ -58,7 +65,8 @@ def test_a_symbol_comes_out_as_the_symbol_listed():
         for command in section.commands:
             if command.kind == "inline" and len(command.result) == 1:
                 for phrase in command.said:
-                    assert command.result in normalize.normalize_text(f"apple {phrase} banana")
+                    said = f"{_opened(phrase)}apple {phrase} banana"
+                    assert command.result in normalize.normalize_text(said)
 
 
 def test_formatting_comes_out_as_listed():

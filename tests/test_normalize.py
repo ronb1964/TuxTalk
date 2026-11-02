@@ -193,6 +193,47 @@ def test_unquote_and_end_quote_close_what_quote_opened(said, written):
     assert normalize_text(said) == written
 
 
+@pytest.mark.parametrize("said, written", [
+    ("his quote was helpful and her quote was accurate",
+     "His quote was helpful and her quote was accurate."),
+    ("that quote was great and this quote too", "That quote was great and this quote too."),
+    ("I liked his quote and her quote", "I liked his quote and her quote."),
+    ("I love this quote and that quote", "I love this quote and that quote."),
+    ("I liked his quote and her quote he said quote hello quote",
+     "I liked his quote and her quote he said \u201chello.\u201d"),
+])
+def test_two_quotes_after_this_or_his_stay_the_word(said, written):
+    """"his quote ... her quote" are two nouns, not a quotation of the words
+    between them; one after "quote" that only "this" follows still closes it
+    ("he said quote this quote")."""
+    assert normalize_text(said) == written
+
+
+@pytest.mark.parametrize("said", [
+    "open quote hello comma world close quote",
+    "begin quote hello comma world end quote",
+    "open quote hello comma world unquote",
+    "begin quotes hello comma world close quotes",
+])
+def test_every_open_and_close_quote_phrase_keeps_the_words_inside_as_said(said):
+    assert normalize_text(said) == "\u201cHello comma world.\u201d"
+
+
+@pytest.mark.parametrize("said, written", [
+    ("the end quote was long", "The end quote was long."),
+    ("he said end quote", "He said end quote."),
+    ("unquote", "Unquote."),
+    # "close quote" may close what the dictation before opened.
+    ("how are you close quote", "How are you.\u201d"),
+])
+def test_unquote_or_end_quote_with_nothing_open_is_typed_as_said(said, written):
+    assert normalize_text(said) == written
+
+
+def test_the_quote_that_quote_unquote_puts_in_marks_is_not_paired_again():
+    assert normalize_text("quote unquote quote hello quote") == "\u201cQuote\u201d hello \"."
+
+
 def test_quote_unquote_puts_the_next_word_in_quotes():
     assert normalize_text("it was a quote unquote small problem") == \
         "It was a \u201csmall\u201d problem."

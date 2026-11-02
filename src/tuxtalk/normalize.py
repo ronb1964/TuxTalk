@@ -4,7 +4,7 @@ line-break marker, and the result gets tidy punctuation, spacing and capitals.
 """
 import re
 
-from .spoken_quotes import mark_spoken_quotes
+from .spoken_quotes import CLOSING, OPENING, mark_spoken_quotes
 
 # A line break in a dictation ("new line"). Typed, it's a Shift+Enter: a plain
 # Enter would send a chat message or run a terminal's half-typed command.
@@ -28,8 +28,10 @@ PLAIN_LOOKALIKES = str.maketrans({
 # =====================================================================
 
 # --- _hold_quoted: "open quote ... close quote" kept as said ---
+# Also "begin quote" ... "end quote" or "unquote", but not a bare "quote",
+# which can be the word.
 _RE_QUOTED_TEXT = re.compile(
-    r'\b(?:open\s+quotes?)[,.\s]+(.*?)[,.\s]+(?:close\s+quotes?)\b',
+    rf'\b{OPENING}[,.\s]+(.*?)[,.\s]+{CLOSING}\b',
     re.IGNORECASE
 )
 
@@ -761,9 +763,9 @@ def safe_to_lowercase_first_word(text: str, your_words=()) -> bool:
       * one of *your_words* (Your Words), already spelled the user's way
         ("TuxTalk", "New York", "TuxTalk's")
 
-    Proper nouns like "Anna" are genuinely ambiguous — Whisper capitalizes them
-    both as names and as sentence starts — so they are left alone here and
-    remain a known limitation rather than a guess.
+    A name like "Anna" can't be told from a sentence start (Whisper
+    capitalizes both), so unless it's one of *your_words* this returns True
+    for it and the name may be lowercased: a known limitation, not a guess.
     """
     first = text.split(maxsplit=1)[0] if text.split() else ""
     if not first:
