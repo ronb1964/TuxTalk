@@ -79,7 +79,7 @@ def test_installing_an_update_has_no_close_button(Gtk, monkeypatch):
     from tuxtalk import tray, update_install
     waiting, may_finish = queue.Queue(), queue.Queue()
     monkeypatch.setattr(GLib, "idle_add", lambda fn, *args: waiting.put(lambda: fn(*args)))
-    monkeypatch.setattr(update_install, "download_update", lambda *a, **k: "/u/TuxTalk.AppImage")
+    monkeypatch.setattr(update_install, "download_update", lambda *a, **k: update_install.Downloaded("/u/TuxTalk.AppImage", "a" * 64))
     monkeypatch.setattr(update_install, "install_appimage_update",
                         lambda path, progress: may_finish.get(timeout=5) or (True, ""))
     stub = types.SimpleNamespace(restart_app=lambda: None, _quitting=False)

@@ -115,27 +115,27 @@ def test_package_asset_picks_deb():
 
 
 def test_install_argv_rpm_prefers_dnf():
-    argv = package_install_argv("rpm", "/tmp/t.rpm", which=lambda c: "/usr/bin/" + c)
-    assert argv == ["pkexec", "dnf", "install", "-y", "/tmp/t.rpm"]
+    argv = package_install_argv("rpm", which=lambda c: "/usr/bin/" + c)
+    assert argv == ["dnf", "install", "-y"]
 
 
 def test_install_argv_rpm_falls_back_to_zypper():
     which = lambda c: "/usr/bin/zypper" if c == "zypper" else None
-    argv = package_install_argv("rpm", "/tmp/t.rpm", which=which)
-    assert argv[:3] == ["pkexec", "zypper", "--non-interactive"]
+    argv = package_install_argv("rpm", which=which)
+    assert argv[:2] == ["zypper", "--non-interactive"]
 
 
 def test_install_argv_deb_prefers_apt():
-    argv = package_install_argv("deb", "/tmp/t.deb", which=lambda c: "/usr/bin/" + c)
-    assert argv == ["pkexec", "apt", "install", "-y", "/tmp/t.deb"]
+    argv = package_install_argv("deb", which=lambda c: "/usr/bin/" + c)
+    assert argv == ["apt", "install", "-y"]
 
 
 def test_install_argv_deb_falls_back_to_dpkg():
     which = lambda c: "/usr/bin/dpkg" if c == "dpkg" else None
-    argv = package_install_argv("deb", "/tmp/t.deb", which=which)
-    assert argv == ["pkexec", "dpkg", "-i", "/tmp/t.deb"]
+    argv = package_install_argv("deb", which=which)
+    assert argv == ["dpkg", "-i"]
 
 
 def test_install_argv_unsupported_returns_none():
-    assert package_install_argv("aur", "/tmp/x", which=lambda c: None) is None
-    assert package_install_argv("rpm", "/tmp/x", which=lambda c: None) is None
+    assert package_install_argv("aur", which=lambda c: None) is None
+    assert package_install_argv("rpm", which=lambda c: None) is None

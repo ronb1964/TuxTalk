@@ -9,7 +9,7 @@ import os
 import subprocess
 import threading
 import urllib.request
-from typing import Optional, Callable, Tuple
+from typing import Callable, NamedTuple, Optional, Tuple
 
 from . import config, installation
 
@@ -23,6 +23,13 @@ UPDATE_DIR = os.path.join(config.get_data_dir(), "updates")
 # Anything in UPDATE_DIR this old is left over from an earlier update. An hour
 # is far longer than any installer takes to open its package.
 STALE_UPDATE_S = 60 * 60
+
+
+class Downloaded(NamedTuple):
+    """A downloaded update, and the SHA256 from the release's SHA256SUMS.txt
+    it was checked against."""
+    path: str
+    sha256: str
 
 
 def fetch_expected_sha256(checksums_url: str, filename: str) -> Optional[str]:
@@ -49,7 +56,7 @@ def download_update(
     filename: str,
     progress_callback: Optional[Callable[[str, int], None]] = None,
     checksums_url: Optional[str] = None,
-) -> Optional[str]:
+) -> Optional[Downloaded]:
     """
     Download an update file with progress tracking and integrity checks.
 
@@ -67,7 +74,7 @@ def download_update(
             one nothing is downloaded
 
     Returns:
-        str: Path to downloaded file, or None if failed
+        Downloaded: the file and its checked SHA256, or None if failed
     """
     from .download_utils import download_file, remove_stale_files
 
@@ -136,7 +143,7 @@ def download_update(
         if filename.endswith(".AppImage"):
             os.chmod(dest_path, 0o755)
 
-        return dest_path
+        return Downloaded(dest_path, expected_sha256)
 
     except Exception as e:
         logger.error(f"Download failed: {e}")
@@ -154,29 +161,51 @@ def get_package_asset(release: dict, install_type: str) -> Tuple[Optional[str], 
     return (None, None)
 
 
-def package_install_argv(install_type: str, package_path: str,
+def package_install_argv(install_type: str,
                          which: Optional[Callable[[str], Optional[str]]] = None):
-    """The argv to install a downloaded package as root via pkexec, choosing the
-    system package manager (so dependencies resolve). None if unsupported.
-    `which` is injectable for testing."""
+    """The system package manager's command to install a package file named
+    after it (so dependencies resolve), or None if unsupported. `which` is
+    injectable for testing."""
     if which is None:
         import shutil
         which = shutil.which
     if install_type == "rpm":
         if which("dnf"):
-            return ["pkexec", "dnf", "install", "-y", package_path]
+            return ["dnf", "install", "-y"]
         if which("zypper"):
-            return ["pkexec", "zypper", "--non-interactive", "install", package_path]
+            return ["zypper", "--non-interactive", "install"]
         if which("rpm"):
-            return ["pkexec", "rpm", "-U", package_path]
+            return ["rpm", "-U"]
     elif install_type == "deb":
         if which("apt"):
-            return ["pkexec", "apt", "install", "-y", package_path]
+            return ["apt", "install", "-y"]
         if which("apt-get"):
-            return ["pkexec", "apt-get", "install", "-y", package_path]
+            return ["apt-get", "install", "-y"]
         if which("dpkg"):
-            return ["pkexec", "dpkg", "-i", package_path]
+            return ["dpkg", "-i"]
     return None
+
+
+# Run as root by bash, with the downloaded package, its SHA256 and the package
+# manager's command as arguments. The package waits in the user's own updates
+# folder, where any program running as the user could swap it after TuxTalk
+# checked it; so it's copied into a folder only root can write to, checked
+# again there, and that copy is what's installed. The folder can be read by
+# others, as apt hands a local package to its _apt user.
+_ROOT_INSTALL_SCRIPT = r"""set -eu
+package=$1 sha256=$2
+shift 2
+folder=$(mktemp -d /var/tmp/tuxtalk-update.XXXXXXXX)
+trap 'rm -rf "$folder"' EXIT
+chmod 755 "$folder"
+copy=$folder/$(basename "$package")
+cp -- "$package" "$copy"
+if ! echo "$sha256  $copy" | sha256sum --check --status; then
+    echo "The update changed after TuxTalk checked it, so it wasn't installed." >&2
+    exit 3
+fi
+"$@" "$copy" </dev/null
+"""
 
 
 # Installing a package can legitimately take minutes: the package manager may be
@@ -211,20 +240,28 @@ def _finish_in_background(proc, package_path: str) -> None:
     threading.Thread(target=wait, name="package-install", daemon=True).start()
 
 
-def install_package_update(package_path: str, install_type: str) -> Tuple[bool, str]:
+def install_package_update(download: Downloaded, install_type: str) -> Tuple[bool, str]:
     """Install a downloaded .rpm/.deb as root via pkexec (PolicyKit prompts for
-    the password). Returns (success, message). Does NOT restart TuxTalk.
-    The package file is deleted once the installer is done with it."""
+    the password), the copy root checked against *download*'s SHA256
+    (_ROOT_INSTALL_SCRIPT). Returns (success, message). Does NOT restart
+    TuxTalk. The package file is deleted once the installer is done with it."""
     import tempfile
-    argv = package_install_argv(install_type, package_path)
-    if not argv:
+    package_path = download.path
+    manager = package_install_argv(install_type)
+    if not manager:
         return (False, "No supported package manager was found to install the update.")
+    argv = ["pkexec", "/bin/bash", "-s", "--", package_path, download.sha256, *manager]
     # The installer writes to an unnamed file rather than a pipe: a pipe closes
     # when TuxTalk exits, and the installer's next write would then kill it
     # part-way through the transaction. The file disappears once both close it.
     with tempfile.TemporaryFile(dir=os.path.dirname(package_path) or None) as output:
         try:
-            proc = subprocess.Popen(argv, stdout=output, stderr=subprocess.STDOUT)
+            proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=output,
+                                    stderr=subprocess.STDOUT)
+            # Small enough for the pipe to hold it whole, so bash reads it all
+            # even if TuxTalk exits while the password prompt is open.
+            proc.stdin.write(_ROOT_INSTALL_SCRIPT.encode())
+            proc.stdin.close()
         except FileNotFoundError:
             _remove_package(package_path)
             return (False, "pkexec (PolicyKit) is not available. Please install the "

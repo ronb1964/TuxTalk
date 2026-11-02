@@ -18,6 +18,7 @@ or wait forever.
    no text and no error.
 """
 
+import io
 import subprocess
 
 import pytest
@@ -68,16 +69,17 @@ class TestPackageInstallIsBounded:
         uc = self._checker()
 
         class HungProc:
+            stdin = io.BytesIO()     # takes the root install script
             def wait(self, timeout=None):
                 raise subprocess.TimeoutExpired(cmd="pkexec", timeout=timeout)
             def kill(self):
                 pytest.fail("a package manager must never be killed mid-transaction")
 
         monkeypatch.setattr(uc, "package_install_argv",
-                            lambda t, p: ["pkexec", "apt", "install", "-y", p])
+                            lambda t: ["apt", "install", "-y"])
         monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: HungProc())
 
-        ok, message = uc.install_package_update(str(tmp_path / "x.deb"), "deb")
+        ok, message = uc.install_package_update(uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64), "deb")
 
         assert ok is False
         assert "still" in message.lower() or "taking" in message.lower()
@@ -86,15 +88,16 @@ class TestPackageInstallIsBounded:
         uc = self._checker()
 
         class GoodProc:
+            stdin = io.BytesIO()     # takes the root install script
             returncode = 0
             def wait(self, timeout=None):
                 return self.returncode
 
         monkeypatch.setattr(uc, "package_install_argv",
-                            lambda t, p: ["pkexec", "apt", "install", "-y", p])
+                            lambda t: ["apt", "install", "-y"])
         monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: GoodProc())
 
-        ok, _ = uc.install_package_update(str(tmp_path / "x.deb"), "deb")
+        ok, _ = uc.install_package_update(uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64), "deb")
 
         assert ok is True
 
@@ -102,15 +105,16 @@ class TestPackageInstallIsBounded:
         uc = self._checker()
 
         class CancelledProc:
+            stdin = io.BytesIO()     # takes the root install script
             returncode = 126
             def wait(self, timeout=None):
                 return self.returncode
 
         monkeypatch.setattr(uc, "package_install_argv",
-                            lambda t, p: ["pkexec", "apt", "install", "-y", p])
+                            lambda t: ["apt", "install", "-y"])
         monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: CancelledProc())
 
-        ok, message = uc.install_package_update(str(tmp_path / "x.deb"), "deb")
+        ok, message = uc.install_package_update(uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64), "deb")
 
         assert ok is False
         assert "cancel" in message.lower()

@@ -313,16 +313,16 @@ def run_appimage_update(release, restart, *, parent=None, failed=None,
             # The download fills the bar to 90 %, the install the rest.
             said[0] = message
             progress(message, percent * 9 // 10)
-        path = update_install.download_update(
+        downloaded = update_install.download_update(
             release["appimage_url"], release.get("appimage_name", "TuxTalk-update.AppImage"),
             reporting, checksums_url=release.get("checksums_url"))
-        if not path:
+        if not downloaded:
             return False, download_failure(said[0])
         if quitting():
             return False, None
 
         def install():
-            return update_install.install_appimage_update(path, progress)
+            return update_install.install_appimage_update(downloaded.path, progress)
         return run_install(install) if run_install else install()
 
     def finish(result):
@@ -372,15 +372,15 @@ def run_package_update(release, install_type, restart=None, *, quitting=lambda: 
             said[:] = [message, percent]
             progress(message, percent)
         try:
-            path = update_install.download_update(url, filename, reporting,
-                                                  checksums_url=release.get("checksums_url"))
-            if not path:
+            downloaded = update_install.download_update(
+                url, filename, reporting, checksums_url=release.get("checksums_url"))
+            if not downloaded:
                 return False, (f"{download_failure(said[0])}\n\n"
                                "Please try again or update from GitHub.")
             if quitting():
                 return False, "TuxTalk quit before the update was installed."
             progress("Waiting for your password to install…", said[1])
-            return update_install.install_package_update(path, install_type)
+            return update_install.install_package_update(downloaded, install_type)
         except Exception as e:
             # Caught here to name the error in the box; run_with_progress
             # would hand finish only None.

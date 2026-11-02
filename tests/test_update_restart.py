@@ -11,6 +11,7 @@ The first-run copy into ~/AppImages goes through a staging file: writing
 straight onto the file the launcher and autostart point at would leave a
 truncated AppImage there after a quit or reboot mid-copy.
 """
+import io
 import os
 import pathlib
 import shutil
@@ -493,7 +494,7 @@ def test_tray_download_install_restarts_through_restart_app(monkeypatch, idle_qu
     from tuxtalk import tray
     steps = []
     monkeypatch.setattr(update_install, "download_update",
-                        lambda *a, **k: "/updates/TuxTalk.AppImage")
+                        lambda *a, **k: update_install.Downloaded("/updates/TuxTalk.AppImage", "a" * 64))
     monkeypatch.setattr(update_install, "install_appimage_update",
                         lambda path, progress: steps.append(
         ("install", path, threading.current_thread() is threading.main_thread()))
@@ -531,7 +532,7 @@ def test_the_tray_says_why_an_appimage_update_didnt_go_in(monkeypatch, idle_queu
     def raises(path, progress):
         raise OSError("disk full")
     monkeypatch.setattr(update_install, "download_update",
-                        lambda *a, **k: "/updates/TuxTalk.AppImage")
+                        lambda *a, **k: update_install.Downloaded("/updates/TuxTalk.AppImage", "a" * 64))
     monkeypatch.setattr(update_install, "install_appimage_update", raises)
     tray.DictationTray._download_update(stub, release)
     idle_queue(lambda: told)
@@ -549,7 +550,7 @@ def test_the_update_bar_never_goes_backwards(monkeypatch, tmp_path):
         for percent in (0, 40, 100):
             progress("Downloading...", percent)
         download.write_bytes(b"x" * 1000)
-        return str(download)
+        return update_install.Downloaded(str(download), "a" * 64)
     monkeypatch.setattr(update_install, "download_update", downloads)
     seen = []
     monkeypatch.setattr(update_ui, "run_with_progress",
@@ -630,7 +631,7 @@ def test_preferences_restarts_an_installed_appimage_through_the_tray(
         prefs_update, monkeypatch, idle_queue):
     monkeypatch.setattr(installation, "get_install_type", lambda: "appimage")
     monkeypatch.setattr(update_install, "download_update",
-                        lambda *a, **k: "/updates/TuxTalk.AppImage")
+                        lambda *a, **k: update_install.Downloaded("/updates/TuxTalk.AppImage", "a" * 64))
     monkeypatch.setattr(update_install, "install_appimage_update",
                         lambda path, progress: (True, ""))
     prefs_update._on_download_update_clicked(None)
@@ -698,11 +699,27 @@ def _package(tmp_path):
     return path
 
 
+def _checked(path):
+    """*path* as download_update hands it on, checked against its SHA256."""
+    import hashlib
+    return update_install.Downloaded(str(path), hashlib.sha256(path.read_bytes()).hexdigest())
+
+
+def _without_pkexec(monkeypatch):
+    """The root install script runs as this user: pkexec taken off the front.
+    The script's folder in /var/tmp is then this user's, and goes the same way."""
+    import subprocess
+    real_popen = subprocess.Popen
+    monkeypatch.setattr(uc.subprocess, "Popen",
+                        lambda argv, **kw: real_popen(argv[1:] if argv[0] == "pkexec" else argv, **kw))
+
+
 @pytest.mark.parametrize("returncode", [0, 1, 126])
 def test_the_package_is_deleted_once_installed_or_refused(tmp_path, monkeypatch, returncode):
     package = _package(tmp_path)
 
     class Proc:
+        stdin = io.BytesIO()     # takes the root install script
         def __init__(self):
             self.returncode = returncode
 
@@ -710,10 +727,10 @@ def test_the_package_is_deleted_once_installed_or_refused(tmp_path, monkeypatch,
             return self.returncode
 
     monkeypatch.setattr(update_install, "package_install_argv",
-                        lambda t, p: ["pkexec", "dpkg", "-i", p])
+                        lambda t: ["dpkg", "-i"])
     monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: Proc())
 
-    update_install.install_package_update(str(package), "deb")
+    update_install.install_package_update(_checked(package), "deb")
 
     assert not package.exists(), "a package hundreds of MB big was left behind"
 
@@ -724,10 +741,10 @@ def test_the_package_is_deleted_when_pkexec_is_missing(tmp_path, monkeypatch):
     def no_pkexec(*a, **k):
         raise FileNotFoundError("pkexec")
     monkeypatch.setattr(update_install, "package_install_argv",
-                        lambda t, p: ["pkexec", "dpkg", "-i", p])
+                        lambda t: ["dpkg", "-i"])
     monkeypatch.setattr(uc.subprocess, "Popen", no_pkexec)
 
-    ok, message = update_install.install_package_update(str(package), "deb")
+    ok, message = update_install.install_package_update(_checked(package), "deb")
 
     assert not ok and "pkexec" in message
     assert not package.exists()
@@ -741,6 +758,7 @@ def test_a_slow_installer_keeps_its_package_until_it_finishes(tmp_path, monkeypa
     finished = threading.Event()
 
     class SlowProc:
+        stdin = io.BytesIO()     # takes the root install script
         returncode = None
 
         def wait(self, timeout=None):
@@ -755,10 +773,10 @@ def test_a_slow_installer_keeps_its_package_until_it_finishes(tmp_path, monkeypa
             pytest.fail("a package manager must never be killed mid-transaction")
 
     monkeypatch.setattr(update_install, "package_install_argv",
-                        lambda t, p: ["pkexec", "dpkg", "-i", p])
+                        lambda t: ["dpkg", "-i"])
     monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: SlowProc())
 
-    ok, _ = update_install.install_package_update(str(package), "deb")
+    ok, _ = update_install.install_package_update(_checked(package), "deb")
 
     assert not ok
     assert package.exists(), "the installer may still be reading the package"
@@ -779,6 +797,7 @@ def test_the_installer_output_does_not_go_through_a_pipe(tmp_path, monkeypatch):
     seen = {}
 
     class Proc:
+        stdin = io.BytesIO()     # takes the root install script
         returncode = 0
 
         def wait(self, timeout=None):
@@ -789,10 +808,10 @@ def test_the_installer_output_does_not_go_through_a_pipe(tmp_path, monkeypatch):
         return Proc()
 
     monkeypatch.setattr(update_install, "package_install_argv",
-                        lambda t, p: ["pkexec", "dpkg", "-i", p])
+                        lambda t: ["dpkg", "-i"])
     monkeypatch.setattr(uc.subprocess, "Popen", popen)
 
-    update_install.install_package_update(str(package), "deb")
+    update_install.install_package_update(_checked(package), "deb")
 
     assert seen["stdout"] not in (subprocess.PIPE, None)
     assert seen["stderr"] == subprocess.STDOUT
@@ -800,16 +819,50 @@ def test_the_installer_output_does_not_go_through_a_pipe(tmp_path, monkeypatch):
 
 def test_a_failed_install_reports_the_installer_last_lines(tmp_path, monkeypatch):
     package = _package(tmp_path)
-    monkeypatch.setattr(update_install, "package_install_argv", lambda t, p: [
+    monkeypatch.setattr(update_install, "package_install_argv", lambda t: [
         "sh", "-c", "for i in $(seq 1 30); do echo progress $i; done; "
-                    "echo 'E: broken dependency' >&2; exit 100"])
+                    "echo 'E: broken dependency' >&2; exit 100", "sh"])
+    _without_pkexec(monkeypatch)
 
-    ok, message = update_install.install_package_update(str(package), "deb")
+    ok, message = update_install.install_package_update(_checked(package), "deb")
 
     assert not ok
     assert "E: broken dependency" in message
     assert "progress 1\n" not in message, "pages of progress buried the error"
     assert not package.exists()
+
+
+def test_the_package_installed_is_roots_checked_copy(tmp_path, monkeypatch):
+    """The package waits in the user's own folder until the password is
+    typed, so a program running as the user could swap it for its own and
+    have that installed as root. The package manager gets a copy made and
+    checked by root, elsewhere."""
+    package = _package(tmp_path)
+    seen = tmp_path / "seen"
+    monkeypatch.setattr(update_install, "package_install_argv", lambda t: [
+        "sh", "-c", f'{{ cat "$1"; echo; dirname "$1"; }} > {seen}', "sh"])
+    _without_pkexec(monkeypatch)
+
+    ok, _ = update_install.install_package_update(_checked(package), "deb")
+
+    content, folder = seen.read_text().split("\n")[:2]
+    assert ok and content == "package"
+    assert folder.startswith("/var/tmp/tuxtalk-update.") and not os.path.exists(folder)
+
+
+def test_a_package_swapped_after_its_check_is_not_installed(tmp_path, monkeypatch):
+    package = _package(tmp_path)
+    download = _checked(package)
+    package.write_bytes(b"someone else's package")
+    ran = tmp_path / "ran"
+    monkeypatch.setattr(update_install, "package_install_argv",
+                        lambda t: ["sh", "-c", f"touch {ran}", "sh"])
+    _without_pkexec(monkeypatch)
+
+    ok, message = update_install.install_package_update(download, "deb")
+
+    assert not ok and "changed after TuxTalk checked it" in message
+    assert not ran.exists()
 
 
 def test_a_package_left_by_an_earlier_install_is_swept(tmp_path, monkeypatch):
@@ -866,6 +919,7 @@ def test_a_cancelled_password_prompt_says_cancelled(tmp_path, monkeypatch, retur
     package = _package(tmp_path)
 
     class Proc:
+        stdin = io.BytesIO()     # takes the root install script
         def __init__(self, stdout):
             stdout.write(said.encode())
             self.returncode = returncode
@@ -874,10 +928,10 @@ def test_a_cancelled_password_prompt_says_cancelled(tmp_path, monkeypatch, retur
             return self.returncode
 
     monkeypatch.setattr(update_install, "package_install_argv",
-                        lambda t, p: ["pkexec", "dpkg", "-i", p])
-    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, stdout, stderr: Proc(stdout))
+                        lambda t: ["dpkg", "-i"])
+    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, stdin, stdout, stderr: Proc(stdout))
 
-    ok, message = update_install.install_package_update(str(package), "deb")
+    ok, message = update_install.install_package_update(_checked(package), "deb")
     assert not ok
     assert expected in message
 
@@ -891,7 +945,7 @@ def test_an_unexpected_install_error_closes_the_update_window_and_says_why(monke
     monkeypatch.setattr(update_ui.update_install, "get_package_asset",
                         lambda release, kind: ("https://example.invalid/t.deb", "t.deb"))
     monkeypatch.setattr(update_ui.update_install, "download_update",
-                        lambda *a, **k: "/tmp/t.deb")
+                        lambda *a, **k: update_install.Downloaded("/tmp/t.deb", "a" * 64))
 
     def broken_install(path, kind):
         raise OSError("no space left")
