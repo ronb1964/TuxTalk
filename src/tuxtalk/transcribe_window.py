@@ -29,7 +29,7 @@ gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from . import file_transcribe as ft  # noqa: E402
-from .logger import setup_logger  # noqa: E402
+from .logger import error_without_words, setup_logger  # noqa: E402
 
 logger = setup_logger(__name__)
 
@@ -395,7 +395,8 @@ class TranscribeWindow:
                 " Choose a model in Preferences → General, or dictate once, and it downloads."
                 if isinstance(e, ft.NotDownloaded) else ""))
         except Exception as e:
-            logger.exception("File transcription failed")
+            # The error can quote what was heard: only on screen, never in the log.
+            logger.error(f"File transcription failed: {error_without_words(e)}")
             GLib.idle_add(self._on_failed, f"Something went wrong: {e}")
 
     def _on_progress(self, done, whole, describe):

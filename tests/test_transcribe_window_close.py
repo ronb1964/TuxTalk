@@ -405,3 +405,21 @@ def test_escape_with_nothing_to_lose_closes(win, monkeypatch):
     monkeypatch.setattr(Gtk, "main_quit", lambda: quit_calls.append(True))
     _escape(win)
     assert win.asked == [] and quit_calls == [True]
+
+
+def test_a_failed_file_never_writes_what_was_heard_to_the_log(win, monkeypatch, caplog):
+    """An engine's error can quote the words it heard: the log keeps the
+    error's type, and only the window shows the whole of it."""
+    from gi.repository import GLib
+    shown = []
+
+    heard = "my secret words"
+
+    def fails(path):
+        raise ValueError(f"couldn't handle {heard!r}")      # not this line: tracebacks show it
+    monkeypatch.setattr(ft, "decode", fails)
+    monkeypatch.setattr(GLib, "idle_add", lambda fn, *args: shown.append(args))
+    win._work("/recording.mp3")
+    assert "File transcription failed: ValueError" in caplog.text
+    assert "secret" not in caplog.text
+    assert any("my secret words" in str(args) for args in shown)
