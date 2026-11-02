@@ -38,9 +38,11 @@ before 0.15.0, so older entries use that name.
   on that" came out as I want to " him on that. It's typed as the word now
   when the words around it say so ("to quote", "a quote", "don't quote me"),
   and "he said quote hello quote" still puts hello in quotes. You can also
-  close a quotation with "unquote" or "end quote", and "quote unquote"
-  puts the next word in quotes. Two "quote"s meant as words with nothing
-  around them to tell, like "quote and quote again", still pair up.
+  open a quotation with "begin quote" and close it with "unquote" or "end
+  quote", and "quote unquote" puts the next word in quotes. Said with no
+  quotation open, "end quote" stays words ("the end quote was long"). Two
+  "quote"s meant as words with nothing around them to tell, like "quote
+  and quote again", still pair up.
 - On a desktop where Right Ctrl (or Right Alt) is also your Compose key,
   like Pop!_OS out of the box, and you dictate with that key, a few more
   cases no longer eat the first letters typed after it. Holding the key in
