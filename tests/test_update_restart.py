@@ -23,7 +23,6 @@ import pytest
 from conftest import progress_in_place
 from tuxtalk import desktop_launcher
 from tuxtalk import installation, update_install
-from tuxtalk import update_checker as uc
 
 # What a checked AppImage download hands on, for tests that skip the download.
 APPIMAGE_DOWNLOAD = update_install.Downloaded("/updates/TuxTalk.AppImage", "a" * 64, 7)
@@ -425,12 +424,16 @@ def test_restart_refuses_a_missing_appimage(tmp_path):
 
 
 class FakeTray:
-    from tuxtalk import tray as _tray
-    restart_app = _tray.DictationTray.restart_app
+    """The tray's own restart_app on a tray with no menu or window, counting
+    the quit_app calls it makes."""
 
     def __init__(self):
         self.quit = 0
         self._quitting = False
+
+    def restart_app(self):
+        from tuxtalk import tray
+        return tray.DictationTray.restart_app(self)
 
     def quit_app(self, _):
         self.quit += 1
@@ -715,7 +718,7 @@ def _without_pkexec(monkeypatch):
     The script's folder in /var/tmp is then this user's, and goes the same way."""
     import subprocess
     real_popen = subprocess.Popen
-    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, **kw: real_popen(
+    monkeypatch.setattr(update_install.subprocess, "Popen", lambda argv, **kw: real_popen(
         argv[1:] if argv[0] == "pkexec" else argv, **kw))
 
 
@@ -733,7 +736,7 @@ def test_the_package_is_deleted_once_installed_or_refused(tmp_path, monkeypatch,
 
     monkeypatch.setattr(update_install, "package_install_argv",
                         lambda t: ["dpkg", "-i"])
-    monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: Proc())
+    monkeypatch.setattr(update_install.subprocess, "Popen", lambda *a, **k: Proc())
 
     update_install.install_package_update(_checked(package), "deb")
 
@@ -747,7 +750,7 @@ def test_the_package_is_deleted_when_pkexec_is_missing(tmp_path, monkeypatch):
         raise FileNotFoundError("pkexec")
     monkeypatch.setattr(update_install, "package_install_argv",
                         lambda t: ["dpkg", "-i"])
-    monkeypatch.setattr(uc.subprocess, "Popen", no_pkexec)
+    monkeypatch.setattr(update_install.subprocess, "Popen", no_pkexec)
 
     ok, message = update_install.install_package_update(_checked(package), "deb")
 
@@ -779,7 +782,7 @@ def test_a_slow_installer_keeps_its_package_until_it_finishes(tmp_path, monkeypa
 
     monkeypatch.setattr(update_install, "package_install_argv",
                         lambda t: ["dpkg", "-i"])
-    monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: SlowProc())
+    monkeypatch.setattr(update_install.subprocess, "Popen", lambda *a, **k: SlowProc())
 
     ok, _ = update_install.install_package_update(_checked(package), "deb")
 
@@ -814,7 +817,7 @@ def test_the_installer_output_does_not_go_through_a_pipe(tmp_path, monkeypatch):
 
     monkeypatch.setattr(update_install, "package_install_argv",
                         lambda t: ["dpkg", "-i"])
-    monkeypatch.setattr(uc.subprocess, "Popen", popen)
+    monkeypatch.setattr(update_install.subprocess, "Popen", popen)
 
     download = _checked(package)
     update_install.install_package_update(download, "deb")
@@ -909,7 +912,7 @@ def test_the_copy_reads_no_more_than_the_checked_download(tmp_path, monkeypatch)
 
         def wait(self, timeout=None):
             return 0
-    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, **kw: seen.append(argv) or Proc())
+    monkeypatch.setattr(update_install.subprocess, "Popen", lambda argv, **kw: seen.append(argv) or Proc())
     monkeypatch.setattr(update_install, "package_install_argv", lambda t: ["dpkg", "-i"])
 
     update_install.install_package_update(download, "deb")
@@ -936,7 +939,7 @@ def test_a_pkexec_that_ends_before_the_script_is_sent_says_why(tmp_path, monkeyp
 
         def wait(self, timeout=None):
             return self.returncode
-    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, **kw: GoneAtOnce())
+    monkeypatch.setattr(update_install.subprocess, "Popen", lambda argv, **kw: GoneAtOnce())
     monkeypatch.setattr(update_install, "package_install_argv", lambda t: ["dpkg", "-i"])
 
     ok, message = update_install.install_package_update(_checked(package), "deb")
@@ -1009,7 +1012,7 @@ def test_a_cancelled_password_prompt_says_cancelled(tmp_path, monkeypatch, retur
 
     monkeypatch.setattr(update_install, "package_install_argv",
                         lambda t: ["dpkg", "-i"])
-    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, stdin, stdout, stderr: Proc(stdout))
+    monkeypatch.setattr(update_install.subprocess, "Popen", lambda argv, stdin, stdout, stderr: Proc(stdout))
 
     ok, message = update_install.install_package_update(_checked(package), "deb")
     assert not ok
