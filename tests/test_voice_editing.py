@@ -1165,6 +1165,30 @@ def test_delete_this_presses_delete(edit_env, keys_sent, monkeypatch):
     assert edit_env["typed"] == [] and edit_env["engine"].asked == [] and edit_env["notices"] == []
 
 
+def test_esc_while_the_instruction_is_heard_deletes_nothing(edit_env, keys_sent, monkeypatch):
+    """Shift+F8, "delete this", let go, then Esc while it's still being
+    heard: "Cancelled by ESC" was said, so the selection stays."""
+    message = rs.state.current.message
+
+    def heard_then_esc(audio, lang):
+        monkeypatch.setattr(message, "cancelled", True)
+        return "Delete this."
+    monkeypatch.setattr(speech_engine, "transcribe", heard_then_esc)
+    run_edit()
+    assert keys_sent == [] and edit_env["typed"] == [] and edit_env["put_back"] == 1
+
+
+def test_esc_before_the_edit_s_turn_copies_nothing(edit_env, monkeypatch):
+    """Esc while the edit waited behind a dictation still being typed: no
+    Ctrl+C goes to the app either."""
+    copied = []
+    monkeypatch.setattr(cb, "copy_selection",
+                        lambda send_copy: copied.append(send_copy) or ("x", lambda also=(): None))
+    monkeypatch.setattr(rs.state.current.message, "cancelled", True)
+    run_edit()
+    assert copied == [] and edit_env["typed"] == []
+
+
 def test_an_ai_answer_that_only_changes_spacing_is_no_change(edit_env, monkeypatch):
     """An answer that only trims the line ends (as the AI does for "Select
     all") changes nothing."""
