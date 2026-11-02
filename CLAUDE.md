@@ -290,8 +290,9 @@ The extension is downloaded from GitHub by users — if you forget it, users get
 
 **ALWAYS include SHA256SUMS.txt in the release** (generated automatically by
 `./build-release.sh` and updated by `./package-extension.sh`). The in-app
-updater downloads it to verify the AppImage before installing — without it,
-updates still work but skip the integrity check.
+updater checks the AppImage, .deb or .rpm against it before installing, and
+refuses an update whose release has no SHA256SUMS.txt or doesn't list the file:
+a release without it can't be installed from inside TuxTalk at all.
 
 **NEVER create a GitHub release before Ron has tested and approved.**
 
