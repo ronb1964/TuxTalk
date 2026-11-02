@@ -3,16 +3,16 @@ Speech is a person reading (type_at_pause_rig.speech)."""
 import numpy as np
 import pytest
 
-from conftest import audio_rng
+from type_at_pause_rig import noise
 from type_at_pause_rig import speech as reading
 
 SR = 16000
 BLOCK = 320
-rng = audio_rng(2)
 
 
 def room(seconds, sr=SR):
-    return rng.normal(0, 380, int(seconds * sr)).astype(np.int16)
+    """A room hissing at int16 RMS 380, louder than the rig's quiet one."""
+    return noise(seconds, 380.0, sr)
 
 
 def speech(seconds, sr=SR):

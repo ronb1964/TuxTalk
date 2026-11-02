@@ -21,15 +21,12 @@ from tuxtalk import notices
 from tuxtalk import recording
 from tuxtalk import pipeline
 from conftest import audio_rng
+from type_at_pause_rig import noise
 from type_at_pause_rig import speech as _reading
 
 SR = 16000
 BLOCK = 320   # 20 ms
 rng = audio_rng(0)
-
-
-def noise(seconds, level=60.0):
-    return (rng.normal(0, level, int(seconds * SR))).astype(np.int16)
 
 
 def speech(seconds, level=3000.0, noise_level=60.0):
