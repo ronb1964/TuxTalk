@@ -315,10 +315,23 @@ def _version(text):
 
 def is_older(running):
     """Whether the running helper's version *running* is older than the one
-    this TuxTalk brings. Never for a newer one (an older TuxTalk run again):
-    no password prompt to go back."""
+    this TuxTalk brings: System check offers the update. Never for a newer
+    one (an older TuxTalk run again): no password prompt to go back."""
     from .hotkey_helper import VERSION
     return running is not None and _version(running) < _version(VERSION)
+
+
+# The oldest helper this TuxTalk works with as it should. Raised only when a
+# feature or fix needs the newer helper, since TuxTalk then asks at every
+# start to update it; a newer helper that only adds to what System check
+# and Report a Problem can say is offered in System check alone.
+NEEDED_HELPER_VERSION = "1.11"
+
+
+def needs_update(running):
+    """Whether the running helper's version *running* is older than the one
+    this TuxTalk needs (NEEDED_HELPER_VERSION), so it asks at start."""
+    return running is not None and _version(running) < _version(NEEDED_HELPER_VERSION)
 
 
 # The dictation keys the first helpers didn't report, and the version that

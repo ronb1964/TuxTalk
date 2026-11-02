@@ -65,17 +65,25 @@ def _typing_state(refused_shortcuts):
     # /dev/uinput while /dev/input, which the hotkeys need, stays unreadable.
     has_access, _reason = uinput_helper.check_all_device_permissions()
     running = secure_input.running_version() if has_access else None
-    if secure_input.is_older(running) and secure_input.is_installed():
-        # A TuxTalk update brought a newer helper: the old one keeps
+    installed = secure_input.is_installed()
+    versions = f'({GLib.markup_escape_text(running or "")} → {HELPER_VERSION})'
+    if secure_input.needs_update(running) and installed:
+        # A TuxTalk update brought a helper it needs: the old one keeps
         # running until it's installed again.
-        return (f'<span color="{WARNING_AMBER}">⚠ This TuxTalk brings a newer hotkey helper '
-                f'({GLib.markup_escape_text(running)} → {HELPER_VERSION}). '
-                'Update it to get its fixes</span>', UPDATE_HELPER_LABEL, True, False)
+        return (f'<span color="{WARNING_AMBER}">⚠ This TuxTalk needs a newer hotkey helper '
+                f'{versions}. Update it to get the fixes your dictation keys need</span>',
+                UPDATE_HELPER_LABEL, True, False)
     if running is not None:
-        return _helper_state(refused_shortcuts)
+        state = _helper_state(refused_shortcuts)
+        if state[3] and installed and secure_input.is_older(running):
+            # New enough for this TuxTalk, which brings a newer one: offered,
+            # but nothing is wrong, so System check doesn't open itself.
+            return (state[0] + f'. A newer hotkey helper comes with this TuxTalk {versions}; '
+                    'updating it is up to you', UPDATE_HELPER_LABEL, True, True)
+        return state
     if has_access:
         return _input_group_state()
-    if secure_input.is_installed() and secure_input.running_version() is None:
+    if installed and secure_input.running_version() is None:
         # The service keeps trying an installed helper (connect_helper), so
         # a silent one means no hotkeys; installing it again starts it, and
         # the service connects within a second, with no restart.

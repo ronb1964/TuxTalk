@@ -1,9 +1,9 @@
 """What TuxTalk says by itself on starting after an update: a better setup
 for this computer (once, a notification), and the offers of what it brings
-that the computer doesn't have yet: a newer hotkey helper (asked at every
-start until it's updated: without it the dictation keys can stop working)
-and Parakeet Ultra (asked once). At most one offer a start, so two never
-stack.
+that the computer doesn't have yet: a hotkey helper new enough for this
+TuxTalk (asked at every start until it's updated: without it the dictation
+keys can stop working) and Parakeet Ultra (asked once). At most one offer
+a start, so two never stack.
 
 They come up while people may be typing, so Not Now is the default: an
 Enter meant for their own window must not start a download or a password
@@ -52,14 +52,16 @@ def _offer_in_turn(restart) -> bool:
 
 def offer_helper_update() -> bool:
     """While the installed hotkey helper is older than the one this TuxTalk
-    brings (secure_input.is_older), ask to update it, at every start until
-    it is. True when it asked. The Flatpak has no helper to update."""
+    needs (secure_input.needs_update), ask to update it, at every start
+    until it is. True when it asked. One only older than the helper this
+    TuxTalk brings is left to System check, which offers it without asking.
+    The Flatpak has no helper to update."""
     try:
         from . import secure_input
         if os.environ.get("FLATPAK_ID") or not secure_input.is_installed():
             return False
         running = secure_input.running_version()
-        if not secure_input.is_older(running):
+        if not secure_input.needs_update(running):
             return False
         if _ask_helper_update(running):
             update_helper(say_helper_updated)

@@ -117,7 +117,7 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.11"
+VERSION = "1.12"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"

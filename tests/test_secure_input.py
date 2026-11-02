@@ -178,11 +178,25 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False):
 def test_only_an_older_helper_needs_an_update():
     """1.9, installed by test builds, and 1.10 are older than 1.11: the
     numbers after the dot are compared as numbers, not as text."""
-    assert hotkey_helper.VERSION == "1.11"
-    for running, wanted in (("1.0", True), ("1.3", True), ("garbled", True), ("1.9", True),
-                            ("1.10", True), (hotkey_helper.VERSION, False), ("1.12", False),
-                            ("9.0", False)):
-        assert si.is_older(running) is wanted, running
+    assert hotkey_helper.VERSION == "1.12" and si.NEEDED_HELPER_VERSION == "1.11"
+    for running, older, needed in (("1.0", True, True), ("1.3", True, True),
+                                   ("garbled", True, True), ("1.9", True, True),
+                                   ("1.10", True, True), ("1.11", True, False),
+                                   (hotkey_helper.VERSION, False, False), ("1.13", False, False),
+                                   ("9.0", False, False), (None, False, False)):
+        assert si.is_older(running) is older, running
+        assert si.needs_update(running) is needed, running
+
+
+def test_a_helper_only_older_than_the_one_shipped_is_offered_without_a_warning(monkeypatch):
+    """1.12 only adds what System check and Report a Problem can say: its
+    update is there for the asking, and System check doesn't open itself
+    to call that a problem."""
+    P, prefs = _typing_prefs(monkeypatch, running="1.11")
+    assert prefs.fix_typing_button.label == P.UPDATE_HELPER_LABEL and prefs.fix_typing_button.sensitive
+    assert "✓ Ready" in prefs.typing_status_label.markup
+    assert "(1.11 → 1.12)" in prefs.typing_status_label.markup
+    assert P._typing_state([])[3] is True
 
 
 def test_a_helper_that_sees_no_keyboard_is_said_plainly(monkeypatch):

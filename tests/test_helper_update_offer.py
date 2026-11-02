@@ -1,6 +1,7 @@
-"""A hotkey helper older than the one this TuxTalk brings is offered for
+"""A hotkey helper older than the one this TuxTalk needs is offered for
 update by itself, at every start until it's updated, not only in System
-check, where nobody looks until the keys stop working."""
+check, where nobody looks until the keys stop working. One only older than
+the helper this TuxTalk brings is left to System check."""
 import types
 
 import pytest
@@ -72,6 +73,7 @@ def test_one_offer_a_start(helper):
 
 @pytest.mark.parametrize("running, installed, flatpak", [
     (hotkey_helper.VERSION, True, False),     # up to date
+    (secure_input.NEEDED_HELPER_VERSION, True, False),  # older than this one brings, not needed
     (None, True, False),            # not running: System check says why
     ("1.4", False, False),          # the input group, no helper
     ("1.4", True, True),            # the Flatpak can't install one
