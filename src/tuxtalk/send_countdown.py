@@ -78,7 +78,7 @@ _delay = 2.0                # seconds before the Enter (Preferences)
 _hold_key_name = "F8"       # named in the "Sending in 2 s" label
 
 # The send counting down to its Enter, until it presses it or a tap of a
-# hotkey holds it, else None: {"to", "why", "press", "type", "space",
+# hotkey holds it, else None: {"to", "message", "why", "press", "type", "space",
 # "mode", "timer", "ticks", "refused", "stopped"}.
 _pending = None
 # The send a tap held, or one refused once its countdown began, while the
@@ -184,6 +184,10 @@ def _claim(pending, spoken: bool = False):
         with _send_lock:
             if not spoken and _pending is not pending:
                 raise virtual_keyboard.GaveUp("held")
+            # Esc while the key waited its turn (the app taking in the
+            # text, the keyboard busy): the message was checked before.
+            if pending["message"].cancelled:
+                _refuse(pending, "cancelled")
             if virtual_keyboard.emitted() != start:
                 _refuse(pending, "typed_meanwhile")
             if not spoken:
@@ -228,7 +232,7 @@ def press_where_sent(key: str, why: str, message: Message, press) -> bool:
     goes only where the words went, by the same claim, with no wait to hold
     it. *press* is as for send_automatically. Not pressed, the notice says
     why."""
-    pending = {"to": message.to}
+    pending = {"to": message.to, "message": message}
     if not (refused := _not_whole(message)) and press(
             key, why, claim=lambda: _claim(pending, spoken=True)):
         return True
@@ -266,8 +270,9 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
     while these words were still being typed: the send is held for it, as a
     press during the countdown holds it, and its space owed."""
     global _pending, _owed, _held_for
-    pending = {"to": message.to, "why": why, "press": press, "type": type_more,
-               "space": space, "mode": injection_mode, "timer": None, "ticks": []}
+    pending = {"to": message.to, "message": message, "why": why, "press": press,
+               "type": type_more, "space": space, "mode": injection_mode,
+               "timer": None, "ticks": []}
     # Nothing to count down to when no Enter could go: part of the message
     # is missing, the delivery saw the focus move, or the window can't be
     # told.

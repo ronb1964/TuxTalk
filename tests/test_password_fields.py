@@ -255,8 +255,9 @@ def test_sending_automatically_doesnt_press_enter_in_a_password_field(desktop, m
     monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
     monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(focused_window, "look", lambda: ("firefox", ("tray", "{f1}")))
-    pending = {"to": focused_window.look(), "why": "sending automatically",
-               "timer": None, "ticks": [], "press": keyboard_output.press_key}
+    pending = {"to": focused_window.look(), "message": rs.Message(),
+               "why": "sending automatically", "timer": None, "ticks": [],
+               "press": keyboard_output.press_key}
     monkeypatch.setattr(send_countdown, "_pending", pending)
     desktop["password"] = True
     send_countdown._send(pending)
