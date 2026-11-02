@@ -126,12 +126,24 @@ Save your settings, voice commands, Fix a Word words and stats to one file, and 
 <tr>
 <td>
 
+### Turn a recording into text
+
+Got a recording or a video? Pick **Transcribe a File** in the tray menu, choose the file or drop it on the window, and you get the text back. MP3, M4A, WAV, MP4, MKV and a bunch more work. It uses the same model you dictate with, so there's nothing new to download, and you can keep dictating while it runs. On my NVIDIA card with Parakeet, three and a half minutes of talking took about nine seconds.
+
+You can copy the text or save it as a text file, or as subtitles for the video. The subtitle timing can be a second or two off, which is fine for most things but I wouldn't use it for a film. **Remove ums and repeats** cleans it up if you want, and your last 10 are kept under Earlier Transcripts.
+
+</td>
+<td width="50%"><img src="screenshots/transcribe-file.png" alt="Transcribe a File: shop-meeting.mp3 turned into three paragraphs of text with times, and buttons to copy it or save it as text or subtitles"></td>
+</tr>
+<tr>
+<td width="50%"><img src="screenshots/prefs-labs.png" alt="Preferences, Advanced: the TuxTalk Labs section with voice editing, Type at pause and the indicator that follows your window"></td>
+<td>
+
 ### Try what's coming next
 
 TuxTalk Labs is at the bottom of Preferences, Advanced. It's for features that work but aren't finished, like Type at pause, voice editing ("edit that, make it shorter") and an indicator that follows the window you're dictating into. They're off until you turn them on, and there's a link right there to tell me how they're working for you.
 
 </td>
-<td width="50%"><img src="screenshots/prefs-labs.png" alt="Preferences, Advanced: the TuxTalk Labs section with voice editing, Type at pause and the indicator that follows your window"></td>
 </tr>
 </table>
 
@@ -317,7 +329,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Your choice of speech model.** NVIDIA's Parakeet is the default: fast on any processor, for English and 24 European languages. OpenAI's Whisper covers 99 languages, from Tiny up to Large-v3. Not sure which? **What works with what?** in Preferences lays it out.
 - **Only these languages.** Tick the languages you actually speak and Whisper's auto-detect sticks to those.
 - **Any graphics card.** NVIDIA, AMD or Intel through Vulkan, a 22 MB download. On NVIDIA you can use CUDA instead. TuxTalk times your graphics chip against your processor first and only uses it if it's really faster.
-- **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. It also drops "um", "uh" and stutters.
+- **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. A separate setting with no AI drops "um", "uh" and stutters.
 - **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
 - **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com.
 - **Numbers as digits, if you want them.** 25 instead of twenty-five, and 7:30 and 15th too. Works in English and seven other languages.

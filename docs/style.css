@@ -292,6 +292,9 @@ kbd.k {
 }
 .keys p { color: var(--ink-2); }
 .keys h3 { margin-bottom: -4px; }
+/* A fifth card would sit alone on a second row, so it takes the whole row. */
+.keys .wide { grid-column: 1 / -1; }
+.keys .wide p { max-width: 68ch; }
 .tag { display: inline-block; font: 700 0.72rem/1 var(--f-body); letter-spacing: 0.06em; text-transform: uppercase; padding: 5px 8px; border-radius: 6px; background: color-mix(in srgb, var(--link) 14%, transparent); color: var(--link); vertical-align: 0.15em; margin-left: 6px; }
 @media (max-width: 980px) { .keys { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .keys { grid-template-columns: minmax(0, 1fr); } }

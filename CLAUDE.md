@@ -313,6 +313,42 @@ Using TuxTalk on Arch? A [vote on the AUR page](https://aur.archlinux.org/packag
 AUR votes only move when asked for — the package sat at zero from December
 2025 to at least August 2026 while still being installed regularly.
 
+### Step 12: Tell People (every release, the same day)
+
+Ron, 2026-11-01: marketing stays in this project, with steps so nothing is
+missed (Mastodon went quiet from 0.18 to 0.19 because no step named it).
+Draft every text in Ron's voice (ron-voice skill), each one saying how
+TuxTalk is made ("SAYING HOW TUXTALK IS MADE" below), show Ron all of them
+together, and post each only after his OK. Every place we've ever posted is
+in Obsidian "TalkType/Where TuxTalk is posted": start from its "Owed right
+now" list, and update it with what went where (and the per-release log,
+"TalkType/<version> release outreach").
+
+1. **GitHub:** the release notes with the AUR line, and the Discussions →
+   Announcements post (Step 11).
+2. **AUR:** bump `tuxtalk-appimage` (`aur/`, memory "Publishing to the AUR").
+3. **Mastodon** (@ronb1964 on mastodon.social, in the debug Chrome): one
+   post, under 500 characters: what changed for the user, a link,
+   #Linux #FOSS, and #Accessibility when it helps.
+4. **The people waiting:** a short reply on every issue, discussion and
+   forum thread whose fix or feature shipped (close the issue), naming what
+   to do: the Mint forum thread (t=475225), the Zorin forum guide
+   (forum.zorin.com/t/69971), Ron's KDE Discuss topic (t/50484) and the
+   Fedora Discussion thread he answered in (t/203062). Never a reply only
+   to bump a thread.
+5. **The website and README:** the README's "New in X.Y" (Step 11), and a
+   new feature added to tuxtalk.app where it belongs (the keys section, a
+   feature section or "And a bunch of smaller stuff").
+6. **Listings:** AlternativeTo (is the description still true?); AppImageHub
+   updates itself from the release.
+7. **Only for a release with a headline feature, if Ron wants:** one new
+   place from the outreach list in Obsidian (EndeavourOS or openSUSE forums,
+   accessibility communities, a Phoronix tip, a YouTuber who replied).
+
+Not Reddit or Lemmy (posts removed, account closed), nor anywhere AI-written
+code is banned (see below). Between releases: the weekly poll tally while a
+poll runs, and answers to new issues, discussions and forum replies.
+
 ---
 
 ## PARAKEET ULTRA — HOSTED AS ITS OWN PRE-RELEASE
