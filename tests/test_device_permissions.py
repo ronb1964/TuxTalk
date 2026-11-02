@@ -15,6 +15,8 @@ On Ubuntu there is no uinput ACL, so a uinput-only check fails and the group
 membership gets fixed as a side effect, which hides the problem there.
 """
 
+import os
+
 import pytest
 
 from tuxtalk import uinput_helper
@@ -100,9 +102,33 @@ def test_a_readable_logitech_mouse_alone_is_not_hotkey_access(monkeypatch):
     monkeypatch.setattr(evdev, "InputDevice", lambda path: _ClosingMouse([], path))
     monkeypatch.setattr("tuxtalk.uinput_helper._readable_input_devices",
                         lambda: ["/dev/input/mouse"])
+    monkeypatch.setattr("tuxtalk.uinput_helper._through_own_group", lambda path: False)
     assert uinput_helper._readable_keyboards() == []
     ok, _ = check_input_read_permission()
     assert ok is False
+
+
+def test_a_logitech_keyboard_read_through_the_input_group_is_hotkey_access(monkeypatch):
+    """In the input group, an MX Keys alone (a keyboard and a mouse to
+    Linux) is read like any keyboard: left out, the check said no keyboard
+    could be read while F8 worked."""
+    evdev = pytest.importorskip("evdev")
+    monkeypatch.setattr("tuxtalk.keyboard_devices.mask_to_keys", lambda fd: None)
+    monkeypatch.setattr(evdev, "InputDevice", lambda path: _ClosingMouse([], path))
+    monkeypatch.setattr("tuxtalk.uinput_helper._readable_input_devices",
+                        lambda: ["/dev/input/mx-keys"])
+    monkeypatch.setattr("tuxtalk.uinput_helper._through_own_group", lambda path: True)
+    assert uinput_helper._readable_keyboards() == ["/dev/input/mx-keys"]
+
+
+def test_a_node_is_reached_through_a_group_only_with_its_group_bits(tmp_path):
+    node = tmp_path / "event5"
+    node.write_text("")
+    os.chown(node, -1, os.getgid())
+    node.chmod(0o660)
+    assert uinput_helper._through_own_group(str(node)) is True
+    node.chmod(0o600)
+    assert uinput_helper._through_own_group(str(node)) is False
 
 
 def test_a_keyboard_unplugged_after_it_was_listed_is_skipped(monkeypatch):

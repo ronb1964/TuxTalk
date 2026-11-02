@@ -208,10 +208,13 @@ def test_a_hotkey_on_a_keyboard_that_is_a_mouse_too_is_hidden(setup):
     assert kb.calls[-1] == ("grab", False) and helper.hide is None
 
 
-def test_a_mouse_holding_shift_for_a_hotkey_elsewhere_is_never_held(setup):
+@pytest.mark.parametrize("read_meanwhile", [True, False])
+def test_a_mouse_holding_shift_for_a_hotkey_elsewhere_is_never_held(setup, read_meanwhile):
     """Shift on a Logitech mouse's button and F8 on the keyboard: the mouse
     would be held with the keyboard, its pointer frozen until F8 came up.
-    The hide is refused whole, as for a read-only keyboard."""
+    The hide is refused whole, as for a read-only keyboard, also when the
+    Shift press is still queued behind the mouse's clicks (the kernel says
+    it's down; what's been read doesn't yet)."""
     helper, kb, connect, say, heard, _seat = setup
     mouse = FakeKeyboard("/dev/input/event-mouse")
     mouse.mouse = True
@@ -222,9 +225,11 @@ def test_a_mouse_holding_shift_for_a_hotkey_elsewhere_is_never_held(setup):
     assert heard(sock) == []
     kb.press(F8)
     assert heard(sock) == ["DOWN 66 42"]
+    if not read_meanwhile:
+        mouse.down.discard(LSHIFT)
     say(sock, "HIDE 66 42")
-    assert heard(sock) == ["ERR a mouse holds a modifier"]
-    assert kb.calls == mouse.calls == [] and helper.hide is None
+    assert heard(sock) == ["ERR couldn't hide the keys"]
+    assert mouse.calls == [] and not kb.grabbed and helper.hide is None
 
 
 def test_watching_only_mice_is_said_once(setup, capsys):

@@ -199,21 +199,25 @@ def test_a_helper_too_old_for_the_keyboard_says_why_keys_arent_active(monkeypatc
             dialog.keyboard_notice.markup
 
 
-def test_an_old_helpers_notice_goes_once_a_key_was_heard_through_it(monkeypatch):
+@pytest.mark.parametrize("kind, version, says, goes", [
+    ("keyboards_also_mice", "1.12", "may not reach", True),
+    ("read_only_keyboards", "1.11", "don&apos;t reach", False)])
+def test_an_old_helpers_notice_goes_once_a_key_was_heard_only_where_it_may_not_apply(
+        monkeypatch, kind, version, says, goes):
     """A Logitech mouse beside a 1.12 helper asks for the update, though the
     keyboard may well be read: "may not reach TuxTalk" beside "Working!"
-    after F8 reached the helper said two things at once."""
+    after F8 reached the helper said two things at once. A read-only
+    keyboard's keys certainly don't reach it, whatever another keyboard's do."""
     import threading
-    monkeypatch.setattr("tuxtalk.helper_keyboard_access.keyboards_also_mice",
-                        lambda: ["/dev/input/event5"])
-    helper = SimpleNamespace(helper_keyboards=4, helper_version="1.12")
+    monkeypatch.setattr(f"tuxtalk.helper_keyboard_access.{kind}", lambda: ["/dev/input/event5"])
+    helper = SimpleNamespace(helper_keyboards=4, helper_version=version)
     dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice(),
                              _heard_by_reader=set())
     hkd.HotkeyTestDialog._show_reading(dialog, [helper])
-    assert dialog.keyboard_notice.shown and "both at once" in dialog.keyboard_notice.markup
+    assert dialog.keyboard_notice.shown and says in dialog.keyboard_notice.markup
     dialog._heard_by_reader.add("F8")
     hkd.HotkeyTestDialog._show_reading(dialog, [helper])
-    assert not dialog.keyboard_notice.shown
+    assert dialog.keyboard_notice.shown is not goes
 
 
 def test_the_helpers_count_is_asked_again_while_the_test_is_open(monkeypatch):

@@ -100,20 +100,33 @@ def _readable_input_devices():
 def _readable_keyboards():
     """Readable input nodes that are keyboards, the ones the service listens
     to. A readable game controller alone does not let a hotkey through, nor
-    a keyboard that's a mouse too: a Logitech mouse is one, and a udev rule
-    (OpenRGB's, on Nobara and Bazzite) lets the user open it without the
+    a keyboard that's a mouse too that the user reaches only through a rule
+    for that one device: a Logitech mouse is such a keyboard, and OpenRGB's
+    udev rule (on Nobara and Bazzite) lets the user open it without the
     input group. Counted, it said typing works while F8 on the keyboard
-    reached nothing, and Fix Typing wasn't offered; a Logitech keyboard
-    left out is offered Fix Typing, whose hotkey helper reads it."""
+    reached nothing, and Fix Typing wasn't offered. One reached through
+    the user's own group (the input group) counts: the group reads every
+    keyboard, an MX Keys or kanata's included."""
     paths = _readable_input_devices()
     try:
         from evdev import InputDevice
     except ImportError:
         return paths
     keyboards = open_new_keyboards([], lambda: paths, InputDevice)
-    found = [dev.path for dev in keyboards if not is_keyboard_and_mouse(dev)]
+    found = [dev.path for dev in keyboards
+             if not is_keyboard_and_mouse(dev) or _through_own_group(dev.path)]
     close_devices(keyboards)
     return found
+
+
+def _through_own_group(path) -> bool:
+    """Whether the user may read and write the node at *path* through a
+    group this process is in."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return False
+    return st.st_gid in os.getgroups() and st.st_mode & 0o060 == 0o060
 
 
 # Said by System check, the hotkey test and first run when the hotkey helper

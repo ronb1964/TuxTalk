@@ -93,25 +93,28 @@ def _hotkey_test_notice(service_can_read):
             "your computer.")
 
 
-def _reading_notice(keyboards, heard=False):
-    """The notice for what the test reads, *keyboards*, or None when it
-    needs none: nothing to read, only a hotkey helper that says it reads
-    no keyboard (one before 1.12 doesn't say), or one too old for this
-    TuxTalk (secure_input.needs_update) while no key was *heard* through
-    it: why its keys show as seen, not active. Heard, the keys reach
-    TuxTalk: the reason only may apply (a Logitech mouse)."""
+def _reading_notice(keyboards):
+    """(notice, gone_once_heard) for what the test reads, *keyboards*: the
+    notice is None when it needs none, else it says why keys show as seen,
+    not active: nothing to read, only a hotkey helper that says it reads no
+    keyboard (one before 1.12 doesn't say), or one too old for this TuxTalk
+    (secure_input.needs_update). *gone_once_heard* when it only may apply
+    (a Logitech mouse may be all it's about): a key heard through the
+    reader shows the keyboard is read."""
     if not keyboards:
-        return _hotkey_test_notice(False)
+        return _hotkey_test_notice(False), False
     if all(getattr(k, "helper_keyboards", None) == 0 for k in keyboards):
         from tuxtalk.uinput_helper import HELPER_SEES_NO_KEYBOARD
-        return f"{HELPER_SEES_NO_KEYBOARD}."
+        return f"{HELPER_SEES_NO_KEYBOARD}.", False
     from tuxtalk import secure_input
     version = next((k.helper_version for k in keyboards if hasattr(k, "helper_version")), None)
-    if secure_input.needs_update(version) and not heard:
-        return (f"{secure_input.outdated_reason(version)}, so these keys may not reach "
-                "TuxTalk yet. Preferences, Advanced, Show system check, Update Hotkey Helper "
-                "updates it.")
-    return None
+    if not secure_input.needs_update(version):
+        return None, False
+    reason = secure_input.outdated_reason(version)
+    uncertain = reason == secure_input.ALSO_MICE_REASON
+    reach = "may not reach" if uncertain else "don't reach"
+    return (f"{reason}, so these keys {reach} TuxTalk yet. Preferences, Advanced, Show "
+            "system check, Update Hotkey Helper updates it.", uncertain)
 
 
 def _evdev():
@@ -175,6 +178,7 @@ class HotkeyTestDialog:
         # window saw doesn't reach the dictation service, whatever reads the
         # keyboards for it (a hotkey helper that can't see the keyboard).
         self._heard_by_reader = set()
+        self._notice_gone_once_heard = False     # see _reading_notice
         self.rows = {}              # "hold"/"toggle": (label, Change Key button, status)
         self.status_words = {"hold": "Not tested", "toggle": "Not tested"}
         self.dialog = self._build()
@@ -298,9 +302,10 @@ class HotkeyTestDialog:
         if not self.ready:
             return False
         is_capture = self.capturing is not None
-        if from_reader and keyname not in self._heard_by_reader:
+        if from_reader:
             self._heard_by_reader.add(keyname)
-            self._show_reading(self._reading_now)
+            if self._notice_gone_once_heard:
+                self.keyboard_notice.hide()
         if loggable_key(keyname) == keyname:
             # Only test keys: without the hotkey helper this hears keys
             # typed in any window, and a line per letter would give away a
@@ -401,8 +406,8 @@ class HotkeyTestDialog:
         if self._stop.is_set():
             return False    # the window has closed
         self._reading_now = keyboards
-        notice = _reading_notice(keyboards, bool(self._heard_by_reader))
-        if notice is None:
+        notice, self._notice_gone_once_heard = _reading_notice(keyboards)
+        if notice is None or (self._notice_gone_once_heard and self._heard_by_reader):
             self.keyboard_notice.hide()
         else:
             self.keyboard_notice.set_markup(

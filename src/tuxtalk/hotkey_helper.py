@@ -105,8 +105,7 @@ helper -> client
   OK <what> / ERR <why>        answers to WATCH, HIDE and UNHIDE; a HIDE of
                                a key from a listen-only keyboard (never held:
                                a remapper's, or one it may only read) gets
-                               ERR listen-only keyboard, and one a mouse holds
-                               a modifier of ERR a mouse holds a modifier
+                               ERR listen-only keyboard
 Codes are Linux evdev key codes (linux/input-event-codes.h).
 """
 import array
@@ -488,11 +487,6 @@ class Keyboard:
         except OSError:
             monotonic = False
         try:
-            mask_to_keys(fd)
-        except OSError as e:
-            log(f"reading every event of {path}, a mouse's movement included: "
-                f"{describe_error(e)}")
-        try:
             keyboard = cls._probe(path, fd, read_only)
         except Skipped:
             os.close(fd)
@@ -501,6 +495,11 @@ class Keyboard:
             os.close(fd)
             raise Skipped(f"couldn't ask what it is ({describe_error(e)})") from None
         keyboard.monotonic = monotonic
+        try:
+            mask_to_keys(fd)
+        except OSError as e:
+            log(f"reading every event of {path}, a mouse's movement included: "
+                f"{describe_error(e)}")
         return keyboard
 
     @classmethod
@@ -692,7 +691,7 @@ class Helper:
         only_mice = bool(self.keyboards) and all(k.mouse for k in self.keyboards.values())
         if only_mice and not self.said_only_mice:
             log("watching only keyboards that are mice too; if F8 does nothing, the "
-                "keyboard you type on is one this helper can't read")
+                "keyboard you type on may be one this helper can't read")
         self.said_only_mice = only_mice
 
     def reopen_if_writable(self, keyboard):
@@ -994,8 +993,6 @@ class Helper:
             # setup works, not a fault. All or nothing: hiding the rest
             # would be answered OK while the desktop still sees part of it.
             return "ERR listen-only keyboard"
-        if self.mouse_holding(presses, mods):
-            return "ERR a mouse holds a modifier"
         held_on = self.hide_presses(presses, mods)
         if held_on is None:
             return "ERR couldn't hide the keys"
@@ -1024,18 +1021,6 @@ class Helper:
                     log(f"not holding keyboard {keyboard.name!r}: {keyboard.listen_only}")
                 return True
         return False
-
-    def mouse_holding(self, presses, mods):
-        """Whether a mouse holds one of *mods* for a hotkey pressed on
-        another keyboard of its group: a Logitech one is read as a keyboard
-        (check_keyboard), and Shift on one of its buttons would have it
-        held, frozen, until the hotkey comes up. Refused whole, as
-        listen_only_holding does, since hiding the rest would be answered
-        OK while the desktop still saw that modifier down."""
-        origins = {path for path, _ in presses}
-        groups = {self.keyboards[path].group for path in origins}
-        return any(k.mouse and k.path not in origins and k.group in groups
-                   and k.down & set(mods) for k in self.keyboards.values())
 
     def hide_presses(self, presses, mods):
         """Hide *presses* on their keyboards and *mods* on those and the other
@@ -1080,6 +1065,8 @@ class Helper:
         desktop as they are."""
         if keyboard.listen_only:
             return False            # holds none of them (listen_only_holding)
+        if keyboard.mouse and not is_origin:
+            return self.never_hold_mouse(keyboard, codes)
         released = self.let_up(keyboard, codes)
         if released is None:
             return None
@@ -1098,6 +1085,20 @@ class Helper:
         keyboard.trusted.difference_update(released)
         self.settle(keyboard, released)
         return True
+
+    def never_hold_mouse(self, keyboard, codes):
+        """hide_on's answer for *keyboard*, a mouse too, holding none of the
+        hotkey's presses: False when it holds none of *codes* (modifiers)
+        either, else None, so the hide is refused whole. A Logitech mouse
+        is read as a keyboard (check_keyboard), and with Shift on one of
+        its buttons it would be held, frozen, until the hotkey comes up.
+        Judged by the kernel's state, not what's been read: a Shift press
+        queued behind its clicks counts."""
+        down = keyboard.kernel_down()
+        if down is not None and not down & set(codes):
+            return False
+        log(f"not holding {keyboard.name!r}: a mouse too, maybe holding a modifier")
+        return None
 
     def let_up(self, keyboard, codes):
         """Tell the desktop that those of *codes* down on *keyboard* went up;

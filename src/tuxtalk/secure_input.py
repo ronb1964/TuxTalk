@@ -332,6 +332,10 @@ NEEDED_HELPER_VERSION = "1.11"
 # word: one the input group may only read, and one that's a mouse too.
 READ_ONLY_KEYBOARDS_SINCE = "1.12"
 KEYBOARDS_ALSO_MICE_SINCE = "1.13"
+# Why to update a helper before 1.13 on a computer with one: not certain,
+# since a Logitech mouse is one too.
+ALSO_MICE_REASON = ("A keyboard or mouse here is both at once, as Logitech's are, and the "
+                    "hotkey helper on this computer may leave your keyboard out")
 
 
 def missed_keyboard_reason(running):
@@ -347,8 +351,7 @@ def missed_keyboard_reason(running):
                 "can't use such a keyboard")
     if (_version(running) < _version(KEYBOARDS_ALSO_MICE_SINCE)
             and access.keyboards_also_mice()):
-        return ("A keyboard or mouse here is both at once, as Logitech's are, and the "
-                "hotkey helper on this computer may leave your keyboard out")
+        return ALSO_MICE_REASON
     return None
 
 
