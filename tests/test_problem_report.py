@@ -15,6 +15,9 @@ from gi.repository import GLib, Gtk
 from tuxtalk import help_dialog, problem_report, problem_report_window
 from tuxtalk.config import Settings
 
+# The real one, before the report fixture stands in for it.
+REAL_HELPER_LOG = problem_report._helper_log
+
 HOME = "/home/archer"
 
 
@@ -30,6 +33,7 @@ def report(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", "LXQt")
     monkeypatch.setattr(problem_report, "os_name", lambda: "Fedora Linux 44 (LXQt)")
     monkeypatch.setattr(problem_report, "_real_name", lambda: "")
+    monkeypatch.setattr(problem_report, "_helper_log", lambda: None)   # tests below fake it
     monkeypatch.setattr(desktop_detect, "get_desktop_environment", lambda: "unknown")
     monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("us", "", ""))
     monkeypatch.setattr(recommend, "detect_hardware",
@@ -569,3 +573,58 @@ def test_escape_closes_the_report(window):
     event.keyval = Gdk.KEY_Escape
     win.window.emit("key-press-event", event)
     assert win.closed
+
+
+# --- the hotkey helper's own log ---------------------------------------------------------
+
+def _journal(monkeypatch, stdout="", fail=None):
+    """journalctl as the system would answer; the command asked is kept."""
+    import subprocess
+    import types
+    asked = []
+
+    def run(argv, **kwargs):
+        asked.append(argv)
+        if fail:
+            raise fail
+        return types.SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+    monkeypatch.setattr(problem_report.subprocess, "run", run)
+    return asked
+
+
+def test_hotkeys_that_never_arrive_bring_the_helpers_log(report, monkeypatch):
+    """F8 dead after an update (issue #26): the report said the helper ran and
+    nothing of what it did, which is only in the system log."""
+    from tuxtalk import secure_input
+    monkeypatch.setattr(problem_report, "_helper_log", REAL_HELPER_LOG)
+    monkeypatch.setattr(problem_report.platform, "node", lambda: "archers-pc")
+    asked = _journal(monkeypatch, "2026-11-02T09:44:31+01:00 archers-pc python3[1575]: "
+                                  "tuxtalk-hotkeys: watching keyboard 'Logitech K800' "
+                                  "(/dev/input/event13)\n")
+    text = report().text
+    assert "## Hotkey helper log" in text
+    assert "<computer> python3[1575]: tuxtalk-hotkeys: watching keyboard 'Logitech K800'" in text
+    assert "archers-pc" not in text
+    assert asked[0][:3] == ["journalctl", "-u", secure_input.SERVICE] and "-b" in asked[0]
+
+
+def test_a_log_this_account_cant_read_says_how_to_get_it(report, monkeypatch):
+    monkeypatch.setattr(problem_report, "_helper_log", REAL_HELPER_LOG)
+    _journal(monkeypatch, "")
+    assert "needs the wheel, adm or systemd-journal group" in report().text
+
+
+def test_no_journalctl_still_gives_the_report(report, monkeypatch):
+    monkeypatch.setattr(problem_report, "_helper_log", REAL_HELPER_LOG)
+    _journal(monkeypatch, fail=FileNotFoundError("journalctl"))
+    text = report().text
+    assert "(couldn't read the system log: FileNotFoundError)" in text
+    assert "## Log, the last" in text
+
+
+def test_without_the_helper_there_is_no_helper_log(report, monkeypatch):
+    from tuxtalk import secure_input
+    monkeypatch.setattr(problem_report, "_helper_log", REAL_HELPER_LOG)
+    monkeypatch.setattr(secure_input, "is_installed", lambda: False)
+    asked = _journal(monkeypatch, "anything")
+    assert "## Hotkey helper log" not in report().text and asked == []

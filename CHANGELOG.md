@@ -69,6 +69,12 @@ before 0.15.0, so older entries use that name.
   the front now.
 - Escape closes Transcribe a File (it still asks first if your text isn't
   saved) and the TuxTalk menu window, like the other windows.
+- Report a Problem now includes the hotkey helper's own log. When F8 does
+  nothing, the reason is written there, not in TuxTalk's log, and the
+  report left it out. It's the last 40 lines since the computer started,
+  with your computer's name taken out, and like everything else in the
+  report you see it all before anything is sent. The helper never logs a
+  key you type.
 - Report a Problem took your user name out of the report but not your real
   name, so "Ron's AirPods" stayed in it for the user ronb1964. Your real
   name comes out too now.

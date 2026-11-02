@@ -64,8 +64,9 @@ class ReportWindow:
         intro = Gtk.Label(xalign=0)
         intro.set_line_wrap(True)
         intro.set_text("This is what helps find a problem with TuxTalk: your system, your "
-                       "settings and the end of TuxTalk's log. Nothing leaves your computer "
-                       "unless you copy it, save it or send it yourself, so read it first.")
+                       "settings, and the end of TuxTalk's log and of its hotkey helper's. "
+                       "Nothing leaves your computer unless you copy it, save it or send it "
+                       "yourself, so read it first.")
         box.pack_start(intro, False, False, 0)
 
         # Shown once the report is in, if its log had dictated words.

@@ -5,19 +5,25 @@ TuxTalk sends none of it anywhere. The person reads it all, then copies it,
 saves it or pastes it into a GitHub issue themselves. What they dictate is
 never in it: the log keeps it out (logger.redact_text) unless that logging
 was turned on, and the lines from then are hidden here the same way. Their
-home folder and user name are taken out too.
+home folder, user name and computer's name are taken out too. The hotkey
+helper's own lines from the system log come too: hotkeys that never arrive
+are explained there, never in TuxTalk's log.
 """
 import ast
 import logging
 import os
 import platform
 import re
+import subprocess
 from dataclasses import asdict
 from typing import NamedTuple
 
 logger = logging.getLogger(__name__)
 
 LOG_LINES = 300
+# The hotkey helper's lines from the system log: which keyboards it watches
+# and what it refused, since the computer started. It never logs a key.
+HELPER_LOG_LINES = 40
 
 
 class Report(NamedTuple):
@@ -38,12 +44,16 @@ def build(layout, home=None, user=None) -> Report:
     log, words_left_out = hide_dictations(_log_tail())
     # The names only where a person's own words can be: a user called
     # "mint" or "ubuntu" mustn't take the distro's name out of the facts.
-    sections = (
+    sections = [
         ("TuxTalk", scrub(_tuxtalk(cfg), home, None)),
         ("This computer", scrub(_computer(cfg, layout), home, None)),
         ("Settings", scrub(_settings(cfg), home, user, real_name)),
         (f"Log, the last {LOG_LINES} lines", scrub(log, home, user, real_name)),
-    )
+    ]
+    helper_log = _helper_log()
+    if helper_log is not None:
+        sections.append(("Hotkey helper log, since the computer started",
+                         scrub(helper_log, home, user, real_name)))
     text = "\n\n".join(f"## {title}\n{body}" for title, body in sections)
     return Report(text, words_left_out)
 
@@ -172,6 +182,33 @@ def _helper_state():
         return "not installed (the input group is used instead)"
     version = secure_input.running_version()
     return f"running, version {version}" if version else "installed but not answering"
+
+
+def _helper_log():
+    """The hotkey helper's last lines in the system log since the computer
+    started, the computer's name taken out; None when there's no helper. An
+    account outside the wheel, adm or systemd-journal group may not read them,
+    and the section says so."""
+    from . import secure_input
+    if os.environ.get("FLATPAK_ID") or not secure_input.is_installed():
+        return None
+    try:
+        result = subprocess.run(
+            ["journalctl", "-u", secure_input.SERVICE, "-b", "-q", "--no-pager",
+             "-o", "short-iso", "-n", str(HELPER_LOG_LINES)],
+            capture_output=True, text=True, errors="replace", timeout=5)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        logger.info(f"Report a problem: the hotkey helper's log couldn't be read ({e})")
+        return f"(couldn't read the system log: {type(e).__name__})"
+    lines = result.stdout.rstrip("\n")
+    if not lines:
+        return ("(nothing here this account may read: reading the system log needs the "
+                "wheel, adm or systemd-journal group, or sudo journalctl -u "
+                f"{secure_input.SERVICE} -b)")
+    host = platform.node()
+    if len(host) > 1:
+        lines = re.sub(rf"(?<=\s){re.escape(host)}(?=\s)", "<computer>", lines)
+    return lines
 
 
 def _computer(cfg, layout):

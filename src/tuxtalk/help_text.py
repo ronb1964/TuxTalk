@@ -656,7 +656,8 @@ Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in 
 
 <b>Bug reports and feedback</b>
   • <b>Something not working?</b> <a href="{REPORT_LINK}">Report a problem</a> gathers
-    what helps find it: your system, your settings and the end of TuxTalk's log.
+    what helps find it: your system, your settings, and the end of TuxTalk's log
+    and of its hotkey helper's.
     You see all of it first, then copy it, save it, or open a GitHub issue with it.
   • <b>Report bugs:</b> <a href="{ISSUES_URL}">TuxTalk issues on GitHub</a>
   • <b>Questions, ideas, or just how it's working for you:</b>
