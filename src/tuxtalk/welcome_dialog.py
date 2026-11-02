@@ -37,6 +37,29 @@ logger = setup_logger(__name__)
 detect_uinput_access = check_all_device_permissions
 
 
+def helper_sees_no_keyboard():
+    """Whether TuxTalk's hotkey helper answers but says it reads no
+    keyboard (issue #26; one before 1.12 doesn't say). The access check
+    fails then too, but Fix Typing can't help: it would install the same
+    helper again."""
+    from . import secure_input
+    return (not os.environ.get("FLATPAK_ID") and secure_input.is_installed()
+            and secure_input.keyboards_watched() == 0)
+
+
+def _no_keyboard_label():
+    """The welcome screen's line for a hotkey helper that reads no keyboard."""
+    from .uinput_helper import HELPER_SEES_NO_KEYBOARD
+    label = Gtk.Label(xalign=0)
+    label.set_markup(f'<span color="{WARNING_AMBER}">⚠ '
+                     f'{GLib.markup_escape_text(HELPER_SEES_NO_KEYBOARD)}.</span>')
+    label.set_line_wrap(True)
+    label.set_max_width_chars(70)
+    label.set_margin_start(10)
+    label.set_margin_bottom(10)
+    return label
+
+
 # The welcome screen's styles. They go on the whole screen (_install_css), so
 # every rule uses a class only the welcome screen's widgets carry.
 _CSS = b"""
@@ -161,7 +184,9 @@ def _status_markup(text, color, max_lines=4):
 def _fix_typing_steps():
     """The blocking part of Fix Typing; runs off the GTK thread.
 
-    Returns a dict: results (lines to show), uinput_fixed and needs_restart.
+    Returns a dict: results (lines to show), uinput_fixed, needs_restart,
+    and sees_no_keyboard: the helper, installed now, says it reads no
+    keyboard, so the hotkeys still can't work.
     """
     from tuxtalk.secure_input import fix_permissions
     logger.info("Setting up typing and hotkey permissions...")
@@ -174,7 +199,8 @@ def _fix_typing_steps():
         results = (["⚠️ Permissions setup cancelled"] if "cancelled" in message.lower()
                    else [f"❌ Permissions: {message}"])
     return {"results": results, "uinput_fixed": fixed,
-            "needs_restart": needs_restart if fixed else False}
+            "needs_restart": needs_restart if fixed else False,
+            "sees_no_keyboard": fixed and helper_sees_no_keyboard()}
 
 
 # A setup step built by _required_step: its box, the box of what the button
@@ -310,8 +336,14 @@ class WelcomeDialog:
         self.hardware = recommend.detect_hardware(cfg)
         self.initial_language = recommend.system_language()
 
-        # Writing keystrokes and reading hotkeys (detect_uinput_access).
+        # Writing keystrokes and reading hotkeys (detect_uinput_access). With
+        # a helper that reads no keyboard, only typing can need the fix; the
+        # screen says what's wrong with the hotkeys instead.
         has_uinput, _ = detect_uinput_access()
+        self.sees_no_keyboard = not has_uinput and helper_sees_no_keyboard()
+        if self.sees_no_keyboard:
+            from .uinput_helper import check_uinput_permission
+            has_uinput = check_uinput_permission()[0]
         self.needs_uinput_fix = not has_uinput
 
         # PortAudio records the audio.
@@ -348,6 +380,8 @@ class WelcomeDialog:
             height += 190  # Shortcut setup section (Flatpak)
         elif self.needs_uinput_fix:
             height += 250  # Typing setup section
+        if self.sees_no_keyboard:
+            height += 60   # the helper reads no keyboard
         if self.needs_portaudio_install:
             height += 180  # PortAudio section
         return height
@@ -538,6 +572,9 @@ class WelcomeDialog:
                 sep_portaudio.set_margin_top(15)
                 sep_portaudio.set_margin_bottom(10)
                 vbox.pack_start(sep_portaudio, False, False, 0)
+
+        if self.sees_no_keyboard:
+            vbox.pack_start(_no_keyboard_label(), False, False, 0)
 
         # Flatpak: typing works out of the box (libei). The only setup is letting
         # the desktop assign the dictation shortcut. Host: the uinput step.
@@ -822,7 +859,9 @@ class WelcomeDialog:
             self.restart_needed = self.restart_needed or outcome["needs_restart"]
         needs_restart = self.restart_needed
 
-        if self.uinput_fixed:
+        if self.uinput_fixed and outcome["sees_no_keyboard"]:
+            self._report_no_keyboard(button)
+        elif self.uinput_fixed:
             button.set_label("✅ Fixed!")
             button.set_sensitive(False)  # Disable - no more action needed
             # Or the status line above the button still says "needed".
@@ -847,6 +886,18 @@ class WelcomeDialog:
             button.set_label("🔧 Fix Typing (Recommended)")
             result_text = "\n".join(outcome["results"]) or "Setup was cancelled"
             self.typing_status_label.set_markup(_status_markup(result_text, "#FF9800"))
+
+    def _report_no_keyboard(self, button):
+        """Fix Typing worked, but the hotkey helper it installed reads no
+        keyboard: typing works, the dictation keys don't, and no "Ready"."""
+        from .uinput_helper import HELPER_SEES_NO_KEYBOARD
+        logger.warning("Fix Typing: the hotkey helper reads no keyboard")
+        button.set_label("✅ Typing Set Up")
+        button.set_sensitive(False)
+        if self._uinput_status_label is not None:
+            self._uinput_status_label.set_markup("✅ Typing permissions OK")
+        self.typing_status_label.set_markup(
+            _status_markup(f"{HELPER_SEES_NO_KEYBOARD}.", WARNING_AMBER))
 
     def _build_gnome_extension_option(self, vbox):
         """Build GNOME extension checkbox and details."""

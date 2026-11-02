@@ -25,7 +25,7 @@ def test_a_failed_fix_is_reported_and_can_be_retried(dialog, monkeypatch):
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: dialogs.append(k) or None)
     button = dialog.fix_typing_button
     outcome = {"results": ["❌ Permissions: udevadm not found"], "uinput_fixed": False,
-               "needs_restart": False}
+               "needs_restart": False, "sees_no_keyboard": False}
     dialog._finish_fix_typing(button, outcome)
     assert button.get_sensitive()
     assert "Fix Typing" in button.get_label()
@@ -131,7 +131,7 @@ def needs_uinput(welcome_screen, monkeypatch, message_boxes):
 
 def _fix_outcome(ok):
     return {"results": [] if ok else ["❌ Permissions: cancelled"], "uinput_fixed": ok,
-            "needs_restart": False}
+            "needs_restart": False, "sees_no_keyboard": False}
 
 
 def test_set_it_up_runs_the_typing_fix_first(needs_uinput, monkeypatch):
@@ -274,3 +274,40 @@ def test_set_it_up_fixes_typing_then_says_portaudio_is_missing(welcome_screen, m
                         lambda button: d._finish_fix_typing(button, _fix_outcome(True)))
     warned, responses = _set_it_up(d, monkeypatch, Gtk.ResponseType.CANCEL)
     assert "Recording isn't set up yet" in warned and responses == []
+
+
+# --- a hotkey helper that reads no keyboard (issue #26) --------------------------
+
+@pytest.fixture
+def blind_helper(monkeypatch):
+    """A hotkey helper installed and answering that keeps saying it reads no
+    keyboard, with typing (/dev/uinput) working."""
+    from tuxtalk import uinput_helper
+    monkeypatch.setattr(secure_input, "is_installed", lambda: True)
+    monkeypatch.setattr(secure_input, "keyboards_watched", lambda: 0)
+    monkeypatch.setattr(uinput_helper, "check_uinput_permission", lambda: (True, ""))
+
+
+def test_a_helper_that_reads_no_keyboard_is_said_not_typing_setup(welcome_screen,
+                                                                   blind_helper):
+    """The access check fails then, and the screen asked for Typing Setup:
+    a password prompt for the same helper, then "Ready!" with the keys
+    still dead. Now it says what's wrong, and asks for nothing."""
+    from gtk_text import tree_text
+    d = welcome_screen(typing_ok=False)
+    shown = " ".join(tree_text(d.dialog))
+    assert "can't see your keyboard" in shown and "Typing Setup Required" not in shown
+    assert not d.needs_uinput_fix and d.fix_typing_button is None
+
+
+def test_fix_typing_that_leaves_the_helper_reading_no_keyboard_isnt_called_ready(
+        dialog, blind_helper, monkeypatch, message_boxes):
+    """Typing needed the fix (no /dev/uinput), and the helper it installed
+    still reads no keyboard: no "Ready!" and no "Typing Setup Complete"."""
+    monkeypatch.setattr(secure_input, "fix_permissions", lambda: (True, "", False))
+    outcome = wd._fix_typing_steps()
+    assert outcome["uinput_fixed"] and outcome["sees_no_keyboard"]
+    dialog._finish_fix_typing(dialog.fix_typing_button, outcome)
+    status = dialog.typing_status_label.get_text()
+    assert "can't see your keyboard" in status and "Ready" not in status
+    assert message_boxes.shown == []

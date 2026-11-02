@@ -490,7 +490,8 @@ def test_fix_typing_success_updates_the_status_lines(monkeypatch):
         typing_status_label=Gtk.Label(), _uinput_status_label=uinput)
     button = Gtk.Button()
     welcome_dialog.WelcomeDialog._report_fix_typing(me, button, {
-        "results": [], "uinput_fixed": True, "needs_restart": False})
+        "results": [], "uinput_fixed": True, "needs_restart": False,
+        "sees_no_keyboard": False})
     assert uinput.get_text() == "✅ Input device permissions OK"
 
 
