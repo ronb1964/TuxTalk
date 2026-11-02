@@ -57,7 +57,7 @@ def service(monkeypatch):
     def grab(devices, codes):
         done.append("grab")
         modifier_hotkeys.note_hidden(codes)
-        modifier_hotkeys.note_compose_hidden(codes)
+        modifier_hotkeys.note_compose_hidden(codes, modifier_hotkeys.compose_press())
 
     def let_go():
         done.append("let go")
@@ -176,11 +176,18 @@ COMPOSE_AGAIN = ("pressed", [(RCTRL, 1), (RCTRL, 0)])
 
 @pytest.fixture
 def right_ctrl_is_compose(monkeypatch):
-    """Pop!_OS's keyboard options: Right Ctrl is the Compose key."""
-    monkeypatch.setattr(modifier_hotkeys, "_compose_keys", frozenset({RCTRL}))
-    monkeypatch.setattr(modifier_hotkeys, "_compose_begun", None)
-    monkeypatch.setattr(modifier_hotkeys, "_compose_hidden", False)
+    """Pop!_OS's keyboard options: Right Ctrl is the Compose key, with or
+    without Shift; the focus stays in KWrite."""
+    monkeypatch.setattr(modifier_hotkeys, "_compose_keys",
+                        frozenset({(RCTRL, False), (RCTRL, True)}))
+    monkeypatch.setattr(modifier_hotkeys, "_compose", None)
     monkeypatch.setattr(modifier_hotkeys, "_hidden", (frozenset(), ()))
+    monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
+
+
+def compose_hidden(codes):
+    """What a grab that caught *codes* down says about the press now."""
+    modifier_hotkeys.note_compose_hidden(codes, modifier_hotkeys.compose_press())
 
 
 def test_letting_go_of_a_compose_right_ctrl_presses_compose_again(service, right_ctrl_is_compose):
@@ -211,7 +218,7 @@ def test_a_toggle_stop_tap_no_longer_hidden_waits_before_compose_again(
     slept = []
     monkeypatch.setattr(modifier_hotkeys.time, "sleep", slept.append)
     modifier_hotkeys.note_compose_key(KeyEvent(RCTRL, 1), (RCTRL,))
-    modifier_hotkeys.note_compose_hidden({RCTRL})   # hidden as it's pressed...
+    compose_hidden({RCTRL})   # hidden as it's pressed...
     modifier_hotkeys.note_hidden(())                # ...and let go of as it stops
     modifier_hotkeys.note_compose_key(KeyEvent(RCTRL, 0), (RCTRL,))
     assert slept == [modifier_hotkeys._SETTLE_S] and service == [COMPOSE_AGAIN]
@@ -227,7 +234,7 @@ def test_a_compose_key_press_left_to_the_desktop_isnt_ended(service, right_ctrl_
     held = set()
     key(RCTRL, 1, held, toggle=RCTRL)
     key(RCTRL, 0, held, toggle=RCTRL)
-    assert COMPOSE_AGAIN not in service and modifier_hotkeys._compose_begun is None
+    assert COMPOSE_AGAIN not in service and modifier_hotkeys._compose is None
 
 
 def test_compose_pressed_again_that_didnt_go_out_is_tried_before_the_next_key(
@@ -235,7 +242,7 @@ def test_compose_pressed_again_that_didnt_go_out_is_tried_before_the_next_key(
     modifier_hotkeys.note([Keyboard(lambda look: False)], RCTRL, ecodes.KEY_F9)
     modifier_hotkeys.note_compose_key(KeyEvent(RCTRL, 1), (RCTRL,))
     modifier_hotkeys.note_hidden({RCTRL})
-    modifier_hotkeys.note_compose_hidden({RCTRL})
+    compose_hidden({RCTRL})
     real_send = modifier_hotkeys.virtual_keyboard.send
     monkeypatch.setattr(modifier_hotkeys.virtual_keyboard, "send", lambda *a, **k: False)
     modifier_hotkeys.end_compose()
@@ -250,14 +257,14 @@ def test_compose_pressed_again_that_keeps_failing_is_given_up(
     modifier_hotkeys.note([Keyboard(lambda look: False)], RCTRL, ecodes.KEY_F9)
     modifier_hotkeys.note_compose_key(KeyEvent(RCTRL, 1), (RCTRL,))
     modifier_hotkeys.note_hidden({RCTRL})
-    modifier_hotkeys.note_compose_hidden({RCTRL})
+    compose_hidden({RCTRL})
     tries = []
     monkeypatch.setattr(modifier_hotkeys.virtual_keyboard, "send",
                         lambda *a, **k: tries.append(1) and False)
     modifier_hotkeys.end_compose()
     modifier_hotkeys.end_compose()
     modifier_hotkeys.end_compose()
-    assert len(tries) == 2 and modifier_hotkeys._compose_begun is None
+    assert len(tries) == 2 and modifier_hotkeys._compose is None
 
 
 def test_typing_waits_for_a_compose_being_ended_on_another_thread(keyboard, no_hotkeys_noted,
@@ -269,7 +276,7 @@ def test_typing_waits_for_a_compose_being_ended_on_another_thread(keyboard, no_h
     modifier_hotkeys.note([Keyboard(lambda look: False)], RCTRL, ecodes.KEY_F9)
     modifier_hotkeys.note_compose_key(KeyEvent(RCTRL, 1), (RCTRL,))
     modifier_hotkeys.note_hidden({RCTRL})
-    modifier_hotkeys.note_compose_hidden({RCTRL})
+    compose_hidden({RCTRL})
     sending, go_on = threading.Event(), threading.Event()
     real_send = modifier_hotkeys.virtual_keyboard.send
 
@@ -294,12 +301,65 @@ def test_typing_waits_for_a_compose_being_ended_on_another_thread(keyboard, no_h
     assert keyboard.typed_keys() == [RCTRL, ecodes.KEY_A]
 
 
+def test_a_compose_key_let_go_in_another_window_presses_nothing_there(
+        service, right_ctrl_is_compose, monkeypatch):
+    """Held in one window and let go in another after a click: Compose
+    pressed again would begin a compose in the second one, which would
+    swallow the first keys typed there."""
+    import time
+    held = set()
+    key(RCTRL, 1, held, hold=RCTRL)
+    press = modifier_hotkeys._compose
+    for _ in range(200):                    # the window is looked at off the hotkey loop
+        if press.where is not None:
+            break
+        time.sleep(0.01)
+    assert press.where == KWRITE
+    monkeypatch.setattr(focused_window, "look", lambda: named("firefox"))
+    key(RCTRL, 0, held, hold=RCTRL)
+    assert COMPOSE_AGAIN not in service and modifier_hotkeys._compose is None
+
+
+def test_a_shift_right_alt_compose_is_ended_with_shift_too(service, monkeypatch):
+    """With lv3:ralt_switch_multikey Right Alt alone is AltGr and Shift+Right
+    Alt is Compose: a voice edit began a compose, and Right Alt pressed
+    again alone (AltGr) didn't end it."""
+    shift = ecodes.KEY_LEFTSHIFT
+    monkeypatch.setattr(modifier_hotkeys, "_compose_keys", frozenset({(RALT, True)}))
+    monkeypatch.setattr(modifier_hotkeys, "_compose", None)
+    monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
+    modifier_hotkeys.note_compose_key(KeyEvent(RALT, 1), (RALT,), {shift})
+    modifier_hotkeys.note_hidden({RALT, shift})
+    compose_hidden({RALT, shift})
+    modifier_hotkeys.note_compose_key(KeyEvent(RALT, 0), (RALT,), {shift})
+    assert service == [("pressed", [(shift, 1), (RALT, 1), (RALT, 0), (shift, 0)])]
+    modifier_hotkeys.note_compose_key(KeyEvent(RALT, 1), (RALT,), set())
+    assert modifier_hotkeys._compose is None        # AltGr alone begins no compose
+
+
+def test_compose_that_didnt_go_out_is_tried_again_after_the_keys_change_to_f_keys(
+        keyboard, no_hotkeys_noted, right_ctrl_is_compose, monkeypatch):
+    """Preferences changed the dictation keys to F8 and F9 meanwhile: the
+    compose the Right Ctrl began still needs ending before the next text."""
+    modifier_hotkeys.note([Keyboard(lambda look: False)], RCTRL, ecodes.KEY_F9)
+    modifier_hotkeys.note_compose_key(KeyEvent(RCTRL, 1), (RCTRL,))
+    modifier_hotkeys.note_hidden({RCTRL})
+    compose_hidden({RCTRL})
+    real_send = modifier_hotkeys.virtual_keyboard.send
+    monkeypatch.setattr(modifier_hotkeys.virtual_keyboard, "send", lambda *a, **k: False)
+    modifier_hotkeys.end_compose()
+    monkeypatch.setattr(modifier_hotkeys.virtual_keyboard, "send", real_send)
+    modifier_hotkeys.note([Keyboard(lambda look: False)], F8, ecodes.KEY_F9)
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard.typed_keys() == [RCTRL, ecodes.KEY_A]
+
+
 def test_scroll_lock_is_never_taken_for_compose():
     """A desktop holds Scroll Lock back from apps, so with compose:sclk its
     press begins no compose for TuxTalk to end."""
-    modifier_hotkeys.note_compose_keys({ecodes.KEY_SCROLLLOCK, RCTRL})
+    modifier_hotkeys.note_compose_keys({(ecodes.KEY_SCROLLLOCK, False), (RCTRL, False)})
     try:
-        assert modifier_hotkeys._compose_keys == {RCTRL}
+        assert modifier_hotkeys._compose_keys == {(RCTRL, False)}
     finally:
         modifier_hotkeys.note_compose_keys(())
 
@@ -343,13 +403,13 @@ def test_the_compose_keys_are_read_when_the_keys_are_watched_not_on_each_press(m
     from tuxtalk import hotkey_keys
     asked = []
     monkeypatch.setattr(keyboard_layout, "compose_keys",
-                        lambda: asked.append(1) or frozenset({RCTRL}))
+                        lambda: asked.append(1) or frozenset({(RCTRL, False)}))
     for name in ("_claim_desktop_hotkeys", "_helper_watch"):
         monkeypatch.setattr(hotkeys, name, lambda *a, **k: None)
     monkeypatch.setattr(modifier_hotkeys, "_compose_keys", frozenset())
     keys = hotkey_keys.Hotkeys(RCTRL, ecodes.KEY_F9, "", None, None)
     hotkeys._watch(Cfg(), [], keys)
-    assert modifier_hotkeys._compose_keys == {RCTRL} and asked == [1]
+    assert modifier_hotkeys._compose_keys == {(RCTRL, False)} and asked == [1]
     hotkeys._watch(Cfg(), [], hotkey_keys.Hotkeys(F8, ecodes.KEY_F9, "", None, None))
     assert modifier_hotkeys._compose_keys == frozenset() and asked == [1]
 
@@ -474,7 +534,7 @@ def test_typing_under_a_held_compose_right_ctrl_ends_the_compose_first(keyboard,
     modifier_hotkeys.note([Keyboard(lambda look: False)], RCTRL, ecodes.KEY_F9)
     modifier_hotkeys.note_compose_key(KeyEvent(RCTRL, 1), (RCTRL, ecodes.KEY_F9))
     modifier_hotkeys.note_hidden({RCTRL})
-    modifier_hotkeys.note_compose_hidden({RCTRL})
+    compose_hidden({RCTRL})
     assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)] * 2, what="aa")
     assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     modifier_hotkeys.note_compose_key(KeyEvent(RCTRL, 0), (RCTRL, ecodes.KEY_F9))
@@ -1161,16 +1221,20 @@ def test_the_dropdowns_say_what_right_ctrl_and_right_alt_give_up():
 
 
 @pytest.mark.parametrize("options,compose", [
-    ("lv3:ralt_switch,compose:rctrl", {RCTRL}),     # every Pop!_OS install
-    ("compose:ralt", {RALT}), ("", set())])
+    ("lv3:ralt_switch,compose:rctrl", {(RCTRL, False), (RCTRL, True)}),  # every Pop!_OS install
+    ("compose:ralt", {(RALT, False), (RALT, True)}),
+    ("lv3:ralt_switch_multikey", {(RALT, True)}),   # AltGr alone, Compose with Shift
+    ("", set())])
 def test_the_compose_key_is_found_in_the_keyboard_options(options, compose):
     from tuxtalk.keyboard_layout import KeyPlanner
-    assert KeyPlanner("us", "", options).compose_keys & {RCTRL, RALT} == compose
+    assert {b for b in KeyPlanner("us", "", options).compose_keys if b[0] in (RCTRL, RALT)} \
+        == compose
 
 
 def test_the_dropdown_names_a_right_ctrl_that_is_compose(monkeypatch):
     from tuxtalk import hotkey_labels
-    monkeypatch.setattr(keyboard_layout, "compose_keys", lambda: frozenset({RCTRL}))
+    monkeypatch.setattr(keyboard_layout, "compose_keys",
+                        lambda: frozenset({(RCTRL, False), (RCTRL, True), (RALT, True)}))
     monkeypatch.setattr(keyboard_layout, "altgr_characters", lambda: None)
     labels = dict(hotkey_labels.dropdown_entries())
     assert labels["Right Ctrl"] == "Right Ctrl (your Compose key: stops working as Compose)"

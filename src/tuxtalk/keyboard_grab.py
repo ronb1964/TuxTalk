@@ -133,7 +133,8 @@ def grab_keyboards_hiding(devices, codes) -> None:
     # Caught down and held here; the hotkey helper says so itself once it has.
     # Before note_hidden: typing let go on by it must find the compose its own.
     modifier_hotkeys.note_compose_hidden({code for dev, code in held if dev in grabbed_devices
-                                          and not hasattr(dev, "held_now")})
+                                          and not hasattr(dev, "held_now")},
+                                         modifier_hotkeys.compose_press())
     modifier_hotkeys.note_hidden(set(codes) - shown, [d for d in devices if d in grabbed_devices])
 
 
