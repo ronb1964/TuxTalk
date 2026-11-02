@@ -1,22 +1,26 @@
 diff --git a/examples/server/server.cpp b/examples/server/server.cpp
-index b745f4d..c63d0ba 100644
+index b745f4d..ef7266d 100644
 --- a/examples/server/server.cpp
 +++ b/examples/server/server.cpp
-@@ -739,6 +739,35 @@ int main(int argc, char ** argv) {
+@@ -739,6 +739,39 @@ int main(int argc, char ** argv) {
                               {"Access-Control-Allow-Origin", "*"},
                               {"Access-Control-Allow-Headers", "content-type, authorization"}});
  
 +    // TuxTalk: with WHISPER_API_KEY set, every request but the health check
 +    // needs "Authorization: Bearer <key>", static files included. Without
-+    // it, any program on this computer, another user's too, could send audio
-+    // or reach the other routes. The key comes from the environment, which
-+    // only this user can read, not the command line, which every user can.
++    // it, another user's programs, or a web page posting to 127.0.0.1, could
++    // send audio or reach the other routes. The key comes from the
++    // environment, which only this user can read, not the command line,
++    // which every user can. This runs before any body is read, so a request
++    // without the key never gets one read: the health check is let through
++    // only as a GET or HEAD with no body.
 +    const char * api_key_env = std::getenv("WHISPER_API_KEY");
 +    const std::string api_key = api_key_env ? api_key_env : "";
 +    if (!api_key.empty()) {
 +        const std::string health_path = sparams.request_path + "/health";
 +        svr->set_pre_routing_handler([api_key, health_path](const Request & req, Response & res) {
-+            if (req.path == health_path) {
++            if (req.path == health_path && (req.method == "GET" || req.method == "HEAD") &&
++                !httplib::detail::expect_content(req)) {
 +                return Server::HandlerResponse::Unhandled;
 +            }
 +            const std::string expected = "Bearer " + api_key;
@@ -38,7 +42,7 @@ index b745f4d..c63d0ba 100644
      std::string const default_content = R"(
      <html>
      <head>
-@@ -1243,7 +1272,7 @@ int main(int argc, char ** argv) {
+@@ -1243,7 +1276,7 @@ int main(int argc, char ** argv) {
      svr->set_error_handler([](const Request &req, Response &res) {
          if (res.status == 400) {
              res.set_content("Invalid request", "text/plain");

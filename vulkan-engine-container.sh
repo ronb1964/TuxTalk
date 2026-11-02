@@ -3,7 +3,7 @@
 set -e
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq >/dev/null
-apt-get install -y -qq build-essential cmake git wget xz-utils libvulkan-dev ca-certificates >/dev/null
+apt-get install -y -qq build-essential cmake git wget curl xz-utils libvulkan-dev ca-certificates >/dev/null
 
 # Vulkan SDK for glslc and current Vulkan headers (22.04 has neither).
 # A pinned version, checked against the SHA256 LunarG publishes at
@@ -64,7 +64,9 @@ cp samples/jfk.wav "$OUT/speed-check.wav"
 test -f "$OUT/libggml-vulkan.so" || { echo "❌ no Vulkan backend in the build"; exit 1; }
 test -f "$OUT/libparakeet.so" || { echo "❌ no Parakeet library in the build"; exit 1; }
 nm -D "$OUT/libparakeet.so" | grep -q parakeet_set_word_boost || { echo "❌ the Parakeet library has no word boost"; exit 1; }
-grep -qa WHISPER_API_KEY "$OUT/whisper-server" || { echo "❌ whisper-server takes no key"; exit 1; }
+echo "Checking whisper-server keeps out requests without its key:"
+bash /build/vulkan-engine-check.sh "$OUT" "$WORK/whisper.cpp/models/for-tests-ggml-tiny.bin" ||
+    { echo "❌ whisper-server doesn't do what its patches promise"; exit 1; }
 MAXGLIBC=$(objdump -T "$OUT"/whisper-server "$OUT"/*.so* 2>/dev/null | grep -oE "GLIBC_[0-9.]+" | sort -Vu | tail -1)
 echo "Newest glibc needed: $MAXGLIBC"
 

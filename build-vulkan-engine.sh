@@ -25,13 +25,17 @@
 # The build number tells apart builds of the SAME whisper.cpp version with
 # different contents. A published build must never be replaced: released
 # TuxTalk versions check its SHA256 and would refuse a changed file. So the
-# script refuses the build that src/tuxtalk/whisper_vulkan.py downloads now,
-# or any earlier one, and a tarball that already exists here.
+# script refuses a build earlier than the one src/tuxtalk/whisper_vulkan.py
+# downloads, any build whose release asset GitHub has (or can't say it
+# hasn't), and a tarball that already exists here. The build the app names
+# may be rebuilt only while it is unpublished.
 #
 # Output: talktype-whisper-vulkan-<version>-b<build>-x64.tar.gz and its
-# .sha256. The folder inside is always talktype-whisper-vulkan-<version>, so
-# a later build unpacks over an earlier one. Afterwards put the version, build
-# and SHA256 into src/tuxtalk/whisper_vulkan.py.
+# .sha256. The folder inside is always talktype-whisper-vulkan-<version>;
+# TuxTalk unpacks each build into a folder of its own (whisper-vulkan/
+# <version>-b<build>) and removes the earlier one once the new one is in
+# place. Afterwards put the version, build and SHA256 into
+# src/tuxtalk/whisper_vulkan.py.
 set -e
 if [ $# -ne 2 ]; then
     echo "Usage: $0 <whisper.cpp version> <build number>" >&2
@@ -51,9 +55,16 @@ if [ -z "$APP_VERSION" ] || [ -z "$APP_BUILD" ]; then
     echo "❌ Could not read ENGINE_VERSION / ENGINE_BUILD from $APP_PY" >&2
     exit 1
 fi
-if [ "$WHISPER_CPP_VERSION" = "$APP_VERSION" ] && [ "$ENGINE_BUILD" -le "$APP_BUILD" ]; then
+if [ "$WHISPER_CPP_VERSION" = "$APP_VERSION" ] && [ "$ENGINE_BUILD" -lt "$APP_BUILD" ]; then
     echo "❌ Build $ENGINE_BUILD of whisper.cpp $WHISPER_CPP_VERSION is already published" >&2
     echo "   (TuxTalk downloads build $APP_BUILD). Use build $((APP_BUILD + 1))." >&2
+    exit 1
+fi
+ASSET_URL="https://github.com/ronb1964/TuxTalk/releases/download/$TAG/$ASSET"
+PUBLISHED=$(curl -s -o /dev/null -w '%{http_code}' -I -L --max-time 30 "$ASSET_URL" || true)
+if [ "$PUBLISHED" != 404 ]; then
+    echo "❌ $TAG may be published already: GitHub answered HTTP $PUBLISHED for" >&2
+    echo "   $ASSET_URL (only a 404 shows it isn't). Use the next build number." >&2
     exit 1
 fi
 if [ -e "$PROJECT_DIR/$ASSET" ]; then
