@@ -260,3 +260,25 @@ def test_a_closed_help_opens_anew(dialog):
         assert again is not dialog
     finally:
         again.destroy()
+
+
+def _start_here(dialog):
+    notebook = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
+    return " ".join(w.get_text() for w in widgets(notebook.get_nth_page(0))
+                    if isinstance(w, Gtk.Label))
+
+
+def test_help_left_open_names_a_hold_key_changed_meanwhile(dialog, monkeypatch):
+    """Help left open, the hold key changed to F6, Help clicked again: the
+    window brought forward says F6, on the section it was showing."""
+    from tuxtalk import config, raise_window
+    monkeypatch.setattr(raise_window, "raise_window", lambda window: None)
+    help_dialog.open_section(next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook)),
+                             "writing")
+    assert "F6" not in _start_here(dialog)
+    monkeypatch.setattr(config, "saved_hold_key", lambda: "F6")
+    assert help_dialog.show_help_dialog() is dialog
+    assert "Hold F6" in _start_here(dialog)
+    notebook = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
+    assert "Writing" in notebook.get_tab_label_text(
+        notebook.get_nth_page(notebook.get_current_page()))

@@ -103,14 +103,31 @@ def _problems_page(markup):
     return page
 
 
-def _sections():
-    """The notebook of sections, one tab each, in Help's order."""
-    notebook = Gtk.Notebook()
-    for title, markup in help_text.tabs():
+def _add_sections(notebook, sections):
+    """A page in *notebook* for each of *sections*, help_text.tabs()' list."""
+    for title, markup in sections:
         page = _problems_page(markup) if title == PROBLEMS_TITLE else text_page(markup)
         notebook.append_page(page, Gtk.Label(label=title))
+
+
+def _sections(sections):
+    """The notebook of sections, one tab each, in Help's order."""
+    notebook = Gtk.Notebook()
+    _add_sections(notebook, sections)
     notebook.get_accessible().set_name("Help sections")
     return notebook
+
+
+def _rewrite(notebook, sections):
+    """Write Help's pages again, on the section shown: a setting they name
+    (the hold key) changed while Help stayed open."""
+    shown = notebook.get_current_page()
+    while notebook.get_n_pages():
+        notebook.remove_page(-1)
+    _add_sections(notebook, sections)
+    notebook.show_all()     # GTK won't show a hidden page
+    notebook.set_current_page(shown)
+    notebook.grab_focus()
 
 
 def _fit(window, notebook):
@@ -136,26 +153,37 @@ def open_section(notebook, word):
             return
 
 
-_open_help = None     # (window, notebook) while Help is open
+_open_help = None     # (window, notebook, its sections) while Help is open
+
+
+def _bring_forward(tab):
+    """Bring the open Help forward, on *tab* when one is named, its text up
+    to date with the settings. Returns the window."""
+    global _open_help
+    window, notebook, built = _open_help
+    sections = help_text.tabs()
+    if sections != built:
+        _rewrite(notebook, sections)
+        _open_help = (window, notebook, sections)
+    if tab:
+        open_section(notebook, tab)
+    from .raise_window import raise_window
+    raise_window(window)
+    return window
 
 
 def show_help_dialog(tab=None):
     """Show Help, on its first section (Start Here), or on the section whose
     title contains *tab* ("writing" from Preferences' TuxTalk Labs section).
-    An open Help is brought forward instead, on *tab* when one is named.
-    Returns the window.
+    An open Help is brought forward instead (_bring_forward). Returns the
+    window.
 
     A plain window, not a Gtk.Dialog: KWin keeps a dialog with no parent
     above every other window of its app, so the Report a Problem window it
     opens came up behind it."""
     global _open_help
     if _open_help is not None:
-        window, notebook = _open_help
-        if tab:
-            open_section(notebook, tab)
-        from .raise_window import raise_window
-        raise_window(window)
-        return window
+        return _bring_forward(tab)
 
     window = Gtk.Window(title="TuxTalk Help")
     window.set_position(Gtk.WindowPosition.CENTER)
@@ -170,7 +198,8 @@ def show_help_dialog(tab=None):
     title = Gtk.Label()
     title.set_markup("<big><b>TuxTalk Help</b></big>")
     content.pack_start(title, False, False, 6)
-    notebook = _sections()
+    sections = help_text.tabs()
+    notebook = _sections(sections)
     content.pack_start(notebook, True, True, 0)
 
     # A passive feedback link under the sections, so it's there whichever
@@ -196,7 +225,7 @@ def show_help_dialog(tab=None):
     # The keyboard and a screen reader start on the tabs, at the section
     # shown: the arrows change section and Tab goes into its text.
     notebook.grab_focus()
-    _open_help = (window, notebook)
+    _open_help = (window, notebook, sections)
     window.connect("destroy", _forget_help)
     window.show_all()
     window.present()  # Bring to front and focus
