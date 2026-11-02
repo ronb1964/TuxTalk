@@ -180,10 +180,13 @@ def test_what_a_killed_download_left_is_swept_next_time(tmp_path):
     from tuxtalk.download_utils import STALE_PARTIAL_S, download_area
     old = time.time() - STALE_PARTIAL_S - 60
     archive, folder = tmp_path / ".engine.0a1b2c3d.tar", tmp_path / ".engine.0a1b2c3d.d"
+    # Cut off while fetching: only fetch_file's partial file is there.
+    partial = tmp_path / ".engine.9f8e7d6c.tar.k3j2h1g0.tmp"
     archive.write_bytes(b"half")
+    partial.write_bytes(b"a third")
     folder.mkdir()
     (folder / "bin").write_bytes(b"x")
-    for path in (archive, folder):
+    for path in (archive, partial, folder):
         os.utime(path, (old, old))
     with download_area(str(tmp_path), "engine"):
         pass

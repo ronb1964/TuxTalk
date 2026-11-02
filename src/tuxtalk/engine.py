@@ -339,7 +339,7 @@ def _build_vulkan_model(settings: Settings):
     processor instead (with the reason logged and the user told). Never stops
     dictation: anything missing or broken falls back to the CPU."""
     from . import whisper_vulkan
-    reason = None
+    reason, model = None, None
     if not whisper_vulkan.is_installed(settings.model):
         reason = "its download isn't there"
     else:
@@ -349,13 +349,14 @@ def _build_vulkan_model(settings: Settings):
                 reason = "no graphics chip was found"
             else:
                 model = whisper_vulkan.VulkanWhisperModel(settings.model, device_index)
-                logger.info(f"Model loaded: {settings.model} on vulkan device {device_index}")
-                _record_engine(settings.model, "vulkan")
-                whisper_vulkan.update_in_background()
-                return model
         except Exception as e:      # any failure here falls back to the processor
             logger.warning(f"The graphics engine failed to start: {e}")
             reason = "the graphics engine failed to start"
+    if model is not None:
+        logger.info(f"Model loaded: {settings.model} on vulkan device {device_index}")
+        _record_engine(settings.model, "vulkan")
+        whisper_vulkan.update_in_background()
+        return model
     logger.warning(f"Vulkan GPU not used for {settings.model}: {reason}; using the processor")
     notify_module.notify("Couldn't use the graphics card",
                 "TuxTalk is using the processor for now. Choose the device again in "
@@ -376,20 +377,21 @@ def _build_parakeet_gpu_model(settings: Settings):
     if not whisper_vulkan.is_installed(PARAKEET_MODEL):
         logger.info("Parakeet's graphics files aren't downloaded; Parakeet runs on the processor")
         return None
-    reason = None
+    reason, model = None, None
     try:
         device_index = whisper_vulkan.find_device()
         if device_index is None:
             reason = "no graphics chip was found"
         else:
             model = parakeet_gpu.ParakeetGpuModel(device_index)
-            logger.info(f"Model loaded: {PARAKEET_MODEL} on vulkan device {device_index}")
-            _record_engine(PARAKEET_MODEL, "vulkan")
-            whisper_vulkan.update_in_background()
-            return model
     except Exception as e:          # any failure here falls back to the processor
         logger.warning(f"Parakeet's graphics helper failed to start: {e}")
         reason = "the graphics helper failed to start"
+    if model is not None:
+        logger.info(f"Model loaded: {PARAKEET_MODEL} on vulkan device {device_index}")
+        _record_engine(PARAKEET_MODEL, "vulkan")
+        whisper_vulkan.update_in_background()
+        return model
     logger.warning(f"Vulkan GPU not used for Parakeet: {reason}; using the processor")
     notify_module.notify("Couldn't run Parakeet on the graphics card",
                 "TuxTalk is using the processor for now. Choose the device again in "

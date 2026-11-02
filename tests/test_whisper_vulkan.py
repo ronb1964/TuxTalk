@@ -27,6 +27,12 @@ load_backend: loaded Vulkan backend from /x/libggml-vulkan.so
 """
 
 
+@pytest.fixture(autouse=True)
+def _engine_update_not_tried_yet(monkeypatch):
+    """Each test is a process of its own as far as the engine update goes."""
+    monkeypatch.setattr(wv, "_update_tried", False)
+
+
 def test_parses_the_device_list_the_engine_prints():
     assert wv.parse_vulkan_devices(REAL_DEVICE_LIST) == [
         (0, "NVIDIA GeForce RTX 4070 SUPER (NVIDIA)", True, False),
@@ -243,6 +249,34 @@ def test_an_engine_update_that_fails_says_why_in_the_log(tmp_path, monkeypatch, 
     wv.update_in_background().join(30)
     assert "Name or service not known" in caplog.text
     assert wv.engine_dir() == str(build_1)
+    # Not again in this process, at every Power Saving wake: at the next start.
+    assert wv.update_in_background() is None
+
+
+def test_an_engine_update_that_cant_make_its_folder_says_so_in_the_log(tmp_path, monkeypatch,
+                                                                       caplog):
+    from tuxtalk import download_utils
+    monkeypatch.setattr(wv, "ENGINE_BUILD", 2)
+    _installed_build(tmp_path, monkeypatch, 1)
+
+    def read_only(parent, name, old_names=()):
+        raise PermissionError(f"Permission denied: '{parent}'")
+    monkeypatch.setattr(download_utils, "download_area", read_only)
+    wv.update_in_background().join(30)
+    assert "update didn't finish (Permission denied" in caplog.text
+
+
+def test_no_engine_update_when_checking_for_updates_at_start_is_off(tmp_path, monkeypatch):
+    """Build 1 keeps working; nothing goes online."""
+    from tuxtalk import config
+    monkeypatch.setattr(wv, "ENGINE_BUILD", 2)
+    _installed_build(tmp_path, monkeypatch, 1)
+    cfg = config.load_config()
+    cfg.auto_check_updates = False
+    config.save_config(cfg)
+    fetched = _download_build(monkeypatch)
+    assert wv.update_in_background() is None and fetched == []
+    assert wv.is_engine_installed("small")
 
 
 def test_two_downloads_of_the_engine_at_once_both_end_installed(tmp_path, monkeypatch):
@@ -534,11 +568,15 @@ def _settings(**kw):
 
 
 def test_service_runs_whisper_on_the_amd_or_intel_chip(monkeypatch):
+    """And brings an earlier engine build up to date once it runs."""
+    updates = []
     monkeypatch.setattr(wv, "is_installed", lambda m: True)
     monkeypatch.setattr(wv, "find_device", lambda: 1)
     monkeypatch.setattr(wv, "VulkanWhisperModel", FakeEngine)
+    monkeypatch.setattr(wv, "update_in_background", lambda: updates.append(1))
     model = engine.build(_settings())
     assert isinstance(model, FakeEngine) and (model.model_name, model.device_index) == ("small", 1)
+    assert updates == [1]
 
 
 def test_service_falls_back_to_the_processor_when_the_engine_is_missing(monkeypatch):
@@ -571,13 +609,17 @@ class FakeParakeetGpu:
 
 
 def test_service_runs_parakeet_on_the_graphics_chip(monkeypatch):
+    """And brings an earlier engine build up to date once it runs."""
     from tuxtalk import parakeet_gpu
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
+    updates = []
     monkeypatch.setattr(wv, "is_installed", lambda m: True)
     monkeypatch.setattr(wv, "find_device", lambda: 0)
     monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", FakeParakeetGpu)
+    monkeypatch.setattr(wv, "update_in_background", lambda: updates.append(1))
     model = engine.build(_settings(model=PARAKEET_MODEL))
     assert isinstance(model, FakeParakeetGpu) and model.device_index == 0
+    assert updates == [1]
 
 
 def test_parakeet_on_vulkan_without_its_files_quietly_uses_the_processor(monkeypatch):
@@ -823,11 +865,13 @@ def test_the_graphics_engines_routes_sit_behind_a_random_path(fake_server, monke
     assert all(len(path) > 30 for path in paths) and paths[0] != paths[1]
 
 
-def test_only_tuxtalk_can_send_the_graphics_engine_audio(fake_server, monkeypatch):
-    """Any program on the computer, another user's too, could send it audio,
-    and through engine build 1's /load route load any file as a model. The
-    key is new at every start and never on the command line, which every
-    user can read."""
+def test_other_users_and_web_pages_cant_send_the_graphics_engine_audio(fake_server,
+                                                                      monkeypatch):
+    """Another user's program could read the port and path on the command
+    line and send it audio, and through engine build 1's /load route load
+    any file as a model. The key is new at every start and never on the
+    command line, which every user can read. What the real server does
+    without it, vulkan-engine-check.sh checks at every engine build."""
     import urllib.error
     import urllib.request
     started = []
@@ -851,6 +895,35 @@ def test_only_tuxtalk_can_send_the_graphics_engine_audio(fake_server, monkeypatc
         finally:
             model.close()
     assert keys[0] != keys[1]
+
+
+def test_an_engine_removed_while_starting_starts_from_the_new_build(fake_server, tmp_path,
+                                                                    monkeypatch):
+    """An update in another TuxTalk process can remove the build just
+    chosen before it was started."""
+    folders = [str(tmp_path / "removed-build"), str(tmp_path)]
+    monkeypatch.setattr(wv, "engine_dir", lambda: folders[0] if len(folders) > 1 else folders[-1])
+
+    def removed_meanwhile(*a):
+        if len(folders) > 1:
+            folders.pop(0)
+    monkeypatch.setattr(wv, "_kill_orphaned_servers", removed_meanwhile)
+    model = wv.VulkanWhisperModel("small", 0, threads=1)
+    try:
+        assert model.transcribe(np.zeros(16000, np.float32)) == "hello"
+    finally:
+        model.close()
+
+
+def test_orphaned_servers_of_every_build_are_looked_for(monkeypatch):
+    """An earlier build's orphan keeps its path after an update removed
+    its folder."""
+    looked = []
+    monkeypatch.setattr(wv, "ENGINE_BUILD", 2)
+    monkeypatch.setattr(wv.engine_process, "processes_of", lambda path: looked.append(path) or [])
+    wv._kill_orphaned_servers()
+    builds = [os.path.basename(os.path.dirname(os.path.dirname(path))) for path in looked]
+    assert builds == [wv.ENGINE_VERSION, f"{wv.ENGINE_VERSION}-b2"]
 
 
 def test_a_server_that_ends_at_start_says_what_it_printed(fake_server, monkeypatch):

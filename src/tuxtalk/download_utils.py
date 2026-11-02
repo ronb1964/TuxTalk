@@ -314,6 +314,9 @@ def download_area(parent: str, name: str, old_names=()):
     # .<name>.old beside them may be the only complete copy of an engine.
     stem = f".{glob.escape(name)}.{'[0-9a-f]' * _AREA_DIGITS}"
     remove_stale_files(parent, stem + ".tar", STALE_PARTIAL_S)
+    # fetch_file's partial download of the archive, which it sweeps only
+    # under this try's archive name.
+    remove_stale_files(parent, stem + ".tar.*.tmp", STALE_PARTIAL_S)
     remove_stale_files(parent, stem + ".d", STALE_PARTIAL_S, folders=True)
     for old in old_names:
         _remove_quiet(os.path.join(parent, old))

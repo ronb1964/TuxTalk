@@ -30,6 +30,27 @@ if [ "$PYPROJECT_VERSION" != "$INIT_VERSION" ]; then
 fi
 echo "✅ Version check: $PYPROJECT_VERSION (pyproject.toml and __init__.py match)"
 echo ""
+# The Vulkan engine build this version downloads has to be on GitHub
+# first. Otherwise every new Vulkan setup fails its download, and first run
+# then saves the processor as the device, which stays after the engine is
+# published.
+ENGINE_PY="$PROJECT_DIR/src/tuxtalk/whisper_vulkan.py"
+ENGINE_VERSION=$(sed -n 's/^ENGINE_VERSION = "\([^"]*\)".*/\1/p' "$ENGINE_PY")
+ENGINE_BUILD=$(sed -n 's/^ENGINE_BUILD = \([0-9]*\).*/\1/p' "$ENGINE_PY")
+ENGINE_SHA256=$(sed -n 's/^ENGINE_SHA256 = "\([0-9a-f]*\)".*/\1/p' "$ENGINE_PY")
+ENGINE_ASSET="talktype-whisper-vulkan-${ENGINE_VERSION}-b${ENGINE_BUILD}-x64.tar.gz"
+ENGINE_URL="https://github.com/ronb1964/TuxTalk/releases/download/whisper-vulkan-${ENGINE_VERSION}-b${ENGINE_BUILD}/$ENGINE_ASSET"
+PUBLISHED_SHA256=$(curl -fsL --max-time 30 "$ENGINE_URL.sha256" | cut -d' ' -f1 || true)
+if [ -z "$ENGINE_SHA256" ] || [ "$PUBLISHED_SHA256" != "$ENGINE_SHA256" ] ||
+        ! curl -fsIL --max-time 30 "$ENGINE_URL" >/dev/null; then
+    echo "❌ The Vulkan engine this version downloads isn't published as it expects:"
+    echo "   $ENGINE_URL"
+    echo "   SHA256 in whisper_vulkan.py: ${ENGINE_SHA256:-none}, published: ${PUBLISHED_SHA256:-none}"
+    echo "   Publish its pre-release (build-vulkan-engine.sh says how) before building."
+    exit 1
+fi
+echo "✅ Vulkan engine check: build $ENGINE_BUILD of whisper.cpp $ENGINE_VERSION is published"
+echo ""
 
 # Use podman if available, otherwise docker
 if command -v podman &> /dev/null; then

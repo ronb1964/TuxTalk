@@ -70,7 +70,7 @@ ENGINE_TAG = f"whisper-vulkan-{ENGINE_VERSION}-b{ENGINE_BUILD}"     # TuxTalk Gi
 ENGINE_URL = f"https://github.com/ronb1964/TuxTalk/releases/download/{ENGINE_TAG}/{ENGINE_ASSET}"
 # From build-vulkan-engine.sh's .sha256; the download is refused if it doesn't
 # match, so a tampered or truncated engine is never run.
-ENGINE_SHA256 = "dae93f88d3c0e318b7ce517259cdc04fb5524bbb6a17ee0f540cbfd5ec4c6887"
+ENGINE_SHA256 = "eb4afebecb3119d84ca66022b76e099ec59cf5e34fe3d31bdd2d7a42f7f8a72a"
 ENGINE_SIZE_TEXT = "22 MB"
 
 # --- Models, in whisper.cpp's format -------------------------------------------
@@ -145,13 +145,14 @@ def has_nvidia() -> bool:
 
 # --- Where things live ---------------------------------------------------------
 
-def _build_folder():
-    """The folder this build unpacks into. With the build in its name, an
-    installed older build doesn't count as this one, which is then
-    downloaded beside it and replaces it once it's there. Build 1 keeps the
-    version's name alone, the folder earlier versions installed it in, so
-    it isn't downloaded again."""
-    return ENGINE_VERSION if ENGINE_BUILD == 1 else f"{ENGINE_VERSION}-b{ENGINE_BUILD}"
+def _build_folder(build=None):
+    """The folder *build* (default: this one) unpacks into. With the build in
+    its name, an installed older build doesn't count as this one, which is
+    then downloaded beside it and replaces it once it's there. Build 1 keeps
+    the version's name alone, the folder earlier versions installed it in,
+    so it isn't downloaded again."""
+    build = build or ENGINE_BUILD
+    return ENGINE_VERSION if build == 1 else f"{ENGINE_VERSION}-b{build}"
 
 
 def _engines_root():
@@ -186,7 +187,7 @@ def engine_dir():
     (update_in_background), an earlier build of the same whisper.cpp
     version, so dictation stays on the graphics card meanwhile."""
     for folder in (_engine_dir(), *_earlier_builds()):
-        if os.access(os.path.join(folder, "whisper-server"), os.X_OK):
+        if _can_run(folder):
             return folder
     return _engine_dir()
 
@@ -278,28 +279,50 @@ def make_engine_download_func(model_name=None):
     return download
 
 
+# Whether this process has tried the update: once is enough, or every
+# Power Saving wake would fetch it again, offline too.
+_update_tried = False
+_update_lock = threading.Lock()
+
+
 def update_in_background():
     """While an earlier build is what runs (engine_dir), download this one
     on a thread of its own, which the next start of the engine uses: the
-    user chose this engine, and an update changes nothing they see. A
-    download that fails is tried again at the next start. The thread, or
-    None when there's nothing to update."""
-    if engine_dir() == _engine_dir():
+    user chose this engine, and an update changes nothing they see. Once a
+    process at most, and not when the user turned off checking for updates
+    at start (Preferences → Updates & Backup): the earlier build keeps
+    working. A download that fails is tried again when the dictation service
+    next starts. The thread, or None when nothing was started."""
+    global _update_tried
+    with _update_lock:
+        if _update_tried or engine_dir() == _engine_dir():
+            return None
+        _update_tried = True
+    from .config import load_config
+    if not load_config().auto_check_updates:
+        logger.info(f"Graphics engine build {ENGINE_BUILD} not downloaded: checking for "
+                    "updates at start is off")
         return None
-
-    def update():
-        reports = []
-        logger.info(f"Updating the graphics engine to build {ENGINE_BUILD}")
-        if make_engine_download_func()(lambda *report: reports.append(report), None):
-            logger.info("Graphics engine updated; it's used from its next start")
-        else:
-            from .download_utils import failure_reason
-            why = failure_reason(*reports[-1]) if reports else None
-            logger.warning(f"The graphics engine update didn't finish ({why or 'stopped'}); "
-                           "trying again at the next start")
-    thread = threading.Thread(target=update, daemon=True, name="vulkan-engine-update")
+    thread = threading.Thread(target=_update, daemon=True, name="vulkan-engine-update")
     thread.start()
     return thread
+
+
+def _update():
+    """The update's download, with how it ended in the log."""
+    from .download_utils import failure_reason
+    reports = []
+    logger.info(f"Updating the graphics engine to build {ENGINE_BUILD}")
+    try:
+        done = make_engine_download_func()(lambda *report: reports.append(report), None)
+    except OSError as e:        # the download folder couldn't be made, say
+        done, reports = False, [(str(e), 0)]
+    if done:
+        logger.info("Graphics engine updated; it's used from its next start")
+        return
+    why = failure_reason(*reports[-1]) if reports else None
+    logger.warning(f"The graphics engine update didn't finish ({why or 'stopped'}); "
+                   "trying again when dictation next starts")
 
 
 def make_model_download_func(model_name):
@@ -507,6 +530,16 @@ def language_scores(reply):
     return {code: float(p) for code, p in scores.items()}
 
 
+def _kill_orphaned_servers():
+    """Kill whisper-servers an earlier run left behind, from any build of
+    this version: an orphan of an earlier build keeps its folder's path
+    after an update removed the folder."""
+    for build in range(1, ENGINE_BUILD + 1):
+        server = os.path.join(_engines_root(), _build_folder(build), ENGINE_NAME, "whisper-server")
+        engine_process.kill_orphans(engine_process.processes_of(server),
+                                    engine_process.is_talktype_process, "graphics engine")
+
+
 class VulkanWhisperModel:
     """A whisper-server process running *model_name* on graphics chip
     *device_index*, kept running for the life of the dictation service."""
@@ -531,24 +564,38 @@ class VulkanWhisperModel:
             raise
 
     def _start(self):
-        """Start whisper-server on a free local port, wait up to two minutes
-        for it to answer, and warm it up with a practice run. Raises
-        RuntimeError with the reason when it doesn't come up, with the
-        server stopped."""
+        """Start whisper-server, warmed up (_start_from). An update in
+        another TuxTalk process can put a new build in place and remove the
+        one just chosen before it was started: then it starts once more,
+        from the new one."""
         folder = engine_dir()
+        try:
+            self._start_from(folder)
+        except (RuntimeError, OSError):
+            if engine_dir() == folder:
+                raise
+            logger.info("The graphics engine was updated while starting; starting the new build")
+            self._start_from(engine_dir())
+
+    def _start_from(self, folder):
+        """Start the whisper-server in *folder* on a free local port, wait up
+        to two minutes for it to answer, and warm it up with a practice run.
+        Raises RuntimeError with the reason when it doesn't come up, with the
+        server stopped."""
         server = os.path.join(folder, "whisper-server")
-        engine_process.kill_orphans(engine_process.processes_of(server),
-                                    engine_process.is_talktype_process, "graphics engine")
+        _kill_orphaned_servers()
         self._port = engine_process.free_port()
-        # A random key, so no other program, another user's included, can
-        # send it audio (vulkan-engine-patches/server-api-key.patch). Like
-        # the AI engine's (ai_server.py) it goes in the environment, which
-        # only this user can read: every user can read a command line. The
-        # random path before every route is for an earlier build still
-        # running until this one has downloaded (update_in_background): it
-        # takes no key and has a /load route that loads any model file it
-        # is given the path of, and the path keeps web pages, which can post
-        # a form to 127.0.0.1 and scan the ports, away from it.
+        # A random key, so other users' programs, which can read the port and
+        # path on the command line, and web pages can't send it audio
+        # (vulkan-engine-patches/server-api-key.patch). Like the AI engine's
+        # (ai_server.py) it goes in the environment, which only this user
+        # can read. Programs running as this user could read it, as they
+        # could read anything else of TuxTalk's. The random path before every
+        # route is for an earlier build still running until this one has
+        # downloaded (update_in_background): it takes no key and has a /load
+        # route that loads any model file it is given the path of, and the
+        # path keeps web pages, which can post a form to 127.0.0.1 and scan
+        # the ports, away from it.
         self._key = secrets.token_hex(16)
         self._path = "/" + secrets.token_hex(16)
         command, env = engine_process.parent_death_command(
