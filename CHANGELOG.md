@@ -47,6 +47,18 @@ before 0.15.0, so older entries use that name.
   helper, and Shift+Right Alt as Compose are all handled now. And if you
   change the Compose key in your keyboard settings while TuxTalk runs,
   that counts from your next dictation instead of the next restart.
+- When the speech engine failed, the error it gave went into TuxTalk's log
+  as is, and that text could hold some of what you'd just said. Only the
+  kind of error is logged now. The notice on your screen still shows the
+  whole thing.
+- Pressing Esc right after you let go of the dictation key did nothing,
+  so the dictation still went in and an automatic send still went out.
+  Esc cancels it now, up until the text starts going in.
+- With Type at pause, a sentence ending in "Dr." or "etc." could get a
+  question mark in place of its period. Those keep their period now. And
+  a phrase followed by a key you said ("press tab" where it only types
+  spaces, say) is heard with the rest of its sentence again when deciding
+  on a question mark.
 - Help and About opened another window every time you clicked them, and
   About asked GitHub for its notes again each time. The open one comes to
   the front now.
