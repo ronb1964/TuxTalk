@@ -1261,6 +1261,37 @@ class ShownWidget:
         self.visible = visible
 
 
+class HeldTimer:
+    """threading.Timer that never runs by itself: the test fires it."""
+
+    def __init__(self, delay, fn, args=()):
+        self.delay, self.fn, self.args = delay, fn, args
+        self.cancelled = self.daemon = False
+
+    def start(self):
+        pass
+
+    def cancel(self):
+        self.cancelled = True
+
+    def fire(self):
+        """What the real one does when its time comes: run, unless cancelled."""
+        if not self.cancelled:
+            self.fn(*self.args)
+
+
+def held_timers(monkeypatch):
+    """threading.Timer is HeldTimer for the rest of the test; returns the
+    timers made, in order."""
+    made = []
+
+    def make(delay, fn, args=()):
+        made.append(HeldTimer(delay, fn, args))
+        return made[-1]
+    monkeypatch.setattr(threading, "Timer", make)
+    return made
+
+
 def tabbed_window(*names):
     """Preferences with only its tabs, named *names* in order: enough for
     PreferencesWindow.select_tab."""
