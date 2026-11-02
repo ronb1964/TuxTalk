@@ -1261,6 +1261,17 @@ class ShownWidget:
         self.visible = visible
 
 
+def tabbed_window(*names):
+    """Preferences with only its tabs, named *names* in order: enough for
+    PreferencesWindow.select_tab."""
+    notebook = Gtk.Notebook()
+    for name in names:
+        page = Gtk.Box()
+        page.show()          # GtkNotebook won't switch to a hidden page
+        notebook.append_page(page, Gtk.Label(label=name))
+    return types.SimpleNamespace(notebook=notebook)
+
+
 class AnyWidget:
     """Takes any widget call and returns another AnyWidget: GTK, for a test
     of what happens around the widgets rather than what they show."""

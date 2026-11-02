@@ -5,25 +5,16 @@ commands ("period", "new line", "undo last word"). Every old tab name still
 opens Words; Help and the quick reference say Words too. The saved files and
 the code keep their old names.
 """
-import types
 
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
+from conftest import tabbed_window
 from gtk_text import find, shown_text, widgets
 from tuxtalk import custom_words
 from tuxtalk.prefs import PreferencesWindow
 from tuxtalk.voice_commands_dialog import _build_markup
-
-
-def _window(*tabs):
-    notebook = Gtk.Notebook()
-    for name in tabs:
-        page = Gtk.Box()
-        page.show()          # GtkNotebook won't switch to a hidden page
-        notebook.append_page(page, Gtk.Label(label=name))
-    return types.SimpleNamespace(notebook=notebook)
 
 
 def shown_buttons(root):
@@ -56,7 +47,7 @@ def test_both_lists_have_the_same_buttons(prefs_window):
 
 def test_every_old_tab_name_opens_words():
     """--tab=commands or --tab=snippets from an older launcher or script still lands there."""
-    window = _window("General", "Audio", "Advanced", "Words", "Stats")
+    window = tabbed_window("General", "Audio", "Advanced", "Words", "Stats")
     for asked in ("words", "snippets", "commands", "Commands"):
         window.notebook.set_current_page(0)
         assert PreferencesWindow.select_tab(window, asked) is True
