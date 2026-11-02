@@ -7,7 +7,7 @@ import numpy as np
 import time
 import pytest
 
-from conftest import held_timers
+from stand_ins import held_timers
 from tuxtalk import config, focused_window, key_commands, send_countdown, window_classes
 from tuxtalk import hotkeys
 from tuxtalk import pipeline

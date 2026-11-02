@@ -13,7 +13,7 @@ restart" and DISABLE the only button that would add them.
 """
 
 
-from conftest import ShownWidget
+from stand_ins import ShownWidget
 
 
 def _prefs_with_perms(monkeypatch, *, all_ok, udev, in_group, hotkey_ok=False,

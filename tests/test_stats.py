@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from conftest import tabbed_window
+from stand_ins import tabbed_window
 from tuxtalk import recording_state as rs
 from tuxtalk import stats
 from tuxtalk import live_settings as live

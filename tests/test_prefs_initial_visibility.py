@@ -6,7 +6,7 @@ that does nothing. Hiding it later on a timer makes it flash on screen first.
 """
 from types import SimpleNamespace
 
-from conftest import ShownWidget
+from stand_ins import ShownWidget
 from tuxtalk.prefs import PreferencesWindow
 from tuxtalk.prefs_general import GeneralTab
 

@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from gi.repository import GLib
 
-from conftest import progress_in_place
+from stand_ins import progress_in_place
 from tuxtalk import service_launcher, single_instance, tray_instance
 from tuxtalk.control import WaitingStart
 from tuxtalk import tray as tray_mod

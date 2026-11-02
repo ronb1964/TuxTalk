@@ -15,7 +15,8 @@ import numpy as np
 import pytest
 from evdev import ecodes
 
-from conftest import CHAT_WINDOW as FIRST, HELD_TITLE, held_timers, next_recording
+from conftest import CHAT_WINDOW as FIRST, HELD_TITLE, next_recording
+from stand_ins import held_timers
 from tuxtalk import (atspi_helper, compositor_focus, dbus_service, focused_window, history,
                      modifier_hotkeys, send_countdown)
 from tuxtalk import recording_state as rs

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from conftest import ShownWidget
+from stand_ins import ShownWidget
 from tuxtalk import pkexec_runner, uinput_helper
 
 NOT_AUTHORIZED = ("Error executing command as another user: Not authorized\n\n"

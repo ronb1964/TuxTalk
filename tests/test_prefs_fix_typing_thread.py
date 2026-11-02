@@ -8,7 +8,7 @@ status check uses.
 import threading
 from types import SimpleNamespace
 
-from conftest import ShownWidget
+from stand_ins import ShownWidget
 from tuxtalk import prefs_system_check as P
 from tuxtalk import uinput_helper
 from tuxtalk.prefs_system_check import SystemCheck

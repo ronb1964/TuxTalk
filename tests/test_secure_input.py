@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from conftest import ShownWidget
+from stand_ins import ShownWidget
 from shell_stubs import recorders, stub
 from tuxtalk import secure_input as si
 from tuxtalk import hotkey_helper

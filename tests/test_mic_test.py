@@ -11,7 +11,7 @@ import pytest
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from conftest import Microphone  # noqa: E402
+from stand_ins import Microphone  # noqa: E402
 from tuxtalk import mic_test  # noqa: E402
 from tuxtalk.mic_test import MicTest  # noqa: E402
 

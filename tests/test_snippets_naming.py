@@ -10,7 +10,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
-from conftest import tabbed_window
+from stand_ins import tabbed_window
 from gtk_text import find, shown_text, widgets
 from tuxtalk import custom_words
 from tuxtalk.prefs import PreferencesWindow

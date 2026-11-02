@@ -20,7 +20,7 @@ import types
 
 import pytest
 
-from conftest import progress_in_place
+from stand_ins import progress_in_place
 from tuxtalk import desktop_launcher
 from tuxtalk import installation, update_install
 
