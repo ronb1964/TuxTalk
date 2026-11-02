@@ -502,7 +502,8 @@ class WelcomeDialog:
             f"1. Hold {key}",
             "2. Talk",
             "3. Let go: your words are typed where your cursor is",
-            f"Settings and Help are in the TuxTalk menu ({desktop_detect.menu_location()})",
+            "Settings and Help are in the TuxTalk menu "
+            f"({GLib.markup_escape_text(extension_helper.menu_location())})",
         ]
 
         for tip in tips:

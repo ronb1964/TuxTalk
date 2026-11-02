@@ -446,7 +446,7 @@ def test_setup_tells_where_the_menu_is_on_this_desktop(monkeypatch, extension, h
     for nothing."""
     monkeypatch.setattr(extension_helper, "is_extension_enabled", lambda: extension)
     monkeypatch.setattr(desktop_detect, "tray_host_available", lambda bus=None: has_tray)
-    assert desktop_detect.menu_location() == where
+    assert extension_helper.menu_location() == where
 
 
 def test_menu_window_buttons_dont_keep_a_focus_box():
