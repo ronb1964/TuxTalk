@@ -579,7 +579,6 @@ def test_escape_closes_the_report(window):
 
 def _journal(monkeypatch, stdout="", fail=None):
     """journalctl as the system would answer; the command asked is kept."""
-    import subprocess
     import types
     asked = []
 
