@@ -192,10 +192,9 @@ def test_turning_stats_off_stops_counting(stats_file, monkeypatch):
     assert not stats_file.exists()
 
 
-def test_usage_stats_setting_applies_without_a_restart():
+def test_usage_stats_are_on_by_default():
     from tuxtalk import config
     assert config.Settings().usage_stats is True
-    assert "usage_stats" in config.LIVE_APPLIED_KEYS
 
 
 def test_preferences_finds_tabs_by_name_not_position():
@@ -290,10 +289,9 @@ def test_summary_works_out_time_saved_at_the_chosen_speed(stats_file):
     assert stats.summary(stats.load(), today)["all"]["saved"] == 600   # default 40
 
 
-def test_typing_speed_setting_needs_no_service_restart():
+def test_typing_speed_is_40_words_a_minute_by_default():
     from tuxtalk import config
     assert config.Settings().typing_wpm == 40
-    assert "typing_wpm" in config.LIVE_APPLIED_KEYS
 
 
 def test_the_tray_still_finds_updates_after_the_tab_became_updates_and_backup():

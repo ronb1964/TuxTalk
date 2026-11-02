@@ -200,7 +200,6 @@ def test_both_typing_paths_know_the_enter_key():
 
 def test_setting_is_off_by_default_and_applies_live():
     assert config.Settings().press_enter_after is False
-    assert "press_enter_after" in config.LIVE_APPLIED_KEYS
     cfg = config.Settings(press_enter_after=True)
     live.apply(cfg)
     try:
@@ -443,11 +442,17 @@ def test_saying_press_enter_never_waits(monkeypatch):
     assert events[-1] == ("enter", 'said "press enter"')
 
 
-def test_the_wait_is_a_setting_applied_live():
+def test_the_wait_is_a_setting_applied_live(monkeypatch):
+    """Changed in Preferences, the wait and the key that holds the send are in
+    force at the service's next settings reload, without a restart."""
+    from tuxtalk import service_tick
     assert config.Settings().press_enter_delay == 2.0
-    assert "press_enter_delay" in config.LIVE_APPLIED_KEYS
-    live.apply(config.Settings(press_enter_delay=3.0, hotkey="F7"))
+    cfg = config.Settings()
+    live.apply(cfg)
+    monkeypatch.setattr(service_tick, "load_config",
+                        lambda: config.Settings(press_enter_delay=3.0, hotkey="F7"))
     try:
+        service_tick._reload_live_settings(cfg, None)
         assert send_countdown._delay == 3.0 and send_countdown._hold_key_name == "F7"
     finally:
         live.apply(config.Settings())

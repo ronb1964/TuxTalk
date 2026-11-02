@@ -105,7 +105,9 @@ class TestSettingsCoverage:
         ["auto_period", "auto_space", "beeps", "notify", "smart_quotes",
          "language", "injection_mode", "hotkey", "toggle_hotkey", "mode",
          "key_delay", "indicator_position", "indicator_size",
-         "launch_at_login", "auto_check_updates"],
+         "launch_at_login", "auto_check_updates",
+         # Read only by the tray, first run and the Stats tab.
+         "dictation_language", "recommend_notice_shown", "vulkan_slower", "typing_wpm"],
     )
     def test_known_live_settings_are_live(self, key):
         assert key in config.LIVE_APPLIED_KEYS, (

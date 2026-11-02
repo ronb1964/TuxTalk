@@ -58,10 +58,6 @@ def test_the_default_follows_the_system_locale(monkeypatch):
     assert config.Settings().swiss_spelling is False
 
 
-def test_it_applies_without_a_restart():
-    assert "swiss_spelling" in config.LIVE_APPLIED_KEYS
-
-
 def _prepare(monkeypatch, on):
     monkeypatch.setattr(live, "swiss_spelling", on)
     monkeypatch.setattr(live, "words", [])

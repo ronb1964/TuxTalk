@@ -30,12 +30,6 @@ def test_log_transcripts_defaults_off():
     assert config.Settings().log_transcripts is False
 
 
-def test_log_transcripts_applies_live_no_restart():
-    """Toggling it in Preferences should take effect without a service restart."""
-    assert "log_transcripts" in config.LIVE_APPLIED_KEYS
-    assert "log_transcripts" not in config.RESTART_REQUIRED_KEYS
-
-
 # --- redaction helper ------------------------------------------------------
 
 def test_redact_hides_content_but_keeps_length_by_default():

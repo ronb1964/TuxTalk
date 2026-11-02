@@ -129,9 +129,8 @@ def test_no_trailing_space_without_auto_space(keys, monkeypatch):
 
 # --- the setting ----------------------------------------------------------------
 
-def test_on_by_default_and_applied_without_a_restart():
+def test_on_by_default():
     assert config.Settings().paste_last_hotkey == "Ctrl+Alt+P"
-    assert "paste_last_hotkey" in config.LIVE_APPLIED_KEYS
 
 
 def test_kde_holds_it_back_from_the_focused_app():

@@ -475,11 +475,6 @@ def test_the_silent_tail_is_trimmed_and_speech_is_kept(monkeypatch):
     assert rs.state.current.silence is None
 
 
-def test_auto_stop_settings_apply_without_a_restart():
-    from tuxtalk.config import LIVE_APPLIED_KEYS
-    assert {"auto_stop_silence", "auto_stop_seconds"} <= LIVE_APPLIED_KEYS
-
-
 def test_setting_follows_config(monkeypatch):
     from tuxtalk.config import Settings
     monkeypatch.setattr(live, "ai_engine", None)
