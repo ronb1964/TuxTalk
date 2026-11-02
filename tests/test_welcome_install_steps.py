@@ -8,28 +8,16 @@ escaped before it goes into Pango markup.
 import threading
 
 import pytest
+from gi.repository import Gdk, GLib, Gtk
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gdk, GLib, Gtk  # noqa: E402
-
-from tuxtalk import recommend as r  # noqa: E402
-from tuxtalk import secure_input  # noqa: E402
-from tuxtalk import welcome_dialog as wd  # noqa: E402
+from tuxtalk import secure_input
+from tuxtalk import welcome_dialog as wd
 
 
 @pytest.fixture
-def dialog(monkeypatch):
+def dialog(welcome_screen):
     """Permissions needed: the typing section shows."""
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
-    monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
-    monkeypatch.setattr(r, "system_language", lambda env=None: "en")
-    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (False, "not in input group"))
-    monkeypatch.setattr(wd, "portaudio_installed", lambda: True)
-    d = wd.WelcomeDialog(force_gnome=False)
-    yield d
-    d.destroy()
+    return welcome_screen(typing_ok=False)
 
 
 def test_a_failed_fix_is_reported_and_can_be_retried(dialog, monkeypatch):
@@ -130,42 +118,15 @@ def test_installs_run_one_at_a_time(dialog, monkeypatch):
 # finished onboarding without it, and the hotkey and typing never worked.
 
 @pytest.fixture
-def needs_uinput(monkeypatch):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
-    monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
-    monkeypatch.setattr(r, "system_language", lambda env=None: "en")
-    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (False, "not in input group"))
-    monkeypatch.setattr(wd, "portaudio_installed", lambda: True)
-    d = wd.WelcomeDialog(force_gnome=False)
-    responses = []
-    monkeypatch.setattr(d.dialog, "response", lambda r: responses.append(r))
-    monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: _Answer(k, d.answer))
-    d.answer = Gtk.ResponseType.OK
-    d.responses = responses
-    yield d
-    d.destroy()
-
-
-class _Answer:
-    """A message box that answers by itself, recording what it said."""
-    shown = []
-
-    def __init__(self, kwargs, answer):
-        self.kwargs, self.answer = kwargs, answer
-        _Answer.shown.append(kwargs.get("text", ""))
-
-    def format_secondary_text(self, text):
-        _Answer.shown.append(text)
-
-    def add_button(self, *a):
-        pass
-
-    def run(self):
-        return self.answer
-
-    def destroy(self):
-        pass
+def needs_uinput(welcome_screen, monkeypatch, message_boxes):
+    """The typing step to do; its message boxes answer .boxes.answer (OK),
+    and .responses keeps how the screen ended."""
+    d = welcome_screen(typing_ok=False)
+    d.responses = []
+    monkeypatch.setattr(d.dialog, "response", d.responses.append)
+    d.boxes = message_boxes
+    message_boxes.answer = Gtk.ResponseType.OK
+    return d
 
 
 def _fix_outcome(ok):
@@ -185,18 +146,17 @@ def test_set_it_up_runs_the_typing_fix_first(needs_uinput, monkeypatch):
 
 def test_a_cancelled_fix_warns_and_can_go_back(needs_uinput, monkeypatch):
     d = needs_uinput
-    d.answer = Gtk.ResponseType.CANCEL           # "Go back"
+    d.boxes.answer = Gtk.ResponseType.CANCEL     # "Go back"
     monkeypatch.setattr(d, "_on_fix_typing_clicked",
                         lambda button: d._finish_fix_typing(button, _fix_outcome(False)))
-    _Answer.shown.clear()
     d.continue_button.clicked()
     assert d.responses == []
-    assert any("won't work" in t for t in _Answer.shown)
+    assert any("won't work" in box.title + box.text for box in d.boxes.shown)
 
 
 def test_a_cancelled_fix_can_still_continue(needs_uinput, monkeypatch):
     d = needs_uinput
-    d.answer = Gtk.ResponseType.OK               # "Continue anyway"
+    d.boxes.answer = Gtk.ResponseType.OK         # "Continue anyway"
     monkeypatch.setattr(d, "_on_fix_typing_clicked",
                         lambda button: d._finish_fix_typing(button, _fix_outcome(False)))
     d.continue_button.clicked()
@@ -214,19 +174,11 @@ def test_set_it_up_goes_straight_on_when_nothing_is_needed(dialog, monkeypatch):
 # --- the extension offer (Ubuntu VM test, 2026-10-13) --------------------------
 
 @pytest.mark.parametrize("active, offered", [(True, False), (False, True)])
-def test_the_extension_is_offered_only_when_it_is_not_running(monkeypatch, active, offered):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
-    monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
-    monkeypatch.setattr(r, "system_language", lambda env=None: "en")
-    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(wd, "portaudio_installed", lambda: True)
+def test_the_extension_is_offered_only_when_it_is_not_running(welcome_screen, monkeypatch,
+                                                              active, offered):
     monkeypatch.setattr("tuxtalk.extension_helper.is_extension_enabled", lambda: active)
-    d = wd.WelcomeDialog(force_gnome=True)
-    try:
-        assert (d.extension_check is not None) is offered
-    finally:
-        d.destroy()
+    d = welcome_screen(gnome=True)
+    assert (d.extension_check is not None) is offered
 
 
 def test_the_welcome_screen_opens_at_the_top_with_set_it_up_focused(dialog):
@@ -238,17 +190,9 @@ def test_the_welcome_screen_opens_at_the_top_with_set_it_up_focused(dialog):
 # --- the PortAudio step ---------------------------------------------------------
 
 @pytest.fixture
-def needs_portaudio(monkeypatch):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
-    monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
-    monkeypatch.setattr(r, "system_language", lambda env=None: "en")
-    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(wd, "portaudio_installed", lambda: False)
+def needs_portaudio(welcome_screen, monkeypatch):
     monkeypatch.setattr(wd, "show_message", lambda *a, **k: None)
-    d = wd.WelcomeDialog(force_gnome=False)
-    yield d
-    d.destroy()
+    return welcome_screen(portaudio=False)
 
 
 def test_without_portaudio_the_step_says_what_its_button_does(needs_portaudio):
@@ -322,20 +266,11 @@ def test_the_welcome_cant_be_closed_while_an_install_runs(needs_portaudio):
     assert seen == [True]
 
 
-def test_set_it_up_fixes_typing_then_says_portaudio_is_missing(monkeypatch):
+def test_set_it_up_fixes_typing_then_says_portaudio_is_missing(welcome_screen, monkeypatch):
     """A computer missing both: after the typing fix "Set it up" started,
     the PortAudio warning still comes, and Go Back stays on the screen."""
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
-    monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
-    monkeypatch.setattr(r, "system_language", lambda env=None: "en")
-    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (False, "not in input group"))
-    monkeypatch.setattr(wd, "portaudio_installed", lambda: False)
-    d = wd.WelcomeDialog(force_gnome=False)
-    try:
-        monkeypatch.setattr(d, "_on_fix_typing_clicked",
-                            lambda button: d._finish_fix_typing(button, _fix_outcome(True)))
-        warned, responses = _set_it_up(d, monkeypatch, Gtk.ResponseType.CANCEL)
-        assert "Recording isn't set up yet" in warned and responses == []
-    finally:
-        d.destroy()
+    d = welcome_screen(typing_ok=False, portaudio=False)
+    monkeypatch.setattr(d, "_on_fix_typing_clicked",
+                        lambda button: d._finish_fix_typing(button, _fix_outcome(True)))
+    warned, responses = _set_it_up(d, monkeypatch, Gtk.ResponseType.CANCEL)
+    assert "Recording isn't set up yet" in warned and responses == []

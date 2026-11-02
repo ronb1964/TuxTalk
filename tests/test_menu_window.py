@@ -422,18 +422,12 @@ def test_closing_the_window_lets_the_tray_open_a_new_one():
 # ----- the setup screen -----
 
 @pytest.mark.parametrize("has_tray", [True, False])
-def test_setup_ticks_the_extension_only_without_a_tray(monkeypatch, has_tray):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
-    from tuxtalk import welcome_dialog
+def test_setup_ticks_the_extension_only_without_a_tray(welcome_screen, monkeypatch, has_tray):
     monkeypatch.setattr(desktop_detect, "tray_host_available", lambda bus=None: has_tray)
     monkeypatch.setattr(extension_helper, "is_extension_enabled", lambda: False)
-    dialog = welcome_dialog.WelcomeDialog(force_gnome=True)
-    try:
-        assert dialog.extension_check is not None
-        assert dialog.extension_check.get_active() is (not has_tray)
-    finally:
-        dialog.dialog.destroy()
+    dialog = welcome_screen(gnome=True)
+    assert dialog.extension_check is not None
+    assert dialog.extension_check.get_active() is (not has_tray)
 
 
 @pytest.mark.parametrize("extension, has_tray, where", [

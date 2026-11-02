@@ -99,24 +99,14 @@ def test_no_pulse_timer_without_anything_to_pulse(dialog, monkeypatch):
     assert removed == []
 
 
-def test_the_card_shows_on_a_computer_with_nothing_to_fix(monkeypatch):
+def test_the_card_shows_on_a_computer_with_nothing_to_fix(welcome_screen):
     """KDE, AMD or Intel graphics, typing and audio already working: the card
     must not sit inside a section shown only for GNOME, NVIDIA or something
     to fix, or the user is never asked their language or offered their
     graphics card."""
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
-    monkeypatch.setattr(r, "detect_hardware",
-                        lambda cfg=None: r.Hardware("AMD Radeon 780M", False))
-    monkeypatch.setattr(r, "system_language", lambda env=None: "de")
-    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(wd, "portaudio_installed", lambda: True)
-    d = wd.WelcomeDialog(force_gnome=False)
-    try:
-        assert hasattr(d, "lang_combo") and d._language() == "de"
-        assert d._current_setup().model
-    finally:
-        d.destroy()
+    d = welcome_screen(card=r.Hardware("AMD Radeon 780M", False), language="de")
+    assert hasattr(d, "lang_combo") and d._language() == "de"
+    assert d._current_setup().model
 
 
 def test_the_language_dropdown_is_named_by_its_label(dialog):

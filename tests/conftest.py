@@ -1113,21 +1113,38 @@ def about_window(monkeypatch):
 
 
 @pytest.fixture
-def welcome_window(monkeypatch):
-    """The first-run welcome screen, built for an English system with an
-    NVIDIA card (any graphics card gets the same card and choices)."""
+def welcome_screen(monkeypatch):
+    """Builds the first-run welcome screen, not yet shown: by default for an
+    English system with an NVIDIA card where typing and recording already
+    work, outside GNOME. *card* (a recommend.Hardware), *language*,
+    *typing_ok*, *portaudio* and *gnome* change that. Each screen built is
+    closed after the test."""
     from tuxtalk import recommend, welcome_dialog
-    monkeypatch.setattr(recommend, "detect_hardware",
-                        lambda cfg=None: recommend.Hardware("NVIDIA GeForce RTX 4070 SUPER", True))
-    monkeypatch.setattr(recommend, "system_language", lambda env=None: "en")
-    monkeypatch.setattr(welcome_dialog, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(welcome_dialog, "portaudio_installed", lambda: True)
-    window = welcome_dialog.WelcomeDialog(force_gnome=False)
+    built = []
+
+    def build(card=recommend.Hardware("NVIDIA GeForce RTX 4070 SUPER", True), language="en",
+              typing_ok=True, portaudio=True, gnome=False):
+        monkeypatch.setattr(recommend, "detect_hardware", lambda cfg=None: card)
+        monkeypatch.setattr(recommend, "system_language", lambda env=None: language)
+        monkeypatch.setattr(welcome_dialog, "detect_uinput_access",
+                            lambda: (True, "") if typing_ok else (False, "not in input group"))
+        monkeypatch.setattr(welcome_dialog, "portaudio_installed", lambda: portaudio)
+        built.append(welcome_dialog.WelcomeDialog(force_gnome=gnome))
+        return built[-1]
+    yield build
+    for window in built:
+        window.destroy()
+
+
+@pytest.fixture
+def welcome_window(welcome_screen):
+    """The first-run welcome screen as it opens, for an English system with
+    an NVIDIA card (any graphics card gets the same card and choices)."""
+    window = welcome_screen()
     window.dialog.show_all()                # as run() does, without waiting for an answer
     while Gtk.events_pending():
         Gtk.main_iteration()
-    yield window
-    window.destroy()
+    return window
 
 
 @pytest.fixture
