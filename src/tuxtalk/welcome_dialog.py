@@ -757,7 +757,7 @@ class WelcomeDialog:
             title = '🔴 Hotkey Helper Update Required'
             status = "❌ The hotkey helper needs an update"
             action = "Update Helper"
-            explain = ('<span><b>This step is required for your dictation keys to work.</b>\n'
+            explain = ('<span><b>Update the hotkey helper so your dictation keys work.</b>\n'
                        f'{reason}.\nClick "Update Helper" below.</span>')
         else:
             title, status = '🔴 Typing Setup Required', "❌ Input device permissions needed"

@@ -78,6 +78,33 @@ def test_a_readable_game_controller_alone_is_not_hotkey_access(monkeypatch):
     assert ok is True
 
 
+class _ClosingMouse(_FakeInputDevice):
+    """A Logitech receiver mouse: letter keys and F8, a mouse's motion and
+    button too; like evdev's, it can't be asked anything once closed."""
+
+    fd = -1
+
+    def capabilities(self):
+        if self.closed:
+            raise OSError(9, "Bad file descriptor")
+        return {1: [30, 48, 46, 32, 66, 0x110], 2: [0, 1]}
+
+
+def test_a_readable_logitech_mouse_alone_is_not_hotkey_access(monkeypatch):
+    """A udev rule (OpenRGB's, on Nobara and Bazzite) lets the user open a
+    Logitech mouse without the input group: counted as the keyboard, the
+    check said typing works while F8 on the real keyboard reached nothing,
+    and Fix Typing wasn't offered."""
+    evdev = pytest.importorskip("evdev")
+    monkeypatch.setattr("tuxtalk.keyboard_devices.mask_to_keys", lambda fd: None)
+    monkeypatch.setattr(evdev, "InputDevice", lambda path: _ClosingMouse([], path))
+    monkeypatch.setattr("tuxtalk.uinput_helper._readable_input_devices",
+                        lambda: ["/dev/input/mouse"])
+    assert uinput_helper._readable_keyboards() == []
+    ok, _ = check_input_read_permission()
+    assert ok is False
+
+
 def test_a_keyboard_unplugged_after_it_was_listed_is_skipped(monkeypatch):
     """A node gone (or refused) between the listing and the open is no
     keyboard, and the check carries on with the next one."""

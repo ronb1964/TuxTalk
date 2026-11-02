@@ -5,7 +5,7 @@ A helper before 1.12 opened keyboards read-write only, and skipped without
 a word one it may only read; 1.12 reads it (listen-only). One before 1.13
 skipped a keyboard that's a mouse too, as a Logitech receiver makes its
 keyboards and mice. So TuxTalk asks at start to update such a helper on a
-computer that has such a keyboard (secure_input.missed_keyboard), and
+computer that has such a keyboard (secure_input.missed_keyboard_reason), and
 stays quiet elsewhere.
 
 The helper runs as a throwaway user (systemd's DynamicUser) with no
@@ -133,13 +133,36 @@ def _event_nodes(input_dir):
     return found
 
 
-def keyboards_also_mice(input_dir="/dev/input", sys_dir="/sys/class/input",
+def _helper_readable(input_dir, group):
+    """(path, stat, writable) of each event node in *input_dir* the helper
+    may read, *writable* when it may write it too. A node whose access
+    can't be told is left out: a question that may not be needed every
+    start is worse than a quiet one, and System check's update stays
+    offered."""
+    try:
+        gid = grp.getgrnam(group).gr_gid
+    except KeyError:
+        return []
+    found = []
+    for node, st in _event_nodes(input_dir):
+        try:
+            acl = _acl_of(node)
+        except UnknownAccess as e:
+            logger.info(f"Keyboard check skipped one node: {e}")
+            continue
+        if helper_may(st.st_mode, st.st_gid, acl, gid, READ):
+            found.append((node, st, helper_may(st.st_mode, st.st_gid, acl, gid, READ | WRITE)))
+    return found
+
+
+def keyboards_also_mice(input_dir="/dev/input", sys_dir="/sys/class/input", group="input",
                         udev_dir=UDEV_DATA_DIR, char_dir=SYS_CHAR_DIR):
-    """The event nodes of seat0's keyboards that are mice too and no
-    program's (helpers before 1.13 read a remapper's already). Logitech
-    mice count: nothing tells them from a Logitech keyboard. The paths can
-    be moved for tests."""
-    return [node for node, st in _event_nodes(input_dir)
+    """The event nodes of seat0's keyboards that are mice too, no
+    program's (helpers before 1.13 read a remapper's already), that the
+    helper may read: updating it can't make one it may not open work.
+    Logitech mice count: nothing tells them from a Logitech keyboard. The
+    paths can be moved for tests."""
+    return [node for node, st, _writable in _helper_readable(input_dir, group)
             if _is_keyboard(sys_dir, os.path.basename(node))
             and _is_mouse(sys_dir, os.path.basename(node))
             and not made_through_uinput(st.st_rdev, char_dir)
@@ -150,22 +173,6 @@ def read_only_keyboards(input_dir="/dev/input", sys_dir="/sys/class/input", grou
                         udev_dir=UDEV_DATA_DIR):
     """The event nodes of seat0's keyboards that the helper may read but
     not write. The paths can be moved for tests."""
-    try:
-        gid = grp.getgrnam(group).gr_gid
-    except KeyError:
-        return []
-    found = []
-    for node, st in _event_nodes(input_dir):
-        try:
-            acl = _acl_of(node)
-        except UnknownAccess as e:
-            # Not asked about: a question that may not be needed every start
-            # is worse than a quiet one, and System check's update stays offered.
-            logger.info(f"Read-only keyboard check skipped one node: {e}")
-            continue
-        if (helper_may(st.st_mode, st.st_gid, acl, gid, READ)
-                and not helper_may(st.st_mode, st.st_gid, acl, gid, READ | WRITE)
-                and _is_keyboard(sys_dir, os.path.basename(node))
-                and udev_seat(st.st_rdev, udev_dir) == "seat0"):
-            found.append(node)
-    return found
+    return [node for node, st, writable in _helper_readable(input_dir, group)
+            if not writable and _is_keyboard(sys_dir, os.path.basename(node))
+            and udev_seat(st.st_rdev, udev_dir) == "seat0"]

@@ -2,8 +2,9 @@
 one it may only read (before 1.12) and one that's a mouse too (before 1.13).
 
 Such a helper skips that keyboard without a word, so TuxTalk asks to update
-it where one is (secure_input.missed_keyboard), and nowhere else. Judged as the kernel would for the helper's throwaway user,
-whose only group a node can name is "input".
+it where one is (secure_input.missed_keyboard_reason), and nowhere else.
+Judged as the kernel would for the helper's throwaway user, whose only
+group a node can name is "input".
 """
 import grp
 import os
@@ -147,7 +148,8 @@ def test_a_python_without_getxattr_judges_by_the_mode_bits(nodes, monkeypatch):
 
 
 def _also_mice(tmp_path, udev):
-    return access.keyboards_also_mice(str(tmp_path / "input"), str(tmp_path / "sys"),
+    group = grp.getgrgid(os.getgid()).gr_name      # the files' own group
+    return access.keyboards_also_mice(str(tmp_path / "input"), str(tmp_path / "sys"), group,
                                       str(udev), str(tmp_path / "char"))
 
 
@@ -158,6 +160,7 @@ def test_keyboards_that_are_mice_too_are_found(nodes, tmp_path):
     make("event3", 0o660)                                       # a plain keyboard
     make("event4", 0o660, keys=[0x110, 0x111], rel=[0, 1])      # a plain mouse
     mx_keys = make("event5", 0o660, keys=LETTERS + [0x110], rel=[0, 1, 6, 8])
+    make("event6", 0o600, keys=LETTERS + [0x110], rel=[0, 1])     # 1.13 can't open it either
     assert _also_mice(tmp_path, udev) == [mx_keys]
 
 

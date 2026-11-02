@@ -377,9 +377,10 @@ Since 0.18 every key TuxTalk presses (typed text, Enter, Ctrl+V, backspaces,
 select and move) goes through one uinput keyboard the dictation service makes
 when it starts (`src/tuxtalk/virtual_keyboard.py`). There is no ydotool or
 ydotoold any more; `keyboard_layout.py` works out the keys for the active
-layout, US included. The keyboard is shaped like a keyboard and a pointer on
-purpose: TuxTalk's hotkey reader and the installed hotkey helper skip pointers,
-so neither grabs or listens to it. Access to /dev/uinput comes from the hotkey
+layout, US included. TuxTalk's hotkey reader and the installed hotkey helper
+skip it by its name (`virtual_keyboard.NAME`, the helper's
+`OWN_KEYBOARD_NAME`), so neither grabs or listens to it; since 1.13 they read
+keyboards shaped like a pointer too (Logitech's, issue #26). Access to /dev/uinput comes from the hotkey
 helper's udev rule (`secure_input.py`) or the older input-group rule.
 
 Timing (`KEY_DELAY_MS`, config `key_delay`, default 2 ms after each key

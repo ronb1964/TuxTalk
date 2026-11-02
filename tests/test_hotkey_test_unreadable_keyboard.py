@@ -172,7 +172,8 @@ def test_a_helper_that_sees_no_keyboard_gets_the_notice_not_silence(monkeypatch,
     monkeypatch.setattr(uinput_helper, "input_group_pending_restart", lambda: False)
     count = {"blind": 0, "old": None, "seeing": 2}.get(keyboards)
     reading = [] if keyboards == "none" else [SimpleNamespace(helper_keyboards=count)]
-    dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice())
+    dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice(),
+                             _heard_by_reader=set())
     hkd.HotkeyTestDialog._show_reading(dialog, reading)
     assert dialog.keyboard_notice.shown is bool(says)
     if says:
@@ -189,12 +190,30 @@ def test_a_helper_too_old_for_the_keyboard_says_why_keys_arent_active(monkeypatc
     monkeypatch.setattr("tuxtalk.helper_keyboard_access.read_only_keyboards",
                         lambda: read_only)
     helper = SimpleNamespace(helper_keyboards=None, helper_version="1.11")
-    dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice())
+    dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice(),
+                             _heard_by_reader=set())
     hkd.HotkeyTestDialog._show_reading(dialog, [helper])
     assert dialog.keyboard_notice.shown is bool(says)
     if says:
         assert says in dialog.keyboard_notice.markup and "Update Hotkey Helper" in \
             dialog.keyboard_notice.markup
+
+
+def test_an_old_helpers_notice_goes_once_a_key_was_heard_through_it(monkeypatch):
+    """A Logitech mouse beside a 1.12 helper asks for the update, though the
+    keyboard may well be read: "may not reach TuxTalk" beside "Working!"
+    after F8 reached the helper said two things at once."""
+    import threading
+    monkeypatch.setattr("tuxtalk.helper_keyboard_access.keyboards_also_mice",
+                        lambda: ["/dev/input/event5"])
+    helper = SimpleNamespace(helper_keyboards=4, helper_version="1.12")
+    dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice(),
+                             _heard_by_reader=set())
+    hkd.HotkeyTestDialog._show_reading(dialog, [helper])
+    assert dialog.keyboard_notice.shown and "both at once" in dialog.keyboard_notice.markup
+    dialog._heard_by_reader.add("F8")
+    hkd.HotkeyTestDialog._show_reading(dialog, [helper])
+    assert not dialog.keyboard_notice.shown
 
 
 def test_the_helpers_count_is_asked_again_while_the_test_is_open(monkeypatch):
@@ -204,7 +223,8 @@ def test_the_helpers_count_is_asked_again_while_the_test_is_open(monkeypatch):
     import threading
     from tuxtalk import secure_input
     helper = SimpleNamespace(helper_keyboards=0)
-    dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice())
+    dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice(),
+                             _heard_by_reader=set())
     dialog._show_reading = lambda kbs: hkd.HotkeyTestDialog._show_reading(dialog, kbs)
     monkeypatch.setattr(hkd.GLib, "idle_add", lambda fn, *args: fn(*args))
     dialog._show_reading([helper])

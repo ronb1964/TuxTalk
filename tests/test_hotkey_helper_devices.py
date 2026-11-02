@@ -158,32 +158,29 @@ def test_a_device_that_cant_be_opened_is_logged_once_with_why(setup, monkeypatch
     assert out.count(f"not watching {node}: couldn't open it (EACCES") == 1
 
 
-@pytest.mark.parametrize("evdev, said", [
-    (FakeEvdev({116}, name="Power Button"), None),                  # no letter keys
-    (FakeEvdev(_LETTERS, name=hh.OWN_KEYBOARD_NAME), None),         # TuxTalk's own
+@pytest.mark.parametrize("evdev", [
+    FakeEvdev({116}, name="Power Button"),                  # no letter keys
+    FakeEvdev(_LETTERS, name=hh.OWN_KEYBOARD_NAME),         # TuxTalk's own
 ])
-def test_a_device_left_out_is_logged_once_when_it_looks_like_a_keyboard(
-        setup, monkeypatch, tmp_path, capsys, evdev, said):
+def test_a_device_that_is_no_keyboard_is_left_out_without_a_word(
+        setup, monkeypatch, tmp_path, capsys, evdev):
     """Power buttons and lid switches would fill the journal."""
     helper, _kb, _connect, _say, _heard, _seat = setup
     node = _device(tmp_path / "input")
     monkeypatch.setattr(hh, "fcntl", evdev)
     for _ in range(3):
         helper.scan()
-    out = capsys.readouterr().out
     assert str(node) not in helper.keyboards
-    if said:
-        assert out.count(f"not watching {node}: {said}") == 1
-    else:
-        assert "not watching" not in out
+    assert "not watching" not in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("name", ["Logitech MX Keys", "Logitech MX Master"])
-def test_a_keyboard_that_is_a_mouse_too_is_read_and_held(setup, monkeypatch, tmp_path, name):
+def test_a_keyboard_that_is_a_mouse_too_is_read_with_its_motion_kept_out(
+        setup, monkeypatch, tmp_path, name):
     """A Logitech receiver gives its keyboards a mouse's motion and buttons
     (an MX Keys, issue #26) and its mice a keyboard's keys: left out as a
-    mouse, the keyboard's F8 never reached TuxTalk. Hardware, so a hotkey
-    pressed on it is held like any keyboard's; its motion is masked off."""
+    mouse, the keyboard's F8 never reached TuxTalk. Hardware, so it isn't
+    listen-only; its motion is masked off so the mouse never wakes the helper."""
     helper, _kb, _connect, _say, _heard, _seat = setup
     node = _device(tmp_path / "input")
     evdev = FakeEvdev(_LETTERS | {F8, hh.BTN_LEFT}, pointer=True, name=name)
@@ -191,8 +188,53 @@ def test_a_keyboard_that_is_a_mouse_too_is_read_and_held(setup, monkeypatch, tmp
     monkeypatch.setattr(hh, "made_through_uinput", lambda rdev: False)
     helper.scan()
     kb = helper.keyboards[str(node)]
-    assert kb.name == name and kb.listen_only is None
+    assert kb.name == name and kb.mouse and kb.listen_only is None
     assert len(evdev.masks) == 1
+
+
+def test_a_hotkey_on_a_keyboard_that_is_a_mouse_too_is_hidden(setup):
+    """An MX Keys holds its own F8 like any keyboard, so it doesn't repeat
+    into the window being dictated into, and gets it back at the release."""
+    helper, kb, connect, say, heard, _seat = setup
+    kb.mouse = True
+    sock = _ready(connect, say, heard)
+    kb.press(F8)
+    assert heard(sock) == ["DOWN 66 -"]
+    say(sock, "HIDE 66")
+    assert heard(sock) == ["OK HIDE"]
+    assert ("grab", True) in kb.calls
+    kb.press(F8, 0)
+    assert heard(sock) == ["UP 66"]
+    assert kb.calls[-1] == ("grab", False) and helper.hide is None
+
+
+def test_a_mouse_holding_shift_for_a_hotkey_elsewhere_is_never_held(setup):
+    """Shift on a Logitech mouse's button and F8 on the keyboard: the mouse
+    would be held with the keyboard, its pointer frozen until F8 came up.
+    The hide is refused whole, as for a read-only keyboard."""
+    helper, kb, connect, say, heard, _seat = setup
+    mouse = FakeKeyboard("/dev/input/event-mouse")
+    mouse.mouse = True
+    kb.group = mouse.group = "real"
+    helper.keyboards[mouse.path] = mouse
+    sock = _ready(connect, say, heard, "66 S:66")
+    mouse.press(LSHIFT)
+    assert heard(sock) == []
+    kb.press(F8)
+    assert heard(sock) == ["DOWN 66 42"]
+    say(sock, "HIDE 66 42")
+    assert heard(sock) == ["ERR a mouse holds a modifier"]
+    assert kb.calls == mouse.calls == [] and helper.hide is None
+
+
+def test_watching_only_mice_is_said_once(setup, capsys):
+    """A Logitech mouse counts as a keyboard, so the count can't say the
+    keyboard itself is missing; the journal does."""
+    helper, kb, _connect, _say, _heard, _seat = setup
+    kb.mouse = True
+    for _ in range(3):
+        helper.scan()
+    assert capsys.readouterr().out.count("watching only keyboards that are mice too") == 1
 
 
 def test_a_programs_keyboard_and_mouse_in_one_is_never_held(setup, monkeypatch, tmp_path):
@@ -206,20 +248,35 @@ def test_a_programs_keyboard_and_mouse_in_one_is_never_held(setup, monkeypatch, 
 
 
 def test_only_key_events_are_asked_of_the_kernel(monkeypatch):
-    """EVIOCSMASK on type 0 takes a bitmap of event types: EV_SYN and EV_KEY."""
+    """EVIOCSMASK (_IOW('E', 0x93, struct input_mask) in linux/input.h) on
+    type 0 takes a bitmap of event types in C longs: EV_SYN and EV_KEY."""
     asked = []
-    monkeypatch.setattr(hh.fcntl, "ioctl", lambda fd, request, arg: asked.append(arg))
+    monkeypatch.setattr(hh.fcntl, "ioctl", lambda fd, request, arg: asked.append((request, arg)))
     hh.mask_to_keys(3)
-    kind, size, address = struct.unpack("IIQ", asked[0])
-    assert (kind, size) == (hh.EV_SYN, 8)
-    assert ctypes.string_at(address, size) == bytes([0b11, 0, 0, 0, 0, 0, 0, 0])
+    request, arg = asked[0]
+    assert request == 0x40104593
+    kind, size, address = struct.unpack("IIQ", arg)
+    assert (kind, size) == (hh.EV_SYN, ctypes.sizeof(ctypes.c_long))
+    assert ctypes.c_ulong.from_address(address).value == 0b11
 
 
-def test_a_kernel_without_event_masks_still_reads_the_keyboard(monkeypatch):
-    def refuse(fd, request, arg):
-        raise OSError(errno.EINVAL, "Invalid argument")
-    monkeypatch.setattr(hh.fcntl, "ioctl", refuse)
-    hh.mask_to_keys(3)
+def test_a_kernel_that_cant_mask_events_still_has_the_keyboard_read(
+        setup, monkeypatch, tmp_path, capsys):
+    """Before Linux 4.4 there's no EVIOCSMASK: the keyboard is read all the
+    same, every event of it, and the journal says so once."""
+    helper, _kb, _connect, _say, _heard, _seat = setup
+    node = _device(tmp_path / "input")
+
+    class NoMasks(FakeEvdev):
+        def ioctl(self, fd, request, arg=0, mutate=False):
+            if request == hh.EVIOCSMASK:
+                raise OSError(errno.EINVAL, "Invalid argument")
+            return super().ioctl(fd, request, arg, mutate)
+    monkeypatch.setattr(hh, "fcntl", NoMasks(_LETTERS))
+    for _ in range(2):
+        helper.scan()
+    assert str(node) in helper.keyboards
+    assert capsys.readouterr().out.count(f"reading every event of {node}") == 1
 
 
 def test_another_seats_keyboard_is_logged_once(setup, monkeypatch, tmp_path, capsys):

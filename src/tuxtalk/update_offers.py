@@ -78,7 +78,7 @@ def helper_update_text(running) -> str:
     from . import secure_input
     from .hotkey_helper import VERSION
     keys = [key for key in secure_input.KEYS_SINCE if not secure_input.hears_key(running, key)]
-    if missed := secure_input.missed_keyboard(running):
+    if missed := secure_input.missed_keyboard_reason(running):
         why = f". {missed}, so your dictation keys may not work until it's updated."
     elif keys:
         why = (f": until it's updated, {' and '.join(keys)} can't be dictation keys, and it "

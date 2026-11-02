@@ -388,6 +388,6 @@ def test_an_update_is_asked_for_only_where_a_keyboard_here_is_left_out(
                         lambda: read_only)
     monkeypatch.setattr("tuxtalk.helper_keyboard_access.keyboards_also_mice",
                         lambda: also_mice)
-    reason = si.missed_keyboard(running)
+    reason = si.missed_keyboard_reason(running)
     assert (reason is None) is (says is None) and (says or "") in (reason or "")
     assert si.needs_update(running) is (says is not None)

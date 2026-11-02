@@ -93,12 +93,13 @@ def _hotkey_test_notice(service_can_read):
             "your computer.")
 
 
-def _reading_notice(keyboards):
+def _reading_notice(keyboards, heard=False):
     """The notice for what the test reads, *keyboards*, or None when it
     needs none: nothing to read, only a hotkey helper that says it reads
     no keyboard (one before 1.12 doesn't say), or one too old for this
-    TuxTalk (secure_input.needs_update): why its keys show as seen, not
-    active."""
+    TuxTalk (secure_input.needs_update) while no key was *heard* through
+    it: why its keys show as seen, not active. Heard, the keys reach
+    TuxTalk: the reason only may apply (a Logitech mouse)."""
     if not keyboards:
         return _hotkey_test_notice(False)
     if all(getattr(k, "helper_keyboards", None) == 0 for k in keyboards):
@@ -106,9 +107,9 @@ def _reading_notice(keyboards):
         return f"{HELPER_SEES_NO_KEYBOARD}."
     from tuxtalk import secure_input
     version = next((k.helper_version for k in keyboards if hasattr(k, "helper_version")), None)
-    if secure_input.needs_update(version):
-        return (f"{secure_input.outdated_reason(version)}, so these keys don't reach TuxTalk "
-                "yet. Preferences, Advanced, Show system check, Update Hotkey Helper "
+    if secure_input.needs_update(version) and not heard:
+        return (f"{secure_input.outdated_reason(version)}, so these keys may not reach "
+                "TuxTalk yet. Preferences, Advanced, Show system check, Update Hotkey Helper "
                 "updates it.")
     return None
 
@@ -297,8 +298,9 @@ class HotkeyTestDialog:
         if not self.ready:
             return False
         is_capture = self.capturing is not None
-        if from_reader:
+        if from_reader and keyname not in self._heard_by_reader:
             self._heard_by_reader.add(keyname)
+            self._show_reading(self._reading_now)
         if loggable_key(keyname) == keyname:
             # Only test keys: without the hotkey helper this hears keys
             # typed in any window, and a line per letter would give away a
@@ -399,7 +401,7 @@ class HotkeyTestDialog:
         if self._stop.is_set():
             return False    # the window has closed
         self._reading_now = keyboards
-        notice = _reading_notice(keyboards)
+        notice = _reading_notice(keyboards, bool(self._heard_by_reader))
         if notice is None:
             self.keyboard_notice.hide()
         else:

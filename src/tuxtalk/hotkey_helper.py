@@ -56,21 +56,21 @@ TuxTalk asks for two.
 
 Hiding a held hotkey
 --------------------
-While TuxTalk records it hides the held hotkey from the desktop and keeps that
-keyboard to itself, so a held F8 doesn't auto-repeat into the window being
-dictated into. That's allowed once per press of a hotkey (never Esc) that is
-physically held, for one client at a time. It grabs the keyboard the press
-came from, and another real keyboard only if it holds a modifier reported
-with the press (Shift for a voice edit, on a split keyboard). One that's a
-mouse as well (a Logitech one: see check_keyboard) moves no pointer while
-it's held. It ends by
-itself as soon as that key comes up there, when someone else's session
-comes to the front, when the program that asked goes away, or after 15
-minutes at most. A press's release is reported from the keyboard it was
-pressed on, so holding the same key on another keyboard can't keep a
-recording or a grab going. A keyboard the helper may only read (its node
-isn't writable for the input group) is never held: its keys are reported,
-and a held hotkey reaches the desktop as it is.
+While TuxTalk records it hides the held hotkey from the desktop and keeps
+that keyboard to itself, so a held F8 doesn't auto-repeat into the window
+being dictated into. That's allowed once per press of a hotkey (never Esc)
+that is physically held, for one client at a time. It grabs the keyboard the
+press came from, and another real keyboard only if it holds a modifier
+reported with the press (Shift for a voice edit, on a split keyboard). One
+that's a mouse as well (a Logitech one: see check_keyboard) moves no pointer
+while it's held, and one holding a modifier for a hotkey pressed elsewhere
+isn't held: that HIDE is refused. It ends by itself as soon as that key
+comes up there, when someone else's session comes to the front, when the
+program that asked goes away, or after 15 minutes at most. A press's release
+is reported from the keyboard it was pressed on, so holding the same key on
+another keyboard can't keep a recording or a grab going. A keyboard the
+helper may only read (its node isn't writable for the input group) is never
+held: its keys are reported, and a held hotkey reaches the desktop as it is.
 
 What the helper can't stop: TuxTalk types through /dev/uinput, which the
 user at the screen gets (secure_input.py), so any program they run can type
@@ -105,7 +105,8 @@ helper -> client
   OK <what> / ERR <why>        answers to WATCH, HIDE and UNHIDE; a HIDE of
                                a key from a listen-only keyboard (never held:
                                a remapper's, or one it may only read) gets
-                               ERR listen-only keyboard
+                               ERR listen-only keyboard, and one a mouse holds
+                               a modifier of ERR a mouse holds a modifier
 Codes are Linux evdev key codes (linux/input-event-codes.h).
 """
 import array
@@ -199,21 +200,20 @@ def EVIOCGNAME(length):
 
 
 # The event types a keyboard's reader needs, as EVIOCSMASK takes them (a
-# bitmap of types, a C long): the keys, and the reports that end them,
-# SYN_DROPPED included. Kept for good: the kernel is given its address.
-_KEYS_ONLY = array.array("B", [1 << EV_SYN | 1 << EV_KEY] + [0] * 7)
+# bitmap of types in C longs): the keys, and the reports that end them,
+# SYN_DROPPED included. The kernel copies it during the call.
+_KEYS_ONLY = array.array("L", [1 << EV_SYN | 1 << EV_KEY])
 
 
 def mask_to_keys(fd):
     """Have the kernel pass the reader on *fd* nothing but key events. A
     keyboard that's a mouse as well (check_keyboard) would otherwise wake
-    it at every movement of the mouse. A kernel before 4.4 can't: every
-    event is read then, and all but the keys passed over, as before."""
+    it at every movement of the mouse. Raises OSError where the kernel
+    can't (before 4.4): every event is read then, and all but the keys
+    passed over."""
     address, count = _KEYS_ONLY.buffer_info()
-    try:
-        fcntl.ioctl(fd, EVIOCSMASK, struct.pack("IIQ", EV_SYN, count, address))
-    except OSError:
-        pass
+    fcntl.ioctl(fd, EVIOCSMASK,
+                struct.pack("IIQ", EV_SYN, count * _KEYS_ONLY.itemsize, address))
 
 
 # --- limits: nobody gets to make this helper do much work ----------------------------
@@ -452,11 +452,13 @@ def check_keyboard(keys, name):
 class Keyboard:
     """One open /dev/input/event* keyboard and the keys down on it."""
 
-    def __init__(self, path, fd, name, down, virtual, group, listen_only=None):
+    def __init__(self, path, fd, name, down, virtual, group, listen_only=None, mouse=False):
         """*down*: the keys down when it was opened; *virtual*: a program may
         have made it; *group*: device_group's answer; *listen_only*: why it
-        is never held nor written to, or None."""
+        is never held nor written to, or None; *mouse*: it's a mouse too
+        (check_keyboard)."""
         self.path, self.fd, self.name, self.virtual, self.group = path, fd, name, virtual, group
+        self.mouse = mouse
         # Two kinds. A program's keyboard shaped like a mouse (_probe):
         # a remapper's, carrying the mouse's motion and the text TuxTalk
         # types; holding it would freeze the one and swallow the other. And
@@ -485,7 +487,11 @@ class Keyboard:
             monotonic = True
         except OSError:
             monotonic = False
-        mask_to_keys(fd)
+        try:
+            mask_to_keys(fd)
+        except OSError as e:
+            log(f"reading every event of {path}, a mouse's movement included: "
+                f"{describe_error(e)}")
         try:
             keyboard = cls._probe(path, fd, read_only)
         except Skipped:
@@ -525,7 +531,7 @@ class Keyboard:
             listen_only = "a program's keyboard and mouse in one"
         else:
             listen_only = READ_ONLY if read_only else None
-        return cls(path, fd, name, bits(state), virtual, group, listen_only)
+        return cls(path, fd, name, bits(state), virtual, group, listen_only, mouse=pointer)
 
     def current_group(self):
         """Its group as its node's permissions and udev's data say now
@@ -625,6 +631,7 @@ class Helper:
         self.unreadable = {}       # path -> (identity, retry at) of a keyboard whose reads failed
         self.too_many = {}         # path -> identity already logged as one keyboard too many
         self.said_no_keyboard = False   # logged that the last scan found none
+        self.said_only_mice = False     # logged that every keyboard it reads is a mouse too
         self.said_unlisted = False      # logged that the input folder couldn't be listed
         self.listener = None
         self.running = True
@@ -674,11 +681,19 @@ class Helper:
         self.say_if_no_keyboard()
 
     def say_if_no_keyboard(self):
-        """Warn once when no keyboard is watched, until one is again."""
+        """Warn once when no keyboard is watched, until one is again, and
+        once when only mice are: a Logitech mouse counts as a keyboard
+        (check_keyboard), so the count can't tell that the keyboard itself
+        is missing."""
         if not self.keyboards and not self.said_no_keyboard:
             log("watching no keyboard at all, so no hotkey can reach TuxTalk (each device "
                 "left out with letter keys was named, with why, when it was first seen)")
         self.said_no_keyboard = not self.keyboards
+        only_mice = bool(self.keyboards) and all(k.mouse for k in self.keyboards.values())
+        if only_mice and not self.said_only_mice:
+            log("watching only keyboards that are mice too; if F8 does nothing, the "
+                "keyboard you type on is one this helper can't read")
+        self.said_only_mice = only_mice
 
     def reopen_if_writable(self, keyboard):
         """A keyboard opened read-only whose node may now be written to (a
@@ -979,6 +994,8 @@ class Helper:
             # setup works, not a fault. All or nothing: hiding the rest
             # would be answered OK while the desktop still sees part of it.
             return "ERR listen-only keyboard"
+        if self.mouse_holding(presses, mods):
+            return "ERR a mouse holds a modifier"
         held_on = self.hide_presses(presses, mods)
         if held_on is None:
             return "ERR couldn't hide the keys"
@@ -1007,6 +1024,18 @@ class Helper:
                     log(f"not holding keyboard {keyboard.name!r}: {keyboard.listen_only}")
                 return True
         return False
+
+    def mouse_holding(self, presses, mods):
+        """Whether a mouse holds one of *mods* for a hotkey pressed on
+        another keyboard of its group: a Logitech one is read as a keyboard
+        (check_keyboard), and Shift on one of its buttons would have it
+        held, frozen, until the hotkey comes up. Refused whole, as
+        listen_only_holding does, since hiding the rest would be answered
+        OK while the desktop still saw that modifier down."""
+        origins = {path for path, _ in presses}
+        groups = {self.keyboards[path].group for path in origins}
+        return any(k.mouse and k.path not in origins and k.group in groups
+                   and k.down & set(mods) for k in self.keyboards.values())
 
     def hide_presses(self, presses, mods):
         """Hide *presses* on their keyboards and *mods* on those and the other

@@ -104,7 +104,8 @@ def _rediscover_devices(devices) -> int:
     receiver blip, a USB reset or a resume from suspend) would be gone for the
     life of the process, and on a single-keyboard machine the hotkey would
     silently stop working. Only keyboards are added, so the poll list never
-    grows with mice or power buttons.
+    grows with power buttons; a Logitech mouse counts as one
+    (keyboard_devices.is_keyboard_device), its movement kept from the reader.
     """
     added = keyboard_devices.open_new_keyboards(devices, list_devices, InputDevice)
     for dev in added:

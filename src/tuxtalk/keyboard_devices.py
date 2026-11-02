@@ -6,8 +6,8 @@ check (uinput_helper) and the keyboard grab.
 Everything under /dev/input reports itself through the same evdev
 interface: keyboards, but also mice, touchpads, the power button, lid
 switches, audio jacks and game controllers. These checks tell the keyboards
-apart by what each device reports, and tell a device a program made
-(through uinput) from hardware. The openers take evdev's list_devices and
+apart by what each device reports, and TuxTalk's own virtual keyboard by its
+name. The openers take evdev's list_devices and
 InputDevice from the caller: the hotkey test also runs where evdev is
 missing, and their tests stand in for both.
 """
@@ -144,7 +144,11 @@ def open_new_keyboards(devices, list_devices, input_device) -> list:
             close_devices([dev])
             continue
         if is_keyboard_and_mouse(dev):
-            mask_to_keys(dev.fd)
+            try:
+                mask_to_keys(dev.fd)
+            except OSError as e:
+                logger.info(f"Reading every event of {dev.name}, its mouse movement "
+                            f"included: {e}")
         devices.append(dev)
         added.append(dev)
     return added

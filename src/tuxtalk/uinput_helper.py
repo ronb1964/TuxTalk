@@ -20,7 +20,7 @@ import grp
 import pwd
 import shlex
 from . import pkexec_runner
-from .keyboard_devices import close_devices, open_new_keyboards
+from .keyboard_devices import close_devices, is_keyboard_and_mouse, open_new_keyboards
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -99,15 +99,21 @@ def _readable_input_devices():
 
 def _readable_keyboards():
     """Readable input nodes that are keyboards, the ones the service listens
-    to. A readable game controller alone does not let a hotkey through."""
+    to. A readable game controller alone does not let a hotkey through, nor
+    a keyboard that's a mouse too: a Logitech mouse is one, and a udev rule
+    (OpenRGB's, on Nobara and Bazzite) lets the user open it without the
+    input group. Counted, it said typing works while F8 on the keyboard
+    reached nothing, and Fix Typing wasn't offered; a Logitech keyboard
+    left out is offered Fix Typing, whose hotkey helper reads it."""
     paths = _readable_input_devices()
     try:
         from evdev import InputDevice
     except ImportError:
         return paths
     keyboards = open_new_keyboards([], lambda: paths, InputDevice)
+    found = [dev.path for dev in keyboards if not is_keyboard_and_mouse(dev)]
     close_devices(keyboards)
-    return [dev.path for dev in keyboards]
+    return found
 
 
 # Said by System check, the hotkey test and first run when the hotkey helper

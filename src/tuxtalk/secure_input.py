@@ -324,7 +324,7 @@ def is_older(running):
 # The oldest helper this TuxTalk works with as it should on any computer.
 # Raised only when a feature or fix everyone needs comes with a newer
 # helper, since TuxTalk then asks at every start to update it. A fix only
-# some computers need asks there alone (missed_keyboard); the
+# some computers need asks there alone (missed_keyboard_reason); the
 # rest of a newer helper is offered in System check without asking.
 NEEDED_HELPER_VERSION = "1.11"
 
@@ -334,7 +334,7 @@ READ_ONLY_KEYBOARDS_SINCE = "1.12"
 KEYBOARDS_ALSO_MICE_SINCE = "1.13"
 
 
-def missed_keyboard(running):
+def missed_keyboard_reason(running):
     """Why the running helper (version *running*) leaves out a keyboard
     this computer has, in one sentence without a full stop, or None when
     it reads them all or none is running."""
@@ -348,7 +348,7 @@ def missed_keyboard(running):
     if (_version(running) < _version(KEYBOARDS_ALSO_MICE_SINCE)
             and access.keyboards_also_mice()):
         return ("A keyboard or mouse here is both at once, as Logitech's are, and the "
-                "hotkey helper on this computer leaves such a device out")
+                "hotkey helper on this computer may leave your keyboard out")
     return None
 
 
@@ -356,16 +356,16 @@ def outdated_reason(running):
     """Why the running helper (version *running*) needs updating, in one
     sentence without a full stop, for the screens that offer it besides
     the question at start."""
-    return (missed_keyboard(running)
+    return (missed_keyboard_reason(running)
             or "The hotkey helper on this computer is too old for this TuxTalk")
 
 
 def needs_update(running):
     """Whether this TuxTalk asks at start to update the running helper
     (version *running*): it's older than NEEDED_HELPER_VERSION, or leaves
-    out a keyboard here (missed_keyboard)."""
+    out a keyboard here (missed_keyboard_reason)."""
     return running is not None and (_version(running) < _version(NEEDED_HELPER_VERSION)
-                                    or missed_keyboard(running) is not None)
+                                    or missed_keyboard_reason(running) is not None)
 
 
 # The dictation keys the first helpers didn't report, and the version that
