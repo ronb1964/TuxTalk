@@ -985,6 +985,17 @@ def test_the_same_recording_stops_at_the_same_moment_whatever_the_block_size(roo
     assert abs(det.tail_to_trim() - in_20ms.tail_to_trim()) < max(block, BLOCK)
 
 
+def test_a_thump_later_in_the_block_doesnt_put_the_stop_off(monkeypatch):
+    """The breath wait read the loudness of the whole block, past the frame
+    the voice detector had just judged: in this dryer, 20 ms blocks stopped
+    0.66 s sooner than blocks of any other size."""
+    monkeypatch.setitem(globals(), "rng", np.random.default_rng(20))
+    audio = _in("a dryer", np.concatenate([_three_words(), np.zeros(8 * SR)]))
+    stops = [run(audio, 1.5, block)[0] for block in (96, BLOCK, 1024)]
+    assert None not in stops, "it never stopped"
+    assert max(stops) - min(stops) < (1024 + BLOCK) / SR
+
+
 def test_in_a_dryer_6_ms_blocks_stop_by_itself_after_the_last_word():
     """The microphone that sends 96-sample blocks: it stops after the last
     word, never during the words."""

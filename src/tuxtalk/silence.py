@@ -20,6 +20,7 @@ is speech, so a dryer, a fan or a kitchen isn't talking. Nothing counts until
 the speaker has actually talked for a moment, so a slow start is never
 mistaken for being done.
 """
+import collections
 import threading
 
 import numpy as np
@@ -79,6 +80,9 @@ class SilenceDetector:
         self.nothing_said = False
         self._busy = 0           # hold() calls not yet released
         self._sound_quiet = 0.0  # since loudness last heard a sound that could be a word
+        # Loudness windows measured and not yet reached by the voice
+        # detector's frames: (where each ends, in seconds; a sound in it).
+        self._windows = collections.deque()
         # A block reached NOTHING_SAID_S and was kept for the speech in it.
         self._past_nothing_said = False
         self._said_before = False
@@ -123,8 +127,11 @@ class SilenceDetector:
         said stops the recording unless the speech has armed the detector,
         so clicks in later blocks can't put the drop off block after block."""
         with self._lock:
-            for sound in self._loudness.feed(block):
-                self._sound_quiet = 0.0 if sound else self._sound_quiet + WINDOW_S
+            loudness = self._loudness
+            start = loudness.measured
+            for n, sound in enumerate(loudness.feed(block)):
+                self._windows.append(((start + (n + 1) * loudness.window) / self.sample_rate,
+                                      sound))
             verdicts = {self._frame(talking) for talking, _ in self._voice.feed(block)}
             if "nothing said" in verdicts and not self.fired:
                 if "speech" not in verdicts or self._past_nothing_said:
@@ -139,6 +146,11 @@ class SilenceDetector:
         NOTHING_SAID_S, "speech" when it is talking, else None. Called with
         the lock held."""
         self.elapsed += FRAME_S
+        # Loudness up to this frame's end, not the rest of the block: a sound
+        # heard ahead put a stop off that smaller blocks made 0.7 s sooner.
+        while self._windows and self._windows[0][0] <= self.elapsed + 1e-9:
+            sound = self._windows.popleft()[1]
+            self._sound_quiet = 0.0 if sound else self._sound_quiet + WINDOW_S
         if self.fired:
             return None
         if talking:
