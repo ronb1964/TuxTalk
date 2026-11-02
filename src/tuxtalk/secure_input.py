@@ -335,7 +335,7 @@ READ_ONLY_KEYBOARDS_SINCE = "1.12"
 def misses_read_only_keyboard(running):
     """Whether the running helper (version *running*) is too old to read a
     keyboard this computer has, one whose node may only be read."""
-    from .uinput_helper import read_only_keyboards
+    from .helper_keyboard_access import read_only_keyboards
     return (running is not None and _version(running) < _version(READ_ONLY_KEYBOARDS_SINCE)
             and bool(read_only_keyboards()))
 

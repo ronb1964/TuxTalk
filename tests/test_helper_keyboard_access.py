@@ -1,0 +1,123 @@
+"""Which keyboards the hotkey helper may only read (helper_keyboard_access.py).
+
+A helper before 1.12 skips such a keyboard without a word, so TuxTalk asks
+to update it where one is (secure_input.misses_read_only_keyboard), and
+nowhere else. Judged as the kernel would for the helper's throwaway user,
+whose only group a node can name is "input".
+"""
+import grp
+import os
+import struct
+
+import pytest
+
+from tuxtalk import helper_keyboard_access as access
+from tuxtalk.helper_keyboard_access import READ, WRITE
+
+INPUT = 997                     # the input group's id, for the permission rules
+LETTERS = list(range(16, 26)) + [30, 31, 32]
+R, RW = READ, READ | WRITE
+
+
+def _acl(*entries):
+    """A system.posix_acl_access value: (tag, permissions, id) entries."""
+    return struct.pack("<I", 2) + b"".join(struct.pack("<HHI", *e) for e in entries)
+
+
+USER_OBJ, USER = 0x01, 0x02
+
+
+@pytest.mark.parametrize("mode, gid, acl, may", [
+    (0o640, INPUT, None, R),                    # crw-r----- root:input: read only
+    (0o660, INPUT, None, RW),                   # the usual crw-rw---- root:input
+    (0o600, INPUT, None, 0),
+    (0o644, 0, None, R),                        # root:root, read by the others' bits
+    (0o660, 0, None, 0),                        # root:root, nothing for the others
+    # crw-rw----+ root:input with group::r-- and a user's rw entry: the mode's
+    # group bits are the mask, and the input group may only read.
+    (0o660, INPUT, [(USER_OBJ, 6, 0), (USER, 6, 1000), (access.ACL_GROUP_OBJ, 4, 0),
+                    (access.ACL_MASK, 6, 0), (access.ACL_OTHER, 0, 0)], R),
+    # Another group's node with a named entry for input.
+    (0o660, 0, [(USER_OBJ, 6, 0), (access.ACL_GROUP_OBJ, 6, 0), (access.ACL_GROUP, 6, INPUT),
+                (access.ACL_MASK, 6, 0), (access.ACL_OTHER, 0, 0)], RW),
+    # The mask takes the write away from the named entry.
+    (0o640, 0, [(USER_OBJ, 6, 0), (access.ACL_GROUP_OBJ, 4, 0), (access.ACL_GROUP, 6, INPUT),
+                (access.ACL_MASK, 4, 0), (access.ACL_OTHER, 0, 0)], R),
+    # A matching group entry decides: the others' rw doesn't add to it.
+    (0o646, INPUT, [(USER_OBJ, 6, 0), (access.ACL_GROUP_OBJ, 4, 0),
+                    (access.ACL_MASK, 6, 0), (access.ACL_OTHER, 6, 0)], R),
+])
+def test_what_the_helper_may_do_with_a_node(mode, gid, acl, may):
+    if acl is not None:
+        acl = access.parse_acl(_acl(*acl))
+    for wanted in (R, RW):
+        assert access.helper_may(mode, gid, acl, INPUT, wanted) is (may & wanted == wanted)
+
+
+def test_something_else_in_the_acl_xattr_is_refused():
+    with pytest.raises(ValueError):
+        access.parse_acl(b"\x01\x00\x00\x00" + b"\x00" * 8)
+
+
+def _capabilities(sys_dir, name, keys, rel=()):
+    """sysfs's capability files for event node *name*: hex longs, highest first."""
+    caps = sys_dir / name / "device" / "capabilities"
+    caps.mkdir(parents=True)
+    width = struct.calcsize("l") * 8
+    for kind, codes in (("key", keys), ("rel", rel)):
+        value = sum(1 << code for code in codes)
+        words = [(value >> (i * width)) & ((1 << width) - 1)
+                 for i in range(max(codes, default=0) // width + 1)]
+        (caps / kind).write_text(" ".join(f"{w:x}" for w in reversed(words)) + "\n")
+
+
+@pytest.fixture
+def nodes(tmp_path):
+    """Make event nodes (plain files) with their sysfs capabilities; returns
+    a scan of them for a group and the folders."""
+    dev, sys_dir, udev = tmp_path / "input", tmp_path / "sys", tmp_path / "udev"
+    dev.mkdir()
+    udev.mkdir()
+
+    def make(name, mode, keys=LETTERS, rel=()):
+        (dev / name).write_text("")
+        (dev / name).chmod(mode)
+        _capabilities(sys_dir, name, keys, rel)
+        return str(dev / name)
+
+    def scan(group=None):
+        group = group or grp.getgrgid(os.getgid()).gr_name      # the files' own group
+        return access.read_only_keyboards(str(dev), str(sys_dir), group, str(udev))
+    return make, scan, udev
+
+
+def test_keyboards_the_helper_may_only_read_are_found(nodes):
+    make, scan, _udev = nodes
+    read_only = make("event3", 0o640)
+    make("event4", 0o660)                                   # writable: 1.11 reads it
+    make("event5", 0o640, keys=[116])                       # a power button
+    make("event6", 0o640, keys=LETTERS + [0x110], rel=[0])  # a mouse
+    make("event7", 0o600)                                   # unreadable: 1.12 can't either
+    assert scan() == [read_only]
+    assert scan("no-such-group") == []
+
+
+def test_a_node_of_another_group_is_judged_by_the_others_bits(nodes):
+    """crw-r--r-- root:root: the helper reads it as one of the others, and
+    can't write it."""
+    make, scan, _udev = nodes
+    others_read = make("event3", 0o644)
+    make("event4", 0o640)
+    other_group = next(g.gr_name for g in grp.getgrall() if g.gr_gid != os.getgid())
+    assert scan(other_group) == [others_read]
+
+
+def test_another_seats_keyboard_is_left_out(nodes):
+    """The helper reads seat0's keyboards only: updating it can't make a
+    seat1 keyboard work, so it's no reason to ask."""
+    make, scan, udev = nodes
+    make("event3", 0o640)
+    st = os.stat(udev.parent / "input" / "event3")
+    (udev / f"c{os.major(st.st_rdev)}:{os.minor(st.st_rdev)}").write_text(
+        "E:ID_INPUT=1\nE:ID_SEAT=seat1\n")
+    assert scan() == []

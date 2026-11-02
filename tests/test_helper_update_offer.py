@@ -16,7 +16,7 @@ def helper(monkeypatch):
     updates run, restarts, the answer to give)."""
     asked, updates, restarts, answer = [], [], [], {"update": True, "result": (True, ""),
                                                     "read_only": []}
-    monkeypatch.setattr("tuxtalk.uinput_helper.read_only_keyboards",
+    monkeypatch.setattr("tuxtalk.helper_keyboard_access.read_only_keyboards",
                         lambda: answer["read_only"])
     monkeypatch.setattr("tuxtalk.first_run_marker.is_first_run", lambda: False)
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])

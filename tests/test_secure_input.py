@@ -186,7 +186,8 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False, read_
 
     monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
     monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: in_group)
-    monkeypatch.setattr(uinput_helper, "read_only_keyboards", lambda: read_only)
+    monkeypatch.setattr("tuxtalk.helper_keyboard_access.read_only_keyboards",
+                        lambda: read_only)
     monkeypatch.setattr(si, "running_version", lambda: running)
     monkeypatch.setattr(si, "is_installed", lambda: installed)
     prefs = P.SystemCheck(SimpleNamespace(config={}))
