@@ -412,6 +412,22 @@ class HotkeyTestDialog:
         if added:
             GLib.idle_add(self._show_reading, list(reading))
 
+    def _recount_helper(self, reading):
+        """Ask the hotkey helper again how many keyboards it reads, on a
+        connection of its own (the one in *reading* carries its key
+        reports), and tell GTK's thread when that changed: a keyboard
+        plugged in, or the last one gone. Its hello said it only once."""
+        from tuxtalk.secure_input import keyboards_watched
+        count = keyboards_watched()
+        if count is None:
+            return              # gone a moment, or too old to say: as it was
+        changed = [k for k in reading
+                   if hasattr(k, "helper_keyboards") and k.helper_keyboards != count]
+        for helper in changed:
+            helper.helper_keyboards = count
+        if changed:
+            GLib.idle_add(self._show_reading, list(reading))
+
     def _keyboard_gone(self, reading, held_modifiers):
         """A keyboard went mid-test: the keys it held will never come up, and
         GTK's thread hears what's left."""
@@ -438,9 +454,12 @@ class HotkeyTestDialog:
         next_scan = time.monotonic() + RESCAN_SECONDS
         while not self._stop.is_set():
             try:
-                if self._rescan and time.monotonic() >= next_scan:
+                if time.monotonic() >= next_scan:
                     next_scan = time.monotonic() + RESCAN_SECONDS
-                    self._open_plugged_in(reading)
+                    if self._rescan:
+                        self._open_plugged_in(reading)
+                    else:
+                        self._recount_helper(reading)
                 ready = devices_with_events(reading, 0.1)
                 # A keyboard unplugged with Ctrl held must not leave Ctrl held.
                 for event in read_ready(reading, ready, on_gone=on_gone):

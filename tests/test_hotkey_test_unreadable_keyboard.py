@@ -179,6 +179,24 @@ def test_a_helper_that_sees_no_keyboard_gets_the_notice_not_silence(monkeypatch,
         assert says in dialog.keyboard_notice.markup
 
 
+def test_the_helpers_count_is_asked_again_while_the_test_is_open(monkeypatch):
+    """Its hello said it once: a keyboard plugged in mid-test turned
+    Working beside "can't see your keyboard", and the last one unplugged
+    never brought the notice."""
+    import threading
+    from tuxtalk import secure_input
+    helper = SimpleNamespace(helper_keyboards=0)
+    dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice())
+    dialog._show_reading = lambda kbs: hkd.HotkeyTestDialog._show_reading(dialog, kbs)
+    monkeypatch.setattr(hkd.GLib, "idle_add", lambda fn, *args: fn(*args))
+    dialog._show_reading([helper])
+    assert dialog.keyboard_notice.shown
+    for count, shown in ((1, False), (None, False), (0, True)):
+        monkeypatch.setattr(secure_input, "keyboards_watched", lambda count=count: count)
+        hkd.HotkeyTestDialog._recount_helper(dialog, [helper])
+        assert dialog.keyboard_notice.shown is shown, count
+
+
 @pytest.mark.parametrize("keyname, logged", [("F8", True), ("Right Ctrl", True),
                                              ("a", False), ("Return", False),
                                              ("space", False), ("BackSpace", False)])
