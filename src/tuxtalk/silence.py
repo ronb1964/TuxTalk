@@ -25,7 +25,7 @@ import threading
 import numpy as np
 
 from .audio_windows import WINDOW_S, RoomLoudness, window_length
-from .voice_detector import FRAME_S, VoiceDetector, speech_seconds
+from .voice_detector import FRAME_S, Unavailable, VoiceDetector, speech_seconds
 
 # How much talking arms hands-free: a cough or a click is shorter than this.
 _SPEECH_TO_ARM_S = 0.3
@@ -226,7 +226,17 @@ def is_speechless_tap(audio_f32, sample_rate) -> bool:
 
 def has_a_word(audio_f32, sample_rate) -> bool:
     """Whether *audio_f32* holds at least a word's worth of speech."""
-    return speech_seconds(audio_f32, sample_rate) >= _WORD_S
+    return _speech_up_to(audio_f32, sample_rate, _WORD_S) >= _WORD_S
+
+
+def _speech_up_to(audio_f32, sample_rate, seconds: float) -> float:
+    """voice_detector.speech_seconds, counted up to *seconds*. That is the
+    answer too when the voice detector didn't load: without it, nothing
+    is dropped as speechless."""
+    try:
+        return speech_seconds(audio_f32, sample_rate, up_to=seconds)
+    except Unavailable:
+        return seconds
 
 
 def has_no_speech(audio_f32, sample_rate) -> bool:
@@ -238,7 +248,7 @@ def has_no_speech(audio_f32, sample_rate) -> bool:
     trusted. It only decides whether stock phrases were invented, never
     whether a recording is transcribed: a long clip's background can be the
     speaker's own voice, so it is too blunt to drop real dictation on."""
-    return speech_seconds(audio_f32, sample_rate) < _SPEECH_TO_ARM_S
+    return _speech_up_to(audio_f32, sample_rate, _SPEECH_TO_ARM_S) < _SPEECH_TO_ARM_S
 
 
 # --- A noisy room, for the microphone test ------------------------------------

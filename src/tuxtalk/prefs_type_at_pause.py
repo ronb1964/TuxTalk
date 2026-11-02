@@ -12,8 +12,14 @@ from .chunk_meter import PauseTest, level_to_fraction
 from .mic_test import MicReopen, SegmentedVUMeter
 from .logger import setup_logger
 from .prefs_tab import LABS_INDENT, Tab, fold, subheading
+from .voice_detector import Unavailable
 
 logger = setup_logger(__name__)
+
+DETECTOR_MISSING = ("The test can't run: TuxTalk's voice detector didn't load, so Type at "
+                    "pause can't hear pauses either. The log says why.")
+DETECTOR_FAILED = ("The test stopped: TuxTalk's voice detector failed while it listened. "
+                   "The log says why.")
 
 
 class PauseMeter(SegmentedVUMeter):
@@ -191,6 +197,7 @@ class TypeAtPause(Tab):
         try:
             device_idx = self.win.get_selected_device_idx()
             sample_rate = mic_stream.input_samplerate(device_idx, 16000)
+            # Before the stream: the voice model loads here, off the audio thread.
             self._pause_test = test = PauseTest(sample_rate, self.tap_pause_spin.get_value())
             self._tap_redraw_pending = False
 
@@ -206,6 +213,9 @@ class TypeAtPause(Tab):
                                                 samplerate=sample_rate, dtype="int16",
                                                 callback=callback)
             stream.start()
+        except Unavailable:             # the log says why, from when it was loaded
+            self.tap_status.set_text(DETECTOR_MISSING)
+            return
         except Exception as e:
             self._pause_test = None
             if stream is not None:      # opened but not started: free the mic
@@ -221,6 +231,10 @@ class TypeAtPause(Tab):
         """Draw *test*'s latest snapshot, unless it was stopped since (GTK thread)."""
         self._tap_redraw_pending = False
         if test is not self._pause_test:
+            return False
+        if test.failed:
+            self.stop_test()
+            self.tap_status.set_text(DETECTOR_FAILED)
             return False
         self.tap_meter.show_snapshot(level_to_fraction(test.snapshot().level),
                                      cut=test.take_cut())

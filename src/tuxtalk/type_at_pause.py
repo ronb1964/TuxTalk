@@ -5,6 +5,7 @@ two phrases is held back until the next one arrives, so the engine can
 hear both together and judge it (a comma, a period, a question going on);
 a phrase that corrects the one before ("no wait, four") is fixed with it
 by the AI."""
+import contextlib
 import threading
 from collections.abc import Callable
 
@@ -105,7 +106,11 @@ def arm_chunker(rec):
     Never for a voice edit: its instruction needs the whole recording."""
     if live.chunk_pause_seconds > 0 and not rec.edit_mode:
         from .chunking import PauseDetector
-        rec.chunker = PauseDetector(live.chunk_pause_seconds, rec.samplerate)
+        from .voice_detector import Unavailable
+        # Without the voice detector (its failure is in the log), the
+        # recording is typed whole when the key ends it.
+        with contextlib.suppress(Unavailable):
+            rec.chunker = PauseDetector(live.chunk_pause_seconds, rec.samplerate)
     # Started here, so the audio callback never has to start it.
     dictation_worker.worker()
 

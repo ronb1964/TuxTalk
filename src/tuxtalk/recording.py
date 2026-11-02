@@ -33,7 +33,8 @@ from . import notify as notify_module
 from . import recording_state as rs
 from .beeps import CANCEL_BEEP, HANDS_FREE_BEEP, START_BEEP
 from .config import load_config
-from .logger import setup_logger
+from .logger import error_without_words, setup_logger
+from .voice_detector import Unavailable
 
 logger = setup_logger(__name__)
 
@@ -253,20 +254,39 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
         # takes a word's audio before its speech is counted: the rest would
         # be thrown away as speechless (drop_speechless_rest).
         chunker = rec.chunker
-        if chunker is not None and chunker.feed(indata):
+        if chunker is not None and _heard(rec, "chunker", indata):
             type_at_pause.cut_chunk(rec, chunker)
 
     # Hands-free auto-stop: when the speaker has finished, ask the service
     # loop to stop it, exactly as a second press of the toggle key would.
     # Logged by the service tick that stops it, to keep file writes off
     # the audio thread.
-    detector = rec.silence
-    if detector is not None and detector.feed(indata):
+    if rec.silence is not None and _heard(rec, "silence", indata):
         rec.went_quiet = True
 
     # Feed the recording indicator whatever its active style needs.
     if indicator:
         feed_indicator(indicator, indata, spectrum_processor)
+
+
+# What each detector _heard feeds is for, in its log line.
+_DETECTOR_NAMES = {"chunker": "Type at pause", "silence": "Hands-free"}
+
+
+def _heard(rec, which: str, indata) -> bool:
+    """Feed *indata* to recording *rec*'s detector *which*, its "chunker"
+    (Type at pause; under chunk_lock) or its "silence" (hands-free): what
+    feed() answered. One that fails is dropped and the recording goes on
+    without it, until the key ends it: sounddevice ends the stream on any
+    error in its callback, and everything said after it would be lost.
+    Logged here, once, since the detector goes with it."""
+    try:
+        return getattr(rec, which).feed(indata)
+    except Exception as e:
+        setattr(rec, which, None)
+        logger.error(f"{_DETECTOR_NAMES[which]} stopped listening to this recording, which goes "
+                     f"on until the key ends it: {error_without_words(e)}")
+        return False
 
 
 def open_input_stream(rec, device_idx) -> None:
@@ -436,7 +456,13 @@ def toggle_pressed_while_recording(beeps_on: bool) -> bool:
     if (live.auto_stop_seconds <= 0 or started is None or rec.silence is not None
             or time.time() - started > DOUBLE_TAP_S):
         return False
-    detector = silence.SilenceDetector(live.auto_stop_seconds, rec.samplerate)
+    try:
+        detector = silence.SilenceDetector(live.auto_stop_seconds, rec.samplerate)
+    except Unavailable:
+        # Can't hear the speaker finish: it records on until the next tap.
+        logger.info("Double-tap: hands-free can't stop by itself without the voice detector; "
+                    "tap again to stop")
+        return True
     if silence.has_a_word(frames_f32(list(rec.frames)), rec.samplerate):
         detector.heard_speech()
     rec.silence = detector
