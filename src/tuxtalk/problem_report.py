@@ -180,10 +180,9 @@ def _helper_state():
         return "not used (Flatpak: the desktop's shortcuts portal)"
     if not secure_input.is_installed():
         return "not installed (the input group is used instead)"
-    version = secure_input.running_version()
+    version, count = secure_input.helper_hello() or (None, None)    # count: None before 1.12
     if not version:
         return "installed but not answering"
-    count = secure_input.keyboards_watched()      # None before 1.12: it doesn't say
     watching = "" if count is None else f", watching {count} keyboard{'' if count == 1 else 's'}"
     return f"running, version {version}{watching}"
 

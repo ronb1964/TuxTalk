@@ -279,7 +279,7 @@ def is_installed():
     return os.path.exists(UNIT_PATH) and os.path.exists(HELPER_PATH)
 
 
-def _hello():
+def helper_hello():
     """The running helper's hello as (version, keyboards it reads), each None
     when it doesn't say; None when no helper answers."""
     from .hotkey_helper_client import HelperKeyboard
@@ -294,14 +294,14 @@ def _hello():
 
 def running_version():
     """The running helper's version, from its hello, or None."""
-    hello = _hello()
+    hello = helper_hello()
     return hello[0] if hello else None
 
 
 def keyboards_watched():
     """How many keyboards the running helper reads, or None: no helper
     answers, or it is older than 1.12, which doesn't say."""
-    hello = _hello()
+    hello = helper_hello()
     return hello[1] if hello else None
 
 

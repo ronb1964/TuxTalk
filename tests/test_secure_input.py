@@ -209,9 +209,9 @@ def test_only_an_older_helper_needs_an_update():
 
 
 def test_a_helper_only_older_than_the_one_shipped_is_offered_without_a_warning(monkeypatch):
-    """1.12 only adds what System check and Report a Problem can say: its
-    update is there for the asking, and System check doesn't open itself
-    to call that a problem."""
+    """With no keyboard here that only 1.12 can read, 1.12 mostly adds what
+    System check and Report a Problem can say: its update is there for the
+    asking, and System check doesn't open itself to call that a problem."""
     P, prefs = _typing_prefs(monkeypatch, running="1.11")
     assert prefs.fix_typing_button.label == P.UPDATE_HELPER_LABEL and prefs.fix_typing_button.sensitive
     assert "✓ Ready" in prefs.typing_status_label.markup
@@ -238,7 +238,7 @@ def test_a_helper_that_sees_no_keyboard_is_said_plainly(monkeypatch, access):
     assert "see your keyboard, so the dictation keys can" in \
         prefs.typing_status_label.markup
     assert "Report a Problem" in prefs.typing_status_label.markup
-    assert not prefs.fix_typing_button.sensitive and P._typing_state([])[3] is False
+    assert prefs.fix_typing_button.visible is False and P._typing_state([])[3] is False
 
 
 @pytest.mark.parametrize("watched", [None, 1])          # None: a 1.11 helper, which doesn't say

@@ -39,7 +39,7 @@ def report(monkeypatch, tmp_path):
     monkeypatch.setattr(recommend, "detect_hardware",
                         lambda cfg: recommend.Hardware("Intel graphics"))
     monkeypatch.setattr(secure_input, "is_installed", lambda: True)
-    monkeypatch.setattr(secure_input, "running_version", lambda: "1.4")
+    monkeypatch.setattr(secure_input, "helper_hello", lambda: ("1.4", None))
     monkeypatch.setattr(uinput_helper, "check_uinput_exists", lambda: True)
     monkeypatch.setattr(uinput_helper, "typing_blocked_reason", lambda: None)
     monkeypatch.setattr(installation, "get_install_type", lambda: "appimage")
@@ -61,14 +61,12 @@ def test_the_report_says_how_many_keyboards_the_helper_reads(report, monkeypatch
     """A helper that reads no keyboard (issue #26) answered as if all was
     well; since 1.12 it says how many it reads. An older one says nothing more."""
     from tuxtalk import secure_input
-    monkeypatch.setattr(secure_input, "running_version", lambda: "1.11")
-    monkeypatch.setattr(secure_input, "keyboards_watched", lambda: None)
-    assert "Hotkey helper: running, version 1.11\n" in report().text
-    monkeypatch.setattr(secure_input, "running_version", lambda: "1.12")
-    monkeypatch.setattr(secure_input, "keyboards_watched", lambda: 2)
-    assert "Hotkey helper: running, version 1.12, watching 2 keyboards\n" in report().text
-    monkeypatch.setattr(secure_input, "keyboards_watched", lambda: 0)
-    assert "Hotkey helper: running, version 1.12, watching 0 keyboards\n" in report().text
+    for hello, line in ((("1.11", None), "running, version 1.11\n"),
+                        (("1.12", 2), "running, version 1.12, watching 2 keyboards\n"),
+                        (("1.12", 0), "running, version 1.12, watching 0 keyboards\n"),
+                        ((None, None), "installed but not answering\n")):
+        monkeypatch.setattr(secure_input, "helper_hello", lambda hello=hello: hello)
+        assert f"Hotkey helper: {line}" in report().text
 
 
 def test_the_report_names_the_keyboard_options(report, monkeypatch):

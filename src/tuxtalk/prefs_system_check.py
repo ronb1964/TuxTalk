@@ -21,7 +21,6 @@ FIX_TYPING_LABEL = "Fix Typing Permissions"
 SWITCH_TO_HELPER_LABEL = "Switch to Hotkey Helper"
 UPDATE_HELPER_LABEL = "Update Hotkey Helper"
 LEAVE_GROUP_LABEL = "Leave the 'input' Group"
-NO_KEYBOARD_LABEL = "No Keyboard Seen"
 
 # What the GNOME extension adds, shared by the install and success dialogs so
 # the two can't promise different things.
@@ -57,7 +56,8 @@ _READY = "✓ Ready"
 
 def _typing_state(refused_shortcuts):
     """What System check says about typing and the hotkeys: (markup, the Fix
-    Typing button's label, whether it's offered, whether all is well).
+    Typing button's label (None: no button, nothing it could fix), whether
+    it's offered, whether all is well).
     *refused_shortcuts* are the shortcuts the hotkey helper won't take."""
     from . import secure_input, uinput_helper
     from .hotkey_helper import VERSION as HELPER_VERSION
@@ -67,7 +67,7 @@ def _typing_state(refused_shortcuts):
     if installed and secure_input.keyboards_watched() == 0:
         return (f'<span color="{WARNING_AMBER}">⚠ '
                 f'{GLib.markup_escape_text(uinput_helper.HELPER_SEES_NO_KEYBOARD)}</span>',
-                NO_KEYBOARD_LABEL, False, False)
+                None, False, False)
     # Both halves, not just uinput: on Fedora a logind ACL can grant
     # /dev/uinput while /dev/input, which the hotkeys need, stays unreadable.
     has_access, _reason = uinput_helper.check_all_device_permissions()
@@ -381,7 +381,11 @@ class SystemCheck(Tab):
             logger.warning(f"Could not check typing: {e}")
             return False
         self.typing_status_label.set_markup(markup)
-        self.fix_typing_button.set_label(label)
+        # Not a dimmed button named after the problem: a screen reader read
+        # that as a broken button, and the line above says it already.
+        self.fix_typing_button.set_visible(label is not None)
+        if label is not None:
+            self.fix_typing_button.set_label(label)
         self.fix_typing_button.set_sensitive(offered)
         return ok
 
