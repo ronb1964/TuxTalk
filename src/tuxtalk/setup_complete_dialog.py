@@ -12,7 +12,7 @@ from gi.repository import GLib, Gtk
 from . import extension_helper
 from .config import saved_hold_key
 from .logger import setup_logger
-from .ui_style import more_below_bar, show_message
+from .ui_style import more_below_bar, show_message, spoken_without_icons
 
 logger = setup_logger(__name__)
 
@@ -106,6 +106,7 @@ def _tips(vbox, is_flatpak):
     for i, tip in enumerate(_ready_tips(is_flatpak)):
         tip_label = Gtk.Label()
         tip_label.set_markup(f'<span><i>{tip}</i></span>')
+        spoken_without_icons(tip_label)
         tip_label.set_halign(Gtk.Align.START)
         tip_label.set_line_wrap(True)
         tip_label.set_margin_top(8 if i == 0 else 2)

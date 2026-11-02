@@ -25,6 +25,7 @@ from .hotkey_test_keys import (captured_key_problem, evdev_key_action, evdev_key
 from .keyboard_devices import (RESCAN_SECONDS, close_devices, devices_with_events,
                                open_new_keyboards)
 from .logger import setup_logger
+from .ui_style import spoken_without_icons
 
 logger = setup_logger(__name__)
 
@@ -212,6 +213,7 @@ class HotkeyTestDialog:
         info_label.set_markup(
             '<span><i>💡 Both keys work: hold one to talk, or tap the other to start '
             'and stop. You can change them anytime in Preferences.</i></span>')
+        spoken_without_icons(info_label)
         info_label.set_line_wrap(True)
         info_label.set_xalign(0)
         info_label.set_margin_top(15)

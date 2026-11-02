@@ -15,6 +15,7 @@ gi.require_version('Gdk', '3.0')
 from gi.repository import Gdk, GLib, Gtk
 
 from .logger import setup_logger
+from .ui_style import spoken_without_icons
 
 logger = setup_logger(__name__)
 
@@ -274,8 +275,8 @@ def build_shortcut_setup_section(vbox, has_gnome):
     box.pack_start(how_label, False, False, 0)
     box.pack_start(_text(f'<span size="medium">{steps}</span>', start=20, top=4),
                    False, False, 0)
-    box.pack_start(_text(f'<span size="medium"><i>{_PERMISSION_NOTE[kind]}</i></span>',
-                         start=10, top=10), False, False, 0)
+    note = _text(f'<span size="medium"><i>{_PERMISSION_NOTE[kind]}</i></span>', start=10, top=10)
+    box.pack_start(spoken_without_icons(note), False, False, 0)
 
     _framed(vbox, box)
     return pulse

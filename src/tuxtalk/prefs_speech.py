@@ -529,7 +529,7 @@ class SpeechSection(Tab):
             "⏱️  Subsequent loads: 10-20 seconds\n\n"
             "The application will not respond to your dictation hotkey "
             "until the model has fully loaded.\n\n"
-            "💡 Click OK here to confirm, then click Apply or OK in Preferences "
+            "Click OK here to confirm, then click Apply or OK in Preferences "
             "to start the download.\n\n"
             "Do you want to proceed with this model?",
             buttons=Gtk.ButtonsType.OK_CANCEL) == Gtk.ResponseType.OK
