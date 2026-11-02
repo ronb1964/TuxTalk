@@ -16,9 +16,10 @@ before 0.15.0, so older entries use that name.
   background. Those are voices too, and no detector can tell them from
   yours.
 - And the noise after your last word mostly stays out of what the speech
-  model hears, so it doesn't type "Yeah." or "Thank you." for a cough or a
-  clatter after you finish. Clicks, typing and claps never count as a word
-  now. A cough or a sneeze still can about half the time, since they're
+  model hears, so it types "Yeah." or "Thank you." for a cough or a
+  clatter after you finish far less often. A click, typing or a clap
+  almost never counts as a word now (3 times in 100 at most in our tests).
+  A cough or a sneeze still can, about half the time, since they're
   voiced.
 - If you talk softly, hands-free could decide after 10 seconds that you'd
   said nothing, while you were still talking. A soft voice is heard like a
