@@ -8,7 +8,7 @@ gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from tuxtalk import splash_screen as ss  # noqa: E402
+from tuxtalk import app_icon, splash_screen as ss  # noqa: E402
 
 
 def test_the_splash_finds_the_projects_own_icon_from_any_folder(monkeypatch, tmp_path):
@@ -16,7 +16,7 @@ def test_the_splash_finds_the_projects_own_icon_from_any_folder(monkeypatch, tmp
     working folder found the icon, and only when started from the project."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("APPDIR", raising=False)
-    candidates = ss._icon_candidates()
+    candidates = app_icon.icon_files()
     assert all(os.path.isabs(path) for path in candidates)
     assert os.path.isfile(candidates[0])
     assert candidates[0].endswith(os.path.join("icons", "OFFICIAL_ICON_DO_NOT_CHANGE.svg"))

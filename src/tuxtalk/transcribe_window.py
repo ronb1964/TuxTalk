@@ -136,6 +136,7 @@ class TranscribeWindow:
         self.window = Gtk.Window(title=TITLE)
         self.window.set_default_size(680, 560)
         self.window.connect("delete-event", self._on_close)
+        self.window.connect("key-press-event", self._on_key)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         for side in ("start", "end", "top", "bottom"):
@@ -577,6 +578,14 @@ class TranscribeWindow:
             self._save("txt")
             return self.kept            # not if the save was cancelled or failed
         return answer == Gtk.ResponseType.REJECT
+
+    def _on_key(self, _window, event):
+        """Escape closes the window as its X does, asking first about text
+        that isn't saved."""
+        if event.keyval != Gdk.KEY_Escape:
+            return False
+        self._on_close()
+        return True
 
     def _on_close(self, *_args):
         """Stop and quit at once, once nothing unsaved would be lost. The

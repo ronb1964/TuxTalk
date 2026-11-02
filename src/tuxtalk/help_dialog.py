@@ -136,14 +136,27 @@ def open_section(notebook, word):
             return
 
 
+_open_help = None     # (window, notebook) while Help is open
+
+
 def show_help_dialog(tab=None):
     """Show Help, on its first section (Start Here), or on the section whose
     title contains *tab* ("writing" from Preferences' TuxTalk Labs section).
+    An open Help is brought forward instead, on *tab* when one is named.
     Returns the window.
 
     A plain window, not a Gtk.Dialog: KWin keeps a dialog with no parent
     above every other window of its app, so the Report a Problem window it
     opens came up behind it."""
+    global _open_help
+    if _open_help is not None:
+        window, notebook = _open_help
+        if tab:
+            open_section(notebook, tab)
+        from .raise_window import raise_window
+        raise_window(window)
+        return window
+
     window = Gtk.Window(title="TuxTalk Help")
     window.set_position(Gtk.WindowPosition.CENTER)
     ui_style.close_on_escape(window)
@@ -183,6 +196,14 @@ def show_help_dialog(tab=None):
     # The keyboard and a screen reader start on the tabs, at the section
     # shown: the arrows change section and Tab goes into its text.
     notebook.grab_focus()
+    _open_help = (window, notebook)
+    window.connect("destroy", _forget_help)
     window.show_all()
     window.present()  # Bring to front and focus
     return window
+
+
+def _forget_help(_window):
+    """Help was closed: the next open builds it again."""
+    global _open_help
+    _open_help = None

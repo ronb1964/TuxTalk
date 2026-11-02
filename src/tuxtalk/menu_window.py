@@ -19,6 +19,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
+from . import ui_style  # noqa: E402
 from .logger import FailureNotes  # noqa: E402
 from .service_launcher import KILL_WAIT_S, QUIT_WAIT_S  # noqa: E402
 
@@ -62,6 +63,7 @@ class MenuWindow:
         win.set_resizable(False)
         win.set_default_size(360, -1)
         win.connect("destroy", self._on_destroy)
+        ui_style.close_on_escape(win)
         self.window = win
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)

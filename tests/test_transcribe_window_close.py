@@ -382,3 +382,26 @@ def test_copy_all_outlives_the_window(win, monkeypatch):
     done(win, "Keep me.")
     win._on_copy(None)
     assert copied == ["Keep me."] and win.copied
+
+
+def _escape(w):
+    event = Gdk.Event.new(Gdk.EventType.KEY_PRESS)
+    event.keyval = Gdk.KEY_Escape
+    return w.window.emit("key-press-event", event)
+
+
+def test_escape_asks_about_unsaved_text_like_the_close_button(win, monkeypatch):
+    """Escape did nothing here, where every other TuxTalk window closes."""
+    quit_calls = []
+    monkeypatch.setattr(Gtk, "main_quit", lambda: quit_calls.append(True))
+    done(win)
+    assert _escape(win) is True
+    assert win.asked[0][0] == "Save the text first?"
+    assert quit_calls == []                         # Cancel keeps it open
+
+
+def test_escape_with_nothing_to_lose_closes(win, monkeypatch):
+    quit_calls = []
+    monkeypatch.setattr(Gtk, "main_quit", lambda: quit_calls.append(True))
+    _escape(win)
+    assert win.asked == [] and quit_calls == [True]

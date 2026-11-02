@@ -238,3 +238,25 @@ def test_the_screen_width_is_the_narrowest_monitors(monkeypatch):
     display = Fake(get_n_monitors=lambda: 2, get_monitor=monitors.__getitem__)
     monkeypatch.setattr(ui_style.Gdk.Display, "get_default", lambda: display)
     assert ui_style.workarea_width() == 600
+
+
+def test_opening_help_again_brings_the_open_one_forward(dialog, monkeypatch):
+    """Each click on Help opened one more Help window. Asked for a section,
+    the open one turns to it."""
+    from tuxtalk import raise_window
+    raised = []
+    monkeypatch.setattr(raise_window, "raise_window", raised.append)
+    assert help_dialog.show_help_dialog(tab="writing") is dialog
+    assert raised == [dialog]
+    notebook = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
+    assert "Writing" in notebook.get_tab_label_text(
+        notebook.get_nth_page(notebook.get_current_page()))
+
+
+def test_a_closed_help_opens_anew(dialog):
+    dialog.destroy()
+    again = help_dialog.show_help_dialog()
+    try:
+        assert again is not dialog
+    finally:
+        again.destroy()

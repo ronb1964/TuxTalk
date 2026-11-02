@@ -9,7 +9,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import GLib, Gtk
 
-from . import desktop_detect, extension_helper
+from . import desktop_detect
 from .config import saved_hold_key
 from .logger import setup_logger
 from .ui_style import more_below_bar, show_message
@@ -33,17 +33,6 @@ def _open_preferences():
         logger.warning(f"Could not open Preferences: {e}")
 
 
-def menu_location() -> str:
-    """Where this desktop shows TuxTalk's menu, for the welcome screen's and
-    Setup Complete's tips: plain GNOME has no tray, so "the tray icon" sent
-    people looking for nothing."""
-    if extension_helper.is_extension_enabled():
-        return "its icon in the top bar"
-    if desktop_detect.tray_host_available():
-        return "its tray icon"
-    return "open TuxTalk again from your apps"
-
-
 def _ready_tips(is_flatpak):
     """The dim lines under Setup Complete's three steps, as markup: the
     keys this user has, where the menu is, and launch at login when on."""
@@ -57,8 +46,8 @@ def _ready_tips(is_flatpak):
     if not is_flatpak and getattr(cfg, "paste_last_hotkey", ""):
         tips.append("📋 Typed into the wrong window? Press "
                     f"<b>{GLib.markup_escape_text(cfg.paste_last_hotkey)}</b> to type it again")
-    tips.append(f"⚙️ Open the TuxTalk menu ({GLib.markup_escape_text(menu_location())}) "
-                "to change these keys and more")
+    where = GLib.markup_escape_text(desktop_detect.menu_location())
+    tips.append(f"⚙️ Open the TuxTalk menu ({where}) to change these keys and more")
     # Onboarding turns on launch at login (appimage_copy._start_at_login) and
     # records it only once its file is written: say so, and where to turn it off.
     if getattr(cfg, "launch_at_login", False):

@@ -1,7 +1,6 @@
 """The About TuxTalk window: the icon, name and version, the credits the
 models' licences ask for, links to the website, the code and the changelog,
 and this version's release notes, fetched from GitHub while it's open."""
-import os
 import threading
 
 import gi
@@ -9,7 +8,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from . import notes_text  # noqa: E402
+from . import app_icon, notes_text  # noqa: E402
 from .logger import setup_logger  # noqa: E402
 
 logger = setup_logger(__name__)
@@ -20,16 +19,10 @@ NOTES_NOT_AVAILABLE = "Release notes not available.\n\nVisit GitHub for the full
 def about_icon_source(theme_has_icon):
     """Where the About dialog's icon comes from: ("file", path), ("icon",
     theme name) or None. *theme_has_icon* is the icon theme's has_icon."""
-    from .autostart import get_icon_path
     from .config import APP_ID
-    path = get_icon_path()
-    if os.path.isfile(path):
+    path = app_icon.icon_file()
+    if path:
         return ("file", path)
-    appdir = os.environ.get("APPDIR")
-    if appdir:
-        bundled = os.path.join(appdir, f"{APP_ID}.svg")
-        if os.path.isfile(bundled):
-            return ("file", bundled)
     # deb/rpm install the icon under the app ID; the AppImage's first run
     # installs it as "tuxtalk".
     for name in (APP_ID, "tuxtalk"):
@@ -54,8 +47,17 @@ def _about_icon():
     return image
 
 
+_open_dialog = None
+
+
 def show_about_dialog():
-    """Open About TuxTalk, and fetch this version's release notes into it."""
+    """Open About TuxTalk, and fetch this version's release notes into it.
+    An open About is brought forward instead, without asking GitHub again."""
+    global _open_dialog
+    if _open_dialog is not None:
+        from .raise_window import raise_window
+        raise_window(_open_dialog)
+        return
     dialog = Gtk.Dialog(title="About TuxTalk", flags=Gtk.DialogFlags.MODAL)
     dialog.set_default_size(500, 450)
     dialog.set_position(Gtk.WindowPosition.CENTER)
@@ -77,9 +79,17 @@ def show_about_dialog():
     # nested run() loop started from a tray menu callback can fail to map
     # the window on Wayland.
     dialog.connect("response", lambda d, _r: d.destroy())
+    dialog.connect("destroy", _forget_dialog)
+    _open_dialog = dialog
     dialog.show_all()
     dialog.present()
     _fetch_notes(dialog, notes)
+
+
+def _forget_dialog(_dialog):
+    """About was closed: the next open builds it again."""
+    global _open_dialog
+    _open_dialog = None
 
 
 def _header(content):

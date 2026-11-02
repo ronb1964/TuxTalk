@@ -3,27 +3,25 @@
 No install has hicolor/128x128/apps/talktype.png or a src/tuxtalk/icons
 folder, so looking only there would leave About without an icon.
 """
-from tuxtalk import about_dialog
+from tuxtalk import about_dialog, app_icon
 
 
 def test_a_real_icon_file_is_used(monkeypatch, tmp_path):
     svg = tmp_path / "icon.svg"
     svg.write_text("<svg/>")
-    monkeypatch.setattr("tuxtalk.autostart.get_icon_path", lambda: str(svg))
+    monkeypatch.setattr(app_icon, "icon_files", lambda: [str(tmp_path / "gone.png"), str(svg)])
     assert about_dialog.about_icon_source(lambda name: False) == ("file", str(svg))
 
 
 def test_the_appimage_bundled_svg_is_used(monkeypatch, tmp_path):
     (tmp_path / "io.github.ronb1964.TuxTalk.svg").write_text("<svg/>")
-    monkeypatch.setattr("tuxtalk.autostart.get_icon_path", lambda: "audio-input-microphone")
     monkeypatch.setenv("APPDIR", str(tmp_path))
     assert about_dialog.about_icon_source(lambda name: False) == (
         "file", str(tmp_path / "io.github.ronb1964.TuxTalk.svg"))
 
 
 def test_the_icon_theme_is_the_fallback(monkeypatch):
-    monkeypatch.setattr("tuxtalk.autostart.get_icon_path", lambda: "audio-input-microphone")
-    monkeypatch.delenv("APPDIR", raising=False)
+    monkeypatch.setattr(app_icon, "icon_files", lambda: [])
     assert about_dialog.about_icon_source(lambda name: name == "tuxtalk") == ("icon", "tuxtalk")
     assert about_dialog.about_icon_source(lambda name: True) == (
         "icon", "io.github.ronb1964.TuxTalk")
@@ -66,3 +64,16 @@ def test_release_notes_go_into_their_own_about_window_only_while_it_is_open(monk
         assert shown[-1] == "New things"
     finally:
         window.destroy()
+
+
+def test_opening_about_again_brings_the_open_one_forward(about_window, monkeypatch):
+    """Each click opened another About, and asked GitHub for the notes again."""
+    from gi.repository import Gtk
+    from tuxtalk import raise_window, update_checker
+    raised, asked = [], []
+    monkeypatch.setattr(raise_window, "raise_window", raised.append)
+    monkeypatch.setattr(update_checker, "fetch_release_by_tag", asked.append)
+    about_dialog.show_about_dialog()
+    assert raised == [about_window] and asked == []
+    assert [w for w in Gtk.Window.list_toplevels() if w.get_title() == "About TuxTalk"
+            and w.get_visible()] == [about_window]

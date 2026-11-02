@@ -111,6 +111,18 @@ def tray_host_available(bus=None) -> bool:
         return True
 
 
+def menu_location() -> str:
+    """Where this desktop shows TuxTalk's menu, for the welcome screen's and
+    Setup Complete's tips: plain GNOME has no tray, so "the tray icon" sent
+    people looking for nothing."""
+    from . import extension_helper    # it imports this module
+    if extension_helper.is_extension_enabled():
+        return "its icon in the top bar"
+    if tray_host_available():
+        return "its tray icon"
+    return "open TuxTalk again from your apps"
+
+
 def is_x11_session(env):
     """Whether the session is X11: XDG_SESSION_TYPE when it is set; otherwise
     (startx sets none) an X DISPLAY with no Wayland one.

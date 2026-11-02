@@ -444,10 +444,9 @@ def test_setup_ticks_the_extension_only_without_a_tray(monkeypatch, has_tray):
 def test_setup_tells_where_the_menu_is_on_this_desktop(monkeypatch, extension, has_tray, where):
     """Plain GNOME has no tray: "the tray icon" there sent people looking
     for nothing."""
-    from tuxtalk import setup_complete_dialog
     monkeypatch.setattr(extension_helper, "is_extension_enabled", lambda: extension)
     monkeypatch.setattr(desktop_detect, "tray_host_available", lambda bus=None: has_tray)
-    assert setup_complete_dialog.menu_location() == where
+    assert desktop_detect.menu_location() == where
 
 
 def test_menu_window_buttons_dont_keep_a_focus_box():
@@ -505,3 +504,15 @@ def test_fix_typing_success_updates_the_status_lines(monkeypatch):
     welcome_dialog.WelcomeDialog._report_fix_typing(me, button, {
         "results": [], "uinput_fixed": True, "needs_restart": False})
     assert uinput.get_text() == "✅ Input device permissions OK"
+
+
+def test_escape_closes_the_menu_window():
+    """Every other TuxTalk window closes on Escape; this one didn't."""
+    from gi.repository import Gdk
+    _tray, win = _menu_window()
+    closed = []
+    win.window.connect("destroy", lambda _w: closed.append(True))
+    event = Gdk.Event.new(Gdk.EventType.KEY_PRESS)
+    event.keyval = Gdk.KEY_Escape
+    win.window.emit("key-press-event", event)
+    assert closed == [True]

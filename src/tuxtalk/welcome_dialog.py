@@ -18,14 +18,13 @@ import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
-from . import config, extension_helper
+from . import config, desktop_detect, extension_helper
 from .ui_style import WARNING_AMBER, Fold, more_below_bar, show_message
 
 from .flatpak_welcome import (build_shortcut_setup_section, build_unsupported_desktop_section,
                               shortcut_support)
 from .logger import setup_logger
 from .portaudio_setup import portaudio_installed
-from .setup_complete_dialog import menu_location
 from .splash_screen import SplashScreen, fade_in
 from .uinput_helper import check_all_device_permissions
 
@@ -503,7 +502,7 @@ class WelcomeDialog:
             f"1. Hold {key}",
             "2. Talk",
             "3. Let go: your words are typed where your cursor is",
-            f"Settings and Help are in the TuxTalk menu ({menu_location()})",
+            f"Settings and Help are in the TuxTalk menu ({desktop_detect.menu_location()})",
         ]
 
         for tip in tips:
