@@ -1,5 +1,5 @@
-"""Getting NVIDIA's CUDA libraries into TuxTalk's data folder: find the
-wheels on PyPI, download them (each checked against PyPI's SHA256), unpack
+"""Getting NVIDIA's CUDA libraries into TuxTalk's data folder: download
+two pinned wheels from PyPI (each checked against its SHA256), unpack
 their libraries into a folder of their own, check that every library is
 there, and only then put it in place of the old one. A download that fails
 or is cancelled at any point, or a TuxTalk killed part-way, leaves a working
@@ -9,23 +9,53 @@ cuda_helper says whether CUDA is there at all; its download window is
 download_progress_dialog.show_cuda_download_dialog.
 """
 import os
-import re
 import shutil
 import tempfile
+from typing import NamedTuple
 
 from . import cuda_helper, download_utils
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# The wheels come straight from PyPI's JSON API; no pip is needed.
-CUDA_PACKAGES = ('nvidia-cuda-runtime-cu12', 'nvidia-cublas-cu12')
+
+class Wheel(NamedTuple):
+    """One of NVIDIA's wheels on PyPI, with the SHA256 and size it has there."""
+    name: str
+    url: str
+    sha256: str
+    size: int
+
+    @property
+    def filename(self):
+        return self.url.rsplit("/", 1)[1]
+
+
+# Pinned, as whisper_vulkan pins its engine: PyPI's newest could change the
+# wheels' layout or the driver they need, and would reach users untested.
+# CUDA 12.9 Update 1's runtime and the cuBLAS 12.9 build every download got
+# until a newer one came out. To move on, take a version's URL, SHA256 and
+# size from https://pypi.org/pypi/<name>/<version>/json, and dictate with a
+# Whisper model on CUDA with it before it ships.
+CUDA_WHEELS = (
+    Wheel("nvidia-cuda-runtime-cu12",
+          "https://files.pythonhosted.org/packages/bc/46/"
+          "a92db19b8309581092a3add7e6fceb4c301a3fd233969856a8cbf042cd3c/"
+          "nvidia_cuda_runtime_cu12-12.9.79-py3-none-manylinux2014_x86_64."
+          "manylinux_2_17_x86_64.whl",
+          "25bba2dfb01d48a9b59ca474a1ac43c6ebf7011f1b0b8cc44f54eb6ac48a96c3", 3493179),
+    Wheel("nvidia-cublas-cu12",
+          "https://files.pythonhosted.org/packages/cb/c0/"
+          "0a517bfe63ccd3b92eb254d264e28fca3c7cab75d07daea315250fb1bf73/"
+          "nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_x86_64.whl",
+          "e4f53a8ca8c5d6e8c492d0d0a3d565ecb59a751b19cfdaa4f6da0ab2104c1702", 581240110),
+)
+
 # Room kept free beyond what the download or the libraries take.
 _SPARE_BYTES = 100 * 1024 * 1024
 # The progress bar: the downloads share 0-70 %, unpacking 70-95 %.
 _DOWNLOAD_SHARE = 70
 _UNPACK_SHARE = 25
-_SHA256 = re.compile(r"[0-9a-f]{64}")
 # The start of an unpacking folder's name (download_utils.download_area's).
 _UNPACKING = ".lib."
 
@@ -34,51 +64,10 @@ class _Stop(Exception):
     """The download ends here; the message, if any, is shown as the reason."""
 
 
-def _pypi_wheel(pkg_name):
-    """(pkg_name, url, filename, sha256, size) of *pkg_name*'s Linux x86_64
-    wheel on PyPI. Raises LookupError when PyPI has none, and OSError or
-    ValueError when it can't be read."""
-    import json
-    import urllib.request
-    request = urllib.request.Request(f"https://pypi.org/pypi/{pkg_name}/json",
-                                     headers={"User-Agent": "TuxTalk"})
-    # Without a timeout a stalled PyPI connection hangs this thread.
-    with urllib.request.urlopen(request, timeout=30) as response:
-        data = json.loads(response.read())
-    for file_info in data['urls']:
-        if (file_info['packagetype'] == 'bdist_wheel' and 'x86_64' in file_info['filename']
-                and 'manylinux' in file_info['filename']):
-            # PyPI's published sha256, so a corrupted or tampered download is
-            # never installed; without one it isn't downloaded at all.
-            sha256 = (file_info.get('digests') or {}).get('sha256') or ""
-            if not _SHA256.fullmatch(sha256):
-                raise LookupError(f"PyPI gave no checksum for {file_info['filename']}, "
-                                  "so it isn't downloaded")
-            return (pkg_name, file_info['url'], file_info['filename'], sha256,
-                    int(file_info.get('size', 0) or 0))
-    raise LookupError(f"PyPI has no {pkg_name} for this computer")
-
-
 def _check_cancel(cancel_event, when=""):
     if cancel_event and cancel_event.is_set():
         logger.info(f"Download cancelled by user{when}")
         raise _Stop()
-
-
-def _resolve_wheels(report, cancel_event):
-    """Each package's wheel as _pypi_wheel gives it."""
-    # From 0, so the bar never jumps back when the first download reports 0 %.
-    report("Looking up CUDA packages...", 0)
-    wheels = []
-    for pkg_name in CUDA_PACKAGES:
-        _check_cancel(cancel_event)
-        try:
-            wheels.append(_pypi_wheel(pkg_name))
-        except Exception as e:
-            logger.error(f"Failed to look up {pkg_name} on PyPI: {e}")
-            raise _Stop(str(e) if isinstance(e, LookupError)
-                        else "Could not reach PyPI — check your internet connection") from e
-    return wheels
 
 
 def _check_space(wheels, temp_dir, cuda_path):
@@ -88,7 +77,7 @@ def _check_space(wheels, temp_dir, cuda_path):
     at least the wheels' size (the unpacked size is checked once they're
     here, in _extract_wheels)."""
     from .download_utils import free_space_bytes
-    total = sum(wheel[4] for wheel in wheels)
+    total = sum(wheel.size for wheel in wheels)
     need = total + _SPARE_BYTES
     for path, label in ((temp_dir, "download (temp)"), (cuda_path, "install")):
         free = free_space_bytes(path)
@@ -103,7 +92,8 @@ def _download_wheels(wheels, temp_dir, report, cancel_event):
     """The wheels' paths in *temp_dir*, each checked against its SHA256."""
     from .download_utils import download_file
     paths = []
-    for index, (pkg_name, url, filename, sha256, _size) in enumerate(wheels):
+    for index, wheel in enumerate(wheels):
+        pkg_name, filename = wheel.name, wheel.filename
         _check_cancel(cancel_event)
         report(f"Downloading {pkg_name}...", _DOWNLOAD_SHARE * index // len(wheels))
         logger.info(f"Downloading {pkg_name}...")
@@ -115,8 +105,8 @@ def _download_wheels(wheels, temp_dir, report, cancel_event):
                        int(_DOWNLOAD_SHARE * (_index + percent / 100) / len(wheels)))
 
         path = os.path.join(temp_dir, filename)
-        if not download_file(url, path, timeout=60, cancel_event=cancel_event,
-                             progress_hook=progress_hook, expected_sha256=sha256):
+        if not download_file(wheel.url, path, timeout=60, cancel_event=cancel_event,
+                             progress_hook=progress_hook, expected_sha256=wheel.sha256):
             logger.error(f"Failed to download {pkg_name}")
             cancelled = cancel_event and cancel_event.is_set()
             raise _Stop(None if cancelled else f"Download of {pkg_name} failed or was corrupted")
@@ -262,9 +252,8 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
         with download_utils.install_turn("cuda", "CUDA"):
             _remove_leftovers(cuda_path)    # a copy cut off last time comes back first
         with tempfile.TemporaryDirectory() as temp_dir:
-            wheels = _resolve_wheels(report, cancel_event)
-            _check_space(wheels, temp_dir, cuda_path)
-            wheel_paths = _download_wheels(wheels, temp_dir, report, cancel_event)
+            _check_space(CUDA_WHEELS, temp_dir, cuda_path)
+            wheel_paths = _download_wheels(CUDA_WHEELS, temp_dir, report, cancel_event)
             _install(wheel_paths, cuda_path, report, cancel_event)
     except _Stop as stop:
         if stop.args and stop.args[0]:

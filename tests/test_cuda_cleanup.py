@@ -74,4 +74,4 @@ def test_a_real_nvidia_folder_is_left_alone(cuda_dir):
 
 
 def test_cudnn_is_not_downloaded():
-    assert not any("cudnn" in name for name in cuda_download.CUDA_PACKAGES)
+    assert not any("cudnn" in wheel.name for wheel in cuda_download.CUDA_WHEELS)

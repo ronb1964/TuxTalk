@@ -1,10 +1,8 @@
-"""CUDA's download (cuda_download): the wheels from PyPI, each checked against
-PyPI's SHA256, their libraries unpacked into a folder of their own and put in
+"""CUDA's download (cuda_download): the pinned wheels from PyPI, each checked
+against its SHA256, their libraries unpacked into a folder of their own and put in
 place only when every library is there, so a failed, cancelled or odd
 download, or a TuxTalk killed part-way, never leaves a working CUDA broken."""
 import contextlib
-import io
-import json
 import os
 import zipfile
 
@@ -33,8 +31,9 @@ def pypi(tmp_path, monkeypatch):
     cuda = tmp_path / "cuda"
     monkeypatch.setattr(cuda_helper, "get_appdir_cuda_path", lambda: str(cuda))
     monkeypatch.setattr(download_utils, "free_space_bytes", lambda path: 10 ** 12)
-    monkeypatch.setattr(cuda_download, "_pypi_wheel",
-                        lambda pkg: (pkg, f"https://x/{pkg}.whl", f"{pkg}.whl", "ab" * 32, 1000))
+    monkeypatch.setattr(cuda_download, "CUDA_WHEELS", tuple(
+        cuda_download.Wheel(wheel.name, f"https://x/{wheel.name}.whl", "ab" * 32, 1000)
+        for wheel in cuda_download.CUDA_WHEELS))
     state = type("PyPI", (), {"libraries": LIBRARIES, "sha256s": [], "cuda": cuda})()
 
     def download_file(url, path, expected_sha256=None, progress_hook=None, **kwargs):
@@ -62,9 +61,9 @@ def test_a_download_installs_every_library(pypi):
     assert sorted(os.listdir(pypi.cuda)) == ["lib"], "the unpacking folder was left behind"
 
 
-def test_each_wheel_is_checked_against_pypis_sha256(pypi):
+def test_each_wheel_is_checked_against_its_pinned_sha256(pypi):
     assert cuda_download.download_cuda_libraries()
-    assert pypi.sha256s == ["ab" * 32] * len(cuda_download.CUDA_PACKAGES)
+    assert pypi.sha256s == ["ab" * 32] * len(cuda_download.CUDA_WHEELS)
 
 
 def test_a_download_missing_a_library_is_not_installed(pypi):
@@ -130,17 +129,18 @@ def test_the_libraries_unpack_into_their_package_folders(tmp_path, monkeypatch):
     assert unpacked.stat().st_size == 1000 and os.access(unpacked, os.X_OK)
 
 
-def test_no_wheel_on_pypi_is_the_reason_given(tmp_path, monkeypatch):
-    """It ended on "Looking up CUDA packages...", shown as the reason."""
-    monkeypatch.setattr(cuda_helper, "get_appdir_cuda_path", lambda: str(tmp_path / "cuda"))
-
-    def none_for_us(pkg_name):
-        raise LookupError(f"PyPI has no {pkg_name} for this computer")
-    monkeypatch.setattr(cuda_download, "_pypi_wheel", none_for_us)
-    reports = []
-    assert not cuda_download.download_cuda_libraries(lambda m, p: reports.append((m, p)))
-    assert download_utils.failure_reason(*reports[-1]) == (
-        "PyPI has no nvidia-cuda-runtime-cu12 for this computer")
+def test_the_wheels_are_pinned_with_their_checksums():
+    """PyPI's newest wheels were downloaded, so a new cuBLAS reached users
+    the day NVIDIA published it, untried. Each is pinned to a version, its
+    SHA256 and size."""
+    import re
+    assert [wheel.name for wheel in cuda_download.CUDA_WHEELS] == [
+        "nvidia-cuda-runtime-cu12", "nvidia-cublas-cu12"]
+    for wheel in cuda_download.CUDA_WHEELS:
+        assert wheel.url.startswith("https://files.pythonhosted.org/packages/")
+        assert re.fullmatch(r"nvidia_cu\w+_cu12-12\.9\.[\d.]+-py3-none-manylinux\S+\.whl",
+                            wheel.filename)
+        assert re.fullmatch(r"[0-9a-f]{64}", wheel.sha256) and wheel.size > 1_000_000
 
 
 def test_the_download_bar_never_goes_backwards(pypi):
@@ -171,9 +171,7 @@ def test_an_install_cut_off_between_its_renames_is_put_back_at_start(pypi):
 def test_a_retry_that_fails_still_puts_a_cut_off_install_back(pypi, monkeypatch):
     _cut_off_between_the_renames(pypi.cuda)
 
-    def offline(pkg):
-        raise OSError("no network")
-    monkeypatch.setattr(cuda_download, "_pypi_wheel", offline)
+    monkeypatch.setattr(download_utils, "download_file", lambda *a, **kw: False)
     assert not cuda_download.download_cuda_libraries()
     assert (pypi.cuda / "lib" / LIBRARIES[0]).read_text() == "the working one"
 
@@ -260,21 +258,6 @@ def test_a_tray_starting_during_the_unpack_leaves_the_unpacking_folder_alone(pyp
     assert cuda_download.download_cuda_libraries()
     assert seen == [True]
     assert cuda_helper.has_talktype_cuda_libraries()
-
-
-def test_a_wheel_pypi_lists_without_a_checksum_is_not_downloaded(monkeypatch):
-    """Without PyPI's SHA256 the download went ahead unchecked and the log
-    said "Downloaded and verified"."""
-    import urllib.request
-    entry = {"packagetype": "bdist_wheel", "url": "https://x/w.whl", "size": 1,
-             "filename": "nvidia_cublas_cu12-12.9-py3-none-manylinux_2_27_x86_64.whl"}
-    for digests in ({}, {"sha256": ""}, {"sha256": "not-a-hash"}):
-        body = json.dumps({"urls": [dict(entry, digests=digests)]}).encode()
-        monkeypatch.setattr(urllib.request, "urlopen",
-                            lambda request, timeout, body=body:
-                            contextlib.nullcontext(io.BytesIO(body)))
-        with pytest.raises(LookupError, match="no checksum"):
-            cuda_download._pypi_wheel("nvidia-cublas-cu12")
 
 
 def test_a_cuda_wheel_file_named_outside_its_folder_is_skipped(tmp_path):
