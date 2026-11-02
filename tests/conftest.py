@@ -1261,6 +1261,39 @@ class ShownWidget:
         self.visible = visible
 
 
+class Microphone:
+    """A stream that records nothing by itself: the test calls its callback.
+    Its stop() can be held until *release* is set."""
+
+    def __init__(self, opened, release, **settings):
+        self.callback = settings["callback"]
+        self.release = release
+        self.closed = threading.Event()
+        opened.append(self)
+
+    def start(self):
+        pass
+
+    def stop(self, ignore_errors=True):
+        self.release.wait(5)
+
+    def close(self, ignore_errors=True):
+        self.closed.set()
+
+
+def progress_in_place(monkeypatch):
+    """progress_window.run_with_progress with no window, its work run at
+    once on this thread."""
+    from tuxtalk import progress_window
+    monkeypatch.setattr(progress_window, "_progress_window", lambda *a: (
+        types.SimpleNamespace(destroy=lambda: None),
+        types.SimpleNamespace(set_text=lambda t: None),
+        types.SimpleNamespace(set_fraction=lambda f: None, set_text=lambda t: None)))
+    monkeypatch.setattr(progress_window.GLib, "idle_add", lambda fn, *a: fn(*a))
+    monkeypatch.setattr(progress_window, "threading", types.SimpleNamespace(
+        Thread=lambda target, daemon=None, name=None: types.SimpleNamespace(start=target)))
+
+
 class HeldTimer:
     """threading.Timer that never runs by itself: the test fires it."""
 

@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 from gi.repository import GLib
 
+from conftest import progress_in_place
 from tuxtalk import service_launcher, single_instance, tray_instance
 from tuxtalk.control import WaitingStart
 from tuxtalk import tray as tray_mod
@@ -876,8 +877,7 @@ def test_a_package_update_installs_nothing_after_quit(monkeypatch):
                         lambda path, kind: installed.append(path) or (True, ""))
     monkeypatch.setattr(update_ui, "_installed_restart_prompt", lambda cb=None: shown.append(1))
     monkeypatch.setattr(update_ui, "_error", lambda message: shown.append(message))
-    from test_update_restart import _progress_in_place
-    _progress_in_place(monkeypatch)
+    progress_in_place(monkeypatch)
     update_ui.run_package_update({}, "deb", quitting=lambda: True)
     assert installed == [] and shown == []
 

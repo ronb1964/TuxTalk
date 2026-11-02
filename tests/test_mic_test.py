@@ -11,28 +11,9 @@ import pytest
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
+from conftest import Microphone  # noqa: E402
 from tuxtalk import mic_test  # noqa: E402
 from tuxtalk.mic_test import MicTest  # noqa: E402
-
-
-class Microphone:
-    """A stream that records nothing by itself: the test calls its callback.
-    Its stop() can be held until *release* is set."""
-
-    def __init__(self, opened, release, **settings):
-        self.callback = settings["callback"]
-        self.release = release
-        self.closed = threading.Event()
-        opened.append(self)
-
-    def start(self):
-        pass
-
-    def stop(self, ignore_errors=True):
-        self.release.wait(5)
-
-    def close(self, ignore_errors=True):
-        self.closed.set()
 
 
 @pytest.fixture
