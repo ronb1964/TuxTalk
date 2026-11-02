@@ -33,6 +33,13 @@ before 0.15.0, so older entries use that name.
 - Preferences → Advanced → TuxTalk Labs no longer has the Noise filter for
   Type at pause. It only tuned the old loudness check. Old settings and
   backups still load.
+- Saying "quote" as a plain word typed a quote mark. "I want to quote him
+  on that" came out as I want to " him on that. It's typed as the word now
+  when the words around it say so ("to quote", "a quote", "don't quote me"),
+  and "he said quote hello quote" still puts hello in quotes. You can also
+  close a quotation with "unquote" or "end quote", and "quote unquote"
+  puts the next word in quotes. Two "quote"s meant as words with nothing
+  around them to tell, like "quote and quote again", still pair up.
 - Help and About opened another window every time you clicked them, and
   About asked GitHub for its notes again each time. The open one comes to
   the front now.
