@@ -26,10 +26,11 @@ STALE_UPDATE_S = 60 * 60
 
 
 class Downloaded(NamedTuple):
-    """A downloaded update, and the SHA256 from the release's SHA256SUMS.txt
-    it was checked against."""
+    """A downloaded update, the SHA256 from the release's SHA256SUMS.txt it
+    was checked against, and its size when it was checked."""
     path: str
     sha256: str
+    size: int
 
 
 def fetch_expected_sha256(checksums_url: str, filename: str) -> Optional[str]:
@@ -143,7 +144,7 @@ def download_update(
         if filename.endswith(".AppImage"):
             os.chmod(dest_path, 0o755)
 
-        return Downloaded(dest_path, expected_sha256)
+        return Downloaded(dest_path, expected_sha256, os.path.getsize(dest_path))
 
     except Exception as e:
         logger.error(f"Download failed: {e}")
@@ -255,7 +256,7 @@ def install_package_update(download: Downloaded, install_type: str) -> Tuple[boo
     if not manager:
         return (False, "No supported package manager was found to install the update.")
     argv = ["pkexec", "/bin/bash", "-s", "--", package_path, download.sha256,
-            str(os.path.getsize(package_path)), *manager]
+            str(download.size), *manager]
     # The installer writes to an unnamed file rather than a pipe: a pipe closes
     # when TuxTalk exits, and the installer's next write would then kill it
     # part-way through the transaction. The file disappears once both close it.

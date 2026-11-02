@@ -870,7 +870,8 @@ def test_a_package_update_installs_nothing_after_quit(monkeypatch):
     installed, shown = [], []
     monkeypatch.setattr(update_ui.update_install, "get_package_asset",
                         lambda release, kind: ("https://x/tuxtalk.deb", "tuxtalk.deb"))
-    monkeypatch.setattr(update_ui.update_install, "download_update", lambda *a, **k: update_ui.update_install.Downloaded("/tmp/x.deb", "a" * 64))
+    monkeypatch.setattr(update_ui.update_install, "download_update",
+                        lambda *a, **k: update_ui.update_install.Downloaded("/tmp/x.deb", "a" * 64, 7))
     monkeypatch.setattr(update_ui.update_install, "install_package_update",
                         lambda path, kind: installed.append(path) or (True, ""))
     monkeypatch.setattr(update_ui, "_installed_restart_prompt", lambda cb=None: shown.append(1))

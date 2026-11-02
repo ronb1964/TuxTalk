@@ -174,6 +174,32 @@ def test_a_failing_detector_doesnt_end_the_recording(recording_now, which, caplo
     assert len([r for r in caplog.records if "stopped listening" in r.message]) == 1
 
 
+def test_hands_free_taken_away_while_a_block_is_judged_logs_no_failure(recording_now, caplog):
+    """A recording found silent (_dropped_as_silent) loses its hands-free on
+    another thread: read twice, the second read found nothing to feed, and
+    "Hands-free stopped listening" was logged for a detector that never failed."""
+    class Quiet:
+        def feed(self, block):
+            return False
+    detector = Quiet()
+
+    class TakenAway(type(recording_now)):
+        reads = 0
+
+        @property
+        def silence(self):
+            TakenAway.reads += 1
+            return detector if TakenAway.reads == 1 else None
+
+        @silence.setter
+        def silence(self, value):
+            pass
+    recording_now.__class__ = TakenAway
+    with caplog.at_level(logging.ERROR):
+        _hear(recording_now, blocks=1)
+    assert not [r for r in caplog.records if "stopped listening" in r.message]
+
+
 def test_the_audio_thread_never_loads_the_model(monkeypatch):
     """Loaded when Type at pause is armed, before the microphone's first
     block: a cold load in the audio callback overran its buffer."""

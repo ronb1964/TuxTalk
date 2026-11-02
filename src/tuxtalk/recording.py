@@ -253,14 +253,15 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
         # takes a word's audio before its speech is counted: the rest would
         # be thrown away as speechless (drop_speechless_rest).
         chunker = rec.chunker
-        if chunker is not None and _heard(rec, "chunker", indata):
+        if chunker is not None and _heard(rec, "chunker", chunker, indata):
             type_at_pause.cut_chunk(rec, chunker)
 
     # Hands-free auto-stop: when the speaker has finished, ask the service
     # loop to stop it, exactly as a second press of the toggle key would.
     # Logged by the service tick that stops it, to keep file writes off
     # the audio thread.
-    if rec.silence is not None and _heard(rec, "silence", indata):
+    silence = rec.silence
+    if silence is not None and _heard(rec, "silence", silence, indata):
         rec.went_quiet = True
 
     # Feed the recording indicator whatever its active style needs.
@@ -272,17 +273,19 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
 _DETECTOR_NAMES = {"chunker": "Type at pause", "silence": "Hands-free"}
 
 
-def _heard(rec, which: str, indata) -> bool:
-    """Feed *indata* to recording *rec*'s detector *which*, its "chunker"
-    (Type at pause; under chunk_lock) or its "silence" (hands-free): what
-    feed() answered. One that fails is dropped and the recording goes on
-    without it, until the key ends it: sounddevice ends the stream on any
+def _heard(rec, which: str, detector, indata) -> bool:
+    """Feed *indata* to *detector*, recording *rec*'s "chunker" (Type at
+    pause; under chunk_lock) or "silence" (hands-free), read once by the
+    caller: hands-free's can be taken away meanwhile (_dropped_as_silent).
+    What feed() answered. One that fails is dropped and the recording goes
+    on without it, until the key ends it: sounddevice ends the stream on any
     error in its callback, and everything said after it would be lost.
     Logged here, once, since the detector goes with it."""
     try:
-        return getattr(rec, which).feed(indata)
+        return detector.feed(indata)
     except Exception as e:
-        setattr(rec, which, None)
+        if getattr(rec, which) is detector:
+            setattr(rec, which, None)
         logger.error(f"{_DETECTOR_NAMES[which]} stopped listening to this recording, which goes "
                      f"on until the key ends it: {error_without_words(e)}")
         return False

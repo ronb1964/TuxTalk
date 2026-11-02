@@ -80,7 +80,7 @@ class TestPackageInstallIsBounded:
         monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: HungProc())
 
         (tmp_path / "x.deb").write_bytes(b"package")
-        download = uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64)
+        download = uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64, 7)
         ok, message = uc.install_package_update(download, "deb")
 
         assert ok is False
@@ -100,7 +100,7 @@ class TestPackageInstallIsBounded:
         monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: GoodProc())
 
         (tmp_path / "x.deb").write_bytes(b"package")
-        download = uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64)
+        download = uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64, 7)
         ok, _ = uc.install_package_update(download, "deb")
 
         assert ok is True
@@ -119,7 +119,7 @@ class TestPackageInstallIsBounded:
         monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: CancelledProc())
 
         (tmp_path / "x.deb").write_bytes(b"package")
-        download = uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64)
+        download = uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64, 7)
         ok, message = uc.install_package_update(download, "deb")
 
         assert ok is False

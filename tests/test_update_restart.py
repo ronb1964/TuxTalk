@@ -25,7 +25,7 @@ from tuxtalk import installation, update_install
 from tuxtalk import update_checker as uc
 
 # What a checked AppImage download hands on, for tests that skip the download.
-APPIMAGE_DOWNLOAD = update_install.Downloaded("/updates/TuxTalk.AppImage", "a" * 64)
+APPIMAGE_DOWNLOAD = update_install.Downloaded("/updates/TuxTalk.AppImage", "a" * 64, 7)
 
 
 @pytest.fixture(autouse=True)
@@ -553,7 +553,7 @@ def test_the_update_bar_never_goes_backwards(monkeypatch, tmp_path):
         for percent in (0, 40, 100):
             progress("Downloading...", percent)
         download.write_bytes(b"x" * 1000)
-        return update_install.Downloaded(str(download), "a" * 64)
+        return update_install.Downloaded(str(download), "a" * 64, 7)
     monkeypatch.setattr(update_install, "download_update", downloads)
     seen = []
     monkeypatch.setattr(update_ui, "run_with_progress",
@@ -705,7 +705,8 @@ def _package(tmp_path):
 def _checked(path):
     """*path* as download_update hands it on, checked against its SHA256."""
     import hashlib
-    return update_install.Downloaded(str(path), hashlib.sha256(path.read_bytes()).hexdigest())
+    return update_install.Downloaded(str(path), hashlib.sha256(path.read_bytes()).hexdigest(),
+                                      path.stat().st_size)
 
 
 def _without_pkexec(monkeypatch):
@@ -891,20 +892,56 @@ def test_a_package_swapped_for_a_link_is_never_read(tmp_path, monkeypatch):
     assert not ran.exists()
 
 
-def test_the_copy_reads_no_more_than_the_download(tmp_path, monkeypatch):
-    """What grew past the checked size is never read whole: a swap for an
-    endless file ends at the download's size, and then fails its check."""
+def test_the_copy_reads_no_more_than_the_checked_download(tmp_path, monkeypatch):
+    """A swap for a huge sparse file once had root fill /var/tmp: the limit
+    handed to root was the file's size at install time. It's the size it
+    had when its SHA256 was checked."""
     package = _package(tmp_path)
     download = _checked(package)
-    seen = tmp_path / "seen"
-    monkeypatch.setattr(update_install, "package_install_argv",
-                        lambda t: ["sh", "-c", f'cat "$1" > {seen}', "sh"])
-    monkeypatch.setattr(update_install.os.path, "getsize", lambda path: 4)
-    _without_pkexec(monkeypatch)
+    with open(package, "r+b") as grown:         # 64 MB that take no disk
+        grown.truncate(64 << 20)
+    seen = []
 
-    ok, _ = update_install.install_package_update(download, "deb")
+    class Proc:
+        stdin = io.BytesIO()     # takes the root install script
+        returncode = 0
 
-    assert not ok and not seen.exists()
+        def wait(self, timeout=None):
+            return 0
+    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, **kw: seen.append(argv) or Proc())
+    monkeypatch.setattr(update_install, "package_install_argv", lambda t: ["dpkg", "-i"])
+
+    update_install.install_package_update(download, "deb")
+
+    assert seen[0][6] == "7" == str(download.size)
+
+
+def test_a_pkexec_that_ends_before_the_script_is_sent_says_why(tmp_path, monkeypatch):
+    """No password agent, refused at once: pkexec was gone before the root
+    script reached it, and the user read "Broken pipe" with the package left."""
+    package = _package(tmp_path)
+
+    class GoneAtOnce:
+        returncode = 127
+
+        class stdin:
+            @staticmethod
+            def write(data):
+                raise BrokenPipeError(32, "Broken pipe")
+
+            @staticmethod
+            def close():
+                pass
+
+        def wait(self, timeout=None):
+            return self.returncode
+    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, **kw: GoneAtOnce())
+    monkeypatch.setattr(update_install, "package_install_argv", lambda t: ["dpkg", "-i"])
+
+    ok, message = update_install.install_package_update(_checked(package), "deb")
+
+    assert not ok and "authorization failed" in message
+    assert not package.exists()
 
 
 def test_a_package_left_by_an_earlier_install_is_swept(tmp_path, monkeypatch):
@@ -937,7 +974,7 @@ def test_download_progress_is_passed_on_once_per_percent(tmp_path, monkeypatch):
         pathlib.Path(dest).write_bytes(b"")
         return True
     monkeypatch.setattr("tuxtalk.download_utils.download_file", fake_download)
-    monkeypatch.setattr(update_install, "fetch_expected_sha256", lambda url, name: "a" * 64)
+    monkeypatch.setattr(update_install, "fetch_expected_sha256", lambda url, name: "a" * 64, 7)
     seen = []
 
     update_install.download_update("https://example.invalid/x", "x.deb",
@@ -987,7 +1024,7 @@ def test_an_unexpected_install_error_closes_the_update_window_and_says_why(monke
     monkeypatch.setattr(update_ui.update_install, "get_package_asset",
                         lambda release, kind: ("https://example.invalid/t.deb", "t.deb"))
     monkeypatch.setattr(update_ui.update_install, "download_update",
-                        lambda *a, **k: update_install.Downloaded("/tmp/t.deb", "a" * 64))
+                        lambda *a, **k: update_install.Downloaded("/tmp/t.deb", "a" * 64, 7))
 
     def broken_install(path, kind):
         raise OSError("no space left")
