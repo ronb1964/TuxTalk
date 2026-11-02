@@ -131,3 +131,28 @@ def test_package_restart_uses_the_tuxtalk_launcher(monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", lambda args, **k: started.append(args))
     ok, _ = update_install.restart_via_launcher()
     assert ok and "/usr/bin/tuxtalk" in started[0][-1]
+
+
+def test_menu_launcher_points_at_the_installed_appimage(tmp_path, monkeypatch):
+    # First run copies the AppImage to APPIMAGE_PATH (~/AppImages/TuxTalk.AppImage);
+    # the launcher it writes must start that file, not the old TalkType name.
+    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH",
+                        str(tmp_path / "apps" / "tuxtalk.desktop"))
+    monkeypatch.setattr(installation, "APPIMAGE_PATH",
+                        str(tmp_path / "AppImages" / "TuxTalk.AppImage"))
+    monkeypatch.setattr(desktop_launcher, "install_app_icon", lambda: "tuxtalk")
+    monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", lambda: None)
+    ok, _ = desktop_launcher.create_desktop_launcher()
+    assert ok
+    text = (tmp_path / "apps" / "tuxtalk.desktop").read_text()
+    assert f"Exec={tmp_path}/AppImages/TuxTalk.AppImage\n" in text
+
+
+def test_a_talktype_service_left_running_by_the_update_is_recognised():
+    # 0.14.x's in-app update execs the new tray without stopping the service,
+    # which keeps running as "python3 -m talktype.app" and holds the lock.
+    from tuxtalk.service_launcher import is_service_argv, is_pre_rename_service_argv
+    assert is_service_argv(["/tmp/.mount_x/usr/bin/python3", "-m", "talktype.app"])
+    assert is_pre_rename_service_argv(["python3", "-m", "talktype.app"])
+    assert not is_pre_rename_service_argv(["python3", "-m", "tuxtalk.app"])
+    assert not is_service_argv(["python3", "-m", "talktype.tray"])
