@@ -1069,6 +1069,9 @@ def test_describe_says_how_close_a_pause_came():
     # voice, and the noise moves that by a frame (0.38 to 0.42 s over 30 seeds).
     assert 0.3 < det.longest_quiet < 0.5
     assert f"longest quiet {det.longest_quiet:.2f}s of the 0.80s" in det.describe()
+    # The voice detector decides a pause, so the log says what it heard first.
+    assert det.describe().startswith(f"speech {det.speech_time:.1f}s, ")
+    assert det.speech_time > 1.5
 
 
 # --- one recording, one Recent Dictations entry -------------------------------

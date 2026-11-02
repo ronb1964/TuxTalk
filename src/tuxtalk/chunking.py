@@ -100,12 +100,15 @@ class PauseDetector:
         self.longest_quiet = 0.0
 
     def describe(self) -> str:
-        """The levels it is working with, for the log."""
+        """What it heard, for the log: the voice detector's speech and longest
+        quiet, which decide a pause, and the loudness that only keeps a trim
+        out of a soft word ending."""
         loudness = self._loudness
-        return (f"room {loudness.room:.0f}, a sound from {loudness.threshold():.0f}, "
-                f"loudest {loudness.loudest:.0f} (int16 RMS after the high-pass), "
-                f"{self.blocks} blocks at {self.sample_rate} Hz, longest quiet "
-                f"{self.longest_quiet:.2f}s of the {self.pause_seconds:.2f}s a pause needs")
+        return (f"speech {self.speech_time:.1f}s, longest quiet {self.longest_quiet:.2f}s of "
+                f"the {self.pause_seconds:.2f}s a pause needs, {self.blocks} blocks at "
+                f"{self.sample_rate} Hz; loudness for the trim: room {loudness.room:.0f}, "
+                f"a sound from {loudness.threshold():.0f}, loudest {loudness.loudest:.0f} "
+                f"(int16 RMS after the high-pass)")
 
     def snapshot(self) -> PauseSnapshot:
         """What it hears now, for the live test in Preferences."""
