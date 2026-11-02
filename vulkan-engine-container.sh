@@ -34,9 +34,9 @@ if [ "$(git rev-parse HEAD)" != "$WHISPER_CPP_COMMIT" ]; then
     exit 1
 fi
 # TuxTalk's own changes (vulkan-engine-patches/): Your Words for Parakeet's
-# greedy decoder (parakeet_set_word_boost), and whisper-server without the
-# /load route any local program could load a model file through. A patch
-# that doesn't apply
+# greedy decoder (parakeet_set_word_boost); whisper-server answering only
+# requests with the key in WHISPER_API_KEY, and without the /load route any
+# local program could load a model file through. A patch that doesn't apply
 # stops the build rather than ship an engine without it.
 for patch in /build/vulkan-engine-patches/*.patch; do
     [ -e "$patch" ] || continue
@@ -64,6 +64,7 @@ cp samples/jfk.wav "$OUT/speed-check.wav"
 test -f "$OUT/libggml-vulkan.so" || { echo "❌ no Vulkan backend in the build"; exit 1; }
 test -f "$OUT/libparakeet.so" || { echo "❌ no Parakeet library in the build"; exit 1; }
 nm -D "$OUT/libparakeet.so" | grep -q parakeet_set_word_boost || { echo "❌ the Parakeet library has no word boost"; exit 1; }
+grep -qa WHISPER_API_KEY "$OUT/whisper-server" || { echo "❌ whisper-server takes no key"; exit 1; }
 MAXGLIBC=$(objdump -T "$OUT"/whisper-server "$OUT"/*.so* 2>/dev/null | grep -oE "GLIBC_[0-9.]+" | sort -Vu | tail -1)
 echo "Newest glibc needed: $MAXGLIBC"
 

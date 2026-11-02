@@ -1,0 +1,49 @@
+diff --git a/examples/server/server.cpp b/examples/server/server.cpp
+index b745f4d..c63d0ba 100644
+--- a/examples/server/server.cpp
++++ b/examples/server/server.cpp
+@@ -739,6 +739,35 @@ int main(int argc, char ** argv) {
+                              {"Access-Control-Allow-Origin", "*"},
+                              {"Access-Control-Allow-Headers", "content-type, authorization"}});
+ 
++    // TuxTalk: with WHISPER_API_KEY set, every request but the health check
++    // needs "Authorization: Bearer <key>", static files included. Without
++    // it, any program on this computer, another user's too, could send audio
++    // or reach the other routes. The key comes from the environment, which
++    // only this user can read, not the command line, which every user can.
++    const char * api_key_env = std::getenv("WHISPER_API_KEY");
++    const std::string api_key = api_key_env ? api_key_env : "";
++    if (!api_key.empty()) {
++        const std::string health_path = sparams.request_path + "/health";
++        svr->set_pre_routing_handler([api_key, health_path](const Request & req, Response & res) {
++            if (req.path == health_path) {
++                return Server::HandlerResponse::Unhandled;
++            }
++            const std::string expected = "Bearer " + api_key;
++            const std::string given = req.get_header_value("Authorization");
++            // Every byte compared, so the time taken doesn't tell how much matched.
++            unsigned char differs = given.size() != expected.size();
++            for (size_t i = 0; i < given.size() && i < expected.size(); i++) {
++                differs |= given[i] ^ expected[i];
++            }
++            if (differs == 0) {
++                return Server::HandlerResponse::Unhandled;
++            }
++            res.status = 401;
++            res.set_content("{\"error\":\"invalid API key\"}", "application/json");
++            return Server::HandlerResponse::Handled;
++        });
++    }
++
+     std::string const default_content = R"(
+     <html>
+     <head>
+@@ -1243,7 +1272,7 @@ int main(int argc, char ** argv) {
+     svr->set_error_handler([](const Request &req, Response &res) {
+         if (res.status == 400) {
+             res.set_content("Invalid request", "text/plain");
+-        } else if (res.status != 500) {
++        } else if (res.status != 500 && res.status != 401) {
+             res.set_content("File Not Found (" + req.path + ")", "text/plain");
+             res.status = 404;
+         }
