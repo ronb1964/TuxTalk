@@ -27,7 +27,7 @@ from . import (
 from . import live_settings as live
 from . import recording_state as rs
 from .beeps import READY_BEEP
-from .logger import setup_logger
+from .logger import error_without_words, setup_logger
 from .normalize import PLAIN_LOOKALIKES, swiss_spelling
 from .window_classes import is_terminal_class, is_word_processor
 
@@ -305,7 +305,8 @@ def _type_rewrite(result, injection_mode, message, beeps_on, into):
         outcome = delivery.inject_text(result, injection_mode, one_block=True, into=into,
                                        message=message)
     except Exception as e:
-        logger.error(f"Voice edit: typing the rewrite failed: {e}", exc_info=True)
+        # The error's text can quote the rewrite, the user's own words.
+        logger.error(f"Voice edit: typing the rewrite failed: {error_without_words(e)}")
         outcome = "failed"
         message.add(outcome, None)      # what's in the box isn't known now
     if outcome == "password_field":

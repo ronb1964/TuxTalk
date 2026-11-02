@@ -455,6 +455,44 @@ def test_a_typing_error_never_writes_the_words(monkeypatch, caplog, capsys):
     assert _leaks(caplog, capsys) == []
 
 
+def test_a_voice_edit_typing_error_never_writes_the_words(monkeypatch, caplog, capsys):
+    """The rewrite typed over the selection is the user's own text, reworded."""
+    import numpy as np
+    from tuxtalk import clipboard as cb
+    engine = type("Engine", (), {"is_ready": lambda self: True,
+                                 "edit": lambda self, text, instruction: "Quokka, formally."})()
+    monkeypatch.setattr(live, "log_transcripts", False)
+    monkeypatch.setattr(live, "ai_engine", engine)
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "make this formal")
+    monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda a, sr: False)
+    monkeypatch.setattr(cb, "copy_selection", lambda send_copy: ("quokka", lambda also=(): None))
+    monkeypatch.setattr(delivery, "inject_text", _words_in_an_error)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
+    monkeypatch.setattr(voice_edit, "EDIT_RESTORE_DELAY_S", 0)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
+    frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
+    _hear_every_level(caplog)
+    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.current.message, None)
+    assert "typing the rewrite failed: ValueError" in caplog.text
+    assert _leaks(caplog, capsys) == []
+
+
+def test_an_error_s_cause_is_named_without_its_words():
+    """A "raise ... from" names what went wrong first, its type only."""
+    from tuxtalk.logger import error_without_words
+    try:
+        try:
+            {}[SECRET[0]]
+        except KeyError as e:
+            raise ValueError(SECRET[1]) from e
+    except ValueError as e:
+        logged = error_without_words(e)
+    assert logged.startswith("ValueError (from KeyError), raised at:")
+    assert "zanzibar" not in logged and "quokka" not in logged
+
+
 def test_a_failed_pass_over_a_pause_never_writes_the_words(monkeypatch, caplog, capsys):
     """Type at pause hears the phrase before a pause with the next one."""
     import numpy as np

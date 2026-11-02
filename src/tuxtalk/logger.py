@@ -91,12 +91,20 @@ def redact_text(text, reveal: bool = False) -> str:
         return f"[hidden, {len(text)} chars]"
     return "[hidden]"
 
+
 def error_without_words(error: BaseException) -> str:
-    """*error* for a log line on the dictation path: its type and the lines
-    it was raised through, without its message, which can quote what was
-    said (a KeyError naming a word, an engine's own error text)."""
+    """*error* for a log line on the dictation path: its type, the types of
+    the errors it came from ("ValueError (from KeyError)") and the lines it
+    was raised through, without any message, which can quote what was said
+    (a KeyError naming a word, an engine's own error text)."""
+    name, seen = type(error).__name__, {id(error)}
+    cause = error.__cause__ or (None if error.__suppress_context__ else error.__context__)
+    while cause is not None and id(cause) not in seen:
+        seen.add(id(cause))
+        name += f" (from {type(cause).__name__})"
+        cause = cause.__cause__ or (None if cause.__suppress_context__ else cause.__context__)
     where = "".join(traceback.format_tb(error.__traceback__)).rstrip()
-    return f"{type(error).__name__}, raised at:\n{where}" if where else type(error).__name__
+    return f"{name}, raised at:\n{where}" if where else name
 
 
 class FailureNotes:
