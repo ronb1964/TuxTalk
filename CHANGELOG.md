@@ -40,6 +40,13 @@ before 0.15.0, so older entries use that name.
   close a quotation with "unquote" or "end quote", and "quote unquote"
   puts the next word in quotes. Two "quote"s meant as words with nothing
   around them to tell, like "quote and quote again", still pair up.
+- On a desktop where Right Ctrl (or Right Alt) is also your Compose key,
+  like Pop!_OS out of the box, and you dictate with that key, a few more
+  cases no longer eat the first letters typed after it. Holding the key in
+  one window and letting go in another, a late answer from the hotkey
+  helper, and Shift+Right Alt as Compose are all handled now. And if you
+  change the Compose key in your keyboard settings while TuxTalk runs,
+  that counts from your next dictation instead of the next restart.
 - Help and About opened another window every time you clicked them, and
   About asked GitHub for its notes again each time. The open one comes to
   the front now.
