@@ -47,6 +47,18 @@ def helper_sees_no_keyboard():
             and secure_input.keyboards_watched() == 0)
 
 
+def outdated_helper():
+    """The running hotkey helper's version when this TuxTalk needs a newer
+    one (secure_input.needs_update), else None. Fix Typing installs the
+    new one, so first run offers it there rather than leave it to the
+    question at the next start."""
+    from . import secure_input
+    if os.environ.get("FLATPAK_ID") or not secure_input.is_installed():
+        return None
+    running = secure_input.running_version()
+    return running if secure_input.needs_update(running) else None
+
+
 def _no_keyboard_label():
     """The welcome screen's line for a hotkey helper that reads no keyboard."""
     from .uinput_helper import HELPER_SEES_NO_KEYBOARD
@@ -344,7 +356,10 @@ class WelcomeDialog:
         if self.sees_no_keyboard:
             from .uinput_helper import check_uinput_permission
             has_uinput = check_uinput_permission()[0]
-        self.needs_uinput_fix = not has_uinput
+        self.outdated_helper = None if self.sees_no_keyboard else outdated_helper()
+        self.needs_uinput_fix = not has_uinput or self.outdated_helper is not None
+        self._fix_label = ("🔧 Update Helper" if self.outdated_helper is not None
+                           else "🔧 Fix Typing (Recommended)")
 
         # PortAudio records the audio.
         self.needs_portaudio_install = not portaudio_installed()
@@ -738,16 +753,26 @@ class WelcomeDialog:
         details = [f"🔧 {GLib.markup_escape_text(line)}" for line in lines]
         details.append("🔄 Restart your computer to apply (logging out is often not enough)"
                        if needs_restart else "✓ No restart needed")
+        if self.outdated_helper is not None:
+            from tuxtalk.secure_input import outdated_reason
+            reason = GLib.markup_escape_text(outdated_reason(self.outdated_helper))
+            title = '🔴 Hotkey Helper Update Required'
+            status = "❌ The hotkey helper needs an update"
+            action = "Update Helper"
+            explain = ('<span><b>This step is required for your dictation keys to work.</b>\n'
+                       f'{reason}.\nClick "Update Helper" below.</span>')
+        else:
+            title, status = '🔴 Typing Setup Required', "❌ Input device permissions needed"
+            action = "Fix Typing"
+            explain = ('<span><b>This step is required for TuxTalk to work.</b>\n'
+                       'Without this setup, dictated text cannot be typed into your '
+                       'applications.\n'
+                       + ('Click "Fix Typing" below, then restart your computer.'
+                          if needs_restart else 'Click "Fix Typing" below.')
+                       + '</span>')
         step = _required_step(
-            '🔴 Typing Setup Required',
-            '<span><b>This step is required for TuxTalk to work.</b>\n'
-            'Without this setup, dictated text cannot be typed into your applications.\n'
-            + ('Click "Fix Typing" below, then restart your computer.' if needs_restart
-               else 'Click "Fix Typing" below.')
-            + '</span>',
-            "❌ Input device permissions needed",   # Fix Typing updates it
-            'Fix Typing', details,
-            "🔧 Fix Typing (Recommended)",
+            title, explain, status,                 # Fix Typing updates the status
+            action, details, self._fix_label,
             "Lets TuxTalk type into your apps and hear its hotkeys.\n"
             "This will prompt for your admin password.",
             self._on_fix_typing_clicked)
@@ -849,7 +874,7 @@ class WelcomeDialog:
         if isinstance(outcome, Exception):
             logger.error(f"Error fixing typing setup: {outcome}")
             button.set_sensitive(True)
-            button.set_label("🔧 Fix Typing (Recommended)")
+            button.set_label(self._fix_label)
             self.typing_status_label.set_markup(
                 _status_markup(f"Error: {outcome}", "#f44336"))
             return
@@ -883,7 +908,7 @@ class WelcomeDialog:
         else:
             # Failed or cancelled: show what went wrong and let the user try again.
             button.set_sensitive(True)
-            button.set_label("🔧 Fix Typing (Recommended)")
+            button.set_label(self._fix_label)
             result_text = "\n".join(outcome["results"]) or "Setup was cancelled"
             self.typing_status_label.set_markup(_status_markup(result_text, "#FF9800"))
 
@@ -898,6 +923,9 @@ class WelcomeDialog:
             self._uinput_status_label.set_markup("✅ Typing permissions OK")
         self.typing_status_label.set_markup(
             _status_markup(f"{HELPER_SEES_NO_KEYBOARD}.", WARNING_AMBER))
+        # In a box: "Set it up" goes straight on afterwards, past the line.
+        show_message(self.dialog, Gtk.MessageType.WARNING, "The dictation keys can't work yet",
+                     f"{HELPER_SEES_NO_KEYBOARD}.")
 
     def _build_gnome_extension_option(self, vbox):
         """Build GNOME extension checkbox and details."""

@@ -340,6 +340,16 @@ def misses_read_only_keyboard(running):
             and bool(read_only_keyboards()))
 
 
+def outdated_reason(running):
+    """Why the running helper (version *running*) needs updating, in one
+    sentence without a full stop, for the screens that offer it besides
+    the question at start."""
+    if misses_read_only_keyboard(running):
+        return ("Your keyboard can only be read, and the hotkey helper on this computer "
+                "can't use such a keyboard")
+    return "The hotkey helper on this computer is too old for this TuxTalk"
+
+
 def needs_update(running):
     """Whether this TuxTalk asks at start to update the running helper
     (version *running*): it's older than NEEDED_HELPER_VERSION, or too old

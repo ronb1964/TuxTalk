@@ -96,13 +96,21 @@ def _hotkey_test_notice(service_can_read):
 
 def _reading_notice(keyboards):
     """The notice for what the test reads, *keyboards*, or None when it
-    needs none: nothing to read, or only a hotkey helper that says it reads
-    no keyboard (one before 1.12 doesn't say)."""
+    needs none: nothing to read, only a hotkey helper that says it reads
+    no keyboard (one before 1.12 doesn't say), or one too old for this
+    TuxTalk (secure_input.needs_update): why its keys show as seen, not
+    active."""
     if not keyboards:
         return _hotkey_test_notice(False)
     if all(getattr(k, "helper_keyboards", None) == 0 for k in keyboards):
         from tuxtalk.uinput_helper import HELPER_SEES_NO_KEYBOARD
         return f"{HELPER_SEES_NO_KEYBOARD}."
+    from tuxtalk import secure_input
+    version = next((k.helper_version for k in keyboards if hasattr(k, "helper_version")), None)
+    if secure_input.needs_update(version):
+        return (f"{secure_input.outdated_reason(version)}, so these keys don't reach TuxTalk "
+                "yet. Preferences, Advanced, Show system check, Update Hotkey Helper "
+                "updates it.")
     return None
 
 

@@ -310,4 +310,27 @@ def test_fix_typing_that_leaves_the_helper_reading_no_keyboard_isnt_called_ready
     dialog._finish_fix_typing(dialog.fix_typing_button, outcome)
     status = dialog.typing_status_label.get_text()
     assert "can't see your keyboard" in status and "Ready" not in status
-    assert message_boxes.shown == []
+    # In a box too: "Set it up" goes straight on past the line.
+    [box] = message_boxes.shown
+    assert "can't see your keyboard" in box.text and "Complete" not in box.title
+
+
+@pytest.mark.parametrize("read_only, offered", [(["/dev/input/event3"], True), ([], False)])
+def test_first_run_offers_an_update_for_a_helper_too_old_for_the_keyboard(
+        welcome_screen, monkeypatch, read_only, offered):
+    """A 1.11 helper answers, so typing counted as set up, and the update
+    it needs waited for the question at the next start, while the hotkey
+    test said only "Seen, not active yet". Where a keyboard here may only
+    be read, first run offers the update; elsewhere 1.11 stays quiet."""
+    from gtk_text import tree_text
+    monkeypatch.setattr(secure_input, "is_installed", lambda: True)
+    monkeypatch.setattr(secure_input, "running_version", lambda: "1.11")
+    monkeypatch.setattr(secure_input, "keyboards_watched", lambda: None)
+    monkeypatch.setattr("tuxtalk.helper_keyboard_access.read_only_keyboards",
+                        lambda: read_only)
+    d = welcome_screen(typing_ok=True)
+    assert d.needs_uinput_fix is offered
+    if offered:
+        shown = " ".join(tree_text(d.dialog))
+        assert "Hotkey Helper Update Required" in shown and "can only be read" in shown
+        assert d.fix_typing_button.get_label() == "🔧 Update Helper"

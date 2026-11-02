@@ -179,6 +179,24 @@ def test_a_helper_that_sees_no_keyboard_gets_the_notice_not_silence(monkeypatch,
         assert says in dialog.keyboard_notice.markup
 
 
+@pytest.mark.parametrize("read_only, says", [(["/dev/input/event3"], "can only be read"),
+                                             ([], None)])
+def test_a_helper_too_old_for_the_keyboard_says_why_keys_arent_active(monkeypatch,
+                                                                       read_only, says):
+    """A 1.11 helper skips a keyboard that may only be read: its keys
+    showed "Seen, not active yet" with nothing saying why."""
+    import threading
+    monkeypatch.setattr("tuxtalk.helper_keyboard_access.read_only_keyboards",
+                        lambda: read_only)
+    helper = SimpleNamespace(helper_keyboards=None, helper_version="1.11")
+    dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice())
+    hkd.HotkeyTestDialog._show_reading(dialog, [helper])
+    assert dialog.keyboard_notice.shown is bool(says)
+    if says:
+        assert says in dialog.keyboard_notice.markup and "Update Hotkey Helper" in \
+            dialog.keyboard_notice.markup
+
+
 def test_the_helpers_count_is_asked_again_while_the_test_is_open(monkeypatch):
     """Its hello said it once: a keyboard plugged in mid-test turned
     Working beside "can't see your keyboard", and the last one unplugged
