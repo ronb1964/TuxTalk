@@ -3,6 +3,49 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [0.20.0] - not released yet
+
+- TuxTalk now has a voice detector (Silero VAD, 1.3 MB, built in, nothing
+  to download). Before, it went by loudness, so a dryer's thump, a fan
+  gust or dishes in the kitchen counted as you talking. Hands-free and
+  Type at pause both ask the detector now.
+- Hands-free next to a dryer or a fan often never stopped by itself,
+  since every thump started its wait over. In our tests with 125 people
+  reading in seven kinds of noise, the times it never stopped went from
+  1,195 to 353, and the ones left are all other people talking in the
+  background. Those are voices too, and no detector can tell them from
+  yours.
+- And the noise after your last word mostly stays out of what the speech
+  model hears, so it doesn't type "Yeah." or "Thank you." for a cough or a
+  clatter after you finish. Clicks, typing and claps never count as a word
+  now. A cough or a sneeze still can about half the time, since they're
+  voiced.
+- If you talk softly, hands-free could decide after 10 seconds that you'd
+  said nothing, while you were still talking. A soft voice is heard like a
+  loud one now.
+- Type at pause in a noisy room typed nothing until you let go, because
+  the noise never looked like a pause. It finds about twice as many of
+  your pauses there now (in a dryer, 458 missed of 1,008 went to 119).
+- One thing to know: with Type at pause, a very short clipped sound after
+  your last pause is left out more often than before, so room noise isn't
+  typed as a word. Real short words like "yes" and "no" were all heard in
+  our tests. If one of yours goes missing, say so on GitHub.
+- Preferences → Advanced → TuxTalk Labs no longer has the Noise filter for
+  Type at pause. It only tuned the old loudness check. Old settings and
+  backups still load.
+- Help and About opened another window every time you clicked them, and
+  About asked GitHub for its notes again each time. The open one comes to
+  the front now.
+- Escape closes Transcribe a File (it still asks first if your text isn't
+  saved) and the TuxTalk menu window, like the other windows.
+- Report a Problem took your user name out of the report but not your real
+  name, so "Ron's AirPods" stayed in it for the user ronb1964. Your real
+  name comes out too now.
+- The CUDA download got whatever NVIDIA had last put on PyPI, so a new
+  version reached you the day it came out, untried. It's pinned now to the
+  version TuxTalk has been downloading and tested with, checked by its
+  SHA256.
+
 ## [0.19.0] - 2026-10-31
 
 - On GNOME, an update to TuxTalk that came with a new extension only told
