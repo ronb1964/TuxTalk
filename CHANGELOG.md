@@ -48,6 +48,13 @@ before 0.15.0, so older entries use that name.
 - Report a Problem took your user name out of the report but not your real
   name, so "Ron's AirPods" stayed in it for the user ronb1964. Your real
   name comes out too now.
+- If you installed TuxTalk from the .deb or .rpm, an update sat in your
+  own folder for a moment before the password prompt installed it, and a
+  program already running as you could have swapped it for something else
+  in that moment. Now the update is copied somewhere only root can write
+  to and checked again there before it's installed. The password prompt
+  says it's running bash now, the same as when you set up the hotkey
+  helper.
 - The CUDA download got whatever NVIDIA had last put on PyPI, so a new
   version reached you the day it came out, untried. It's pinned now to the
   version TuxTalk has been downloading and tested with, checked by its
