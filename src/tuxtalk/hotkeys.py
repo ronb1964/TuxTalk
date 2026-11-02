@@ -21,7 +21,6 @@ from . import (
     hotkey_keys,
     keyboard_devices,
     keyboard_grab,
-    keyboard_layout,
     modifier_hotkeys,
     notices,
     pipeline,
@@ -600,9 +599,7 @@ def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys") -> None:
     _helper_watch(devices, keys.hold_key, keys.toggle_key, keys.voice_cmds_combo,
                   keys.paste_last_combo)
     modifier_hotkeys.note(devices, keys.hold_key, keys.toggle_key)
-    modifier = {keys.hold_key, keys.toggle_key} & {ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT}
-    # Only asked when it can matter: the desktop can take a moment to answer.
-    modifier_hotkeys.note_compose_keys(keyboard_layout.compose_keys() if modifier else ())
+    modifier_hotkeys.read_compose_keys()
 
 
 def _read_key_events(devices, keys: "hotkey_keys.Hotkeys", held_modifiers, cfg: Settings, svc,

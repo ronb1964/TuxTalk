@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from evdev import ecodes
 
-from . import focused_window, virtual_keyboard
+from . import focused_window, keyboard_layout, virtual_keyboard
 from .config import HOTKEY_CHOICES
 from .hotkey_keys import MODIFIER_CODES, SHIFT_CODES, keys_down
 from .keyboard_devices import is_keyboard_device
@@ -43,8 +43,8 @@ HELD_LIMIT_S = 30.0
 _stuck = set()
 # Right Ctrl or Right Alt when the keyboard options make it Compose, as
 # (code, with Shift) pairs (keyboard_layout.compose_keys), read when the
-# hotkey loop starts watching (note_compose_keys), not on each press: the
-# desktop can take a moment to answer.
+# hotkey loop starts watching and after each dictation (read_compose_keys),
+# not on each press: the desktop can take a moment to answer.
 _compose_keys = frozenset()
 # The press of a Compose dictation key that began a compose in the focused
 # app TuxTalk hasn't ended yet (note_compose_key), or None; set on the
@@ -247,6 +247,15 @@ def guard_alt_tap() -> None:
             logger.error("Couldn't press Ctrl to keep Right Alt from opening a menu")
     except virtual_keyboard.StoppedPartway:
         pass            # logged by send, which let go of the Ctrl
+
+
+def read_compose_keys() -> None:
+    """Read which keys the keyboard options make Compose, for
+    note_compose_key: when the hotkey loop starts watching, and after each
+    dictation, so options changed meanwhile count from the next press
+    rather than the next start. Only when a dictation key is Right Ctrl or
+    Right Alt: the desktop can take a moment to answer."""
+    note_compose_keys(keyboard_layout.compose_keys() if _noted[1] else ())
 
 
 def note_compose_keys(bindings) -> None:

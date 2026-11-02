@@ -354,6 +354,19 @@ def test_compose_that_didnt_go_out_is_tried_again_after_the_keys_change_to_f_key
     assert keyboard.typed_keys() == [RCTRL, ecodes.KEY_A]
 
 
+def test_keyboard_options_changed_after_start_count_from_the_next_dictation(
+        monkeypatch, right_ctrl_is_compose):
+    """Compose:rctrl switched on in the desktop's settings while TuxTalk ran:
+    every dictation lost its first keys until TuxTalk started again."""
+    monkeypatch.setattr(modifier_hotkeys, "_noted", ([], frozenset({RCTRL})))
+    monkeypatch.setattr(modifier_hotkeys, "_compose_keys", frozenset())
+    monkeypatch.setattr(keyboard_layout, "compose_keys",
+                        lambda: frozenset({(RCTRL, False), (RCTRL, True)}))
+    pipeline.transcribe_and_inject([], 16000, False, False, False, message=rs.Message())
+    modifier_hotkeys.note_compose_key(KeyEvent(RCTRL, 1), (RCTRL,))
+    assert modifier_hotkeys._compose is not None
+
+
 def test_scroll_lock_is_never_taken_for_compose():
     """A desktop holds Scroll Lock back from apps, so with compose:sclk its
     press begins no compose for TuxTalk to end."""
