@@ -249,15 +249,13 @@ def has_no_speech(audio_f32, sample_rate) -> bool:
 # eight-second take left the whole take's 90th percentile in the room. The
 # room is its median, not its quietest moments: a kitchen, a cafe or traffic
 # goes quiet now and then between its clatter, and against those moments a
-# voice stood well over a room in which hands-free never stopped by itself.
-# Measured with 125 recorded readers in six recorded rooms (DEMAND: kitchen,
-# living room, laundry, office, cafeteria, traffic) and five made ones, at
-# three voice levels. In the recorded rooms hands-free (1 to 3 s waits, 702
-# runs at each level) stops by itself in 96% with the room 30 dB under the
-# voice, 81% at 25 dB, 45% at 22 and 31% at 20; in steady noise it does stop,
-# but cuts the speaker off mid-sentence more often as it nears the voice
-# (white noise: 15% of runs at 30 dB, 27% at 25, 38% at 22, 45% at 20).
-# With a second or more of talking, of 1,800 takes in the recorded rooms at
+# voice stood well over a room that was loud next to it. The warning is about
+# how well the speech model hears the voice (a headset or the microphone
+# closer helps); hands-free no longer depends on it, as the voice detector
+# tells the voice from such a room. Measured with 125 recorded readers in six
+# recorded rooms (DEMAND: kitchen, living room, laundry, office, cafeteria,
+# traffic) and five made ones, at three voice levels: with a second or more
+# of talking, of 1,800 takes in the recorded rooms at
 # each level, it warns in 8 at 40 dB (a reader whose first second is a soft
 # start), 59 at 30, 214 at 25, 1,196 at 22 and 1,416 at 20; over the
 # quietest moments, at 16 dB, it warned in 0, 25, 47, 77 and 86.
@@ -290,9 +288,8 @@ def speech_over_room_db(audio_f32, sample_rate):
     """How much louder a recording's speech is than its room, in dB, or None
     without a second of clear talking and a second of the room around it,
     or when what is around it is louder than the pauses between the words.
-    Under NOISY_ROOM_DB the room is noisy for that voice: in recorded rooms
-    like it hands-free stops by itself about half the time or less, and in
-    steady noise it cuts the speaker off mid-sentence more often."""
+    Under NOISY_ROOM_DB the room is loud next to that voice, and a headset
+    or the microphone closer to the mouth helps the speech model hear it."""
     rms = _windows_rms(audio_f32, sample_rate)
     if len(rms) * WINDOW_S < _SHORTEST_TAKE_S:
         return None
