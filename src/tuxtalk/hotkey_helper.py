@@ -924,20 +924,37 @@ class Helper:
         if not presses:
             return "ERR the hotkey isn't held"
         mods = [c for c in codes if c in client.mods_owed and c in MODIFIERS]
+        if self.listen_only_holding(presses, mods):
+            # kanata's keyboard (issue #23), or one that may only be read:
+            # its keys reach the desktop as they are, which is how that
+            # setup works, not a fault. All or nothing: hiding the rest
+            # would be answered OK while the desktop still sees part of it.
+            return "ERR listen-only keyboard"
         held_on = self.hide_presses(presses, mods)
         if held_on is None:
             return "ERR couldn't hide the keys"
         if not held_on:
-            if all(getattr(self.keyboards.get(path), "listen_only", False)
-                   for path, _ in presses):
-                # kanata's keyboard (issue #23): its keys reach the desktop
-                # as they are, which is how that setup works, not a fault.
-                return "ERR listen-only keyboard"
             return "ERR couldn't hold the keyboard"
         client.hideable.difference_update(c for _, c in presses)
         self.hide = {"client": client, "uid": client.uid, "presses": presses,
                      "keyboards": held_on, "since": time.monotonic()}
         return "OK HIDE"
+
+    def listen_only_holding(self, presses, mods):
+        """Whether a listen-only keyboard holds part of what a HIDE asks
+        for: one of *presses*, or one of *mods* in a press's group. Such a
+        keyboard is never held nor written to, so that part can't be
+        hidden. Logged once per keyboard."""
+        origins = {path for path, _ in presses}
+        groups = {self.keyboards[path].group for path in origins}
+        for keyboard in self.keyboards.values():
+            if keyboard.listen_only and (keyboard.path in origins or (
+                    keyboard.group in groups and keyboard.down.intersection(mods))):
+                if not keyboard.said_listen_only:
+                    keyboard.said_listen_only = True
+                    log(f"not holding keyboard {keyboard.name!r}: {keyboard.listen_only}")
+                return True
+        return False
 
     def hide_presses(self, presses, mods):
         """Hide *presses* on their keyboards and *mods* on those and the other
@@ -981,10 +998,7 @@ class Helper:
         listen-only keyboard is never held or written to: its keys reach the
         desktop as they are."""
         if keyboard.listen_only:
-            if not keyboard.said_listen_only:
-                keyboard.said_listen_only = True
-                log(f"not holding keyboard {keyboard.name!r}: {keyboard.listen_only}")
-            return False
+            return False            # holds none of them (listen_only_holding)
         released = self.let_up(keyboard, codes)
         if released is None:
             return None

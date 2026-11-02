@@ -252,6 +252,33 @@ def test_a_hold_key_the_helper_couldnt_hide_still_holds_typing_up(rig, right_ctr
     assert keyboard.events == []
 
 
+def test_right_ctrl_on_a_read_only_keyboard_still_holds_typing_up(rig, right_ctrl, keyboard,
+                                                                monkeypatch):
+    """A voice edit: Right Ctrl on a keyboard the helper may only read,
+    Shift on a writable one. The helper answered OK for hiding the Shift
+    alone, typing took Right Ctrl for hidden, and a phrase typed meanwhile
+    went in as Ctrl shortcuts. Now the hide is refused and typing waits."""
+    helper, kb, client, loop, calls = rig
+    monkeypatch.setattr(live, "voice_editing", True)
+    read_only = FakeKeyboard("/dev/input/event-read-only")
+    read_only.listen_only = "it may only be read here"
+    kb.group = read_only.group = "real"
+    helper.keyboards[read_only.path] = read_only
+    try:
+        kb.press(LSHIFT)
+        loop(hold=RCTRL)
+        read_only.press(RCTRL)
+        loop(hold=RCTRL)
+        assert calls == [("start", True)] and helper.hide is None
+        assert not client.hidden and kb.calls == read_only.calls == []
+        assert right_ctrl() is False
+        assert keyboard.events == []
+    finally:
+        read_only.close()
+        os.close(read_only.w)
+        FakeKeyboard.made.remove(read_only)
+
+
 def test_typing_waits_for_the_helper_to_say_the_hold_key_is_hidden(rig, right_ctrl, keyboard,
                                                                    monkeypatch):
     """HIDE is answered after a round trip through the helper: until then

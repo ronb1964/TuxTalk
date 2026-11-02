@@ -1,8 +1,12 @@
-"""A keyboard for the hotkey helper's tests (test_hotkey_helper.py and
-test_hotkey_helper_client.py): a pipe its events are written into, so no real
-device or privilege is needed."""
+"""What the hotkey helper's tests share (test_hotkey_helper.py,
+test_hotkey_helper_devices.py and test_hotkey_helper_client.py): a keyboard
+that is a pipe its events are written into, so no real device or privilege
+is needed, and a helper to connect to."""
 import os
+import socket
 import time
+
+import pytest
 
 from tuxtalk import hotkey_helper as hh
 
@@ -63,3 +67,67 @@ class FakeKeyboard(hh.Keyboard):
             (self.kernel.add if value == 1 else self.kernel.discard)(code)
             self._event(code, value)
         return True
+
+
+@pytest.fixture
+def setup(tmp_path, monkeypatch):
+    """A helper listening in *tmp_path* with one FakeKeyboard, the user at
+    the screen being this one: (helper, keyboard, connect, say, heard, the
+    seat file)."""
+    seat = tmp_path / "seat0"
+    seat.write_text(f"ACTIVE=c1\nACTIVE_UID={os.getuid()}\n")
+    (tmp_path / "input").mkdir()
+    helper = hh.Helper(socket_dir=str(tmp_path), seat_file=str(seat),
+                       input_dir=str(tmp_path / "input"))
+    helper.listen()
+    keyboard = FakeKeyboard()
+    helper.keyboards[keyboard.path] = keyboard
+    clients = []
+
+    def connect():
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(helper.socket_path)
+        sock.settimeout(0)          # the helper answers before recv: no wait
+        clients.append(sock)
+        spin()
+        return sock
+
+    def spin(times=4):
+        for _ in range(times):
+            helper.run_once(timeout=0)
+
+    def say(sock, line):
+        sock.sendall(line.encode() + b"\n")
+        spin()
+
+    def heard(sock):
+        spin()
+        data = b""
+        while True:
+            try:
+                chunk = sock.recv(4096)
+            except (socket.timeout, BlockingIOError):
+                break
+            if not chunk:
+                break
+            data += chunk
+        return data.decode().splitlines()
+
+    yield helper, keyboard, connect, say, heard, seat
+    for sock in clients:
+        sock.close()
+    helper.listener.close()
+    for kb in FakeKeyboard.made:
+        kb.close()
+        os.close(kb.w)
+    FakeKeyboard.made.clear()
+
+
+def ready_client(connect, say, heard, specs="66 67 1 CA:25"):
+    """A client of the setup's helper that said hello and watches *specs*."""
+    sock = connect()
+    say(sock, "HELLO 1")
+    say(sock, f"WATCH {specs}")
+    hello, *rest = heard(sock)
+    assert hello.startswith(f"HELLO 1 {hh.VERSION} keyboards=") and rest == ["OK WATCH"]
+    return sock
