@@ -75,6 +75,11 @@ before 0.15.0, so older entries use that name.
   the front now.
 - Escape closes Transcribe a File (it still asks first if your text isn't
   saved) and the TuxTalk menu window, like the other windows.
+- The hotkey test could say F8 and F9 were "Working" when only the test
+  window itself saw them, while the hotkey helper that dictation listens
+  to never did, and then F8 did nothing. A key now counts as working only
+  once the helper (or TuxTalk's own reader) has heard it; otherwise it says
+  "Seen, not active yet".
 - Report a Problem now includes the hotkey helper's own log. When F8 does
   nothing, the reason is written there, not in TuxTalk's log, and the
   report left it out. It's the last 40 lines since the computer started,

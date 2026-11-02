@@ -151,6 +151,10 @@ class HotkeyTestDialog:
         # Hardware key codes held down, to ignore GTK's auto-repeat: it sends
         # repeated presses while a key is held, with no "is_repeat" flag.
         self._held_keycodes = set()
+        # Keys the reader heard: only these show as working. A key only this
+        # window saw doesn't reach the dictation service, whatever reads the
+        # keyboards for it (a hotkey helper that can't see the keyboard).
+        self._heard_by_reader = set()
         self.rows = {}              # "hold"/"toggle": (label, Change Key button, status)
         self.status_words = {"hold": "Not tested", "toggle": "Not tested"}
         self.dialog = self._build()
@@ -258,25 +262,32 @@ class HotkeyTestDialog:
         self.rows[which][1].get_accessible().set_description(words)
 
     def _show_status(self, which, keyname):
-        """Show how *keyname*, *which*'s key, tested."""
-        markup, words = _key_seen(service_hears(self._reading_now, keyname))
+        """Show how *keyname*, *which*'s key, tested: working only once the
+        reader heard it, as the dictation service would."""
+        heard = keyname in self._heard_by_reader and service_hears(self._reading_now, keyname)
+        markup, words = _key_seen(heard)
         self.rows[which][2].set_markup(markup)
         self.status_words[which] = words
         self._announce(which, words)
 
-    def _on_key(self, keyname, action="press"):
+    def _on_key(self, keyname, action="press", from_reader=False):
         """A key pressed or released, on GTK's thread, where Change Key's
-        state is kept too. While Change Key waits, a press picks the key;
-        otherwise a release marks it as working, since phantom events from a
+        state is kept too; *from_reader* when the reader heard it, not only
+        this window. While Change Key waits, a press picks the key;
+        otherwise a release marks it as tested, since phantom events from a
         released keyboard grab are presses only."""
         if not self.ready:
             return False
         is_capture = self.capturing is not None
+        if from_reader:
+            self._heard_by_reader.add(keyname)
         if loggable_key(keyname) == keyname:
             # Only test keys: without the hotkey helper this hears keys
             # typed in any window, and a line per letter would give away a
             # password's length and timing to the log.
-            logger.info(f"Hotkey test: {action} {keyname}, capture={is_capture}")
+            source = "reader" if from_reader else "window"
+            logger.info(f"Hotkey test: {action} {keyname}, capture={is_capture}, "
+                        f"heard by the {source}")
         if is_capture:
             if action == "press":
                 self._capture(keyname)
@@ -429,7 +440,7 @@ class HotkeyTestDialog:
                                              modifier_codes, evdev_key_name)
                     if found:
                         keyname, action = found
-                        GLib.idle_add(self._on_key, keyname, action)
+                        GLib.idle_add(self._on_key, keyname, action, True)
             except Exception as e:
                 # Logged once: the loop tries again every 0.1 s.
                 if not self._stop.is_set() and str(e) != last_error:

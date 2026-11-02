@@ -242,28 +242,67 @@ def test_dialog_with_only_a_game_controller_says_seen_not_working(monkeypatch):
     assert "✓ Working!" not in texts
 
 
+def _until(condition, seconds=5):
+    """Run GTK's loop until *condition*() holds (the reader's keys arrive
+    through it), at most *seconds*."""
+    from gi.repository import Gtk
+    deadline = time.monotonic() + seconds
+    while not condition() and time.monotonic() < deadline:
+        Gtk.main_iteration_do(False)
+
+
+F8_PRESS_AND_RELEASE = [SimpleNamespace(type=EV_KEY, code=66, value=value) for value in (1, 0)]
+
+
+def _run_dialog_with_f8_from_the_reader(monkeypatch, during):
+    """The real dialog, with a keyboard the reader opens once it runs whose
+    F8 it hears (a keyboard's keys from before the test are flushed)."""
+    monkeypatch.setattr(hkd, "RESCAN_SECONDS", 0)
+    paths = ["/dev/input/event3"]
+
+    def plug_in_then(dialog):
+        paths.append("/dev/input/event5")
+        during(dialog)
+    _run_dialog(monkeypatch, paths, plug_in_then,
+                queued={"/dev/input/event5": F8_PRESS_AND_RELEASE})
+
+
 def test_a_screen_reader_is_told_how_a_key_tested(monkeypatch):
     """The status beside each key is a plain label, which a screen reader
     isn't told about when it changes: the row's Change Key button says it."""
-    from gi.repository import Gdk, Gtk
+    from gi.repository import Gtk
     seen = {}
 
     def during(dialog):
         buttons = [w for w in widgets(dialog)
                    if isinstance(w, Gtk.Button) and w.get_label() == "Change Key"]
-        _key(dialog, Gdk.KEY_F8, "key-release-event")
+        _until(lambda: buttons[0].get_accessible().get_description() == "Working")
         seen["after F8"] = buttons[0].get_accessible().get_description()
         buttons[1].clicked()
         seen["changing"] = buttons[1].get_accessible().get_description()
-    _run_dialog(monkeypatch, ["/dev/input/event3"], during)
+    _run_dialog_with_f8_from_the_reader(monkeypatch, during)
     assert seen["after F8"] == "Working"
     assert "Esc to cancel" in seen["changing"]
 
 
 def test_dialog_with_keyboard_access_still_says_working(monkeypatch):
+    seen = {}
+
+    def during(dialog):
+        _until(lambda: "✓ Working!" in _visible_texts(dialog))
+        seen["texts"] = _visible_texts(dialog)
+    _run_dialog_with_f8_from_the_reader(monkeypatch, during)
+    assert "✓ Working!" in seen["texts"]
+    assert not any("can't read the keyboard" in t for t in seen["texts"])
+
+
+def test_a_key_only_this_window_saw_isnt_working_though_a_keyboard_is_open(monkeypatch):
+    """Issue #26: the hotkey helper couldn't see the user's keyboard, and the
+    test said "Working" for F8 and F9 because the focused test window got
+    them; the dictation service never did."""
     texts = _run_dialog_with_f8_release(monkeypatch, ["/dev/input/event3"])
-    assert "✓ Working!" in texts
-    assert not any("can't read the keyboard" in t for t in texts)
+    assert "✓ Seen, not active yet" in texts
+    assert "✓ Working!" not in texts
 
 
 def test_a_keyboard_plugged_in_during_the_test_is_heard(monkeypatch):
