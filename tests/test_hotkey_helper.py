@@ -17,6 +17,7 @@ from tuxtalk import hotkey_helper as hh
 
 F8, F9, ESC, P, A = 66, 67, 1, 25, 30
 LCTRL, LALT, LSHIFT = 29, 56, 42
+HELLO = f"HELLO 1 {hh.VERSION} keyboards=1"      # the setup's one keyboard
 
 
 @pytest.fixture
@@ -74,7 +75,8 @@ def _ready(connect, say, heard, specs="66 67 1 CA:25"):
     sock = connect()
     say(sock, "HELLO 1")
     say(sock, f"WATCH {specs}")
-    assert heard(sock) == [f"HELLO 1 {hh.VERSION}", "OK WATCH"]
+    hello, *rest = heard(sock)
+    assert hello.startswith(f"HELLO 1 {hh.VERSION} keyboards=") and rest == ["OK WATCH"]
     return sock
 
 
@@ -120,7 +122,7 @@ def test_say_hello_first_and_refusals_are_named(setup):
     say(sock, "HELLO 1")
     say(sock, "WATCH 66 30")
     assert heard(sock) == ["ERR say HELLO first", "ERR this helper speaks protocol 1",
-                           f"HELLO 1 {hh.VERSION}",
+                           HELLO,
                            "ERR key 30 is only reported with two of Ctrl, Alt and Super"]
 
 
@@ -511,7 +513,7 @@ def test_a_full_house_makes_room_for_the_user_at_the_screen(setup, monkeypatch):
     next(c for c in helper.clients.values() if c.sock.fileno() >= 0).uid = os.getuid() + 1
     third = connect()
     say(third, "HELLO 1")
-    assert heard(third) == [f"HELLO 1 {hh.VERSION}"]
+    assert heard(third) == [HELLO]
     assert sorted(c.uid for c in helper.clients.values()) == [os.getuid()] * 2
 
 
@@ -612,7 +614,7 @@ def test_a_program_holding_every_place_cant_keep_tuxtalk_out(setup):
         _ready(connect, say, heard)             # all of them said hello
     tuxtalk = connect()
     say(tuxtalk, "HELLO 1")
-    assert heard(tuxtalk) == [f"HELLO 1 {hh.VERSION}"]
+    assert heard(tuxtalk) == [HELLO]
     assert len(helper.clients) == hh.MAX_CLIENTS
 
 
@@ -804,7 +806,7 @@ def test_a_client_gets_four_shortcuts_at_most(setup):
     sock = connect()
     say(sock, "HELLO 1")
     say(sock, "WATCH 66 CA:25 CA:30 CA:31 CA:32 CA:33")
-    assert heard(sock) == [f"HELLO 1 {hh.VERSION}", "ERR no more than 4 shortcuts"]
+    assert heard(sock) == [HELLO, "ERR no more than 4 shortcuts"]
     say(sock, "WATCH 66 67 1 CA:25 CA:30 CA:31 CA:32")
     assert heard(sock) == ["OK WATCH"]
 
@@ -978,7 +980,7 @@ def test_a_program_making_devices_over_and_over_doesnt_grow_the_helper(
 
     def fake_open(path):
         if path.endswith("mouse"):
-            return None                 # not a keyboard
+            raise hh.Skipped("looks like a mouse")
         keyboard = FakeKeyboard(path)
         keyboard.virtual = True
         return keyboard
@@ -1193,6 +1195,14 @@ def _failing_keyboard_at(node, helper, kb, monkeypatch):
     _fail_reads_of(kb, monkeypatch)
 
 
+def _no_keyboard_noting(opened):
+    """A Keyboard.open that notes each path asked and finds no keyboard there."""
+    def open_nothing(cls, path):
+        opened.append(path)
+        raise hh.Skipped()
+    return classmethod(open_nothing)
+
+
 def _replug(node):
     """A new node at *node*'s path. Made before the old one goes, so the
     file system can't hand the new one the old inode number."""
@@ -1228,7 +1238,7 @@ def test_a_keyboard_plugged_in_while_the_old_one_failed_isnt_skipped(setup, monk
     node = tmp_path / "input" / "event5"
     _failing_keyboard_at(node, helper, kb, monkeypatch)
     opened = []
-    monkeypatch.setattr(hh.Keyboard, "open", classmethod(lambda cls, path: opened.append(path)))
+    monkeypatch.setattr(hh.Keyboard, "open", _no_keyboard_noting(opened))
     _replug(node)
     helper.read_keyboard(kb)
     helper.scan()
@@ -1242,7 +1252,7 @@ def test_a_keyboard_that_failed_to_read_is_tried_again_after_a_while(setup, monk
     node = tmp_path / "input" / "event5"
     _failing_keyboard_at(node, helper, kb, monkeypatch)
     opened = []
-    monkeypatch.setattr(hh.Keyboard, "open", classmethod(lambda cls, path: opened.append(path)))
+    monkeypatch.setattr(hh.Keyboard, "open", _no_keyboard_noting(opened))
     helper.read_keyboard(kb)
     helper.scan()
     assert opened == []
@@ -1275,11 +1285,19 @@ _LETTERS = set(range(16, 26)) | set(range(30, 39))      # Q..P, A..L
     (False, True, "keyd virtual keyboard", True),
     (True, True, hh.OWN_KEYBOARD_NAME, False)])         # the one TuxTalk types with
 def test_which_devices_are_read_as_keyboards(pointer, uinput, name, read):
-    assert hh.counts_as_keyboard(_LETTERS | {hh.BTN_LEFT}, pointer, uinput, name) is read
+    assert _counts_as_keyboard(_LETTERS | {hh.BTN_LEFT}, pointer, uinput, name) is read
 
 
 def test_a_device_without_letter_keys_is_no_keyboard():
-    assert hh.counts_as_keyboard({hh.BTN_LEFT, 66}, False, False, "Power Button") is False
+    assert _counts_as_keyboard({hh.BTN_LEFT, 66}, False, False, "Power Button") is False
+
+
+def _counts_as_keyboard(keys, pointer, uinput, name):
+    try:
+        hh.check_keyboard(keys, pointer, uinput, name)
+    except hh.Skipped:
+        return False
+    return True
 
 
 def test_only_a_uinput_device_counts_as_made_by_a_program(tmp_path):
@@ -1309,7 +1327,7 @@ def test_a_remappers_keyboard_is_listened_to_but_never_held(setup, capsys):
     the service is told that's how this keyboard works, with the journal
     saying so once rather than at every dictation (issue #23)."""
     helper, kb, connect, say, heard, _seat = setup
-    kb.listen_only = True
+    kb.listen_only = "a program's keyboard and mouse in one"
     sock = _ready(connect, say, heard)
     capsys.readouterr()
     for _ in range(2):
@@ -1321,3 +1339,135 @@ def test_a_remappers_keyboard_is_listened_to_but_never_held(setup, capsys):
         kb.press(F8, 0)
         assert heard(sock) == ["UP 66"]
     assert capsys.readouterr().out.count("not holding keyboard") == 1
+
+
+# --- devices it can't or won't read (issue #26) --------------------------------------------
+
+class FakeEvdev:
+    """The kernel's side of Keyboard.open for a plain file standing in for a
+    device node: what each ioctl answers, and the grabs asked for."""
+
+    def __init__(self, keys, pointer=False, name="USB Keyboard"):
+        self.keys, self.pointer, self.name = keys, pointer, name
+        self.grabs = []
+
+    def ioctl(self, fd, request, arg=0, mutate=False):
+        if request == hh.EVIOCGRAB:
+            self.grabs.append(arg)
+        elif request == hh.EVIOCGBIT(hh.EV_KEY, hh.KEY_BYTES):
+            for code in self.keys:
+                arg[code // 8] |= 1 << code % 8
+        elif request == hh.EVIOCGBIT(hh.EV_REL, 2) and self.pointer:
+            arg[0] |= 1 << hh.REL_X
+        elif request == hh.EVIOCGNAME(256):
+            arg[:len(self.name)] = self.name.encode()
+        return 0
+
+
+def _device(folder, name="event7", writable=True):
+    """A plain file at *folder*/*name* that the helper opens as a device node."""
+    node = folder / name
+    node.write_bytes(b"")
+    node.chmod(0o644 if writable else 0o444)
+    return node
+
+
+needs_permissions = pytest.mark.skipif(os.geteuid() == 0, reason="root opens any file")
+
+
+@needs_permissions
+def test_a_keyboard_refused_read_write_is_watched_read_only_and_never_held(
+        setup, monkeypatch, tmp_path, capsys):
+    """The helper opened keyboards read-write only: where the input group
+    may only read them, it watched none and nothing said so. Read-only, its
+    hotkeys are reported; it's never grabbed nor written to, and a hide is
+    turned down the way a remapper's keyboard's is."""
+    helper, fake, connect, say, heard, _seat = setup
+    helper.keyboards.pop(fake.path)
+    node = _device(tmp_path / "input", writable=False)
+    evdev = FakeEvdev(_LETTERS | {F8})
+    monkeypatch.setattr(hh, "fcntl", evdev)
+    helper.scan()
+    kb = helper.keyboards[str(node)]
+    assert kb.listen_only and "never held: it may only be read here" in capsys.readouterr().out
+    sock = _ready(connect, say, heard)
+    node.chmod(0o644)
+    with node.open("ab") as events:
+        events.write(hh.EVENT.pack(0, 0, hh.EV_KEY, F8, 1))
+    assert heard(sock) == ["DOWN 66 -"]
+    say(sock, "HIDE 66")
+    assert heard(sock) == ["ERR listen-only keyboard"]
+    assert evdev.grabs == [] and helper.hide is None and helper.injected == []
+
+
+@needs_permissions
+def test_a_device_that_cant_be_opened_is_logged_once_with_why(setup, monkeypatch, tmp_path,
+                                                              capsys):
+    helper, _kb, _connect, _say, _heard, _seat = setup
+    node = _device(tmp_path / "input")
+    node.chmod(0)
+    monkeypatch.setattr(hh, "fcntl", FakeEvdev(_LETTERS))
+    for _ in range(3):
+        helper.scan()
+    out = capsys.readouterr().out
+    assert out.count(f"not watching {node}: couldn't open it (EACCES") == 1
+
+
+@pytest.mark.parametrize("evdev, said", [
+    (FakeEvdev(_LETTERS | {hh.BTN_LEFT}, pointer=True, name="Logitech USB Receiver"),
+     "'Logitech USB Receiver' looks like a mouse"),
+    (FakeEvdev({116}, name="Power Button"), None),                  # no letter keys
+    (FakeEvdev(_LETTERS, name=hh.OWN_KEYBOARD_NAME), None),         # TuxTalk's own
+])
+def test_a_device_left_out_is_logged_once_when_it_looks_like_a_keyboard(
+        setup, monkeypatch, tmp_path, capsys, evdev, said):
+    """Power buttons and lid switches would fill the journal; a mouse with
+    letter keys is worth a line, since a keyboard taken for one is a
+    keyboard whose hotkeys never work."""
+    helper, _kb, _connect, _say, _heard, _seat = setup
+    node = _device(tmp_path / "input")
+    monkeypatch.setattr(hh, "fcntl", evdev)
+    for _ in range(3):
+        helper.scan()
+    out = capsys.readouterr().out
+    assert str(node) not in helper.keyboards
+    if said:
+        assert out.count(f"not watching {node}: {said}") == 1
+    else:
+        assert "not watching" not in out
+
+
+def test_another_seats_keyboard_is_logged_once(setup, monkeypatch, tmp_path, capsys):
+    helper, _kb, _connect, _say, _heard, _seat = setup
+    node = _device(tmp_path / "input")
+    monkeypatch.setattr(hh, "fcntl", FakeEvdev(_LETTERS))
+    monkeypatch.setattr(hh, "udev_seat", lambda rdev: "seat1")
+    helper.scan()
+    helper.scan()
+    assert capsys.readouterr().out.count(
+        f"not watching {node}: 'USB Keyboard' is on seat1") == 1
+
+
+def test_watching_no_keyboard_at_all_is_said_once_until_one_comes(setup, monkeypatch,
+                                                                   tmp_path, capsys):
+    helper, fake, _connect, _say, _heard, _seat = setup
+    helper.keyboards.pop(fake.path)
+    helper.scan()
+    helper.scan()
+    assert capsys.readouterr().out.count("watching no keyboard at all") == 1
+    node = _device(tmp_path / "input")
+    monkeypatch.setattr(hh, "fcntl", FakeEvdev(_LETTERS))
+    helper.scan()
+    helper.drop_keyboard(helper.keyboards[str(node)])
+    node.unlink()
+    helper.scan()
+    assert capsys.readouterr().out.count("watching no keyboard at all") == 1
+
+
+def test_the_hello_says_how_many_keyboards_are_watched(setup):
+    helper, _kb, connect, say, heard, _seat = setup
+    second = FakeKeyboard("/dev/input/event-two")
+    helper.keyboards[second.path] = second
+    sock = connect()
+    say(sock, "HELLO 1")
+    assert heard(sock) == [f"HELLO 1 {hh.VERSION} keyboards=2"]

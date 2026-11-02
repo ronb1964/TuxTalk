@@ -66,7 +66,9 @@ itself as soon as that key comes up there, when someone else's session
 comes to the front, when the program that asked goes away, or after 15
 minutes at most. A press's release is reported from the keyboard it was
 pressed on, so holding the same key on another keyboard can't keep a
-recording or a grab going.
+recording or a grab going. A keyboard the helper may only read (its node
+isn't writable for the input group) is never held: its keys are reported,
+and a held hotkey reaches the desktop as it is.
 
 What the helper can't stop: TuxTalk types through /dev/uinput, which the
 user at the screen gets (secure_input.py), so any program they run can type
@@ -79,7 +81,10 @@ isolated mode, outside TuxTalk. Standard library only, Python 3.8 or newer.
 The protocol (one line each, over a Unix stream socket)
 -------------------------------------------------------
 client -> helper
-  HELLO 1                      say hello; the helper answers HELLO 1 <version>
+  HELLO 1                      say hello; the helper answers
+                               HELLO 1 <version> keyboards=<how many it reads>
+                               (before 1.12 without the count; a client reads
+                               the words it knows and passes over the rest)
   WATCH <spec> [<spec>...]     the keys to report: a code ("66" = F8) or
                                MODS:code with MODS from C A S M
                                (Ctrl Alt Shift Meta/Super), "CA:25" = Ctrl+Alt+P;
@@ -96,8 +101,9 @@ helper -> client
   UP <code>                    a key reported DOWN (or one of its modifiers)
                                was let go
   OK <what> / ERR <why>        answers to WATCH, HIDE and UNHIDE; a HIDE of
-                               a key from a remapper's keyboard (never held)
-                               gets ERR listen-only keyboard
+                               a key from a listen-only keyboard (never held:
+                               a remapper's, or one it may only read) gets
+                               ERR listen-only keyboard
 Codes are Linux evdev key codes (linux/input-event-codes.h).
 """
 import errno
@@ -370,15 +376,50 @@ def made_through_uinput(rdev, sys_dir=SYS_CHAR_DIR):
     return path.startswith("/sys/devices/virtual/input/")
 
 
-def counts_as_keyboard(keys, pointer, uinput, name) -> bool:
-    """Whether a device with the key codes *keys*, mouse motion (*pointer*),
-    made through uinput or not (*uinput*) and called *name*, is a keyboard to
-    read: it has letter keys, and it isn't a mouse claiming them (a Logitech
-    receiver) nor the keyboard TuxTalk types with. A uinput one shaped like a
-    mouse is read, and never held (Keyboard.listen_only): kanata takes the
-    real keyboards and passes every key on through one (issue #23)."""
-    mouse = pointer and not uinput
-    return len(keys & LETTER_KEYS) >= 3 and not mouse and name != OWN_KEYBOARD_NAME
+class Skipped(Exception):
+    """A device that isn't read. *why* says so in plain words for the
+    journal, once per device; None for one not worth a line there (a power
+    button, a lid switch, the keyboard TuxTalk types with). Never a key."""
+
+    def __init__(self, why=None):
+        super().__init__(why)
+        self.why = why
+
+
+def describe_error(error):
+    """"EACCES: Permission denied" for the OSError *error*."""
+    return f"{errno.errorcode.get(error.errno, error.errno)}: {error.strerror}"
+
+
+def open_node(path):
+    """(descriptor, read_only) for the input device node *path*: read-write,
+    or read-only where only reading is allowed (python-evdev, which TuxTalk
+    used before the helper, does the same). Raises Skipped when it can't be
+    opened at all."""
+    flags = os.O_NONBLOCK | os.O_CLOEXEC
+    try:
+        return os.open(path, os.O_RDWR | flags), False
+    except OSError as e:
+        if e.errno not in (errno.EACCES, errno.EPERM):
+            raise Skipped(f"couldn't open it ({describe_error(e)})") from None
+    try:
+        return os.open(path, os.O_RDONLY | flags), True
+    except OSError as e:
+        raise Skipped(f"couldn't open it ({describe_error(e)})") from None
+
+
+def check_keyboard(keys, pointer, uinput, name):
+    """Raise Skipped unless a device with the key codes *keys*, mouse motion
+    (*pointer*), made through uinput or not (*uinput*) and called *name*, is
+    a keyboard to read: it has letter keys, and it isn't a mouse claiming
+    them (a Logitech receiver) nor the keyboard TuxTalk types with. A uinput
+    one shaped like a mouse is read, and never held (Keyboard.listen_only):
+    kanata takes the real keyboards and passes every key on through one
+    (issue #23)."""
+    if len(keys & LETTER_KEYS) < 3 or name == OWN_KEYBOARD_NAME:
+        raise Skipped()
+    if pointer and not uinput:
+        raise Skipped(f"{name!r} looks like a mouse")
 
 
 # --- keyboards --------------------------------------------------------------------------
@@ -386,13 +427,16 @@ def counts_as_keyboard(keys, pointer, uinput, name) -> bool:
 class Keyboard:
     """One open /dev/input/event* keyboard and the keys down on it."""
 
-    def __init__(self, path, fd, name, down, virtual, group, listen_only=False):
+    def __init__(self, path, fd, name, down, virtual, group, listen_only=None):
         """*down*: the keys down when it was opened; *virtual*: a program may
-        have made it; *group*: device_group's answer."""
+        have made it; *group*: device_group's answer; *listen_only*: why it
+        is never held nor written to, or None."""
         self.path, self.fd, self.name, self.virtual, self.group = path, fd, name, virtual, group
-        # A program's keyboard shaped like a mouse (counts_as_keyboard): a
-        # remapper's, carrying the mouse's motion and the text TuxTalk types.
-        # Holding it would freeze the one and swallow the other.
+        # Two kinds. A program's keyboard shaped like a mouse (check_keyboard):
+        # a remapper's, carrying the mouse's motion and the text TuxTalk
+        # types; holding it would freeze the one and swallow the other. And
+        # one opened read-only (open_node): writing to it fails, so its keys
+        # couldn't be told to go up before holding it.
         self.listen_only = listen_only
         self.said_listen_only = False      # logged once that it's never held
         self.down = set(down)
@@ -407,12 +451,9 @@ class Keyboard:
 
     @classmethod
     def open(cls, path):
-        """The keyboard at *path*, or None if it isn't one (mouse, power button,
-        game controller), belongs to another seat, or can't be opened."""
-        try:
-            fd = os.open(path, os.O_RDWR | os.O_NONBLOCK | os.O_CLOEXEC)
-        except OSError:
-            return None
+        """The keyboard at *path*. Raises Skipped when it isn't one to read
+        (a mouse, a power button, another seat's) or can't be opened or asked."""
+        fd, read_only = open_node(path)
         # First thing: changing the clock throws away events already waiting.
         try:
             fcntl.ioctl(fd, EVIOCSCLOCKID, struct.pack("i", CLOCK_MONOTONIC))
@@ -420,33 +461,45 @@ class Keyboard:
         except OSError:
             monotonic = False
         try:
-            keys = bytearray(KEY_BYTES)
-            fcntl.ioctl(fd, EVIOCGBIT(EV_KEY, len(keys)), keys, True)
-            keys = bits(keys)
-            rel = bytearray(2)
-            fcntl.ioctl(fd, EVIOCGBIT(EV_REL, len(rel)), rel, True)
-            pointer = REL_X in bits(rel) and BTN_LEFT in keys
-            st = os.fstat(fd)
-            group = node_group(st)
-            name = bytearray(256)
-            fcntl.ioctl(fd, EVIOCGNAME(len(name)), name, True)
-            name = name.split(b"\0", 1)[0].decode("utf-8", "replace")
-            seat = udev_seat(st.st_rdev)
-            uinput = made_through_uinput(st.st_rdev)
-            if not counts_as_keyboard(keys, pointer, uinput, name) or seat != "seat0":
-                os.close(fd)
-                return None
-            ident = bytearray(8)
-            fcntl.ioctl(fd, EVIOCGID, ident, True)
-            virtual = struct.unpack("HHHH", ident)[0] == BUS_VIRTUAL or group.startswith("virtual:")
-            state = bytearray(KEY_BYTES)
-            fcntl.ioctl(fd, EVIOCGKEY(len(state)), state, True)
-            keyboard = cls(path, fd, name, bits(state), virtual, group, listen_only=pointer)
-        except OSError:
+            keyboard = cls._probe(path, fd, read_only)
+        except Skipped:
             os.close(fd)
-            return None
+            raise
+        except OSError as e:
+            os.close(fd)
+            raise Skipped(f"couldn't ask what it is ({describe_error(e)})") from None
         keyboard.monotonic = monotonic
         return keyboard
+
+    @classmethod
+    def _probe(cls, path, fd, read_only):
+        """The keyboard open on *fd*, from what the kernel and udev say about
+        it; raises Skipped or OSError as open() explains."""
+        keys = bytearray(KEY_BYTES)
+        fcntl.ioctl(fd, EVIOCGBIT(EV_KEY, len(keys)), keys, True)
+        keys = bits(keys)
+        rel = bytearray(2)
+        fcntl.ioctl(fd, EVIOCGBIT(EV_REL, len(rel)), rel, True)
+        pointer = REL_X in bits(rel) and BTN_LEFT in keys
+        st = os.fstat(fd)
+        name = bytearray(256)
+        fcntl.ioctl(fd, EVIOCGNAME(len(name)), name, True)
+        name = name.split(b"\0", 1)[0].decode("utf-8", "replace")
+        check_keyboard(keys, pointer, made_through_uinput(st.st_rdev), name)
+        seat = udev_seat(st.st_rdev)
+        if seat != "seat0":
+            raise Skipped(f"{name!r} is on {seat}, and only seat0's keyboards are read")
+        group = node_group(st)
+        ident = bytearray(8)
+        fcntl.ioctl(fd, EVIOCGID, ident, True)
+        virtual = struct.unpack("HHHH", ident)[0] == BUS_VIRTUAL or group.startswith("virtual:")
+        state = bytearray(KEY_BYTES)
+        fcntl.ioctl(fd, EVIOCGKEY(len(state)), state, True)
+        if pointer:
+            listen_only = "a program's keyboard and mouse in one"
+        else:
+            listen_only = "it may only be read here" if read_only else None
+        return cls(path, fd, name, bits(state), virtual, group, listen_only)
 
     def current_group(self):
         """Its group as its node's permissions and udev's data say now
@@ -545,6 +598,7 @@ class Helper:
         self.not_keyboards = {}    # path -> identity of a node that isn't a keyboard
         self.unreadable = {}       # path -> (identity, retry at) of a keyboard whose reads failed
         self.too_many = {}         # path -> identity already logged as one keyboard too many
+        self.said_no_keyboard = False   # logged that the last scan found none
         self.listener = None
         self.running = True
 
@@ -584,10 +638,15 @@ class Helper:
         for path in paths:
             if path not in self.keyboards:
                 self.open_if_keyboard(path)
+        if not self.keyboards and not self.said_no_keyboard:
+            log("watching no keyboard at all, so no hotkey can reach TuxTalk (a device "
+                "left out is named above with why, unless it has no letter keys)")
+        self.said_no_keyboard = not self.keyboards
 
     def open_if_keyboard(self, path):
         """Open the device at *path* if it's a keyboard there's room for. One
-        that isn't is remembered by its identity, so it isn't opened again."""
+        that isn't is remembered by its identity, so it isn't opened again,
+        and the journal says why once, when that's worth a line."""
         identity = node_identity(path)
         if identity is None:
             return
@@ -596,9 +655,12 @@ class Helper:
         failed = self.unreadable.get(path)
         if failed is not None and failed[0] == identity and time.monotonic() < failed[1]:
             return
-        keyboard = Keyboard.open(path)
-        if keyboard is None:
+        try:
+            keyboard = Keyboard.open(path)
+        except Skipped as skipped:
             self.not_keyboards[path] = identity
+            if skipped.why:
+                log(f"not watching {path}: {skipped.why}")
             return
         virtual = sum(1 for k in self.keyboards.values() if k.virtual)
         if len(self.keyboards) >= MAX_KEYBOARDS or (
@@ -614,7 +676,8 @@ class Helper:
         self.unreadable.pop(path, None)
         self.too_many.pop(path, None)
         self.keyboards[path] = keyboard
-        log(f"watching keyboard {keyboard.name!r} ({path})")
+        never_held = f", never held: {keyboard.listen_only}" if keyboard.listen_only else ""
+        log(f"watching keyboard {keyboard.name!r} ({path}){never_held}")
 
     def drop_keyboard(self, keyboard, why="gone"):
         log(f"keyboard {why}: {keyboard.name!r} ({keyboard.path})")
@@ -920,8 +983,7 @@ class Helper:
         if keyboard.listen_only:
             if not keyboard.said_listen_only:
                 keyboard.said_listen_only = True
-                log(f"not holding keyboard {keyboard.name!r}: a program's keyboard and "
-                    "mouse in one")
+                log(f"not holding keyboard {keyboard.name!r}: {keyboard.listen_only}")
             return False
         released = self.let_up(keyboard, codes)
         if released is None:
@@ -1080,7 +1142,7 @@ class Helper:
             if args[:1] != [str(PROTOCOL)]:
                 return f"ERR this helper speaks protocol {PROTOCOL}"
             client.hello = True
-            return f"HELLO {PROTOCOL} {VERSION}"
+            return f"HELLO {PROTOCOL} {VERSION} keyboards={len(self.keyboards)}"
         if not client.hello:
             return "ERR say HELLO first"
         if command == "WATCH":
