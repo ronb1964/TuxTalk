@@ -339,13 +339,14 @@ def _moved(press) -> bool:
     again there would begin a compose in it. The one the press began stays
     in the first window, out of reach.
 
-    The look at the press may not have come back yet. It was asked as the
-    key went down, before a click could move the focus, and the tray takes
-    questions and the desktop's focus reports in the order they come, so it
-    still names the press's window: it's waited for. A look that doesn't
-    come back in _LOOK_WAIT_S leaves the window unknown, which isn't another
-    window, as for typing (focused_window.changed): a tray that busy would
-    otherwise cost the first keys of each dictation."""
+    The look at the press may not have come back yet: it's waited for. It
+    starts on its own thread as the key goes down and names the window the
+    tray knows when it answers, so a click in its first few milliseconds
+    would be missed. A look that doesn't come back in _LOOK_WAIT_S leaves
+    the window unknown, which isn't another window, as for typing
+    (focused_window.changed): treating it as one would cost the first keys
+    of every dictation while the tray is busy, a far more common case than
+    a click into another window meanwhile (CODE_HEALTH row 76)."""
     if not press.looked.wait(_LOOK_WAIT_S) or press.where is None:
         logger.info("Compose pressed again without knowing which window the dictation "
                     "key went down in")
