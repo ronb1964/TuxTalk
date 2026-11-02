@@ -763,9 +763,9 @@ def safe_to_lowercase_first_word(text: str, your_words=()) -> bool:
       * one of *your_words* (Your Words), already spelled the user's way
         ("TuxTalk", "New York", "TuxTalk's")
 
-    Proper nouns like "Anna" are genuinely ambiguous — Whisper capitalizes them
-    both as names and as sentence starts — so they are left alone here and
-    remain a known limitation rather than a guess.
+    A name like "Anna" can't be told from a sentence start (Whisper
+    capitalizes both), so unless it's one of *your_words* this returns True
+    for it and the name may be lowercased: a known limitation, not a guess.
     """
     first = text.split(maxsplit=1)[0] if text.split() else ""
     if not first:
