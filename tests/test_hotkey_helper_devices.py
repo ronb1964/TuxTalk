@@ -255,3 +255,33 @@ def test_a_hide_of_right_ctrl_on_a_read_only_keyboard_holds_no_other(setup):
     say(sock, "HIDE 97 42")
     assert heard(sock) == ["ERR listen-only keyboard"]
     assert kb.calls == other.calls == [] and helper.hide is None
+
+
+@needs_permissions
+def test_a_read_only_keyboard_made_writable_is_opened_again_to_be_held(setup, monkeypatch,
+                                                                       tmp_path):
+    """Opened read-only, it stayed listen-only for good: after a udev rule
+    or a permission fix, its held hotkey still reached the desktop until
+    it was unplugged or the helper restarted."""
+    helper, fake, _connect, _say, _heard, _seat = setup
+    helper.keyboards.pop(fake.path)
+    node = _device(tmp_path / "input", writable=False)
+    monkeypatch.setattr(hh, "fcntl", FakeEvdev(_LETTERS))
+    helper.scan()
+    assert helper.keyboards[str(node)].listen_only == hh.READ_ONLY
+    node.chmod(0o644)
+    helper.scan()
+    assert helper.keyboards[str(node)].listen_only is None
+
+
+def test_an_input_folder_that_cant_be_listed_is_said_once(setup, tmp_path, capsys):
+    """It returned silently: the hello said keyboards=0 and the journal
+    nothing at all."""
+    helper, fake, _connect, _say, _heard, _seat = setup
+    helper.keyboards.pop(fake.path)
+    helper.input_dir = str(tmp_path / "no-input")
+    for _ in range(3):
+        helper.scan()
+    out = capsys.readouterr().out
+    assert out.count(f"couldn't list {helper.input_dir} (ENOENT") == 1
+    assert out.count("watching no keyboard at all") == 1

@@ -408,6 +408,10 @@ def open_node(path):
         raise Skipped(f"couldn't open it ({describe_error(e)})") from None
 
 
+# Why a keyboard opened read-only (open_node) is listen-only.
+READ_ONLY = "it may only be read here"
+
+
 def check_keyboard(keys, pointer, uinput, name):
     """Raise Skipped unless a device with the key codes *keys*, mouse motion
     (*pointer*), made through uinput or not (*uinput*) and called *name*, is
@@ -498,7 +502,7 @@ class Keyboard:
         if pointer:
             listen_only = "a program's keyboard and mouse in one"
         else:
-            listen_only = "it may only be read here" if read_only else None
+            listen_only = READ_ONLY if read_only else None
         return cls(path, fd, name, bits(state), virtual, group, listen_only)
 
     def current_group(self):
@@ -599,6 +603,7 @@ class Helper:
         self.unreadable = {}       # path -> (identity, retry at) of a keyboard whose reads failed
         self.too_many = {}         # path -> identity already logged as one keyboard too many
         self.said_no_keyboard = False   # logged that the last scan found none
+        self.said_unlisted = False      # logged that the input folder couldn't be listed
         self.listener = None
         self.running = True
 
@@ -624,8 +629,13 @@ class Helper:
             return
         try:
             names = sorted(n for n in os.listdir(self.input_dir) if n.startswith("event"))
-        except OSError:
+        except OSError as e:
+            if not self.said_unlisted:
+                self.said_unlisted = True
+                log(f"couldn't list {self.input_dir} ({describe_error(e)})")
+            self.say_if_no_keyboard()
             return
+        self.said_unlisted = False
         paths = [os.path.join(self.input_dir, name) for name in names]
         present = set(paths)
         # Gone: nothing left to wait for, and the tables stay as small as
@@ -635,13 +645,25 @@ class Helper:
                 del table[path]
         for keyboard in list(self.keyboards.values()):
             self.reclassify(keyboard)
+            self.reopen_if_writable(keyboard)
         for path in paths:
             if path not in self.keyboards:
                 self.open_if_keyboard(path)
+        self.say_if_no_keyboard()
+
+    def say_if_no_keyboard(self):
+        """Warn once when no keyboard is watched, until one is again."""
         if not self.keyboards and not self.said_no_keyboard:
-            log("watching no keyboard at all, so no hotkey can reach TuxTalk (a device "
-                "left out is named above with why, unless it has no letter keys)")
+            log("watching no keyboard at all, so no hotkey can reach TuxTalk (each device "
+                "left out with letter keys was named, with why, when it was first seen)")
         self.said_no_keyboard = not self.keyboards
+
+    def reopen_if_writable(self, keyboard):
+        """A keyboard opened read-only whose node may now be written to (a
+        udev rule reloaded, permissions fixed) is closed, to be opened again
+        read-write by this scan, so it can be held again."""
+        if keyboard.listen_only == READ_ONLY and os.access(keyboard.path, os.W_OK):
+            self.drop_keyboard(keyboard, "writable now, opening it again")
 
     def open_if_keyboard(self, path):
         """Open the device at *path* if it's a keyboard there's room for. One
