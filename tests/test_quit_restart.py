@@ -494,10 +494,13 @@ def test_a_restart_queued_after_dictation_off(slow_service, second, starts):
 def test_an_action_queued_before_quit_does_nothing_after_it(monkeypatch):
     """Quit and Open Preferences together from the GNOME extension:
     Preferences opened over a TuxTalk that was going away."""
+    from tuxtalk.dbus_service import TuxTalkDBusService
     from tuxtalk.tray_dbus_app import TrayAppInstance
     opened = []
     t = _bare_tray(open_preferences=lambda _: opened.append(True))
-    TrayAppInstance(t).show_preferences()   # queued
+    bus_side = TuxTalkDBusService.__new__(TuxTalkDBusService)
+    bus_side.app = TrayAppInstance(t)
+    bus_side._dispatch("show_preferences")  # queued on GTK's thread
     t._quitting = True                      # Quit runs first
     _run_main_loop_until(lambda: False, timeout=0.2)
     assert opened == []
