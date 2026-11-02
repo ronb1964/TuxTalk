@@ -18,7 +18,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
-from . import config, desktop_detect, extension_helper
+from . import config, extension_helper
 from .ui_style import WARNING_AMBER, Fold, more_below_bar, show_message
 
 from .flatpak_welcome import (build_shortcut_setup_section, build_unsupported_desktop_section,
