@@ -229,17 +229,17 @@ def listens_on(pid, port, proc="/proc") -> bool:
     return False
 
 
-def remove_other_versions(parent, keep):
-    """Delete every engine version folder under *parent* except *keep*. Each
-    version unpacks into its own folder, so without this an update leaves
-    the old one behind for good. Never raises."""
+def remove_other_versions(parent, *keep):
+    """Delete every engine version folder under *parent* except those named
+    in *keep*. Each version unpacks into its own folder, so without this an
+    update leaves the old one behind for good. Never raises."""
     try:
         names = os.listdir(parent)
     except OSError:
         return
     for name in names:
         path = os.path.join(parent, name)
-        if name != keep and os.path.isdir(path) and not os.path.islink(path):
+        if name not in keep and os.path.isdir(path) and not os.path.islink(path):
             shutil.rmtree(path, ignore_errors=True)
             if os.path.exists(path):
                 logger.warning(f"Couldn't remove an older engine version: {path}")

@@ -30,7 +30,8 @@ load_backend: loaded Vulkan backend from /x/libggml-vulkan.so
 @pytest.fixture(autouse=True)
 def _engine_update_not_tried_yet(monkeypatch):
     """Each test is a process of its own as far as the engine update goes."""
-    monkeypatch.setattr(wv, "_update_tried", False)
+    monkeypatch.setattr(wv, "_update_running", False)
+    monkeypatch.setattr(wv, "_update_failed_at", None)
 
 
 def test_parses_the_device_list_the_engine_prints():
@@ -201,7 +202,7 @@ def _download_build(monkeypatch):
 def test_an_earlier_engine_build_dictates_until_the_new_one_replaces_it(tmp_path, monkeypatch):
     """With build 1 installed, a TuxTalk that brings build 2 keeps dictating
     on the graphics card with build 1, and still downloads build 2, which
-    then replaces build 1. A failed download leaves build 1 as it was."""
+    then takes over. A failed download leaves build 1 as it was."""
     _runtime_dir(tmp_path, monkeypatch)
     monkeypatch.setattr(wv, "ENGINE_BUILD", 2)
     build_1 = _installed_build(tmp_path, monkeypatch, 1)
@@ -214,7 +215,23 @@ def test_an_earlier_engine_build_dictates_until_the_new_one_replaces_it(tmp_path
     _download_build(monkeypatch)
     assert wv.make_engine_download_func("small")(lambda *a: None, None) is True
     assert wv.engine_dir() == wv._engine_dir() != str(build_1)
-    assert wv.is_engine_installed("small") and not build_1.parent.exists()
+    assert wv.is_engine_installed("small")
+
+
+def test_installing_a_build_keeps_the_one_in_use_until_the_next(tmp_path, monkeypatch):
+    """Another TuxTalk process may have chosen the build in use and not
+    started it yet (the device check, the Parakeet helper): removing it
+    under that process put its dictation on the processor. The build before
+    that goes."""
+    _runtime_dir(tmp_path, monkeypatch)
+    monkeypatch.setattr(wv, "ENGINE_BUILD", 3)
+    build_1 = _installed_build(tmp_path, monkeypatch, 1)
+    build_2 = _installed_build(tmp_path, monkeypatch, 2)
+    assert wv.engine_dir() == str(build_2)
+    _download_build(monkeypatch)
+    assert wv.make_engine_download_func("small")(lambda *a: None, None) is True
+    assert wv.engine_dir() == wv._engine_dir()
+    assert (build_2 / "whisper-server").exists() and not build_1.parent.exists()
 
 
 def test_another_whisper_cpp_versions_engine_is_never_run(tmp_path, monkeypatch):
@@ -249,8 +266,40 @@ def test_an_engine_update_that_fails_says_why_in_the_log(tmp_path, monkeypatch, 
     wv.update_in_background().join(30)
     assert "Name or service not known" in caplog.text
     assert wv.engine_dir() == str(build_1)
-    # Not again in this process, at every Power Saving wake: at the next start.
+    # Not at every Power Saving wake, offline too; at a start ten minutes on.
     assert wv.update_in_background() is None
+    monkeypatch.setattr(wv, "_update_failed_at", wv._update_failed_at - wv.UPDATE_RETRY_S - 1)
+    wv.update_in_background().join(30)
+    assert caplog.text.count("update didn't finish (Download failed") == 2
+
+
+def test_never_two_engine_updates_at_once(tmp_path, monkeypatch):
+    import threading
+    _runtime_dir(tmp_path, monkeypatch)
+    monkeypatch.setattr(wv, "ENGINE_BUILD", 2)
+    _installed_build(tmp_path, monkeypatch, 1)
+    release = threading.Event()
+    monkeypatch.setattr(wv, "make_engine_download_func",
+                        lambda: lambda report, cancel: release.wait(30) and False)
+    first = wv.update_in_background()
+    try:
+        assert first is not None and wv.update_in_background() is None
+    finally:
+        release.set()
+        first.join(30)
+
+
+def test_an_engine_update_that_hits_a_bug_says_so_in_the_log(tmp_path, monkeypatch, caplog):
+    """Not only on the thread's stderr, where nobody sees it."""
+    monkeypatch.setattr(wv, "ENGINE_BUILD", 2)
+    _installed_build(tmp_path, monkeypatch, 1)
+
+    def broken(report, cancel):
+        raise ValueError("unexpected reply")
+    monkeypatch.setattr(wv, "make_engine_download_func", lambda: broken)
+    wv.update_in_background().join(30)
+    assert "ValueError: unexpected reply" in caplog.text
+    assert wv._update_failed_at is not None and not wv._update_running
 
 
 def test_an_engine_update_that_cant_make_its_folder_says_so_in_the_log(tmp_path, monkeypatch,
@@ -897,22 +946,22 @@ def test_other_users_and_web_pages_cant_send_the_graphics_engine_audio(fake_serv
     assert keys[0] != keys[1]
 
 
-def test_an_engine_removed_while_starting_starts_from_the_new_build(fake_server, tmp_path,
-                                                                    monkeypatch):
-    """An update in another TuxTalk process can remove the build just
-    chosen before it was started."""
-    folders = [str(tmp_path / "removed-build"), str(tmp_path)]
-    monkeypatch.setattr(wv, "engine_dir", lambda: folders[0] if len(folders) > 1 else folders[-1])
-
-    def removed_meanwhile(*a):
-        if len(folders) > 1:
-            folders.pop(0)
-    monkeypatch.setattr(wv, "_kill_orphaned_servers", removed_meanwhile)
-    model = wv.VulkanWhisperModel("small", 0, threads=1)
-    try:
-        assert model.transcribe(np.zeros(16000, np.float32)) == "hello"
-    finally:
-        model.close()
+def test_the_device_check_runs_one_builds_program_with_its_own_libraries(tmp_path,
+                                                                        monkeypatch):
+    """An update landing between choosing the program and choosing its
+    libraries mixed two builds, and dictation went to the processor."""
+    import sys
+    builds = [tmp_path / "build-1", tmp_path / "build-2"]
+    for build in builds:
+        build.mkdir()
+        server = build / "whisper-server"
+        server.write_text(f"#!{sys.executable}\nimport os, sys\n"
+                          f"if os.environ.get('LD_LIBRARY_PATH') == {str(build)!r}:\n"
+                          f"    sys.stderr.write({REAL_DEVICE_LIST!r})\n")
+        server.chmod(0o755)
+    chosen = iter([str(builds[0]), str(builds[1])])
+    monkeypatch.setattr(wv, "engine_dir", lambda: next(chosen))     # updated after one look
+    assert wv.find_device() == 0
 
 
 def test_orphaned_servers_of_every_build_are_looked_for(monkeypatch):

@@ -61,8 +61,8 @@ ENGINE_VERSION = "1.9.5"                           # whisper.cpp release it is b
 # asset and pre-release, because released versions download theirs and check
 # its SHA256, so a published build must stay exactly as it is. The archive's
 # folder is named after the whisper.cpp version alone; it unpacks into a
-# folder per build (_build_folder), and a new build's folder replaces the
-# old one.
+# folder per build (_build_folder). A new build takes over from the one in
+# use, which stays until the build after it arrives.
 ENGINE_BUILD = 2
 ENGINE_NAME = f"talktype-whisper-vulkan-{ENGINE_VERSION}"
 ENGINE_ASSET = f"{ENGINE_NAME}-b{ENGINE_BUILD}-x64.tar.gz"
@@ -148,7 +148,7 @@ def has_nvidia() -> bool:
 def _build_folder(build=None):
     """The folder *build* (default: this one) unpacks into. With the build in
     its name, an installed older build doesn't count as this one, which is
-    then downloaded beside it and replaces it once it's there. Build 1 keeps
+    then downloaded beside it and takes over once it's there. Build 1 keeps
     the version's name alone, the folder earlier versions installed it in,
     so it isn't downloaded again."""
     build = build or ENGINE_BUILD
@@ -266,10 +266,14 @@ def make_engine_download_func(model_name=None):
                     # kill before the move left none.
                     target, old = _engine_dir(), os.path.join(parent, f".{ENGINE_NAME}.old")
                     restore_cut_off_swap(target, old)
+                    # The build in use until now stays, until the next
+                    # build replaces this one: another TuxTalk process may
+                    # have chosen it (engine_dir) and not started it yet.
+                    previous = os.path.basename(os.path.dirname(engine_dir()))
                     if not _can_run(target, model_name):    # or another download did it
                         replace_folder(os.path.join(folder, ENGINE_NAME), target, old)
                     engine_process.remove_other_versions(os.path.dirname(parent),
-                                                         _build_folder())
+                                                         _build_folder(), previous)
             except Exception as e:
                 logger.error(f"Could not unpack the graphics engine: {e}")
                 progress_callback("Could not unpack the download", 0)
@@ -279,30 +283,36 @@ def make_engine_download_func(model_name=None):
     return download
 
 
-# Whether this process has tried the update: once is enough, or every
-# Power Saving wake would fetch it again, offline too.
-_update_tried = False
+# A try that didn't happen or failed waits this long before the next one, at
+# a later start of the engine: a Power Saving wake shouldn't fetch it again
+# every time, offline too, but a login before the network was up shouldn't
+# leave the whole session on the earlier build either.
+UPDATE_RETRY_S = 600
 _update_lock = threading.Lock()
+_update_running = False
+_update_failed_at = None        # time.monotonic() of the last try that didn't update
 
 
 def update_in_background():
     """While an earlier build is what runs (engine_dir), download this one
     on a thread of its own, which the next start of the engine uses: the
-    user chose this engine, and an update changes nothing they see. Once a
-    process at most, and not when the user turned off checking for updates
-    at start (Preferences → Updates & Backup): the earlier build keeps
-    working. A download that fails is tried again when the dictation service
-    next starts. The thread, or None when nothing was started."""
-    global _update_tried
+    user chose this engine, and an update changes nothing they see. Never
+    two at once, and not when the user turned off checking for updates at
+    start (Preferences → Updates & Backup): the earlier build keeps
+    working. The thread, or None when nothing was started."""
+    global _update_running, _update_failed_at
     with _update_lock:
-        if _update_tried or engine_dir() == _engine_dir():
+        waiting = (_update_failed_at is not None
+                   and time.monotonic() - _update_failed_at < UPDATE_RETRY_S)
+        if _update_running or waiting or engine_dir() == _engine_dir():
             return None
-        _update_tried = True
-    from .config import load_config
-    if not load_config().auto_check_updates:
-        logger.info(f"Graphics engine build {ENGINE_BUILD} not downloaded: checking for "
-                    "updates at start is off")
-        return None
+        from .config import load_config
+        if not load_config().auto_check_updates:
+            _update_failed_at = time.monotonic()
+            logger.info(f"Graphics engine build {ENGINE_BUILD} not downloaded: checking for "
+                        "updates at start is off")
+            return None
+        _update_running = True
     thread = threading.Thread(target=_update, daemon=True, name="vulkan-engine-update")
     thread.start()
     return thread
@@ -310,6 +320,19 @@ def update_in_background():
 
 def _update():
     """The update's download, with how it ended in the log."""
+    global _update_running, _update_failed_at
+    done = False
+    try:
+        done = _download_update()
+    finally:
+        with _update_lock:
+            _update_running = False
+            _update_failed_at = None if done else time.monotonic()
+
+
+def _download_update() -> bool:
+    """Download this build; True once it's in place. Whatever went wrong is
+    logged."""
     from .download_utils import failure_reason
     reports = []
     logger.info(f"Updating the graphics engine to build {ENGINE_BUILD}")
@@ -317,12 +340,18 @@ def _update():
         done = make_engine_download_func()(lambda *report: reports.append(report), None)
     except OSError as e:        # the download folder couldn't be made, say
         done, reports = False, [(str(e), 0)]
+    except Exception as e:      # a bug: in the log, not only on the thread's stderr
+        logger.warning(f"The graphics engine update failed: {type(e).__name__}: {e}",
+                       exc_info=True)
+        done = False
     if done:
         logger.info("Graphics engine updated; it's used from its next start")
-        return
+        return True
     why = failure_reason(*reports[-1]) if reports else None
     logger.warning(f"The graphics engine update didn't finish ({why or 'stopped'}); "
-                   "trying again when dictation next starts")
+                   f"trying again at a start of the engine {UPDATE_RETRY_S // 60} minutes "
+                   "from now or later")
+    return False
 
 
 def make_model_download_func(model_name):
@@ -367,8 +396,9 @@ def _engine_env(folder=None):
 
 def find_device():
     """Index of the graphics chip the engine should use, or None."""
+    folder = engine_dir()       # once: the program and its libraries from one build
     command, env = engine_process.parent_death_command(
-        [_binary("whisper-server"), "--help"], _engine_env())
+        [os.path.join(folder, "whisper-server"), "--help"], _engine_env(folder))
     try:
         result = subprocess.run(command, capture_output=True, text=True, errors="replace",
                                 timeout=30, env=env)
@@ -564,24 +594,11 @@ class VulkanWhisperModel:
             raise
 
     def _start(self):
-        """Start whisper-server, warmed up (_start_from). An update in
-        another TuxTalk process can put a new build in place and remove the
-        one just chosen before it was started: then it starts once more,
-        from the new one."""
-        folder = engine_dir()
-        try:
-            self._start_from(folder)
-        except (RuntimeError, OSError):
-            if engine_dir() == folder:
-                raise
-            logger.info("The graphics engine was updated while starting; starting the new build")
-            self._start_from(engine_dir())
-
-    def _start_from(self, folder):
-        """Start the whisper-server in *folder* on a free local port, wait up
-        to two minutes for it to answer, and warm it up with a practice run.
-        Raises RuntimeError with the reason when it doesn't come up, with the
+        """Start whisper-server on a free local port, wait up to two minutes
+        for it to answer, and warm it up with a practice run. Raises
+        RuntimeError with the reason when it doesn't come up, with the
         server stopped."""
+        folder = engine_dir()       # once: the program and its libraries from one build
         server = os.path.join(folder, "whisper-server")
         _kill_orphaned_servers()
         self._port = engine_process.free_port()

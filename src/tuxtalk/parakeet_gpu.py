@@ -69,8 +69,8 @@ class ParakeetGpuModel:
     def _helper_command(self):
         """The helper's command line for the engine and model on disk now.
         Worked out at every start: an engine update during the session
-        (whisper_vulkan.update_in_background) removes the folder of the
-        build the helper started from."""
+        (whisper_vulkan.update_in_background) puts a newer build in place,
+        and the update after it removes the build the helper started from."""
         from . import whisper_vulkan as wv
         model = wv.model_path(PARAKEET_MODEL)
         logger.info(f"Parakeet on the graphics card from {os.path.basename(model)}")
