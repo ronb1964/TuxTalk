@@ -106,6 +106,24 @@ def test_block_size_doesnt_change_the_verdicts():
     assert pieces == whole
 
 
+@pytest.mark.parametrize("rate", [44100, 48000])
+@pytest.mark.parametrize("block", [0, 256, 960, 1023])
+def test_a_microphone_at_another_rate_keeps_time_in_any_block_size(rate, block):
+    """In blocks of 256 a 48 kHz microphone's 10 s came out as 160,312
+    samples at 16 kHz: the detector's time ran ahead of the microphone's,
+    and after a few minutes a cut fell inside the next word."""
+    audio = np.sin(np.arange(rate * 10) / 37.0).astype(np.float32)
+    whole = voice_detector._Resampler(rate).feed(audio)
+    resampler = voice_detector._Resampler(rate)
+    if block == 0:                                  # an empty block first, then the rest
+        pieces = [resampler.feed(audio[:0]), resampler.feed(audio)]
+    else:
+        pieces = [resampler.feed(audio[i:i + block]) for i in range(0, len(audio), block)]
+    streamed = np.concatenate(pieces)
+    assert len(streamed) == len(whole) == 160000
+    assert np.allclose(streamed, whole, atol=1e-6)
+
+
 def test_time_since_maybe_speech_counts_the_quiet_after_the_last_word():
     """1 s of quiet follows the sentence; the reader's own pause after its
     last word (about 0.1 s) is quiet too."""

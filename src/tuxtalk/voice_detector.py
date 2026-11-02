@@ -71,12 +71,19 @@ class _Resampler:
         self.position = 0.0     # of the next output sample, in self.buffer
 
     def feed(self, samples):
+        """The 16 kHz samples *samples* completes, as floats; what falls past
+        the last whole step waits for the next block."""
         self.buffer = np.concatenate([self.buffer, samples])
+        if not self.buffer.size:
+            return self.buffer
         count = max(0, int(np.ceil((len(self.buffer) - 1 - self.position) / self.step)))
         points = self.position + self.step * np.arange(count)
         out = np.interp(points, np.arange(len(self.buffer)), self.buffer).astype(np.float32)
         self.position += self.step * count
-        used = int(self.position)
+        # The last sample stays: the next output may fall between it and the
+        # next block's first. Dropping more than the buffer held would move
+        # the position back and repeat samples, a drift that grows.
+        used = min(int(self.position), len(self.buffer) - 1)
         self.buffer = self.buffer[used:]
         self.position -= used
         return out
