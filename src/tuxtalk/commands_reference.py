@@ -60,7 +60,9 @@ SECTIONS = (
                 note='Said as a word ("a quote for the job", "to quote him") it stays '
                      'the word; a lone one otherwise is a plain "'),
         _inline("open quote", "begin quote", result="“"),
-        _inline("close quote", "end quote", "unquote", result="”"),
+        _inline("close quote", "end quote", "unquote", result="”",
+                note='"unquote" and "end quote" with no quote open stay the words '
+                     '("the end quote")'),
         _inline("quote unquote", result="“next word”",
                 note="a quote unquote expert → a “expert”"),
         _inline("hyphen", "dash", result="-"),

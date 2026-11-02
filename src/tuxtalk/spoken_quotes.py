@@ -6,25 +6,33 @@ quote"); "unquote", "end quote" and "close quote" close what the last bare
 next word in quotes ("a quote unquote expert"). "quote" is always the word
 after an article or a possessive with at most one describing word ("a quote
 for the job", "the price quote", "my favorite quote"), and as the verb with a
-person after it ("to quote him", "don't quote me").
+person after it ("to quote him", "don't quote me"). "unquote" and "end quote"
+with nothing open are the words ("the end quote was long"); "close quote"
+stays a mark, closing what the dictation before may have opened.
 
 Any other bare "quote" can be either, and the words beside it don't settle
 it: "please quote hello quote" and "she said quote me too quote" are
-quotations although "please quote" and "quote me" read like the verb. So an
-even number of them is always pairs. Only an odd number, which can't all be
-marks, keeps one as the word: the one the words beside it point to most
-("to quote Einstein quote imagination is everything quote"). With no such
-words the last one is a plain ".
+quotations although "please quote" and "quote me" read like the verb. So
+they pair, except where the words beside one point to the word strongly. Of
+an odd number, which can't all be marks, the one they point to most is the
+word ("to quote Einstein quote imagination is everything quote"). Then those
+after "to", "this", "his" and the like are words in twos ("his quote and her
+quote"), as long as the rest still pair: in "he said quote this quote" the
+second closes the first. With no such words a last one is a plain ".
 """
 import re
 from dataclasses import dataclass
 
 OPEN, CLOSE, PLAIN = "\u201c", "\u201d", '"'
 
+# The phrases that only open or only close, also what normalize keeps the
+# words between as said.
+OPENING = r"(?:open|begin)\s+quotes?"
+CLOSING = r"(?:(?:close|end)\s+quotes?|unquote)"
 _RE_SPOKEN = re.compile(
     r"(?P<pair>\bquote[\s,.-]+unquote\b)"
-    r"|(?P<open>\b(?:open|begin)\s+quotes?\b)"
-    r"|(?P<close>\b(?:close\s+quotes?|end\s+quotes?|unquote)\b)"
+    rf"|(?P<open>\b{OPENING}\b)"
+    rf"|(?P<close>\b{CLOSING}\b)"
     r"|(?P<bare>\bquote\b)",
     re.IGNORECASE,
 )
@@ -67,6 +75,10 @@ _WORD_AFTER = {"of": 1, "from": 1, "for": 1, "him": 1, "her": 1, "them": 1, "me"
                "us": 1, "was": 1}
 _RE_WORD_BEFORE = re.compile(r"([\w'’]+)[\s,.]*$")
 _RE_WORD_AFTER = re.compile(r"[\s,.]*([\w'’]+)")
+# A score this high (one of the strongest words before, "to", "this", "his",
+# or a weaker word both before and after) keeps a quote the word if the
+# others still pair.
+_STRONG = 2
 # Enough of the text before a "quote" to hold the word before it.
 _NEARBY = 40
 
@@ -105,27 +117,67 @@ def _claim_explicit(said: list) -> None:
             said[j].mark = OPEN if phrase.kind == "close" else CLOSE
 
 
+def _keep_strong_words(left: list, scores: list) -> None:
+    """Mark as the word each quote in *left* whose score is _STRONG or more,
+    leaving the rest an even number of marks: if the weaker ones are odd,
+    the strong one after the last of them closes it ("he said quote this
+    quote"), or else the strong one nearest before it opens it."""
+    marks = [i for i, n in enumerate(scores) if n < _STRONG]
+    if len(marks) % 2 and len(marks) < len(left):
+        last = marks[-1]
+        marks.append(last + 1 if last + 1 < len(left)
+                     else max(i for i in range(last) if scores[i] >= _STRONG))
+    for i, s in enumerate(left):
+        if i not in marks:
+            s.mark = "word"
+
+
 def _pair_bare(text: str, said: list) -> None:
     """The bare quotes no phrase took, in pairs. Of an odd number, the one
-    the words beside it point to most is the word."""
+    the words beside it point to most is the word, and so are the strongly
+    word-like ones the pairs can do without."""
     left = [s for s in said if s.kind == "bare" and not s.mark]
-    if len(left) % 2:
-        scores = [_word_score(text, s.start, s.end) for s in left]
-        if max(scores):
-            left.pop(scores.index(max(scores))).mark = "word"
+    if not left:
+        return
+    scores = [_word_score(text, s.start, s.end) for s in left]
+    if len(left) % 2 and max(scores):
+        i = scores.index(max(scores))
+        left.pop(i).mark = "word"
+        scores.pop(i)
+    _keep_strong_words(left, scores)
+    left = [s for s in left if not s.mark]
     for i, s in enumerate(left):
         s.mark = CLOSE if i % 2 else OPEN
     if len(left) % 2:
         left[-1].mark = PLAIN
 
 
+def _close_unopened(said: list, text: str) -> None:
+    """An "unquote" or "end quote" with no mark open before it is the word
+    ("the end quote was long")."""
+    opened = False
+    for s in said:
+        if s.kind == "open" or s.mark == OPEN:
+            opened = True
+        elif s.kind == "close" or s.mark == CLOSE:
+            if not (opened or text[s.start:s.end].lower().startswith("close")):
+                s.mark = "word"
+            opened = False
+
+
 def _spoken(text: str) -> list:
     """Each spoken quote word or phrase in *text*; a bare "quote" that can
-    only be the word is marked so already."""
+    only be the word is marked so already. The word "quote unquote" puts in
+    quotes is left out, even when it's "quote"."""
     verbs = {m.start(1) for m in
              _RE_VERB_WITH_OBJECT.finditer(text.replace("\u2019", "'"))}
-    said = []
+    said, taken = [], set()
     for m in _RE_SPOKEN.finditer(text):
+        if m.start() in taken:
+            continue
+        quoted = m.lastgroup == "pair" and _RE_NEXT_WORD.match(text, m.end())
+        if quoted:
+            taken.add(quoted.start(1))
         word = m.lastgroup == "bare" and (m.start() in verbs
                                           or _RE_NOUN_BEFORE.search(text, 0, m.start()))
         said.append(_Said(m.lastgroup, m.start(), m.end(), "word" if word else ""))
@@ -134,6 +186,8 @@ def _spoken(text: str) -> list:
 
 def _written(text: str, s: _Said):
     """(what *s* is typed as, where the text carries on after it)."""
+    if s.mark == "word":
+        return text[s.start:s.end], s.end
     if s.kind == "pair":
         word = _RE_NEXT_WORD.match(text, s.end)
         if not word:
@@ -145,7 +199,7 @@ def _written(text: str, s: _Said):
     if s.kind == "close" or s.mark == CLOSE:
         stop = _RE_ENDED.search(text, 0, s.start) and _RE_PAUSE_MARK.match(text, s.end)
         return CLOSE, stop.end() if stop else s.end
-    return (text[s.start:s.end] if s.mark == "word" else s.mark), s.end
+    return s.mark, s.end
 
 
 def mark_spoken_quotes(text: str) -> str:
@@ -155,10 +209,9 @@ def mark_spoken_quotes(text: str) -> str:
         return text
     _claim_explicit(said)
     _pair_bare(text, said)
+    _close_unopened(said, text)
     out, pos = [], 0
     for s in said:
-        if s.start < pos:
-            continue        # the word "quote unquote" already put in quotes
         written, after = _written(text, s)
         out += [text[pos:s.start], written]
         pos = after

@@ -4,7 +4,7 @@ line-break marker, and the result gets tidy punctuation, spacing and capitals.
 """
 import re
 
-from .spoken_quotes import mark_spoken_quotes
+from .spoken_quotes import CLOSING, OPENING, mark_spoken_quotes
 
 # A line break in a dictation ("new line"). Typed, it's a Shift+Enter: a plain
 # Enter would send a chat message or run a terminal's half-typed command.
@@ -28,8 +28,10 @@ PLAIN_LOOKALIKES = str.maketrans({
 # =====================================================================
 
 # --- _hold_quoted: "open quote ... close quote" kept as said ---
+# Also "begin quote" ... "end quote" or "unquote", but not a bare "quote",
+# which can be the word.
 _RE_QUOTED_TEXT = re.compile(
-    r'\b(?:open\s+quotes?)[,.\s]+(.*?)[,.\s]+(?:close\s+quotes?)\b',
+    rf'\b{OPENING}[,.\s]+(.*?)[,.\s]+{CLOSING}\b',
     re.IGNORECASE
 )
 
