@@ -530,7 +530,9 @@ def _finish(message, work) -> None:
     """Queue *work*, the last part of *message*'s recording, on the dictation
     worker. Until it's done, Esc cancels what of it is left
     (recording.cancel_finishing): the key is up, but the words may not be
-    in yet, nor the automatic Enter after them."""
+    in yet, nor a key said after them ("... press enter"). It's done once
+    an automatic send's countdown starts: from then on a tap of the
+    dictation key holds the send, and Esc is the app's again."""
     message.finishing = True
 
     def run():

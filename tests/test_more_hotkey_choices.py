@@ -905,7 +905,7 @@ def test_typing_that_waited_goes_on_where_it_was_going(keyboard, no_hotkeys_note
 
 def _send_to_kwrite():
     """A send counting down to Enter in KWrite, as send_countdown keeps it."""
-    return {"to": focused_window.Destination(*KWRITE), "why": "test",
+    return {"to": focused_window.Destination(*KWRITE), "message": rs.Message(), "why": "test",
             "press": keyboard_output.press_key, "space": "", "mode": "type",
             "timer": None, "ticks": []}
 

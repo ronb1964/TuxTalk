@@ -1,17 +1,25 @@
 """The voice detector: real speech is heard, steady and bumpy noise isn't,
 at any microphone rate and block size, and the bundled model is the one
-the measurements were made with.
+the measurements were made with. The model loads before the audio thread
+needs it, and a detector that fails, or a model that won't load, never
+costs the rest of a recording.
 
 Speech is a LibriSpeech sentence (CC BY 4.0, tests/data/README.md).
 """
 import hashlib
+import logging
+import types
 import wave
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from tuxtalk import resampling, voice_detector
+from conftest import next_recording
+from tuxtalk import (live_settings, recording, resampling, silence, type_at_pause,
+                     voice_detector)
+from tuxtalk import recording_state as rs
+from tuxtalk.chunk_meter import PauseTest
 from tuxtalk.voice_detector import FRAME_S, VoiceDetector, speech_seconds
 
 DATA = Path(__file__).with_name("data")
@@ -131,3 +139,107 @@ def test_time_since_maybe_speech_counts_the_quiet_after_the_last_word():
     block = (np.concatenate([_at_rms(READER, 1750), _quiet(1.0)]) * 32767).astype(np.int16)
     detector.feed(block.tobytes())
     assert 1.0 - FRAME_S <= detector.since_maybe <= 1.25
+
+
+# --- When the detector fails ---------------------------------------------------
+
+class _Broken:
+    """A detector whose every feed() fails, as a bug in one would."""
+
+    def feed(self, block):
+        raise ValueError("broken")
+
+
+@pytest.fixture
+def recording_now(monkeypatch):
+    """A recording under way at 16 kHz, nothing heard yet."""
+    monkeypatch.setattr(recording, "indicator", None)
+    monkeypatch.setattr(rs.state, "is_recording", True)
+    return next_recording()
+
+
+def _hear(rec, blocks=3):
+    for _ in range(blocks):
+        recording._sd_callback(rec, np.zeros((320, 1), np.int16), 320, None, None)
+
+
+@pytest.mark.parametrize("which", ["chunker", "silence"])
+def test_a_failing_detector_doesnt_end_the_recording(recording_now, which, caplog):
+    """sounddevice ends the stream on an error in its callback: what's said
+    after it was lost, and hands-free never stopped."""
+    setattr(recording_now, which, _Broken())
+    with caplog.at_level(logging.ERROR):
+        _hear(recording_now)
+    assert len(recording_now.frames) == 3 and getattr(recording_now, which) is None
+    assert len([r for r in caplog.records if "stopped listening" in r.message]) == 1
+
+
+def test_the_audio_thread_never_loads_the_model(monkeypatch):
+    """Loaded when Type at pause is armed, before the microphone's first
+    block: a cold load in the audio callback overran its buffer."""
+    monkeypatch.setattr(live_settings, "chunk_pause_seconds", 0.8)
+    rec = types.SimpleNamespace(edit_mode=False, samplerate=16000, chunker=None)
+    type_at_pause.arm_chunker(rec)
+
+    def no_loading_now():
+        raise AssertionError("the model was loaded while audio was judged")
+    monkeypatch.setattr(voice_detector, "_model", no_loading_now)
+    rec.chunker.feed(np.zeros(1600, np.int16).tobytes())
+
+
+@pytest.fixture
+def no_model(monkeypatch, tmp_path):
+    """A model file that isn't there, never loaded yet in this process."""
+    monkeypatch.setattr(voice_detector, "MODEL", str(tmp_path / "missing.onnx"))
+    monkeypatch.setattr(voice_detector, "_session", None)
+    monkeypatch.setattr(voice_detector, "_load_failed", False)
+
+
+def test_a_model_that_wont_load_is_said_once(no_model, caplog):
+    with caplog.at_level(logging.ERROR):
+        assert not voice_detector.load()
+        assert not voice_detector.load()
+    assert len([r for r in caplog.records if "didn't load" in r.message]) == 1
+
+
+def test_without_the_model_nothing_is_dropped_as_silent(no_model):
+    quiet = np.zeros(SR, np.float32)
+    assert silence.has_a_word(quiet, SR) and not silence.has_no_speech(quiet, SR)
+
+
+def test_without_the_model_type_at_pause_types_the_recording_whole(no_model, monkeypatch):
+    monkeypatch.setattr(live_settings, "chunk_pause_seconds", 0.8)
+    rec = types.SimpleNamespace(edit_mode=False, samplerate=16000, chunker=None)
+    type_at_pause.arm_chunker(rec)
+    assert rec.chunker is None
+
+
+def test_without_the_model_a_double_tap_records_on(no_model, recording_now, monkeypatch):
+    """Hands-free can't hear the speaker finish: the recording goes on until
+    the next tap, not stopped by the second tap of the double-tap."""
+    monkeypatch.setattr(live_settings, "auto_stop_seconds", 2.0)
+    recording_now.toggle_started_at = recording.time.time()
+    assert recording.toggle_pressed_while_recording(False)
+    assert recording_now.silence is None
+
+
+def test_the_preferences_test_stops_when_its_detector_fails(caplog):
+    test = PauseTest(SR, 0.8)
+    test._detector = _Broken()
+    with caplog.at_level(logging.ERROR):
+        assert not test.feed(np.zeros(320, np.int16))
+        assert not test.feed(np.zeros(320, np.int16))
+    assert test.failed
+    assert len([r for r in caplog.records if "stopped listening" in r.message]) == 1
+
+
+def test_a_word_is_found_without_judging_the_whole_recording(monkeypatch):
+    """has_a_word and has_no_speech run after every transcription: a long
+    dictation's audio was judged whole again, about 170 ms a minute."""
+    judged = []
+    feed = VoiceDetector.feed
+    monkeypatch.setattr(VoiceDetector, "feed",
+                        lambda self, block: judged.append(len(block)) or feed(self, block))
+    audio = np.concatenate([_sentence(), _quiet(60.0)])
+    assert silence.has_a_word(audio, SR) and not silence.has_no_speech(audio, SR)
+    assert sum(judged) < 2 * 5 * SR * 2         # two checks, each well inside the sentence

@@ -12,7 +12,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 import gtk_text  # noqa: E402
-from tuxtalk import mic_stream  # noqa: E402
+from tuxtalk import mic_stream, prefs_type_at_pause, voice_detector  # noqa: E402
 from tuxtalk.mic_test import MicTest  # noqa: E402
 from tuxtalk.prefs import PreferencesWindow  # noqa: E402
 from tuxtalk.prefs_advanced import AdvancedTab  # noqa: E402
@@ -191,6 +191,32 @@ def test_a_mic_that_wont_open_says_so(win):
     win.tap_test_btn.clicked()
     assert "Couldn't open the microphone" in win.tap_status.get_text()
     assert win.tap_test_btn.get_label() == "Test"
+
+
+def test_a_voice_detector_that_fails_stops_the_test_and_says_so(win):
+    """An error in the stream's callback ended the stream: the meter froze
+    with the test still showing as running."""
+    win.tap_check.set_active(True)
+    win.tap_test_btn.clicked()
+    stream = win.streams[-1]
+
+    def broken(block):
+        raise ValueError("broken")
+    win._pause_test._detector.feed = broken
+    stream.kwargs["callback"](np.zeros((320, 1), np.int16), 320, None, None)
+    win._tap_show(win._pause_test)
+    assert win.tap_status.get_text() == prefs_type_at_pause.DETECTOR_FAILED
+    assert win.tap_test_btn.get_label() == "Test" and stopped(stream)
+
+
+def test_a_voice_detector_that_wont_load_says_so(win, monkeypatch):
+    def unavailable():
+        raise voice_detector.Unavailable("the voice detector didn't load")
+    monkeypatch.setattr(voice_detector, "_model", unavailable)
+    win.tap_check.set_active(True)
+    win.tap_test_btn.clicked()
+    assert win.streams == [] and win.tap_test_btn.get_label() == "Test"
+    assert win.tap_status.get_text() == prefs_type_at_pause.DETECTOR_MISSING
 
 
 def test_a_mic_that_cant_be_found_says_so(win):

@@ -17,7 +17,7 @@ import sys
 import threading
 
 from . import (engine, gtk_loop, keyboard_output, recording, single_instance, tray_link,
-               virtual_keyboard)
+               virtual_keyboard, voice_detector)
 from . import live_settings as live
 from . import recording_state as rs
 from .config import load_config, load_custom_commands
@@ -168,6 +168,10 @@ def main():
     input_device_idx = recording.pick_input_device(cfg.mic)
     gtk_ok = _start_gtk(cfg)
     _load_model(cfg, gtk_ok)
+    # The voice detector hears every recording (silence.py), and Type at
+    # pause and hands-free judge it as it arrives: loaded now, the first
+    # recording doesn't wait for it.
+    voice_detector.load()
     # A toggle sent while the model was loading would otherwise start a
     # recording seconds later, out of the blue, when the input loop starts.
     # One asked for on the command line waits in the tray instead (control.py).

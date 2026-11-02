@@ -46,9 +46,8 @@ READY_BEEP = (1000, 0.09)
 
 SAMPLE_RATE = 44100
 VOLUME = 0.2
-# A tone that starts or stops at once clicks, and a click is sound at every
-# pitch: picked up by a microphone near the speakers, it isn't told apart from
-# a word by the beep's pitch (silence.has_a_word).
+# A tone that starts or stops at once clicks, and a microphone near the
+# speakers records the click with the dictation.
 FADE_S = 0.005
 # The longest wait_until_played waits. Measured in a VM on PipeWire, the
 # start beep took 0.39 s at its usual 0.035 s of latency and 0.53 s at 0.17 s.

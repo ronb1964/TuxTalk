@@ -1,8 +1,8 @@
 """
-Whether, and when, someone is talking: hands-free auto-stop, judged by the
-voice detector, and from the loudness of 20 ms blocks of audio, an
-accidental tap of the hold key, a start beep the microphone picked up, a
-dead microphone, and a recording in which nobody talked.
+Whether, and when, someone is talking. The voice detector judges
+hands-free auto-stop, an accidental tap of the hold key with no word in it,
+and a recording in which nobody talked; the loudness of 20 ms windows
+judges a dead microphone and a noisy room in the microphone test.
 
 Hands-free auto-stop is used only for toggle recordings (tap the toggle key,
 talk, and it stops on its own). A hold recording already ends when the key
@@ -20,12 +20,13 @@ is speech, so a dryer, a fan or a kitchen isn't talking. Nothing counts until
 the speaker has actually talked for a moment, so a slow start is never
 mistaken for being done.
 """
+import collections
 import threading
 
 import numpy as np
 
 from .audio_windows import WINDOW_S, RoomLoudness, window_length
-from .voice_detector import FRAME_S, VoiceDetector, speech_seconds
+from .voice_detector import FRAME_S, Unavailable, VoiceDetector, speech_seconds
 
 # How much talking arms hands-free: a cough or a click is shorter than this.
 _SPEECH_TO_ARM_S = 0.3
@@ -46,16 +47,15 @@ class SilenceDetector:
     """Feed it audio blocks as they arrive; it says when the speaker is done:
     quiet for silence_seconds, by the voice detector, after talking.
 
-    Measured on 125 recorded readers in seven noises (six of them recorded
-    rooms and a dryer) from 40 to 10 dB under the voice, with a 2 s wait and
-    sentences 1.2 s apart (.superpowers/voice-detector, sim_vad.py hf):
-    where the loudness rules it replaces never stopped by themselves (236
-    of 2,268 recordings, as next to a dryer or in a kitchen), it stops; noise
-    sent to the engine after the last word fell from up to 4 s to under 0.9
-    s; recordings losing speech from 37 to 8, which lost a soft last sound
-    under the noise. Stopping before the speaker was done stayed about as
-    often as before at waits of 2 and 3 s. Other people talking is speech to
-    it, so near a TV it doesn't stop, as before.
+    Simulated with 125 recorded readers in seven noises (six recorded rooms
+    and a dryer) from 40 to 10 dB under the voice, a 2 s wait and sentences
+    1.2 s apart, 2,268 recordings, against stopping by loudness: it stops
+    in the 236 that loudness never stopped (next to a dryer, in a kitchen);
+    noise sent to the engine after the last word is under 0.9 s, where
+    loudness sent up to 4 s; 8 recordings lose speech (a soft last sound
+    under the noise), against 37. It stops before the speaker is done about
+    as often, at waits of 2 and 3 s. Other people talking is speech to it,
+    so near a TV it doesn't stop by itself.
     """
 
     # With nothing said at all for this long, stop anyway (nothing_said is
@@ -79,6 +79,9 @@ class SilenceDetector:
         self.nothing_said = False
         self._busy = 0           # hold() calls not yet released
         self._sound_quiet = 0.0  # since loudness last heard a sound that could be a word
+        # Loudness windows measured and not yet reached by the voice
+        # detector's frames: (where each ends, in seconds; a sound in it).
+        self._windows = collections.deque()
         # A block reached NOTHING_SAID_S and was kept for the speech in it.
         self._past_nothing_said = False
         self._said_before = False
@@ -123,8 +126,11 @@ class SilenceDetector:
         said stops the recording unless the speech has armed the detector,
         so clicks in later blocks can't put the drop off block after block."""
         with self._lock:
-            for sound in self._loudness.feed(block):
-                self._sound_quiet = 0.0 if sound else self._sound_quiet + WINDOW_S
+            loudness = self._loudness
+            start = loudness.measured
+            for n, sound in enumerate(loudness.feed(block)):
+                self._windows.append(((start + (n + 1) * loudness.window) / self.sample_rate,
+                                      sound))
             verdicts = {self._frame(talking) for talking, _ in self._voice.feed(block)}
             if "nothing said" in verdicts and not self.fired:
                 if "speech" not in verdicts or self._past_nothing_said:
@@ -139,6 +145,11 @@ class SilenceDetector:
         NOTHING_SAID_S, "speech" when it is talking, else None. Called with
         the lock held."""
         self.elapsed += FRAME_S
+        # Loudness up to this frame's end, not the rest of the block: a sound
+        # heard ahead put a stop off that smaller blocks made 0.7 s sooner.
+        while self._windows and self._windows[0][0] <= self.elapsed + 1e-9:
+            sound = self._windows.popleft()[1]
+            self._sound_quiet = 0.0 if sound else self._sound_quiet + WINDOW_S
         if self.fired:
             return None
         if talking:
@@ -179,7 +190,7 @@ class SilenceDetector:
 # measured on real everyday sounds (ESC-50, 40 each of coughs, sneezes,
 # breaths, laughs, claps, knocks, mouse clicks and typing) and real short words
 # (English and German, said normally and fast), at two levels in a quiet and a
-# noisy room (.superpowers/voice-detector/word_checks.py), every word counted;
+# noisy room, every word counted;
 # clicks, typing and claps 0 to 3% of the time, where loudness counted every
 # one; knocks and breaths 5 to 20%; laughs up to 40%; coughs 45 to 70% and
 # sneezes 52 to 80%, voiced as they are. TuxTalk's start beep, which the
@@ -226,7 +237,17 @@ def is_speechless_tap(audio_f32, sample_rate) -> bool:
 
 def has_a_word(audio_f32, sample_rate) -> bool:
     """Whether *audio_f32* holds at least a word's worth of speech."""
-    return speech_seconds(audio_f32, sample_rate) >= _WORD_S
+    return _speech_up_to(audio_f32, sample_rate, _WORD_S) >= _WORD_S
+
+
+def _speech_up_to(audio_f32, sample_rate, seconds: float) -> float:
+    """voice_detector.speech_seconds, counted up to *seconds*. That is the
+    answer too when the voice detector didn't load: without it, nothing
+    is dropped as speechless."""
+    try:
+        return speech_seconds(audio_f32, sample_rate, up_to=seconds)
+    except Unavailable:
+        return seconds
 
 
 def has_no_speech(audio_f32, sample_rate) -> bool:
@@ -238,7 +259,7 @@ def has_no_speech(audio_f32, sample_rate) -> bool:
     trusted. It only decides whether stock phrases were invented, never
     whether a recording is transcribed: a long clip's background can be the
     speaker's own voice, so it is too blunt to drop real dictation on."""
-    return speech_seconds(audio_f32, sample_rate) < _SPEECH_TO_ARM_S
+    return _speech_up_to(audio_f32, sample_rate, _SPEECH_TO_ARM_S) < _SPEECH_TO_ARM_S
 
 
 # --- A noisy room, for the microphone test ------------------------------------

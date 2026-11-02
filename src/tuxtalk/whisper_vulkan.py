@@ -409,8 +409,8 @@ def parse_result(reply):
 
     Its segments' no-speech probability is left out: on the same audio it
     reads 0.90 for clear speech with the language set and 0.00 for pure
-    silence, so the recording's own loudness stands in for it
-    (engine._transcribe_vulkan)."""
+    silence, so the voice detector's verdict on the recording stands in
+    for it (engine._transcribe_vulkan)."""
     segments = reply.get("segments") or []
     text = " ".join((s.get("text") or "").strip() for s in segments).strip()
     if not segments:

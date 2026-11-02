@@ -7,6 +7,9 @@ with synthetic audio, without a display or a microphone.
 import math
 
 from .chunking import MIN_SPEECH_S, PauseDetector, PauseSnapshot
+from .logger import error_without_words, setup_logger
+
+logger = setup_logger(__name__)
 
 # The meter's scale, in dBFS: a quiet dynamic mic (room near -80, speech from
 # -55) and a hissing onboard input (room near -38) both read clearly.
@@ -35,6 +38,8 @@ class PauseTest:
         self._cuts = 0
         self._cuts_flashed = 0
         self._heard_speech = False
+        # Set by feed() when the detector failed; the test is over then.
+        self.failed = False
         self._detector = PauseDetector(pause_seconds, self.sample_rate)
 
     def configure(self, pause_seconds: float) -> None:
@@ -42,7 +47,17 @@ class PauseTest:
         self._detector = PauseDetector(pause_seconds, self.sample_rate)
 
     def feed(self, block) -> bool:
-        fired = self._detector.feed(block)
+        """Hear *block* (int16 samples); True when it ended a pause. A
+        detector that fails sets failed, logged once, and hears nothing
+        more: an error here would end the stream, the meter frozen."""
+        if self.failed:
+            return False
+        try:
+            fired = self._detector.feed(block)
+        except Exception as e:
+            self.failed = True
+            logger.error(f"Type at pause's test stopped listening: {error_without_words(e)}")
+            return False
         if fired:
             self._cuts += 1
         if fired or self._detector.speech_time >= MIN_SPEECH_S:

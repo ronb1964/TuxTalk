@@ -10,8 +10,8 @@ from evdev import ecodes
 
 from conftest import CHAT_WINDOW, next_recording
 from type_at_pause_rig import fake_pipeline, frames_of, speech, type_chunk
-from tuxtalk import (delivery, dictation_worker, engine, hotkeys, pipeline, recording,
-                     send_countdown, tray_link, type_at_pause)
+from tuxtalk import (delivery, dictation_worker, engine, hotkeys, keyboard_output, pipeline,
+                     recording, send_countdown, tray_link, type_at_pause)
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 
@@ -92,6 +92,23 @@ def test_esc_while_the_words_go_in_sends_nothing_after_them(chat, keyboard, let_
         return outcome
     monkeypatch.setattr(delivery, "deliver_text", deliver_then_esc)
     heard.append("see you at noon")
+    let_go()
+    assert typed == [("See you at noon.", CHAT_WINDOW[1])]
+    assert keyboard.typed_keys() == [] and notices == [send_countdown.CANCELLED_NOTICE]
+
+
+def test_esc_while_a_spoken_enter_waits_its_turn_sends_nothing(chat, keyboard, let_go,
+                                                              monkeypatch):
+    """"see you at noon, press enter", then Esc while the Enter waits for
+    the app to take in the words: the message stays unsent."""
+    focus, heard, typed, notices = chat
+    press = keyboard_output.press_key
+
+    def esc_then_press(*a, **k):
+        esc()
+        return press(*a, **k)
+    monkeypatch.setattr(keyboard_output, "press_key", esc_then_press)
+    heard.append("see you at noon, press enter")
     let_go()
     assert typed == [("See you at noon.", CHAT_WINDOW[1])]
     assert keyboard.typed_keys() == [] and notices == [send_countdown.CANCELLED_NOTICE]

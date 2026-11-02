@@ -71,9 +71,9 @@ def _transcribe_vulkan(engine, audio_f32, language, limit_to, words_prompt, star
     logger.info(f"TIMING: Transcription completed in {time.time() - started:.2f}s (Vulkan GPU)")
     logger.info(f"Raw transcription (Vulkan GPU): {live.loggable(raw)}")
     # whisper.cpp's no-speech score isn't reliable (0.90 on clear speech,
-    # 0.00 on silence, see whisper_vulkan.parse_result), so the recording's
-    # own loudness stands in for it. With nobody talking, a lone "Thanks
-    # for watching!" is invented; said aloud, it is kept.
+    # 0.00 on silence, see whisper_vulkan.parse_result), so the voice
+    # detector's verdict on the recording stands in for it. With nobody
+    # talking, a lone "Thanks for watching!" is invented; said aloud, it is kept.
     if custom_words.is_echo(raw, live.words):
         logger.info("Whisper read your words back with nothing said; dropped")
         return None
