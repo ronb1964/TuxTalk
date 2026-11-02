@@ -52,11 +52,13 @@ before 0.15.0, so older entries use that name.
   that counts from your next dictation instead of the next restart.
 - When the speech engine failed, the error it gave went into TuxTalk's log
   as is, and that text could hold some of what you'd just said. Only the
-  kind of error is logged now. The notice on your screen still shows the
-  whole thing.
+  kind of error is logged now, there and when a file in Transcribe a File
+  or a voice edit fails. The notice on your screen still shows the whole
+  thing.
 - Pressing Esc right after you let go of the dictation key did nothing,
   so the dictation still went in and an automatic send still went out.
-  Esc cancels it now, up until the text starts going in.
+  Esc cancels it now, up until the text starts going in, and that goes
+  for a voice edit and a "..., press enter" too.
 - With Type at pause, a sentence ending in "Dr." or "etc." could get a
   question mark in place of its period. Those keep their period now. And
   a phrase followed by a key you said ("press tab" where it only types
