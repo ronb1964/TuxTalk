@@ -75,6 +75,19 @@ before 0.15.0, so older entries use that name.
   the front now.
 - Escape closes Transcribe a File (it still asks first if your text isn't
   saved) and the TuxTalk menu window, like the other windows.
+- When the hotkey helper can't read your keyboard, TuxTalk now says so:
+  the welcome screen, System check and the hotkey test tell you the
+  dictation keys can't work, the helper's log names each device it
+  skipped and why, and Report a Problem says how many keyboards it reads
+  (issue #26).
+- The hotkey helper (now 1.12) uses a keyboard it's only allowed to read
+  instead of skipping it, so the dictation keys work there. On such a
+  keyboard it can't hide the held key from the window you're typing in,
+  so it may repeat there.
+- TuxTalk no longer asks at every start to update a hotkey helper that
+  already works. It asks, at first run or at start, only where the update
+  matters, like a keyboard the old helper can't read; otherwise System
+  check offers it.
 - The hotkey test could say F8 and F9 were "Working" when only the test
   window itself saw them, while the hotkey helper that dictation listens
   to never did, and then F8 did nothing. A key now counts as working only
