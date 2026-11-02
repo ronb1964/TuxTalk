@@ -60,7 +60,7 @@ def build(layout, home=None, user=None) -> Report:
 
 def scrub(text, home, user, real_name="") -> str:
     """*text* with the home folder written as ~, the user name taken out,
-    "Ron's headset" too, and each capitalised word of the account's
+    a headset named after them too, and each capitalised word of the account's
     *real_name*. A one-letter name is left: a user called "a" or "i" would
     have that word replaced all through the settings and the log. The real
     name's words go only as written, and only those starting with a capital:
@@ -124,7 +124,7 @@ _LIVE_SESSION_NAMES = {"live system user", "live session user"}
 
 
 def _real_name():
-    """The account's full name ("Ron Brand"), the first field of its GECOS
+    """The account's full name ("Jo Ann Smith"), the first field of its GECOS
     entry, or "" when it has none or it's a live session's."""
     try:
         import pwd

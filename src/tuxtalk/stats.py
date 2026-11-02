@@ -86,7 +86,7 @@ def _read():
 
 
 def load():
-    """Stored counts per day ({"2026-10-02": {...}}). Never raises."""
+    """Stored counts per day, keyed by date ({"YYYY-MM-DD": {...}}). Never raises."""
     return _read() or {}
 
 

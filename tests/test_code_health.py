@@ -137,6 +137,11 @@ def measure_file(text):
     for tok in tokenize.generate_tokens(io.StringIO(text).readline):
         if tok.type == tokenize.COMMENT and _DATED.search(_LINK.sub("", tok.string)):
             add(tok.start[0], "dated_comment")
+    # Docstrings too: a name or a date there tells history just as a comment does.
+    for node in [tree] + [n for _, n in scopes]:
+        doc = ast.get_docstring(node)
+        if doc and _DATED.search(_LINK.sub("", doc)):
+            add(node.body[0].lineno, "dated_comment")
     if ast.get_docstring(tree) is None:
         add(1, "undocumented", "<module>")
     functions = {}
@@ -307,6 +312,13 @@ def test_a_date_in_a_link_is_not_history():
     assert _findings("# see https://example.org/2026-10-23/spec\n") == {}
     assert _findings("# Ron, 2026-10-18: the box was confusing\n") == \
         {"<module>::dated_comment": 1}
+
+
+def test_a_name_or_date_in_a_docstring_is_history_too():
+    """The 0.19 review found six that only comments had been checked for."""
+    assert _findings('def f():\n    """Opens the window.\n\n    Ron, 2026-10-18: it was slow."""\n') \
+        == {"f::dated_comment": 1}
+    assert _findings('def f():\n    """Counts per day, keyed by date (YYYY-MM-DD)."""\n') == {}
 
 
 def test_a_long_function_without_a_docstring_is_a_finding_under_its_name():
