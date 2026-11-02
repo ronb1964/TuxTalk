@@ -21,7 +21,7 @@
 <p align="center">
   <a href="https://tuxtalk.app/"><b>Website</b></a> &nbsp;&bull;&nbsp;
   <a href="#installation">Install</a> &nbsp;&bull;&nbsp;
-  <a href="#new-in-019">New in 0.19</a> &nbsp;&bull;&nbsp;
+  <a href="#new-in-020">New in 0.20</a> &nbsp;&bull;&nbsp;
   <a href="#what-it-does">What it does</a> &nbsp;&bull;&nbsp;
   <a href="#all-the-features">All the features</a> &nbsp;&bull;&nbsp;
   <a href="#how-its-made">How it's made</a> &nbsp;&bull;&nbsp;
@@ -44,17 +44,17 @@ Claude, Anthropic's AI, writes the code. I test it and use it every day, and I h
 
 ---
 
-## New in 0.19
+## New in 0.20
 
-**Dictation keys that don't need Fn.** You can pick Right Ctrl, Right Alt or Scroll Lock as your dictation key now, in Preferences, General. On a lot of laptops the F keys only work while you hold Fn, which makes holding F8 a two-handed job. Pick Right Ctrl or Right Alt and it's TuxTalk's key, so it stops working as Ctrl or Alt, and the list tells you what else you'd give up, like @ and € if Right Alt is your AltGr key, or the Compose key Pop!_OS puts on Right Ctrl. The hotkey helper needs an update for it, so TuxTalk asks for your password once.
+**A voice detector.** TuxTalk used to go by loudness, so a dryer's thump, a fan or dishes in the kitchen counted as you talking. Now it has a small voice detector built in (Silero VAD, 1.3 MB, nothing to download), and hands-free and Type at pause both ask it. Hands-free next to a dryer stops by itself far more often now. In our tests with 125 people reading in seven kinds of noise, the times it never stopped went from 1,195 to 353, and what's left is other people talking in the background, which is a voice too. A soft voice is heard like a loud one, and a cough or a clatter after your last word gets typed as "Yeah." a lot less.
 
-**Questions said over pauses end with a question mark.** With Type at pause on, each part of a sentence gets typed when you pause, and each part was heard on its own. So "don't you think it would be smart", a pause, then "to pick more than one" ended with a period. Now TuxTalk listens to the whole sentence once more before it decides how to end it.
+**"Quote" as a word.** "I want to quote him on that" used to come out with a quote mark in the middle. Now it's the word when the words around it say so, and "he said quote hello quote" still puts hello in quotes. "Begin quote" and "end quote" work too.
 
-**"Press tab" presses Tab.** Saying "tab" in the middle of a sentence used to type a tab character almost every time. Now only "press tab" does, and at the end of a dictation it presses the real Tab key, so you can fill in a form one box at a time.
+**Esc right after you let go.** It cancels the dictation now, and an automatic send with it, up until the text starts going in.
 
-**Report a Problem.** Help's Problems tab has a button that puts together what I'd ask you for anyway: your distro, desktop, keyboard layout, graphics card and the end of the log, with your username taken out and none of your dictation. You see all of it before anything goes anywhere, and nothing gets sent by itself. Help got a Tips section too, and it looks like Preferences now.
+**When the hotkey helper can't read your keyboard, TuxTalk says so.** Somebody on CachyOS had F8 do nothing at all, and the hotkey test said it was working. The helper (now 1.12) can use a keyboard it's only allowed to read, the hotkey test only says Working once dictation can really hear the key, and Report a Problem includes the helper's own log. It only asks you to update the helper where that matters.
 
-**A big cleanup, and what it turned up.** I had the whole codebase reviewed file by file, by Claude and by Codex, OpenAI's coding AI, and most of this release is fixing what they found. Some of it you'd notice. Hands-free stops by itself in steady noise like a dryer or a fan, the beeps don't get cut short, "Send each dictation automatically" won't send half a sentence that ended on "and" or send into a window you just switched to, and quitting or updating lets a dictation finish typing first. The CUDA download for NVIDIA cards is 580 MB now instead of 1.4 GB. The [changelog](CHANGELOG.md) has the rest.
+**Safer updates and graphics card.** A .deb or .rpm update is checked again somewhere only root can write before it's installed, the graphics engine only answers TuxTalk, and the CUDA download is pinned to the version we tested. The .rpm installs on openSUSE now, too. The [changelog](CHANGELOG.md) has the rest.
 
 ---
 
