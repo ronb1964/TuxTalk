@@ -131,7 +131,7 @@ def _owning_package(module_path: str, run=subprocess.run, which=shutil.which) ->
         return None
     try:
         result = run(["pacman", "-Qqo", module_path], capture_output=True, text=True,
-                     timeout=5)
+                     errors="replace", timeout=5)
     except (OSError, subprocess.SubprocessError) as e:
         logger.info(f"Install type: pacman -Qqo didn't answer ({e})")
         return None
