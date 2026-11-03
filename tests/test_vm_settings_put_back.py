@@ -52,10 +52,9 @@ def test_a_setting_the_vm_didnt_have_is_taken_out_again(run):
 
 
 def test_put_back_after_a_check_that_failed_part_way(run):
-    with pytest.raises(harness.Abort):
-        with run.settings_put_back("toggle_hotkey"):
-            run.set_config(toggle_hotkey="Right Ctrl")
-            raise harness.Abort("the dictation service didn't come back")
+    with pytest.raises(harness.Abort), run.settings_put_back("toggle_hotkey"):
+        run.set_config(toggle_hotkey="Right Ctrl")
+        raise harness.Abort("the dictation service didn't come back")
     assert run.config()["toggle_hotkey"] == '"F6"'
 
 

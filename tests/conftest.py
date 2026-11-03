@@ -1136,8 +1136,9 @@ def welcome_screen(monkeypatch):
     from tuxtalk import recommend, welcome_dialog
     built = []
 
-    def build(card=recommend.Hardware("NVIDIA GeForce RTX 4070 SUPER", True), language="en",
-              typing_ok=True, portaudio=True, gnome=False):
+    nvidia = recommend.Hardware("NVIDIA GeForce RTX 4070 SUPER", True)
+
+    def build(card=nvidia, language="en", typing_ok=True, portaudio=True, gnome=False):
         monkeypatch.setattr(recommend, "detect_hardware", lambda cfg=None: card)
         monkeypatch.setattr(recommend, "system_language", lambda env=None: language)
         monkeypatch.setattr(welcome_dialog, "detect_uinput_access",

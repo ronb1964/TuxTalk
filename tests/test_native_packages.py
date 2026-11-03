@@ -6,6 +6,7 @@ project, with stand-ins for fpm and rpmbuild that record the tree they were
 handed, so what each package would install is checked, not the scripts' text.
 """
 import hashlib
+import itertools
 import os
 import pathlib
 import shutil
@@ -89,7 +90,7 @@ def _build(project, script, **extra):
 def _fpm_option(project, flag):
     """Every value fpm was given for *flag*, in order."""
     args = (project[2] / "fpm-args").read_text().split("\0")[:-1]
-    return [value for option, value in zip(args, args[1:]) if option == flag]
+    return [value for option, value in itertools.pairwise(args) if option == flag]
 
 
 def _desktop_exec_lines(tree):
