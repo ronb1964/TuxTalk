@@ -112,9 +112,14 @@ def _reading_notice(keyboards):
         return None, False
     reason = secure_input.outdated_reason(version)
     uncertain = reason == secure_input.ALSO_MICE_REASON
-    reach = "may not reach" if uncertain else "don't reach"
-    return (f"{reason}, so these keys {reach} TuxTalk yet. Preferences, Advanced, Show "
-            "system check, Update Hotkey Helper updates it.", uncertain)
+    if uncertain:
+        which = "these keys may not reach"
+    elif secure_input.missed_keyboard_reason(version):
+        which = "keys from that keyboard don't reach"
+    else:
+        which = "some of these keys may not reach"
+    return (f"{reason}, so {which} TuxTalk yet. Preferences, Advanced, Show system check, "
+            "Update Hotkey Helper updates it.", uncertain)
 
 
 def _evdev():

@@ -105,8 +105,8 @@ def _readable_keyboards():
     udev rule (on Nobara and Bazzite) lets the user open it without the
     input group. Counted, it said typing works while F8 on the keyboard
     reached nothing, and Fix Typing wasn't offered. One reached through
-    the user's own group (the input group) counts: the group reads every
-    keyboard, an MX Keys or kanata's included."""
+    the input group counts: the group reads every keyboard, an MX Keys or
+    kanata's included."""
     paths = _readable_input_devices()
     try:
         from evdev import InputDevice
@@ -114,19 +114,24 @@ def _readable_keyboards():
         return paths
     keyboards = open_new_keyboards([], lambda: paths, InputDevice)
     found = [dev.path for dev in keyboards
-             if not is_keyboard_and_mouse(dev) or _through_own_group(dev.path)]
+             if not is_keyboard_and_mouse(dev) or _through_input_group(dev.path)]
     close_devices(keyboards)
     return found
 
 
-def _through_own_group(path) -> bool:
-    """Whether the user may read and write the node at *path* through a
-    group this process is in."""
+def _through_input_group(path) -> bool:
+    """Whether this session reaches the node at *path* through the input
+    group: it's in the group, and the group may read and write the node,
+    its ACL included, as for the hotkey helper (helper_may)."""
+    from .helper_keyboard_access import READ, WRITE, UnknownAccess, acl_of, helper_may
     try:
+        gid = grp.getgrnam("input").gr_gid
         st = os.stat(path)
-    except OSError:
+        acl = acl_of(path)
+    except (KeyError, OSError, UnknownAccess):
         return False
-    return st.st_gid in os.getgroups() and st.st_mode & 0o060 == 0o060
+    in_group = gid in os.getgroups() or gid == os.getegid()
+    return in_group and helper_may(st.st_mode, st.st_gid, acl, gid, READ | WRITE)
 
 
 # Said by System check, the hotkey test and first run when the hotkey helper

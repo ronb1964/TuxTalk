@@ -201,7 +201,7 @@ def test_a_helper_too_old_for_the_keyboard_says_why_keys_arent_active(monkeypatc
 
 @pytest.mark.parametrize("kind, version, says, goes", [
     ("keyboards_also_mice", "1.12", "may not reach", True),
-    ("read_only_keyboards", "1.11", "don&apos;t reach", False)])
+    ("read_only_keyboards", "1.11", "keys from that keyboard don&apos;t reach", False)])
 def test_an_old_helpers_notice_goes_once_a_key_was_heard_only_where_it_may_not_apply(
         monkeypatch, kind, version, says, goes):
     """A Logitech mouse beside a 1.12 helper asks for the update, though the

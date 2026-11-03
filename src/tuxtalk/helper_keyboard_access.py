@@ -71,7 +71,7 @@ class UnknownAccess(Exception):
     """A node's ACL couldn't be read: what the helper may do with it isn't known."""
 
 
-def _acl_of(node):
+def acl_of(node):
     """The ACL entries of *node*, or None when it has none (or the file
     system keeps none): its mode bits then say it all. Raises
     UnknownAccess when the ACL is there but can't be read: the mode's
@@ -146,7 +146,7 @@ def _helper_readable(input_dir, group):
     found = []
     for node, st in _event_nodes(input_dir):
         try:
-            acl = _acl_of(node)
+            acl = acl_of(node)
         except UnknownAccess as e:
             logger.info(f"Keyboard check skipped one node: {e}")
             continue

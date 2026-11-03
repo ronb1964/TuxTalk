@@ -391,3 +391,14 @@ def test_an_update_is_asked_for_only_where_a_keyboard_here_is_left_out(
     reason = si.missed_keyboard_reason(running)
     assert (reason is None) is (says is None) and (says or "") in (reason or "")
     assert si.needs_update(running) is (says is not None)
+
+
+def test_a_helper_too_old_for_any_keyboard_says_what_is_certain(monkeypatch):
+    """Helper 1.4 doesn't report Right Ctrl or Right Alt at all: beside a
+    Logitech mouse, the offer said only that a keyboard "may" be left out."""
+    from tuxtalk import update_offers
+    monkeypatch.setattr("tuxtalk.helper_keyboard_access.keyboards_also_mice",
+                        lambda: ["/dev/input/event5"])
+    assert si.missed_keyboard_reason("1.4") is None and si.needs_update("1.4")
+    assert "too old" in si.outdated_reason("1.4")
+    assert "Right Ctrl" in update_offers.helper_update_text("1.4")

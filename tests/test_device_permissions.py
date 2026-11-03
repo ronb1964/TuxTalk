@@ -102,7 +102,7 @@ def test_a_readable_logitech_mouse_alone_is_not_hotkey_access(monkeypatch):
     monkeypatch.setattr(evdev, "InputDevice", lambda path: _ClosingMouse([], path))
     monkeypatch.setattr("tuxtalk.uinput_helper._readable_input_devices",
                         lambda: ["/dev/input/mouse"])
-    monkeypatch.setattr("tuxtalk.uinput_helper._through_own_group", lambda path: False)
+    monkeypatch.setattr("tuxtalk.uinput_helper._through_input_group", lambda path: False)
     assert uinput_helper._readable_keyboards() == []
     ok, _ = check_input_read_permission()
     assert ok is False
@@ -117,18 +117,34 @@ def test_a_logitech_keyboard_read_through_the_input_group_is_hotkey_access(monke
     monkeypatch.setattr(evdev, "InputDevice", lambda path: _ClosingMouse([], path))
     monkeypatch.setattr("tuxtalk.uinput_helper._readable_input_devices",
                         lambda: ["/dev/input/mx-keys"])
-    monkeypatch.setattr("tuxtalk.uinput_helper._through_own_group", lambda path: True)
+    monkeypatch.setattr("tuxtalk.uinput_helper._through_input_group", lambda path: True)
     assert uinput_helper._readable_keyboards() == ["/dev/input/mx-keys"]
 
 
-def test_a_node_is_reached_through_a_group_only_with_its_group_bits(tmp_path):
+@pytest.mark.parametrize("groups, egid, mode, acl, reached", [
+    ([77], 1000, 0o660, None, True),                     # in the input group
+    ([1000], 77, 0o660, None, True),                     # its effective group
+    ([1000, 55], 1000, 0o660, None, False),              # another group (OpenRGB's)
+    ([77], 1000, 0o600, None, False),                    # the group may not
+    # An ACL: the mode's group bits are its mask; group::--- with a user entry.
+    ([77], 1000, 0o660, [(0x01, 6, 0), (0x02, 6, 1000), (0x04, 0, 0),
+                         (0x10, 6, 0), (0x20, 0, 0)], False),
+    ([77], 1000, 0o660, [(0x01, 6, 0), (0x04, 6, 0), (0x10, 6, 0), (0x20, 0, 0)], True)])
+def test_a_node_counts_only_when_reached_through_the_input_group(
+        monkeypatch, tmp_path, groups, egid, mode, acl, reached):
+    """A Logitech mouse given to the user through a one-device rule (an
+    ACL, or a group of its own) isn't the keyboard; the input group reads
+    them all."""
+    import grp
+    from types import SimpleNamespace
     node = tmp_path / "event5"
     node.write_text("")
-    os.chown(node, -1, os.getgid())
-    node.chmod(0o660)
-    assert uinput_helper._through_own_group(str(node)) is True
-    node.chmod(0o600)
-    assert uinput_helper._through_own_group(str(node)) is False
+    monkeypatch.setattr(grp, "getgrnam", lambda name: SimpleNamespace(gr_gid=77))
+    monkeypatch.setattr(os, "getgroups", lambda: groups)
+    monkeypatch.setattr(os, "getegid", lambda: egid)
+    monkeypatch.setattr(os, "stat", lambda path: SimpleNamespace(st_mode=mode, st_gid=77))
+    monkeypatch.setattr("tuxtalk.helper_keyboard_access.acl_of", lambda path: acl)
+    assert uinput_helper._through_input_group(str(node)) is reached
 
 
 def test_a_keyboard_unplugged_after_it_was_listed_is_skipped(monkeypatch):

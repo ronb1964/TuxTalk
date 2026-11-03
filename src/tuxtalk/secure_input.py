@@ -349,8 +349,10 @@ def missed_keyboard_reason(running):
             and access.read_only_keyboards()):
         return ("Your keyboard can only be read, and the hotkey helper on this computer "
                 "can't use such a keyboard")
-    if (_version(running) < _version(KEYBOARDS_ALSO_MICE_SINCE)
-            and access.keyboards_also_mice()):
+    # Below NEEDED_HELPER_VERSION what's certain is said instead: keys the
+    # helper doesn't report at all (update_offers, outdated_reason).
+    if (_version(NEEDED_HELPER_VERSION) <= _version(running)
+            < _version(KEYBOARDS_ALSO_MICE_SINCE) and access.keyboards_also_mice()):
         return ALSO_MICE_REASON
     return None
 
