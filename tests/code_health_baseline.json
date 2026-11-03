@@ -41,9 +41,6 @@
   "rename_migration.py::repin_launchers": {
    "decisions": 19
   },
-  "uninstall.py::done_text": {
-   "decisions": 16
-  },
   "vocabulary.py::save_word": {
    "decisions": 16
   },

@@ -1,7 +1,8 @@
 """Uninstall TuxTalk: Preferences -> Updates & Backup -> Uninstall TuxTalk...,
 or `tuxtalk --uninstall`.
 
-Removing the package or deleting the AppImage takes away only the program.
+Removing the package, or deleting the AppImage or a source install's venv,
+takes away only the program.
 Running it sets up much more: the hotkey helper service and udev rules (as
 root), the input group on older setups, a launcher, an icon and start at
 login, the GNOME extension, KDE shortcuts, and gigabytes of downloads
@@ -17,8 +18,9 @@ stay.
 
 It runs in the tray's process when TuxTalk is running: an AppImage's files
 vanish when its first process (the tray) exits, and this needs them to the
-end. Removing the .deb or .rpm deletes this very code mid-run, so every
-module it uses afterwards is imported here, up front.
+end. Removing the .deb, .rpm or pacman package deletes this very code
+mid-run, and so does deleting a source install's venv, so every module it
+uses afterwards is imported here, up front.
 """
 import grp
 import os
@@ -27,10 +29,11 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, NamedTuple
+from typing import Callable, NamedTuple, Optional
 
 import gi
 
@@ -41,8 +44,8 @@ from . import (ai_download, config, cosmic_hotkeys, custom_words,  # noqa: E402
                desktop_detect, extension_helper, file_transcribe, gnome_extensions,
                gnome_keybindings, installation, kwin_hotkeys, menu_cache, model_helper,
                parakeet_engine, rename_migration, secure_input, service_launcher,
-               settings_backup, single_instance, uinput_helper, update_install,
-               whisper_vulkan, ydotoold_leftovers)
+               settings_backup, single_instance, source_install, uinput_helper,
+               update_install, whisper_vulkan, ydotoold_leftovers)
 from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
 from .ui_style import message_dialog, show_message  # noqa: E402
 
@@ -54,10 +57,12 @@ PERSONAL_DATA = ("stats.json", "stats.json.bak", file_transcribe.RECENT_FILE,
                  file_transcribe.OLD_LAST_FILE)
 # The rest of what TuxTalk puts there, downloaded or rebuilt by itself
 # (tests/test_uninstall.py makes every name in the code pick one of the two).
+# A source install's venv is the program, gone whether settings stay or not.
 # .show_welcome_on_restart is only in an old TalkType's folder.
 DOWNLOADED_DATA = ("cuda", "ai-engine", "parakeet-ultra", "whisper-vulkan", "kwin", "updates",
-                   ".first_run_done", ".hotkey_test_mode", "remote_desktop_token",
-                   gnome_keybindings.BACKUP_NAME, ".show_welcome_on_restart")
+                   source_install.VENV_NAME, ".first_run_done", ".hotkey_test_mode",
+                   "remote_desktop_token", gnome_keybindings.BACKUP_NAME,
+                   ".show_welcome_on_restart")
 # The folders in it whose programs TuxTalk runs, stopped before deleting.
 ENGINE_FOLDERS = ("whisper-vulkan", "ai-engine", "parakeet-ultra", "cuda")
 # What TuxTalk keeps in its settings folder (tests/test_uninstall.py again).
@@ -70,7 +75,7 @@ CONFIG_NAMES = ("config.toml", "custom_commands.toml", custom_words.FILE_NAME, "
 # engine moved to a bigger disk) loses only the link, and the folder it
 # leads to stays, as TuxTalk didn't make it there.
 FOLDER_NAMES = ("cuda", "ai-engine", "parakeet-ultra", "whisper-vulkan", "kwin", "updates",
-                "backups")
+                source_install.VENV_NAME, "backups")
 
 
 def _copies(*patterns):
@@ -137,8 +142,11 @@ RUNTIME_FILES = ("talktype-history.json", ".talktype-history-" + "[a-z0-9_]" * 8
 
 ICON_SIZES = ("256x256", "128x128", "64x64", "48x48", "32x32")
 
-# The packages, by how TuxTalk was installed.
+# The packages, by how TuxTalk was installed. A system install's is the one
+# pacman says owns its files (Plan.system_package).
 PACKAGES = {"deb": "tuxtalk", "rpm": "tuxtalk", "aur": "tuxtalk-appimage"}
+# How the user removes a package the uninstall couldn't; pacman for the rest.
+REMOVE_COMMANDS = {"deb": "sudo apt remove", "rpm": "sudo dnf remove"}
 
 FEEDBACK_URL = "https://github.com/ronb1964/TuxTalk/discussions"
 
@@ -161,10 +169,18 @@ class Plan:
     input_group: bool = False        # TuxTalk's old setup put the user in it
     ydotoold_unit: Path = None       # the systemd user unit TuxTalk used until 0.18
     extension: bool = False
+    system_package: Optional[str] = None    # the pacman package a system install is in
+    # A source install's venv other than the README's: named for the user to
+    # remove, never deleted, since it may hold other programs.
+    venv_elsewhere: Optional[Path] = None
+    # A source install pip put in no venv: its prefix (/usr/local, ~/.local)
+    # holds other programs, so it is never named for deleting either.
+    outside_venv: bool = False
 
     @property
     def package(self):
-        return PACKAGES.get(self.install_type)
+        """The package the root step removes, or None."""
+        return PACKAGES.get(self.install_type) or self.system_package
 
     @property
     def needs_root(self):
@@ -250,6 +266,13 @@ def _program_files(home, install_type, appimage):
                   *sorted(apps.glob(".TuxTalk.AppImage.*.part"))]
     if appimage and install_type == "appimage":
         candidates.insert(0, Path(appimage))
+    # The README's link to a source install's command. A tuxtalk of the
+    # user's own there, or a link to another one, isn't TuxTalk's to delete.
+    command = home / ".local" / "bin" / "tuxtalk"
+    venv = home / ".local" / "share" / config.DATA_DIR / source_install.VENV_NAME
+    if command.is_symlink() and os.path.realpath(command).startswith(
+            os.path.realpath(venv) + os.sep):
+        candidates.append(command)
     for name in ("tuxtalk.desktop", "talktype.desktop"):
         candidates += [home / ".config" / "autostart" / name,
                        home / ".local" / "share" / "applications" / name]
@@ -302,12 +325,32 @@ def _runtime_files(runtime):
                   if path.is_symlink() or not path.is_dir())
 
 
-def find(home, install_type, environ=os.environ, appimage=None):
+def _where_program_is(plan, venv, owner, prefix, base_prefix):
+    """Note in *plan* where the program is, for the installs it isn't plain
+    to see: the pacman package a system install is in (*owner*), and where a
+    source install runs from when it isn't the README's *venv*, which goes
+    with the downloads: the venv at *prefix* (sys.prefix by default), or no
+    venv at all when that is *base_prefix* (sys.base_prefix by default)."""
+    if plan.install_type == "system":
+        plan.system_package = owner()
+    if plan.install_type != "source":
+        return
+    prefix = sys.prefix if prefix is None else prefix
+    if prefix == (sys.base_prefix if base_prefix is None else base_prefix):
+        plan.outside_venv = True
+    elif os.path.realpath(prefix) != os.path.realpath(venv):
+        plan.venv_elsewhere = Path(prefix)
+
+
+def find(home, install_type, environ=os.environ, appimage=None, *,
+         owner=installation.system_package, prefix=None, base_prefix=None):
     """The Plan for *home*: only what exists. *appimage* is the running
-    AppImage's path, if any."""
+    AppImage's path, if any; *owner*, *prefix* and *base_prefix* are for
+    _where_program_is."""
     plan = Plan(home=home, install_type=install_type)
     config_dir = home / ".config" / config.CONFIG_DIR
     data_dir = home / ".local" / "share" / config.DATA_DIR
+    _where_program_is(plan, data_dir / source_install.VENV_NAME, owner, prefix, base_prefix)
 
     def exists(path):
         return os.path.lexists(path)
@@ -616,14 +659,21 @@ def _size_text(size):
     return f"{max(1, round(size / 1000 ** 2))} MB"
 
 
+def _program_line(plan):
+    """The question's line for the program itself, or None when the
+    uninstall leaves it (_program_text then says how to remove it)."""
+    if plan.install_type == "appimage":
+        return "TuxTalk itself (its AppImage)"
+    if plan.install_type == "source":
+        if plan.venv_elsewhere is None and not plan.outside_venv:
+            return "TuxTalk itself (installed from its source code)"
+        return None
+    return f"TuxTalk itself (the {plan.package} package)" if plan.package else None
+
+
 def confirm_text(plan, size):
     """The bullet lines of the question: what will go, as found here."""
-    program = {
-        "appimage": "TuxTalk itself (its AppImage)",
-        "deb": "TuxTalk itself (the tuxtalk package)",
-        "rpm": "TuxTalk itself (the tuxtalk package)",
-        "aur": "TuxTalk itself (the tuxtalk-appimage package)",
-    }.get(plan.install_type)
+    program = _program_line(plan)
     lines = [program] if program else []
     if plan.helper:
         lines.append("its hotkey helper and the permission to type into other apps")
@@ -805,6 +855,26 @@ def done_heading(result):
     return "TuxTalk is uninstalled" if result.complete else "TuxTalk couldn't remove everything"
 
 
+def _program_text(plan, result):
+    """What the closing message says about the program itself when the
+    uninstall didn't or couldn't remove it (Pango markup); None when it's
+    gone. A prefix that isn't a venv is never named: it holds other programs."""
+    if result.package_failed:
+        command = f"{REMOVE_COMMANDS.get(plan.install_type, 'sudo pacman -R')} {plan.package}"
+        return ("The package manager wouldn't remove the program itself (it may be "
+                f"busy with an update). Remove it later with:\n<tt>{command}</tt>")
+    if plan.install_type == "package":
+        return "Remove the tuxtalk package with your package manager to finish."
+    if plan.install_type == "system" and plan.package is None:
+        return "Remove TuxTalk with the package manager you installed it with to finish."
+    if plan.venv_elsewhere is not None:
+        where = GLib.markup_escape_text(_shown(plan.venv_elsewhere, plan.home))
+        return f"Remove <tt>{where}</tt> to finish: TuxTalk was installed there."
+    if plan.outside_venv:
+        return "Remove TuxTalk the way you installed it to finish."
+    return None
+
+
 def done_text(plan, delete_personal, delete_shared, result):
     """The closing message's body (Pango markup)."""
     parts = []
@@ -813,13 +883,9 @@ def done_text(plan, delete_personal, delete_shared, result):
         if len(result.not_removed) > 6:
             shown.append(f"and {len(result.not_removed) - 6} more")
         parts.append("These are still there:\n" + "\n".join(f"•  {item}" for item in shown))
-    if result.package_failed:
-        command = {"deb": "sudo apt remove tuxtalk", "rpm": "sudo dnf remove tuxtalk",
-                   "aur": "sudo pacman -R tuxtalk-appimage"}[plan.install_type]
-        parts.append("The package manager wouldn't remove the program itself (it may be "
-                     f"busy with an update). Remove it later with:\n<tt>{command}</tt>")
-    elif plan.install_type == "package":
-        parts.append("Remove the tuxtalk package with your package manager to finish.")
+    program = _program_text(plan, result)
+    if program:
+        parts.append(program)
     logout = []
     if plan.extension:
         logout.append("GNOME shows the extension's menu until then")
@@ -881,7 +947,10 @@ def _remove_the_rest(plan, delete_personal, delete_shared, tray, result):
 def run(tray=None):
     """Ask, then uninstall. True when TuxTalk was uninstalled, if not
     always all of it, and the caller should quit; False when nothing
-    changed. *tray* (TrayParts) when the running tray asks."""
+    changed. *tray* (TrayParts) when the running tray asks. A development
+    copy and a Flatpak are turned away; a system install pacman doesn't
+    own, or a source install outside the README's venv, loses all but the
+    program, and the closing message says how to remove that."""
     install_type = installation.get_install_type()
     if install_type in ("dev", "flatpak"):
         _tell(Gtk.MessageType.INFO, "Not for this copy of TuxTalk",
