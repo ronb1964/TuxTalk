@@ -10,6 +10,8 @@ differently:
   AUR        /usr/share/applications/tuxtalk.desktop
   deb / rpm  /usr/share/applications/io.github.ronb1964.TuxTalk.desktop
   Flatpak    io.github.ronb1964.TuxTalk
+  source     ~/.local/share/applications/tuxtalk.desktop  (first run)
+  system     /usr/share/applications/io.github.ronb1964.TuxTalk.desktop
   dev        ~/.local/share/applications/tuxtalk-dev.desktop
 """
 import pathlib
@@ -28,6 +30,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
     ("rpm", "io.github.ronb1964.TuxTalk"),
     ("package", "io.github.ronb1964.TuxTalk"),
     ("flatpak", "io.github.ronb1964.TuxTalk"),
+    ("source", "tuxtalk"),
+    ("system", "io.github.ronb1964.TuxTalk"),
     ("dev", "tuxtalk-dev"),
 ])
 def test_name_matches_the_launcher_of_each_install(install_type, expected):

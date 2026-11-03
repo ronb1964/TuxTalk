@@ -5,6 +5,9 @@ and run an AppImage on a .deb/.rpm/AUR/Flatpak install (that fails, e.g. missing
 libfuse.so.2 on Fedora). get_install_type() is fully injectable so these tests
 never touch the real environment.
 """
+import subprocess
+
+from tuxtalk import installation
 from tuxtalk.installation import get_install_type
 from tuxtalk.update_install import get_package_asset, package_install_argv
 from tuxtalk.update_ui import get_update_guidance
@@ -150,3 +153,60 @@ def test_apt_and_zypper_wait_for_the_desktops_own_updater():
     assert "DPkg::Lock::Timeout=120" in package_install_argv("deb", which=everything)
     only_zypper = lambda command: "/usr/bin/zypper" if command == "zypper" else None
     assert "ZYPP_LOCK_TIMEOUT=120" in package_install_argv("rpm", which=only_zypper)
+
+
+def _type(path, **kw):
+    return get_install_type(appimage_env="", flatpak_env="", appdir_env="", module_path=path, **kw)
+
+
+def test_a_venv_in_the_home_folder_is_a_source_install():
+    assert _type("/home/ann/.local/share/TuxTalk/venv/lib/python3.14/site-packages/"
+                 "tuxtalk/installation.py") == "source"
+
+
+def test_a_debian_style_venv_is_a_source_install_too():
+    assert _type("/home/ann/env/lib/python3/dist-packages/tuxtalk/installation.py") == "source"
+
+
+def test_tuxtalk_in_the_systems_site_packages_is_a_system_install():
+    assert _type("/usr/lib/python3.14/site-packages/tuxtalk/installation.py") == "system"
+    assert _type("/usr/lib/python3/dist-packages/tuxtalk/installation.py") == "system"
+
+
+def test_pip_into_usr_local_is_not_taken_for_a_package():
+    assert _type("/usr/local/lib/python3.14/site-packages/tuxtalk/installation.py") == "source"
+
+
+def test_a_git_checkout_is_still_the_development_version():
+    assert _type("/home/ron/Projects/TuxTalk/src/tuxtalk/installation.py") == "dev"
+
+
+def test_an_appimage_and_a_flatpak_still_win_over_their_site_packages():
+    assert get_install_type(
+        appimage_env="/home/a/AppImages/TuxTalk.AppImage", appdir_env="", flatpak_env="",
+        module_path="/tmp/.mount_x/usr/lib/python3.10/site-packages/tuxtalk/i.py") == "appimage"
+    assert get_install_type(
+        flatpak_env="io.github.ronb1964.TuxTalk", appimage_env="",
+        module_path="/app/lib/python3.12/site-packages/tuxtalk/i.py") == "flatpak"
+
+
+def test_pacman_names_the_package_that_owns_a_system_install():
+    calls = []
+
+    def run(argv, **kw):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, stdout="tuxtalk\n", stderr="")
+    path = "/usr/lib/python3.14/site-packages/tuxtalk/installation.py"
+    assert installation._owning_package(
+        path, run=run, which=lambda n: "/usr/bin/pacman") == "tuxtalk"
+    assert calls[0][:2] == ["pacman", "-Qqo"] and calls[0][-1] == path
+
+
+def test_without_pacman_or_its_ownership_there_is_no_known_owner():
+    path = "/usr/lib/python3.14/site-packages/tuxtalk/installation.py"
+    assert installation._owning_package(path, which=lambda n: None) is None
+
+    def not_owned(argv, **kw):
+        return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
+    assert installation._owning_package(
+        path, run=not_owned, which=lambda n: "/usr/bin/pacman") is None

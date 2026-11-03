@@ -12,6 +12,8 @@ install:
   AUR        /usr/share/applications/tuxtalk.desktop
   deb / rpm  /usr/share/applications/io.github.ronb1964.TuxTalk.desktop
   Flatpak    io.github.ronb1964.TuxTalk
+  source     ~/.local/share/applications/tuxtalk.desktop  (first run)
+  system     /usr/share/applications/io.github.ronb1964.TuxTalk.desktop
   dev        ~/.local/share/applications/tuxtalk-dev.desktop
 
 Call apply() at the start of every process that opens windows (the tray,
@@ -28,6 +30,7 @@ logger = setup_logger(__name__)
 _BY_INSTALL_TYPE = {
     "appimage": "tuxtalk",
     "aur": "tuxtalk",
+    "source": "tuxtalk",
     "dev": "tuxtalk-dev",
 }
 

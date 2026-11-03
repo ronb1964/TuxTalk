@@ -1,11 +1,14 @@
 """How and where this TuxTalk is installed: an AppImage (and whether it is
-the copy in ~/AppImages), a .deb or .rpm, the AUR, a Flatpak, or a source
+the copy in ~/AppImages), a .deb or .rpm, the AUR, a Flatpak, a pip install
+into a virtual environment, a distro package under /usr, or a source
 checkout. Updates, the menu launcher, the uninstaller and problem reports
 each act on the answer."""
 
 import functools
 import logging
 import os
+import shutil
+import subprocess
 from typing import Optional, Tuple
 
 
@@ -43,7 +46,6 @@ def _detect_system_package_manager() -> Optional[str]:
     tuxtalk (or talktype, its name before 0.15.0), falling back to the distro
     family from /etc/os-release. Cached: it runs up to four package queries,
     and the answer can't change while TuxTalk runs."""
-    import shutil
     for pkg in ("tuxtalk", "talktype"):
         for kind, query in (("rpm", ["rpm", "-q", pkg]), ("deb", ["dpkg-query", "-W", pkg])):
             if shutil.which(query[0]) and _package_query_succeeds(query):
@@ -65,7 +67,6 @@ def _package_query_succeeds(query) -> bool:
     """Whether the package database query *query* found the package. One
     that hangs or fails to run says so in the log: the install type then
     falls back to the distro family, which may answer differently."""
-    import subprocess
     try:
         return subprocess.run(query, capture_output=True, timeout=5).returncode == 0
     except (OSError, subprocess.SubprocessError) as e:
@@ -80,6 +81,8 @@ def get_install_type(*, appimage_env=None, flatpak_env=None, appdir_env=None,
       'aur'      — pacman-managed AppImage at a system path (/opt, /usr)
       'appimage' — self-managed AppImage the app may swap in place
       'rpm'/'deb'/'package' — extracted package tree under /opt/talktype
+      'system'   — a distro package's Python files under /usr
+      'source'   — pip-installed into a virtual environment (or /usr/local)
       'dev'      — running from a source checkout
     All inputs are injectable for testing; by default they read the real env.
     """
@@ -107,7 +110,44 @@ def get_install_type(*, appimage_env=None, flatpak_env=None, appdir_env=None,
     if module_path.startswith("/opt/"):
         # .deb/.rpm ship the extracted tree under /opt/talktype.
         return pkg_query() or "package"
-    return "dev"
+    return _python_package_type(module_path) or "dev"
+
+
+def _python_package_type(module_path: str) -> Optional[str]:
+    """'system' for TuxTalk's files in a distro's Python folder under /usr,
+    'source' for any other site-packages (a venv, or a plain pip into
+    /usr/local, which no package manager owns), None for a checkout."""
+    if "/site-packages/" not in module_path and "/dist-packages/" not in module_path:
+        return None
+    if module_path.startswith("/usr/") and not module_path.startswith("/usr/local/"):
+        return "system"
+    return "source"
+
+
+def _owning_package(module_path: str, run=subprocess.run, which=shutil.which) -> Optional[str]:
+    """The pacman package that owns *module_path*, or None without pacman or
+    when no package owns it. Uncached; system_package is the cached entry."""
+    if not which("pacman"):
+        return None
+    try:
+        result = run(["pacman", "-Qqo", module_path], capture_output=True, text=True,
+                     timeout=5)
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.info(f"Install type: pacman -Qqo didn't answer ({e})")
+        return None
+    lines = result.stdout.strip().splitlines()
+    return lines[0] if result.returncode == 0 and lines else None
+
+
+@functools.lru_cache(maxsize=None)
+def system_package() -> Optional[str]:
+    """The pacman package this TuxTalk's files belong to (the name an update
+    or uninstall message has to give), or None when it isn't a system
+    install, pacman isn't there or no package owns the files. Cached: it
+    runs a program, and the answer can't change while TuxTalk runs."""
+    if get_install_type() != "system":
+        return None
+    return _owning_package(os.path.realpath(__file__))
 
 
 def running_appimage_location() -> Tuple[bool, Optional[str]]:
