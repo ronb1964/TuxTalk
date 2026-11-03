@@ -1,8 +1,9 @@
 """
-TuxTalk's own menu launcher and icon, for a self-managed AppImage: the icon in
-the user's icon folders, the Applications-menu entry with its right-click
-shortcuts, and the hidden entry that gives first-run windows TuxTalk's icon.
-Packages ship their own launcher and icon.
+TuxTalk's own menu launcher and icon, for a self-managed AppImage or a source
+install (a pip install into a venv): the icon in the user's icon folders, the
+Applications-menu entry with its right-click shortcuts, and the hidden entry
+that gives first-run windows TuxTalk's icon. Packages ship their own launcher
+and icon.
 """
 
 import os
@@ -10,7 +11,7 @@ import threading
 from pathlib import Path
 from typing import Optional, Tuple
 
-from . import __version__, installation, menu_cache
+from . import __version__, installation, menu_cache, source_install
 from .app_icon import user_icon_file
 from .autostart import desktop_exec_program
 from .logger import setup_logger
@@ -22,8 +23,9 @@ DESKTOP_FILE_PATH = os.path.expanduser("~/.local/share/applications/tuxtalk.desk
 
 
 def _icon_source() -> Optional[str]:
-    """The PNG to install: the running AppImage's own, else the project's
-    (running from the source); None when there is neither."""
+    """The PNG to install: the running AppImage's own, else the package's copy
+    (a source install has no project folder around it); None when there is
+    neither."""
     candidates = []
     appdir = os.environ.get("APPDIR", "") if installation.get_running_appimage_path() else ""
     if appdir:
@@ -31,8 +33,7 @@ def _icon_source() -> Optional[str]:
                        os.path.join(appdir, "tuxtalk.png"),
                        os.path.join(appdir, "usr", "share", "icons", "hicolor", "256x256",
                                     "apps", "tuxtalk.png")]
-    project_root = Path(__file__).parent.parent.parent
-    candidates.append(str(project_root / "io.github.ronb1964.TuxTalk.png"))
+    candidates.append(str(Path(__file__).parent / "icons" / "io.github.ronb1964.TuxTalk.png"))
     return next((path for path in candidates if os.path.exists(path)), None)
 
 
@@ -106,19 +107,28 @@ def point_at_running_appimage(running: str) -> None:
         logger.warning(f"Could not repoint the menu launcher: {msg}")
 
 
-def create_desktop_launcher(appimage_exec_path: Optional[str] = None) -> Tuple[bool, str]:
-    """Write the Applications-menu launcher for the AppImage installed in
-    ~/AppImages, or for *appimage_exec_path*: the running AppImage, when the
-    copy there failed. (success, message for the user)."""
+def _launcher_program() -> str:
+    """What the menu entry of this install starts: a source install's own
+    `tuxtalk` command, else the AppImage in ~/AppImages."""
+    if installation.get_install_type(pkg_query=lambda: "package") == "source":
+        return source_install.command()
+    return installation.APPIMAGE_PATH
+
+
+def create_desktop_launcher(exec_path: Optional[str] = None) -> Tuple[bool, str]:
+    """Write the Applications-menu launcher for this install's program: the
+    AppImage in ~/AppImages or a source install's `tuxtalk` command, or
+    *exec_path*: the running AppImage, when the copy there failed.
+    (success, message for the user)."""
     try:
         os.makedirs(os.path.dirname(DESKTOP_FILE_PATH), exist_ok=True)
         icon_name = install_app_icon() or "audio-input-microphone"
         version = __version__
-        appimage_exec_path = appimage_exec_path or installation.APPIMAGE_PATH
-        logger.info(f"Desktop launcher Exec path: {appimage_exec_path}")
+        exec_path = exec_path or _launcher_program()
+        logger.info(f"Desktop launcher Exec path: {exec_path}")
         # Quoted where it must be: a download named "TuxTalk (1).AppImage"
         # was cut at the space, and the menu entry opened nothing.
-        program = desktop_exec_program(appimage_exec_path)
+        program = desktop_exec_program(exec_path)
         desktop_content = f"""[Desktop Entry]
 Name=TuxTalk
 Comment=Hold a key, talk, and your words are typed for you (v{version})
@@ -218,21 +228,23 @@ def desktop_launcher_exists() -> bool:
 
 
 def create_hidden_desktop_entry() -> bool:
-    """Write a hidden tuxtalk.desktop for a self-managed AppImage that has no
-    launcher yet. KDE and GNOME find a window's icon through the .desktop file
+    """Write a hidden tuxtalk.desktop for a self-managed AppImage or a source
+    install that has no launcher yet. KDE and GNOME find a window's icon through the .desktop file
     its program name names, so without this first-run setup shows the
     desktop's generic icon. NoDisplay keeps it out of the app menu, and the
     Ready screen replaces it with the real launcher. Returns True if written."""
     try:
-        if installation.get_install_type(pkg_query=lambda: "package") != "appimage":
+        install_type = installation.get_install_type(pkg_query=lambda: "package")
+        if install_type not in ("appimage", "source"):
             return False        # other installs ship their own launcher
         if os.path.lexists(DESKTOP_FILE_PATH):
             return False
         icon_name = install_app_icon() or "audio-input-microphone"
         os.makedirs(os.path.dirname(DESKTOP_FILE_PATH), exist_ok=True)
-        # Exec is required for a valid entry; the running AppImage exists now.
-        exec_path = desktop_exec_program(installation.get_running_appimage_path()
-                                         or installation.APPIMAGE_PATH)
+        # Exec is required for a valid entry; the running program exists now.
+        exec_path = desktop_exec_program(
+            source_install.command() if install_type == "source"
+            else installation.get_running_appimage_path() or installation.APPIMAGE_PATH)
         tmp = DESKTOP_FILE_PATH + ".tmp"
         with open(tmp, "w") as f:
             f.write("[Desktop Entry]\n"

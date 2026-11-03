@@ -11,6 +11,9 @@ Copies of it live outside this folder:
   there, the .deb and .rpm put it in `/usr/share/pixmaps`, the updater
   installs it for the desktop's menu, the splash screen falls back to it, and
   the top of the README shows it.
+- `src/tuxtalk/icons/io.github.ronb1964.TuxTalk.png`: the same image inside
+  the package, so a source install (a pip install, with no project folder
+  around it) can put the icon in the desktop's menu.
 - `packaging/flatpak/io.github.ronb1964.TuxTalk.svg`: the Flatpak's, on a
   square canvas, since Flatpak refuses icons that aren't square and the
   official one is 782x769.
@@ -30,6 +33,8 @@ Copies of it live outside this folder:
    cd /home/ron/Projects/TuxTalk
    inkscape icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg --export-type=png --export-width=2606 --export-filename=io.github.ronb1964.TuxTalk.png
    ```
+   Copy it to `src/tuxtalk/icons/` too (`cp io.github.ronb1964.TuxTalk.png src/tuxtalk/icons/`);
+   a test fails while the two differ.
 4. Copy the official icon to `packaging/flatpak/io.github.ronb1964.TuxTalk.svg`
    and put its square canvas back: in its first lines, make `height` the same
    as `width` (220.60793mm) and set

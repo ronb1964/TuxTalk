@@ -17,7 +17,7 @@ import sys
 import glob
 import subprocess
 
-from . import installation
+from . import installation, source_install
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -53,7 +53,9 @@ def desktop_exec_program(path: str) -> str:
 def get_launch_command(prefer_installed_appimage: bool = False) -> str:
     """Return the most portable command to launch the tray.
 
-    Order: dev script → self-managed AppImage path → packaged launcher
+    Order: dev script → self-managed AppImage path → a source install's own
+    `tuxtalk` (the copy running is the one that starts at login, even beside
+    a packaged one) → packaged launcher
     (absolute; the AUR's too) → PATH lookup → bare interpreter (last
     resort). See the module docstring for why the packaged launcher must win
     over a bare-Python invocation.
@@ -81,6 +83,9 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
     appimage_command = _appimage_command(prefer_installed_appimage)
     if appimage_command:
         return appimage_command
+
+    if installation.get_install_type() == "source":
+        return desktop_exec_program(source_install.command())
 
     # Installed .deb/.rpm: prefer the KNOWN ABSOLUTE launcher, not `which`
     # (a stray ~/.local/bin/tuxtalk must never be written into autostart).

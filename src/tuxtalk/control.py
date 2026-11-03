@@ -1,8 +1,9 @@
 """`tuxtalk --toggle`, `--start` and `--stop`: dictation from a desktop
 shortcut or a script.
 
-Every install runs `python -m tuxtalk.tray "$@"` (the AppImage's AppRun, the
-.deb/.rpm and AUR launchers, run-dev.sh), so the tray's main() reads these.
+Every install's `tuxtalk` command runs the tray's main() (the AppImage's AppRun,
+the .deb/.rpm and AUR launchers and run-dev.sh as `python -m tuxtalk.tray "$@"`,
+a source install's through its console script), so main() reads these.
 
 With TuxTalk running, the command asks it over D-Bus (ControlDictation) and
 exits. With nothing running, the command itself becomes TuxTalk: the AppImage
@@ -228,16 +229,20 @@ def ask_running(action, tray_starting=lambda: False, bus=None,
 
 def shortcut_command():
     """The command Help suggests for a desktop shortcut on this install: the
-    AppImage file for a self-managed AppImage, else the `tuxtalk` launcher
-    (.deb, .rpm and AUR; a package started from another AppImage's terminal
-    sees that one's APPIMAGE). The AppImage's full path, shell-quoted: GNOME
-    runs a custom shortcut without a shell, so "~" isn't expanded there, and
-    a folder with a space would split the path."""
+    AppImage file for a self-managed AppImage, the venv's own `tuxtalk` for a
+    source install (it is on no PATH), else the `tuxtalk` launcher (.deb,
+    .rpm and AUR; a package started from another AppImage's terminal sees
+    that one's APPIMAGE). The full path, shell-quoted: GNOME runs a custom
+    shortcut without a shell, so "~" isn't expanded there, and a folder with
+    a space would split the path."""
     import shlex
-    from . import installation
+    from . import installation, source_install
+    install_type = installation.get_install_type()
     appimage = installation.get_running_appimage_path()
-    if appimage and installation.get_install_type() == "appimage":
+    if appimage and install_type == "appimage":
         return f"{shlex.quote(appimage)} --toggle"
+    if install_type == "source":
+        return f"{shlex.quote(source_install.command())} --toggle"
     return "tuxtalk --toggle"
 
 

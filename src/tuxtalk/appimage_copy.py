@@ -26,7 +26,8 @@ _thread = None
 def put_in_place():
     """First run: start at login (on for new users: a dictation tool is only
     useful when it's already running) and, from a self-managed AppImage, the
-    menu launcher and the copy into ~/AppImages, which both point at. A
+    menu launcher and the copy into ~/AppImages, which both point at; from a
+    source install, the menu launcher alone, for the venv's own command. A
     package's launcher, the AUR's included, is the package manager's: a copy
     of the AUR's AppImage would override it and never be updated by pacman.
     Returns whether TuxTalk is (or will be) in ~/AppImages and whether a
@@ -36,7 +37,12 @@ def put_in_place():
     installed = launcher_created = False
     copy_from = None
     try:
-        if installation.get_install_type() == "appimage":
+        install_type = installation.get_install_type()
+        if install_type == "source" and not desktop_launcher_exists():
+            launcher_created, msg = create_desktop_launcher()
+            logger.info("Desktop launcher created" if launcher_created
+                        else f"Could not create the desktop launcher: {msg}")
+        if install_type == "appimage":
             installed, current_path = installation.running_appimage_location()
             if not installed and current_path:
                 copy_from, installed = current_path, True       # it will be, once copied

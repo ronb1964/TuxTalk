@@ -35,9 +35,7 @@ text2num = "^3.1"
 # GPU (RTX 4070 SUPER). Removing it cut the packaged size by ~170 MB (.deb 302 MB → 133 MB).
 
 [tool.poetry.scripts]
-dictate-tray = "tuxtalk.tray:main"
-dictate = "tuxtalk.app:main"
-dictate-prefs = "tuxtalk.prefs:main"
+tuxtalk = "tuxtalk.tray:main"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"
