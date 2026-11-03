@@ -4,6 +4,8 @@ distro package's files under /usr).
 Every test works in a made-up home folder; nothing here may touch the real
 one, and conftest.py fails any test that reaches pkexec.
 """
+import shutil
+
 import pytest
 
 from tuxtalk import secure_input, uinput_helper, uninstall
@@ -89,7 +91,10 @@ def test_a_venv_elsewhere_is_named_and_never_deleted(home, tmp_path):
     (venv / "bin").mkdir(parents=True)
     plan = _source(home, venv)
     assert plan.venv_elsewhere == venv and venv not in plan.downloads
-    assert f"<tt>{venv}</tt>" in _done(plan)
+    # pip takes TuxTalk out; the folder may hold other programs.
+    assert (f"TuxTalk was installed in <tt>{venv}</tt>. To finish, remove it with "
+            f"<tt>{venv}/bin/pip uninstall tuxtalk</tt>, or delete that folder if nothing "
+            "else is in it.") in _done(plan)
     # The question doesn't promise to remove a program it leaves.
     assert "TuxTalk itself" not in uninstall.confirm_text(plan, 0)
     uninstall.remove_files(plan, delete_personal=False, delete_shared=False)
@@ -97,8 +102,43 @@ def test_a_venv_elsewhere_is_named_and_never_deleted(home, tmp_path):
 
 
 def test_a_venv_elsewhere_in_the_home_folder_is_shown_with_a_tilde(home):
-    plan = _source(home, home / "envs/tuxtalk")
-    assert "Remove <tt>~/envs/tuxtalk</tt> to finish: TuxTalk was installed there." in _done(plan)
+    text = _done(_source(home, home / "envs/tuxtalk"))
+    assert "installed in <tt>~/envs/tuxtalk</tt>" in text
+    assert "<tt>~/envs/tuxtalk/bin/pip uninstall tuxtalk</tt>" in text
+
+
+def test_a_venv_path_that_needs_quoting_is_quoted_whole_for_the_shell(home):
+    venv = home / "R&D envs/tt"
+    text = _done(_source(home, venv))
+    # Quoted, so a pasted command works; escaped, so the message shows it
+    # (Pango shows &apos; as ').
+    assert f"<tt>&apos;{home}/R&amp;D envs/tt/bin/pip&apos; uninstall tuxtalk</tt>" in text
+
+
+def test_a_readme_venv_that_is_a_link_names_the_venv_it_leads_to(home, tmp_path):
+    real = tmp_path / "envs/tt"
+    (real / "bin").mkdir(parents=True)
+    readme = home / VENV
+    shutil.rmtree(readme)
+    readme.symlink_to(real)
+    plan = _source(home)
+    assert plan.venv_elsewhere == real
+    assert "TuxTalk itself" not in uninstall.confirm_text(plan, 0)
+    assert f"<tt>{real}/bin/pip uninstall tuxtalk</tt>" in _done(plan)
+    uninstall.remove_files(plan, delete_personal=False, delete_shared=False)
+    assert not readme.is_symlink() and (real / "bin").is_dir()
+
+
+@pytest.mark.parametrize("install_type", ["appimage", "deb"])
+def test_another_installs_uninstall_names_the_source_install_it_takes(home, install_type):
+    plan = uninstall.find(home, install_type)
+    assert home / VENV in plan.downloads
+    assert ("•  TuxTalk installed from its source code, in ~/.local/share/TuxTalk/venv"
+            in uninstall.confirm_text(plan, 0))
+
+
+def test_a_source_installs_own_question_doesnt_name_its_venv_twice(home):
+    assert "in ~/.local/share/TuxTalk/venv" not in uninstall.confirm_text(_source(home), 0)
 
 
 def test_the_readmes_venv_reached_through_a_link_is_not_called_elsewhere(home, tmp_path):
@@ -128,6 +168,13 @@ def test_a_pacman_owned_system_install_is_removed_with_pacman(home):
     assert "pacman -R --noconfirm tuxtalk" in uninstall.root_script(plan, False)
 
 
+def test_a_package_name_from_pacman_is_quoted_for_the_shell(home):
+    plan = uninstall.find(home, "system", owner=lambda: "tux talk;rm")
+    script = uninstall.root_script(plan, False)
+    assert "pacman -R --noconfirm 'tux talk;rm'" in script
+    assert "<tt>sudo pacman -R &apos;tux talk;rm&apos;</tt>" in _done(plan, package_failed=True)
+
+
 def test_a_failed_pacman_removal_names_the_command(home):
     plan = uninstall.find(home, "system", owner=lambda: "tuxtalk")
     assert "<tt>sudo pacman -R tuxtalk</tt>" in _done(plan, package_failed=True)
@@ -148,8 +195,18 @@ def test_the_question_names_the_program_for_the_new_install_types(home):
     assert "•  TuxTalk itself (the tuxtalk package)" in uninstall.confirm_text(plan, 0)
 
 
+def test_the_question_names_the_program_for_the_package_installs(home):
+    """The packages' question lines are as they were before system installs came in."""
+    for install_type, line in (("deb", "TuxTalk itself (the tuxtalk package)"),
+                               ("rpm", "TuxTalk itself (the tuxtalk package)"),
+                               ("aur", "TuxTalk itself (the tuxtalk-appimage package)"),
+                               ("appimage", "TuxTalk itself (its AppImage)")):
+        assert f"•  {line}" in uninstall.confirm_text(uninstall.find(home, install_type), 0)
+    assert "TuxTalk itself" not in uninstall.confirm_text(uninstall.find(home, "package"), 0)
+
+
 def test_the_package_installs_keep_their_words(home):
-    """The packages' own lines are as they were before system installs came in."""
+    """The packages' closing lines are as they were before system installs came in."""
     for install_type, command in (("deb", "sudo apt remove tuxtalk"),
                                   ("rpm", "sudo dnf remove tuxtalk"),
                                   ("aur", "sudo pacman -R tuxtalk-appimage")):

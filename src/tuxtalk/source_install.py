@@ -25,7 +25,7 @@ def command(prefix: Optional[str] = None) -> str:
     return f"{prefix or sys.prefix}/bin/tuxtalk"
 
 
-def _shown(path: str, home: str) -> str:
+def shell_path(path: str, home: str) -> str:
     """*path* as a shell takes it: `~/...` when it is under *home* and nothing in
     it needs quoting, else quoted whole (a `~` inside quotes doesn't expand)."""
     if path.startswith(home + "/"):
@@ -39,6 +39,6 @@ def update_command(version: str, prefix: Optional[str] = None,
                    home: Optional[str] = None) -> str:
     """The pip command that installs release *version* into the venv at *prefix*
     (the running one by default); *home* is the one `~` stands for."""
-    pip = _shown(f"{prefix or sys.prefix}/bin/pip", home or os.path.expanduser("~"))
+    pip = shell_path(f"{prefix or sys.prefix}/bin/pip", home or os.path.expanduser("~"))
     return (f"{pip} install -c {CONSTRAINTS_URL.format(version=version)} "
             f"{ARCHIVE_URL.format(version=version)}")

@@ -26,6 +26,7 @@ import grp
 import os
 import pwd
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -170,8 +171,9 @@ class Plan:
     ydotoold_unit: Path = None       # the systemd user unit TuxTalk used until 0.18
     extension: bool = False
     system_package: Optional[str] = None    # the pacman package a system install is in
-    # A source install's venv other than the README's: named for the user to
-    # remove, never deleted, since it may hold other programs.
+    # A source install's venv other than the README's, or the one the README's
+    # is a link to: the user is told how to remove TuxTalk from it, and it is
+    # never deleted, since it may hold other programs.
     venv_elsewhere: Optional[Path] = None
     # A source install pip put in no venv: its prefix (/usr/local, ~/.local)
     # holds other programs, so it is never named for deleting either.
@@ -340,13 +342,18 @@ def _where_program_is(plan, venv, owner, prefix, base_prefix):
         plan.outside_venv = True
     elif os.path.realpath(prefix) != os.path.realpath(venv):
         plan.venv_elsewhere = Path(prefix)
+    elif venv.is_symlink():
+        # Only the link goes with the downloads; the venv it leads to stays.
+        plan.venv_elsewhere = Path(os.path.realpath(venv))
 
 
 def find(home, install_type, environ=os.environ, appimage=None, *,
          owner=installation.system_package, prefix=None, base_prefix=None):
     """The Plan for *home*: only what exists. *appimage* is the running
-    AppImage's path, if any; *owner*, *prefix* and *base_prefix* are for
-    _where_program_is."""
+    AppImage's path, if any; *owner* names the pacman package that owns a
+    system install's files (installation.system_package); *prefix* and
+    *base_prefix* are where this Python runs from and the Python it was made
+    from (sys.prefix and sys.base_prefix when None), equal outside a venv."""
     plan = Plan(home=home, install_type=install_type)
     config_dir = home / ".config" / config.CONFIG_DIR
     data_dir = home / ".local" / "share" / config.DATA_DIR
@@ -410,7 +417,8 @@ def disk_size(paths):
 def _package_lines(plan):
     """Shell lines removing TuxTalk's package; on failure they print
     PACKAGE_NOT_REMOVED and the package manager's last lines."""
-    name = plan.package
+    # Quoted: a system install's name comes from pacman's answer.
+    name = shlex.quote(plan.package)
     # The desktop's own updater may hold the lock (update_install.LOCK_WAIT_S).
     wait = update_install.LOCK_WAIT_S
     if plan.install_type == "deb":
@@ -671,10 +679,19 @@ def _program_line(plan):
     return f"TuxTalk itself (the {plan.package} package)" if plan.package else None
 
 
+def _source_venv_line(plan):
+    """The question's line for the README's source-install venv when an
+    uninstall of another install (the AppImage, a package) takes it too:
+    it is TuxTalk's, but not the copy the user is thinking of."""
+    venv = plan.home / ".local" / "share" / config.DATA_DIR / source_install.VENV_NAME
+    if plan.install_type == "source" or venv not in plan.downloads or venv.is_symlink():
+        return None
+    return f"TuxTalk installed from its source code, in {_shown(venv, plan.home)}"
+
+
 def confirm_text(plan, size):
     """The bullet lines of the question: what will go, as found here."""
-    program = _program_line(plan)
-    lines = [program] if program else []
+    lines = [line for line in (_program_line(plan), _source_venv_line(plan)) if line]
     if plan.helper:
         lines.append("its hotkey helper and the permission to type into other apps")
     elif plan.typing_rule:
@@ -855,21 +872,36 @@ def done_heading(result):
     return "TuxTalk is uninstalled" if result.complete else "TuxTalk couldn't remove everything"
 
 
+def _venv_elsewhere_text(plan):
+    """How to take TuxTalk out of the venv it runs from, which the uninstall
+    leaves (Pango markup): pip, since the venv may be a project's, a tools
+    venv or pipx's, and deleting it would take their programs too. Paths as
+    a shell takes them, since the user may paste the command."""
+    home = str(plan.home)
+    venv = source_install.shell_path(str(plan.venv_elsewhere), home)
+    pip = source_install.shell_path(str(plan.venv_elsewhere / "bin" / "pip"), home)
+    return (f"TuxTalk was installed in <tt>{GLib.markup_escape_text(venv)}</tt>. To finish, "
+            f"remove it with <tt>{GLib.markup_escape_text(pip)} uninstall tuxtalk</tt>, or "
+            "delete that folder if nothing else is in it.")
+
+
 def _program_text(plan, result):
     """What the closing message says about the program itself when the
     uninstall didn't or couldn't remove it (Pango markup); None when it's
-    gone. A prefix that isn't a venv is never named: it holds other programs."""
+    gone. Nothing is named for deleting whole: a venv elsewhere and a prefix
+    outside one may hold other programs."""
     if result.package_failed:
-        command = f"{REMOVE_COMMANDS.get(plan.install_type, 'sudo pacman -R')} {plan.package}"
+        command = (f"{REMOVE_COMMANDS.get(plan.install_type, 'sudo pacman -R')} "
+                   f"{shlex.quote(plan.package)}")
         return ("The package manager wouldn't remove the program itself (it may be "
-                f"busy with an update). Remove it later with:\n<tt>{command}</tt>")
+                f"busy with an update). Remove it later with:\n"
+                f"<tt>{GLib.markup_escape_text(command)}</tt>")
     if plan.install_type == "package":
         return "Remove the tuxtalk package with your package manager to finish."
     if plan.install_type == "system" and plan.package is None:
         return "Remove TuxTalk with the package manager you installed it with to finish."
     if plan.venv_elsewhere is not None:
-        where = GLib.markup_escape_text(_shown(plan.venv_elsewhere, plan.home))
-        return f"Remove <tt>{where}</tt> to finish: TuxTalk was installed there."
+        return _venv_elsewhere_text(plan)
     if plan.outside_venv:
         return "Remove TuxTalk the way you installed it to finish."
     return None
