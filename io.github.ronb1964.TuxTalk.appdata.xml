@@ -95,7 +95,7 @@
   </screenshots>
 
   <releases>
-    <release version="0.20.0" date="2026-11-01">
+    <release version="0.20.0" date="2026-11-02">
       <description>
         <p>A voice detector that tells your voice from the noise around you</p>
         <ul>

@@ -3,7 +3,7 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [0.20.0] - 2026-11-01
+## [0.20.0] - 2026-11-02
 
 - TuxTalk now has a voice detector (Silero VAD, 1.3 MB, built in, nothing
   to download). Before, it went by loudness, so a dryer's thump, a fan
