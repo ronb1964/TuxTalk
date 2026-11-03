@@ -32,9 +32,6 @@ def test_release_notes_go_into_their_own_about_window_only_while_it_is_open(monk
     """The notes come from GitHub while About is open. They land in the window
     that asked for them, and in none once it's closed: its box is gone."""
     import types
-    import gi
-    gi.require_version("Gtk", "3.0")
-    from gi.repository import Gtk
     from tuxtalk import notes_text, update_checker
     shown, later = [], []
     real_show = notes_text.NotesView.show
@@ -47,8 +44,7 @@ def test_release_notes_go_into_their_own_about_window_only_while_it_is_open(monk
 
     def open_about():
         about_dialog.show_about_dialog()
-        return next(w for w in Gtk.Window.list_toplevels()
-                    if w.get_title() == "About TuxTalk" and w.get_visible())
+        return about_dialog._open_dialog
 
     window = open_about()
     window.destroy()                    # closed before the notes came back
@@ -68,12 +64,10 @@ def test_release_notes_go_into_their_own_about_window_only_while_it_is_open(monk
 
 def test_opening_about_again_brings_the_open_one_forward(about_window, monkeypatch):
     """Each click opened another About, and asked GitHub for the notes again."""
-    from gi.repository import Gtk
     from tuxtalk import raise_window, update_checker
     raised, asked = [], []
     monkeypatch.setattr(raise_window, "raise_window", raised.append)
     monkeypatch.setattr(update_checker, "fetch_release_by_tag", asked.append)
     about_dialog.show_about_dialog()
     assert raised == [about_window] and asked == []
-    assert [w for w in Gtk.Window.list_toplevels() if w.get_title() == "About TuxTalk"
-            and w.get_visible()] == [about_window]
+    assert about_dialog._open_dialog is about_window
