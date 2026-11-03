@@ -83,6 +83,14 @@ def _tips(monkeypatch, flatpak=False, **settings):
     return next(text for title, text in help_text.tabs() if "Tips" in title)
 
 
+def test_help_says_how_a_source_install_and_the_aur_package_update():
+    """Read from Help's markup (tabs()), where the bold and the command show."""
+    from tuxtalk import help_text
+    markup = "\n".join(text for _title, text in help_text.tabs())
+    assert "<b>From source:</b>" in markup
+    assert "<tt>yay -S tuxtalk</tt>" in markup
+
+
 def test_tips_name_your_own_keys(monkeypatch):
     """Help names keys from the settings: someone on F6 is never told F8."""
     tips = _tips(monkeypatch, hotkey="F6", toggle_hotkey="F7", paste_last_hotkey="Ctrl+Alt+V")

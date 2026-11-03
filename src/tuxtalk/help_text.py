@@ -155,8 +155,10 @@ def _values():
             "(you'll be asked for your password once), then offers to restart.\n"
             "   – <b>AppImage:</b> click \"Download &amp; Install\". It swaps in the "
             "new version and restarts automatically.\n"
+            "   – <b>From source:</b> Check for Updates shows the command that "
+            "installs the new version.\n"
             "   – <b>Arch (AUR):</b> update with your AUR helper, e.g. "
-            "<tt>yay -S tuxtalk-appimage</tt>.")
+            "<tt>yay -S tuxtalk-appimage</tt> or <tt>yay -S tuxtalk</tt>.")
 
     paste_tip = (f"Press <b>{paste_key}</b> in the right window and your last dictation is "
                  "typed again. " if paste_key else "")

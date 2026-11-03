@@ -6,10 +6,12 @@ libfuse.so.2 on Fedora). get_install_type() is fully injectable so these tests
 never touch the real environment.
 """
 import subprocess
+import sys
 
-from tuxtalk import installation
+from tuxtalk import installation, source_install
 from tuxtalk.installation import get_install_type
 from tuxtalk.update_install import get_package_asset, package_install_argv
+from tuxtalk.prefs_updates import how_it_updates_text
 from tuxtalk.update_ui import get_update_guidance
 
 
@@ -210,3 +212,31 @@ def test_without_pacman_or_its_ownership_there_is_no_known_owner():
         return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
     assert installation._owning_package(
         path, run=not_owned, which=lambda n: "/usr/bin/pacman") is None
+
+
+def test_a_source_install_is_shown_the_install_command_and_told_to_quit_first(monkeypatch):
+    monkeypatch.setattr(sys, "prefix", "/home/ann/.local/share/TuxTalk/venv")
+    g = get_update_guidance("source", "0.21.0")
+    assert (g["update_method"], g["can_auto_update"]) == ("manual", False)
+    assert g["command"] == source_install.update_command("0.21.0")
+    assert "Quit TuxTalk, run this in a terminal, then open TuxTalk again" in g["message"]
+
+
+def test_a_system_install_from_the_aur_is_told_its_aur_helper_command():
+    g = get_update_guidance("system", "0.21.0", owner=lambda: "tuxtalk")
+    assert g["command"] == "yay -S tuxtalk   # or: paru -S tuxtalk"
+
+
+def test_a_system_install_with_no_known_owner_is_sent_to_its_package_manager():
+    g = get_update_guidance("system", "0.21.0", owner=lambda: None)
+    assert g["command"] is None and "package manager you installed it with" in g["message"]
+
+
+def test_preferences_says_in_one_line_how_each_new_type_updates():
+    assert how_it_updates_text("source") == ("Installed from source: Check for Updates shows "
+                                             "the command that installs the new version.")
+    assert how_it_updates_text("system", owner=lambda: "tuxtalk") == (
+        "Installed from the AUR: update with your AUR helper (yay -S tuxtalk).")
+    assert how_it_updates_text("system", owner=lambda: None) == (
+        "Installed by your system's package manager: update TuxTalk with it.")
+    assert how_it_updates_text("dev") == "Development version: update with git pull."

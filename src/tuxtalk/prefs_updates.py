@@ -10,6 +10,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import GLib, Gtk, Pango
 
+from . import installation
 from .desktop_detect import is_gnome
 from .logger import setup_logger
 from .prefs_tab import Tab, dropdown, subheading
@@ -48,21 +49,32 @@ def _separator():
     return line
 
 
+def how_it_updates_text(install_type, owner=installation.system_package):
+    """One line on how an install of this type updates. *owner* names the
+    package a system install belongs to (the AUR's, on Arch), if one does."""
+    package = ("Check for Updates installs the new .deb or .rpm through your package "
+               "manager, with your password.")
+    if install_type == "system":
+        pkg = owner()
+        if pkg:
+            return f"Installed from the AUR: update with your AUR helper (yay -S {pkg})."
+        return "Installed by your system's package manager: update TuxTalk with it."
+    return {
+        "appimage": "Updates install and TuxTalk restarts by itself.",
+        "rpm": package, "deb": package, "package": package,
+        "source": ("Installed from source: Check for Updates shows the command that "
+                   "installs the new version."),
+        "aur": "Installed from the AUR: update with your AUR helper (yay -S tuxtalk-appimage).",
+        "flatpak": "Installed as a Flatpak: update with flatpak update or your software center.",
+    }.get(install_type, "Development version: update with git pull.")
+
+
 def _how_it_updates(install_type):
     """One dim line on how this install updates (the way it was installed
     decides), with the changelog link at its end."""
     from . import update_checker
-    package = ("Check for Updates installs the new .deb or .rpm through your package "
-               "manager, with your password.")
-    how = {
-        "appimage": "Updates install and TuxTalk restarts by itself.",
-        "rpm": package, "deb": package, "package": package,
-        "aur": "Installed from the AUR: update with your AUR helper (yay -S tuxtalk-appimage).",
-        "flatpak": "Installed as a Flatpak: update with flatpak update or your software center.",
-    }
     row = _indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4))
-    info = Gtk.Label(label=how.get(install_type, "Development version: update with git pull."),
-                     xalign=0)
+    info = Gtk.Label(label=how_it_updates_text(install_type), xalign=0)
     info.set_line_wrap(True)
     info.get_style_context().add_class("dim-label")
     row.pack_start(info, False, True, 0)
@@ -324,7 +336,6 @@ class UpdatesTab(Tab):
         """The tab's page. Packed tight so it fits the window without
         scrolling: the version shares a line with Check for Updates, and the
         Update Status box only appears once a check has run."""
-        from . import installation
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         vbox.set_margin_start(20)
         vbox.set_margin_end(20)
@@ -515,7 +526,7 @@ class UpdatesTab(Tab):
         # self-managed AppImage can be swapped in place; package/AUR/Flatpak
         # users get instructions + the release link, never an AppImage download
         # (which fails on package installs, e.g. missing libfuse.so.2).
-        from . import installation, update_install, update_ui
+        from . import update_install, update_ui
         install_type = installation.get_install_type()
         guidance = update_ui.get_update_guidance(install_type, latest)
 
@@ -558,7 +569,7 @@ class UpdatesTab(Tab):
         """Download & Install, by how TuxTalk was installed: a package update
         through the shared pkexec flow, the release page (AUR, Flatpak, the
         development version), or a self-managed AppImage installed here."""
-        from . import installation, update_checker, update_ui
+        from . import update_checker, update_ui
         if not self._current_release:
             return
         install_type = installation.get_install_type()

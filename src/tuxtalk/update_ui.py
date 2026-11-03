@@ -15,7 +15,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib  # noqa: E402
 from .ui_style import message_dialog, show_message  # noqa: E402
 
-from . import installation, notes_text, update_checker, update_install  # noqa: E402
+from . import installation, notes_text, source_install, update_checker, update_install  # noqa: E402
 from .progress_window import run_with_progress  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,8 @@ DOWNLOAD_FAILED = "The download could not be completed"
 UNEXPECTED = "Something TuxTalk didn't expect went wrong; the log has the details."
 
 
-def get_update_guidance(install_type: str, latest_version: str) -> dict:
+def get_update_guidance(install_type: str, latest_version: str, *,
+                        owner=installation.system_package) -> dict:
     """How to update a given install type. Returns a dict with:
       update_method: 'appimage_swap' (download+swap the AppImage in place),
                      'pkexec_package' (download the .rpm/.deb, install as root
@@ -34,6 +35,7 @@ def get_update_guidance(install_type: str, latest_version: str) -> dict:
       message: user-facing text. command: copy-paste command for manual.
     """
     v = latest_version
+    aur_package = owner() if install_type == "system" else None
     if install_type == "appimage":
         return {"update_method": "appimage_swap", "can_auto_update": True,
                 "message": f"TuxTalk {v} is available.", "command": None}
@@ -52,13 +54,23 @@ def get_update_guidance(install_type: str, latest_version: str) -> dict:
         cmd = f"flatpak update {APP_ID}"
         msg = (f"TuxTalk {v} is available. Update through Flatpak (your software "
                f"center may also update it automatically):")
+    elif install_type == "source":
+        cmd = source_install.update_command(v)
+        msg = (f"TuxTalk {v} is available. You installed it from its source code. "
+               f"Quit TuxTalk, run this in a terminal, then open TuxTalk again:")
+    elif aur_package:
+        cmd = f"yay -S {aur_package}   # or: paru -S {aur_package}"
+        msg = (f"TuxTalk {v} is available. You installed it from the AUR — "
+               f"update with your AUR helper:")
     elif install_type == "dev":
         cmd = "git pull   # in your TuxTalk project folder"
         msg = (f"TuxTalk {v} is available. You're running the development "
                f"version — update with git:")
-    else:  # 'package' / unknown
+    else:  # 'package' / a system install no known package owns / unknown
         cmd = None
-        msg = (f"TuxTalk {v} is available. Please update using your system's "
+        msg = (f"TuxTalk {v} is available. Update it with the package manager you "
+               f"installed it with." if install_type == "system" else
+               f"TuxTalk {v} is available. Please update using your system's "
                f"package manager, or download it from the release page.")
     return {"update_method": "manual", "can_auto_update": False,
             "message": msg, "command": cmd}
