@@ -225,3 +225,21 @@ def test_a_voice_edit_esc_stops_at_its_first_key_and_says_nothing_more(monkeypat
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: told.append(a))
     assert voice_edit._type_rewrite("Rewritten.", "type", message, True, None) is False
     assert watched == [message] and told == []
+
+
+def test_esc_before_the_first_key_keeps_the_window_undo_goes_to(monkeypatch):
+    """Dictated into one app, then Esc on the next in another before its
+    first key: undo of the first must still point at the first app, not
+    reach into the second (deliver_text takes the window early)."""
+    from tuxtalk import focused_window, virtual_keyboard
+    monkeypatch.setattr(focused_window, "destination", lambda: None)
+    monkeypatch.setattr(rs.state, "last_inserted_window", "kwrite")
+    monkeypatch.setattr(rs.state, "last_inserted_where", ("kwrite", 7))
+
+    def take_window_then_esc(text, mode, one_block=False, *, where):
+        rs.state.last_inserted_window = "org.kde.konsole"
+        rs.state.last_inserted_where = ("org.kde.konsole", 9)
+        raise virtual_keyboard.GaveUp("cancelled")
+    monkeypatch.setattr(delivery, "deliver_text", take_window_then_esc)
+    assert delivery.inject_text("Hello.", "type") == "cancelled"
+    assert (rs.state.last_inserted_window, rs.state.last_inserted_where) == ("kwrite", ("kwrite", 7))

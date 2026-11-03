@@ -300,7 +300,7 @@ def _type_rewrite(result, injection_mode, message, beeps_on, into):
     one block (see delivery.inject_text), as part of *message*, and only
     into *into* (a look, or None when the window isn't known); True when it
     all went in."""
-    from . import history, keyboard_output
+    from . import history
     try:
         # Esc while the rewrite gets ready to go in stops it at the first key.
         with keyboard_output.until_cancelled(message):
@@ -314,7 +314,7 @@ def _type_rewrite(result, injection_mode, message, beeps_on, into):
     if outcome == "password_field":
         history.forget(result)
     if outcome == "cancelled":
-        return False        # Esc said so itself; the selection is as it was
+        return False        # Esc said so itself; nothing replaced the selection
     if outcome == "moved":
         # The window changed between the last look and the keys: the
         # dictation's notice would blame a Right Ctrl the user may not use.

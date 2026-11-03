@@ -177,7 +177,8 @@ def _values():
         f"Press <b>Esc</b> right after you let go of <b>{hold}</b>: nothing more is typed,\n"
         "and nothing is sent after it. A line already going in finishes, and with Type at\n"
         "pause the phrases typed before stay where they are. To take back the last one,\n"
-        f"hold <b>{hold}</b>, say <b>delete last sentence</b>, let go.\n\n")
+        f"hold <b>{hold}</b>, say <b>delete last sentence</b>, let go (after a line cut\n"
+        "short, your app's own Ctrl+Z).\n\n")
 
     return {"hold": hold, "toggle": toggle, "paste_tip": paste_tip, "esc_tip": esc_tip,
             "paste_line": paste_line, "key_choice_tip": key_choice_tip,

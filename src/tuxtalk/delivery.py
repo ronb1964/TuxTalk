@@ -115,6 +115,8 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
     """
     before = focused_window.destination()
     sends_before, landed = keyboard_output.this_thread.sends, None
+    # deliver_text takes the window for this text's before its first key.
+    kept_window = (rs.state.last_inserted_window, rs.state.last_inserted_where)
     try:
         # Checked again right before each line, line break and paste key,
         # after the waits for the paste (wl-copy) or a dictation key held
@@ -126,6 +128,10 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
     except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp) as stop:
         typed_some = keyboard_output.this_thread.sends != sends_before
         outcome = _delivery_stopped(stop, typed_some=typed_some)
+        if outcome == "cancelled":
+            # Nothing typed: the text before is where it was, and undo of it
+            # must not reach into the window this one would have gone to.
+            rs.state.last_inserted_window, rs.state.last_inserted_where = kept_window
     except Exception:
         # Any of it may be in the app: undo mustn't count on the dictation
         # before, nor a voice move on where the cursor was. The caller
