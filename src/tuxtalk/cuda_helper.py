@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 from typing import Optional
+from . import installation
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -16,6 +17,9 @@ logger = setup_logger(__name__)
 # Timeout constants (in seconds)
 NVIDIA_SMI_TIMEOUT = 5
 SUBPROCESS_TIMEOUT = 2
+# The CTranslate2 check imports the speech library in a new Python, which
+# takes a few seconds when nothing of it is cached yet.
+CTRANSLATE2_CHECK_TIMEOUT = 10
 
 # The libraries a CUDA install needs here: CTranslate2 opens CUDA 12's cuBLAS
 # and cuBLASLt by these names, so another major version (11, 13) doesn't do;
@@ -58,11 +62,17 @@ def detect_nvidia_gpu():
 def probe_ctranslate2_cuda(run=subprocess.run, python: Optional[str] = None) -> bool:
     """Whether the CTranslate2 that *python* (this one by default) imports was
     built with CUDA. Hidden from every graphics card, so the check never wakes
-    one. No clean answer (a hang, a crash, no CTranslate2) counts as without."""
-    argv = [python or sys.executable, "-I", "-c", _CUDA_PROBE]
+    one. No clean answer (a hang, a crash, no CTranslate2) counts as without.
+
+    Not isolated (-I): TuxTalk itself finds a CTranslate2 the user installed
+    with pip --user or through PYTHONPATH, so the check must find the same
+    one. It runs in / instead, so the current folder that -c puts first on
+    the path can't offer a stray ctranslate2.py."""
+    argv = [python or sys.executable, "-c", _CUDA_PROBE]
     try:
-        result = run(argv, env={**os.environ, "CUDA_VISIBLE_DEVICES": ""},
-                     capture_output=True, text=True, errors="replace", timeout=20)
+        result = run(argv, env={**os.environ, "CUDA_VISIBLE_DEVICES": ""}, cwd="/",
+                     capture_output=True, text=True, errors="replace",
+                     timeout=CTRANSLATE2_CHECK_TIMEOUT)
     except (OSError, subprocess.SubprocessError) as e:
         why = str(e)
     else:
@@ -83,8 +93,7 @@ def ctranslate2_has_cuda() -> bool:
     package's TuxTalk (install type "system") is asked: it may run a
     CTranslate2 the distro built without CUDA. Every other install runs
     PyPI's, which has it. Cached: the answer can't change while TuxTalk runs."""
-    from .installation import get_install_type
-    if get_install_type() != "system":
+    if installation.get_install_type() != "system":
         return True
     return probe_ctranslate2_cuda()
 

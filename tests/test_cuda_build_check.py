@@ -17,7 +17,7 @@ except ImportError:
 
 import pytest
 
-from tuxtalk import cuda_helper, installation, prefs_speech, settings_backup
+from tuxtalk import config, cuda_helper, engine, installation, prefs_speech, settings_backup
 from tuxtalk import prefs as P
 from tuxtalk.prefs import PreferencesWindow
 from tuxtalk.prefs_speech import SpeechSection
@@ -50,7 +50,7 @@ def test_a_cuda_build_counts_even_with_no_card_now():
 
 def test_a_check_that_doesnt_answer_offers_no_cuda():
     def hang(argv, **kw):
-        raise subprocess.TimeoutExpired(argv, 20)
+        raise subprocess.TimeoutExpired(argv, kw["timeout"])
     assert cuda_helper.probe_ctranslate2_cuda(run=hang) is False
 
 
@@ -75,7 +75,19 @@ def test_the_check_asks_the_python_tuxtalk_runs_on():
     argvs = []
     cuda_helper.probe_ctranslate2_cuda(run=lambda argv, **kw: argvs.append(argv)
                                        or _answer("cuda\n")(argv), python="/usr/bin/python3")
-    assert argvs[0][:2] == ["/usr/bin/python3", "-I"]
+    assert argvs[0][:2] == ["/usr/bin/python3", "-c"]
+
+
+def test_the_check_finds_a_ctranslate2_from_pip_user_but_none_in_the_current_folder():
+    """Not isolated, so it sees the user's site and PYTHONPATH as TuxTalk
+    does; run in /, so a ctranslate2.py where TuxTalk was started can't
+    answer for the real one."""
+    calls = []
+    cuda_helper.probe_ctranslate2_cuda(run=lambda argv, **kw: calls.append((argv, kw))
+                                       or _answer("cuda\n")(argv))
+    argv, kw = calls[0]
+    assert "-I" not in argv and "-s" not in argv
+    assert kw["cwd"] == "/"
 
 
 def _no_probe(**kw):
@@ -204,6 +216,16 @@ def test_picking_large_v3_there_sets_it_up_rather_than_confirming_3_gb(
     assert done == [("back to", "small"), "set up"]
 
 
+def test_large_v3_there_without_vulkan_says_the_speech_library_cant_use_cuda(
+        monkeypatch, without_cuda_build):
+    win = SimpleNamespace(cuda_files_present=lambda: True, has_nvidia=lambda: True,
+                          vulkan_offered=lambda: False)
+    win.cuda_ready = lambda: PreferencesWindow.cuda_ready(win)
+    win.cuda_offered = lambda: PreferencesWindow.cuda_offered(win)
+    assert (SpeechSection._large_v3_text(SimpleNamespace(win=win))
+            == "large-v3 — needs CUDA, which the speech library installed here can't use")
+
+
 def test_a_cuda_build_still_lists_cuda_on_nvidia(monkeypatch):
     """Every other install type: as before, CUDA is listed on NVIDIA."""
     monkeypatch.setattr(installation, "get_install_type", lambda: "appimage")
@@ -224,6 +246,28 @@ def test_a_cuda_build_still_lists_cuda_on_nvidia(monkeypatch):
 def test_a_backup_with_cuda_restores_onto_another_device_there(monkeypatch, without_cuda_build):
     monkeypatch.setattr(cuda_helper, "detect_nvidia_gpu", lambda: "NVIDIA GeForce RTX 4070")
     assert settings_backup._device_works_here("cuda") is False
+
+
+def test_the_restore_note_there_blames_the_speech_library_not_the_card(
+        tmp_path, monkeypatch, without_cuda_build):
+    monkeypatch.setattr(cuda_helper, "detect_nvidia_gpu", lambda: "NVIDIA GeForce RTX 4070")
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.toml"))
+    notes = []
+    text = settings_backup._fit_device('device = "cuda"\n', notes)
+    assert text == 'device = "cpu"\n'
+    assert notes == ["The backup uses CUDA, which the speech library installed here "
+                     "can't use, so the Device stays on CPU."]
+
+
+def test_large_v3_there_runs_as_medium_rather_than_on_the_processor(
+        monkeypatch, without_cuda_build):
+    monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
+    notes = []
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(body))
+    cfg = SimpleNamespace(model="large-v3", device="cuda")
+    engine.guard_large_v3_without_cuda(cfg)
+    assert cfg.model == "medium"
+    assert notes and "speech library installed here can't use" in notes[0]
 
 
 class FakeLabel:

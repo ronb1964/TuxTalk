@@ -284,6 +284,9 @@ class SpeechSection(Tab):
             return "large-v3 — click to download required CUDA libraries"
         if self.win.vulkan_offered():
             return "large-v3 — Whisper's best, on your graphics card (Vulkan)"
+        if self.win.has_nvidia():
+            # NVIDIA without CUDA offered: the speech library lacks it.
+            return "large-v3 — needs CUDA, which the speech library installed here can't use"
         return "large-v3 — needs a graphics card (none found)"
 
     def _relabel_large_v3(self):

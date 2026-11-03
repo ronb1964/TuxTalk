@@ -320,6 +320,16 @@ def _device_works_here(device):
     return True
 
 
+def _lacks(device):
+    """Why *device* doesn't work here, as the end of a sentence: a speech
+    library built without CUDA is no missing card."""
+    if device == "cuda":
+        from .cuda_helper import ctranslate2_has_cuda
+        if not ctranslate2_has_cuda():
+            return "the speech library installed here can't use"
+    return "this computer doesn't have"
+
+
 def _fit_device(text, notes):
     """The restored settings *text*, with the device swapped for this
     computer's own when this computer can't use the one in the backup (a
@@ -338,7 +348,7 @@ def _fit_device(text, notes):
     if not _device_works_here(keep):
         keep = "cpu"
     name = _DEVICE_NAMES.get(wanted, wanted)
-    notes.append(f"The backup uses {name}, which this computer doesn't have, so the "
+    notes.append(f"The backup uses {name}, which {_lacks(wanted)}, so the "
                  f"Device stays on {_DEVICE_NAMES.get(keep, 'CPU')}.")
     return _DEVICE_LINE.sub(f'device = "{keep}"', text, count=1)
 

@@ -233,30 +233,36 @@ _QUALITY_ORDER = ("large-v3", "parakeet-v3", "medium", "small", "base", "tiny")
 
 
 def guard_large_v3_without_cuda(cfg):
-    """large-v3 without any CUDA libraries runs as medium.
+    """large-v3 without CUDA it can use runs as medium.
 
     Without CUDA, large-v3 would run on the processor, far too slowly to use.
     This keeps the service usable for someone who set up large-v3 with CUDA
-    and later lost the libraries (a fresh profile, a cleaned data folder). It
-    uses the same check as Preferences, which accepts a system-wide CUDA
-    install, so a model Preferences offers is never swapped here. It applies
-    to every device but Vulkan: large-v3 runs there without any CUDA library,
-    and Vulkan has its own fallback, which tells the user.
+    and later lost the libraries (a fresh profile, a cleaned data folder), or
+    whose speech library was built without CUDA (a distro's own build). It
+    uses the same checks as Preferences' cuda_ready, which accepts a
+    system-wide CUDA install, so a model Preferences offers is never swapped
+    here. It applies to every device but Vulkan: large-v3 runs there without
+    any CUDA library, and Vulkan has its own fallback, which tells the user.
     """
     if cfg.model != "large-v3" or str(cfg.device).lower() == "vulkan":
         return
     try:
-        from .cuda_helper import has_cuda_libraries
-        if not has_cuda_libraries():
-            logger.warning(
-                "large-v3 selected but CUDA libraries not found — "
-                "falling back to 'medium' to prevent non-functional state."
-            )
-            cfg.model = "medium"
-            notify_module.notify("Using Medium instead of Large-v3",
-                                 "Large-v3 needs the CUDA files, which aren't installed. Pick "
-                                 "CUDA under Preferences, General, Device to download them and "
-                                 "use Large-v3 again.")
+        from .cuda_helper import ctranslate2_has_cuda, has_cuda_libraries
+        if not ctranslate2_has_cuda():
+            why = ("the speech library has no CUDA",
+                   "Large-v3 needs CUDA, which the speech library installed here can't "
+                   "use. With a graphics card, pick Vulkan under Preferences, General, "
+                   "Device to use Large-v3.")
+        elif not has_cuda_libraries():
+            why = ("CUDA libraries not found",
+                   "Large-v3 needs the CUDA files, which aren't installed. Pick CUDA under "
+                   "Preferences, General, Device to download them and use Large-v3 again.")
+        else:
+            return
+        logger.warning(f"large-v3 selected but {why[0]}; falling back to 'medium' "
+                       "to prevent a non-functional state.")
+        cfg.model = "medium"
+        notify_module.notify("Using Medium instead of Large-v3", why[1])
     except Exception as e:
         # The model's own load reports a real problem with CUDA.
         logger.info(f"Could not check large-v3's CUDA files: {e}")
