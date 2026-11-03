@@ -68,17 +68,13 @@ def take_tab_request():
 def is_prefs_argv(argv) -> bool:
     """True if *argv* (a process's argument list) is a Preferences window:
     ``<python> -m tuxtalk.prefs`` (talktype.prefs before the 0.15.0 rename,
-    which shares this pidfile) or the ``dictate-prefs`` console script, read
-    where an interpreter reads them (service_launcher.interpreter_target):
-    a pidfile left by a crashed Preferences can name a PID another program
-    has since, and FRONT's and CLOSE's default action ends a process."""
+    which shares this pidfile), read where an interpreter reads them
+    (service_launcher.interpreter_target): a pidfile left by a crashed
+    Preferences can name a PID another program has since, and FRONT's and
+    CLOSE's default action ends a process."""
     from .service_launcher import interpreter_target
-    argv = list(argv)
-    if argv and os.path.basename(argv[0]) == "dictate-prefs":
-        return True
-    return interpreter_target(argv) in (("module", "tuxtalk.prefs"),
-                                        ("module", "talktype.prefs"),
-                                        ("script", "dictate-prefs"))
+    return interpreter_target(list(argv)) in (("module", "tuxtalk.prefs"),
+                                              ("module", "talktype.prefs"))
 
 
 def is_prefs_pid(pid) -> bool:

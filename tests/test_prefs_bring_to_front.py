@@ -39,10 +39,9 @@ def test_a_reused_pid_is_not_trusted(tmp_path, monkeypatch):
 
 def test_preferences_is_recognised_by_whole_arguments():
     assert prefs_ipc.is_prefs_argv(["/usr/bin/python3", "-m", "tuxtalk.prefs", "--tab=stats"])
-    assert prefs_ipc.is_prefs_argv(["/home/u/.local/bin/dictate-prefs"])
-    assert prefs_ipc.is_prefs_argv(["/usr/bin/python3.12", "/home/u/.local/bin/dictate-prefs"])
+    assert prefs_ipc.is_prefs_argv(["/usr/bin/python3.12", "-m", "talktype.prefs"])
     assert not prefs_ipc.is_prefs_argv(["bash", "-c", "pgrep -f tuxtalk.prefs"])
-    assert not prefs_ipc.is_prefs_argv(["vim", "/home/u/.local/bin/dictate-prefs"])
+    assert not prefs_ipc.is_prefs_argv(["vim", "-m", "tuxtalk.prefs"])
     assert not prefs_ipc.is_prefs_argv([])
 
 

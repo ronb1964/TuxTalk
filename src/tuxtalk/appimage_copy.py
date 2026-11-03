@@ -38,18 +38,14 @@ def put_in_place():
     copy_from = None
     try:
         install_type = installation.get_install_type()
-        if install_type == "source" and not desktop_launcher_exists():
-            launcher_created, msg = create_desktop_launcher()
-            logger.info("Desktop launcher created" if launcher_created
-                        else f"Could not create the desktop launcher: {msg}")
         if install_type == "appimage":
             installed, current_path = installation.running_appimage_location()
             if not installed and current_path:
                 copy_from, installed = current_path, True       # it will be, once copied
-            if not desktop_launcher_exists():
-                launcher_created, msg = create_desktop_launcher()
-                logger.info("Desktop launcher created" if launcher_created
-                            else f"Could not create the desktop launcher: {msg}")
+        if install_type in ("appimage", "source") and not desktop_launcher_exists():
+            launcher_created, msg = create_desktop_launcher()
+            logger.info("Desktop launcher created" if launcher_created
+                        else f"Could not create the desktop launcher: {msg}")
     except Exception as e:
         logger.warning(f"Could not set up AppImage/launcher: {e}")
     _start_at_login(installed)

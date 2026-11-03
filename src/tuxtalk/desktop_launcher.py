@@ -229,10 +229,11 @@ def desktop_launcher_exists() -> bool:
 
 def create_hidden_desktop_entry() -> bool:
     """Write a hidden tuxtalk.desktop for a self-managed AppImage or a source
-    install that has no launcher yet. KDE and GNOME find a window's icon through the .desktop file
-    its program name names, so without this first-run setup shows the
-    desktop's generic icon. NoDisplay keeps it out of the app menu, and the
-    Ready screen replaces it with the real launcher. Returns True if written."""
+    install that has no launcher yet. KDE and GNOME find a window's icon
+    through the .desktop file its program name names, so without this
+    first-run setup shows the desktop's generic icon. NoDisplay keeps it out
+    of the app menu, and the Ready screen replaces it with the real launcher.
+    Returns True if written."""
     try:
         install_type = installation.get_install_type(pkg_query=lambda: "package")
         if install_type not in ("appimage", "source"):
@@ -242,9 +243,11 @@ def create_hidden_desktop_entry() -> bool:
         icon_name = install_app_icon() or "audio-input-microphone"
         os.makedirs(os.path.dirname(DESKTOP_FILE_PATH), exist_ok=True)
         # Exec is required for a valid entry; the running program exists now.
-        exec_path = desktop_exec_program(
-            source_install.command() if install_type == "source"
-            else installation.get_running_appimage_path() or installation.APPIMAGE_PATH)
+        if install_type == "source":
+            running = source_install.command()
+        else:
+            running = installation.get_running_appimage_path() or installation.APPIMAGE_PATH
+        exec_path = desktop_exec_program(running)
         tmp = DESKTOP_FILE_PATH + ".tmp"
         with open(tmp, "w") as f:
             f.write("[Desktop Entry]\n"

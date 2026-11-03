@@ -112,25 +112,20 @@ def interpreter_target(argv):
 def is_service_argv(argv) -> bool:
     """True if *argv* (a process's argument list) is the dictation service.
 
-    The service only ever runs one of two ways:
-      * ``<python> -m tuxtalk.app`` — dev checkouts, the AppImage, the .deb and
-        .rpm (which repackage the AppImage) and the Flatpak.
-      * the ``dictate`` console script from a pip install, which the kernel
-        runs as ``<python> /path/bin/dictate`` (or ``/path/bin/dictate``).
+    The service only ever runs as ``<python> -m tuxtalk.app``: dev checkouts,
+    source installs, the AppImage, the .deb and .rpm (which repackage the
+    AppImage) and the Flatpak.
 
     So this compares whole arguments where an interpreter reads them
     (interpreter_target), never substrings: ``bash -c "pgrep -f
     tuxtalk.app"`` or ``python3 -c '...' -m tuxtalk.app`` would be signalled
     (SIGUSR1 kills a process that doesn't handle it, and a quit that runs long
-    ends in SIGKILL). "-m tuxtalk.tray" and bin/dictate-tray never match.
+    ends in SIGKILL). "-m tuxtalk.tray" never matches.
     talktype.app: the service from before the 0.15.0 rename, which a 0.14.x
     in-app update leaves running (it holds the shared lock).
     """
-    argv = list(argv)
-    if argv and os.path.basename(argv[0]) == "dictate":
-        return True
-    return interpreter_target(argv) in (("module", "tuxtalk.app"), ("module", "talktype.app"),
-                                        ("script", "dictate"))
+    return interpreter_target(list(argv)) in (("module", "tuxtalk.app"),
+                                              ("module", "talktype.app"))
 
 
 def is_pre_rename_service_argv(argv) -> bool:

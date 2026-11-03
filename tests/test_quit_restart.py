@@ -923,7 +923,7 @@ def test_every_preferences_window_of_the_users_is_found_whatever_the_pidfile(mon
         "42": (me, ["/usr/bin/python3", "-m", "talktype.prefs"]),       # an older window
         "43": (me + 1, ["python3", "-m", "tuxtalk.prefs"]),             # another user's
         "44": (me, ["python3", "-c", "job()", "-m", "tuxtalk.prefs"]),
-        "45": (me, ["/opt/tuxtalk/bin/dictate-prefs"]),
+        "45": (me, ["bash", "-c", "pgrep -f tuxtalk.prefs"]),           # only mentions it
     }
     listdir, stat = os.listdir, os.stat
 
@@ -939,7 +939,7 @@ def test_every_preferences_window_of_the_users_is_found_whatever_the_pidfile(mon
     monkeypatch.setattr(prefs_ipc.os, "listdir", proc_listdir)
     monkeypatch.setattr(prefs_ipc.os, "stat", proc_stat)
     monkeypatch.setattr("tuxtalk.service_launcher.read_argv", lambda pid: procs[str(pid)][1])
-    assert sorted(prefs_ipc.open_windows()) == [42, 45]
+    assert sorted(prefs_ipc.open_windows()) == [42]
 
 
 def test_quit_waits_for_an_update_going_in_but_not_for_its_download():

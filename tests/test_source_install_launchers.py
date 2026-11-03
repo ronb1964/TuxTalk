@@ -116,3 +116,10 @@ def test_help_suggests_the_venvs_own_command_for_a_shortcut(source_home):
 
 def test_help_quotes_a_venv_path_with_a_space_for_a_shortcut(source_home_with_space):
     assert control.shortcut_command() == f"'{source_home_with_space.command}' --toggle"
+
+
+def test_the_icon_list_ends_with_the_packages_own_png_then_the_users_copy():
+    from tuxtalk import app_icon
+    files = app_icon.icon_files()
+    assert files[-2:] == [str(ROOT / "src/tuxtalk/icons/io.github.ronb1964.TuxTalk.png"),
+                          app_icon.user_icon_file()]

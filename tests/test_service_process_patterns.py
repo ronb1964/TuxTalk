@@ -6,8 +6,6 @@ One helper owns the rule, because the obvious patterns hit the wrong processes:
     merely mentions the project path;
   * "-m tuxtalk" matches "-m tuxtalk.tray", the tray's own command line (and
     pkill reads a pattern starting with a dash as an option and aborts);
-  * "bin/dictate" is a prefix of "bin/dictate-tray", which is the only launcher
-    the shipped AppImage actually contains.
 
 These tests pin the property that matters: it hits the service, and nothing
 else, above all not the tray.
@@ -33,15 +31,11 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # Real argument lists, as they appear in /proc/<pid>/cmdline. The AppImage ones
 # were taken from an extracted v0.7.2: usr/bin/dictate-tray execs
 # "python3 -m tuxtalk.tray", and usr/bin/dictate does not ship at all, so the
-# service runs as the module. A pip install's `dictate` console script is run
-# by the kernel as "<python> /path/bin/dictate".
+# service runs as the module.
 SERVICE_ARGVS = [
     ["/home/ron/Projects/TalkType/.venv/bin/python", "-m", "tuxtalk.app"],
     ["/tmp/.mount_TalkTyabc/usr/bin/python3", "-m", "tuxtalk.app"],
     ["python3", "-X", "faulthandler", "-m", "tuxtalk.app"],
-    ["/opt/talktype/usr/bin/dictate"],
-    ["/opt/talktype/usr/bin/dictate", "--verbose"],
-    ["/usr/bin/python3", "/home/u/.local/bin/dictate"],
 ]
 
 # Anything here being matched is a bug. The tray is the parent process: killing
@@ -61,8 +55,6 @@ NOT_THE_SERVICE_ARGVS = [
     ["/bin/bash", "-c", "pgrep -af tuxtalk.app"],
     ["grep", "-rn", "tuxtalk.app", "src/"],
     ["less", "/tmp/tuxtalk.app.log"],
-    ["vim", "/opt/talktype/usr/bin/dictate"],
-    ["/bin/bash", "-c", "/opt/talktype/usr/bin/dictate"],
     [],
 ]
 
@@ -89,7 +81,7 @@ class TestTheRuleSparesEverythingElse:
         )
 
     def test_dictate_tray_is_spared(self):
-        """'bin/dictate' is a prefix of the only launcher the AppImage ships."""
+        """The AppImage's launcher script is the tray's wrapper, not the service."""
         assert not service_launcher.is_service_argv(
             ["/tmp/.mount_x/usr/bin/dictate-tray"]
         )

@@ -38,7 +38,8 @@ def icon_files():
         f"/usr/local/{_SCALABLE}",
         f"/usr/share/icons/hicolor/256x256/apps/{APP_ID}.png",
         f"/usr/share/pixmaps/{APP_ID}.png",
-        # A source install's copy inside the package.
+        # The PNG that ships inside the package: the fallback for installs
+        # with no project folder around them (a pip install into a venv).
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", f"{APP_ID}.png"),
         user_icon_file(),
     ]
