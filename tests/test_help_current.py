@@ -114,3 +114,16 @@ def test_problems_explains_letters_that_come_out_wrong(help_pages):
     problems = next(text for title, text in help_pages.items() if "Problems" in title)
     assert "Caps Lock is on" in problems
     assert "COSMIC" in problems and "keyboard layout" in problems
+
+
+@pytest.mark.parametrize("flatpak, says", [(None, True), ("io.github.ronb1964.TuxTalk", False)])
+def test_help_tells_what_esc_does_only_where_esc_is_heard(monkeypatch, flatpak, says):
+    """The Flatpak's shortcuts portal never hears Esc."""
+    from tuxtalk import help_text
+    if flatpak:
+        monkeypatch.setenv("FLATPAK_ID", flatpak)
+    else:
+        monkeypatch.delenv("FLATPAK_ID", raising=False)
+    mistakes = dict(help_text.tabs())["Mistakes"]
+    assert ("Changed your mind as you let go" in mistakes) is says
+    assert "delete everything" not in mistakes

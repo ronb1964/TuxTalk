@@ -171,7 +171,15 @@ def _values():
             "them. Where Right Alt is AltGr,\n    the list says which characters you'd lose, "
             "like @ or €.")
 
-    return {"hold": hold, "toggle": toggle, "paste_tip": paste_tip,
+    # The Flatpak's shortcuts portal never hears Esc.
+    esc_tip = "" if is_flatpak else (
+        "<b>Changed your mind as you let go</b>\n"
+        f"Press <b>Esc</b> right after you let go of <b>{hold}</b>: nothing more is typed,\n"
+        "and nothing is sent after it. A line already going in finishes, and with Type at\n"
+        "pause the phrases typed before stay where they are. To take back the last one,\n"
+        f"hold <b>{hold}</b>, say <b>delete last sentence</b>, let go.\n\n")
+
+    return {"hold": hold, "toggle": toggle, "paste_tip": paste_tip, "esc_tip": esc_tip,
             "paste_line": paste_line, "key_choice_tip": key_choice_tip,
             "shortcut_line": shortcut_line, "typing_para": typing_para,
             "no_hotkey_block": no_hotkey_block, "kde_notice": kde_notice,
@@ -539,13 +547,7 @@ Say a short phrase and TuxTalk types the full text: "my email" →
 user@example.com. Add your own in <b>Preferences → Words → Add Snippet</b>, then hold
 <b>{hold}</b>, say the phrase, let go.
 
-<b>Changed your mind as you let go</b>
-Press <b>Esc</b> right after you let go of <b>{hold}</b>: what isn't typed yet stays out,
-and nothing is sent after it. With Type at pause, the phrases already typed stay
-where they are. To clear them too, hold <b>{hold}</b>, say <b>delete everything</b>,
-let go.
-
-<b>Getting it back</b>
+{esc_tip}<b>Getting it back</b>
 <b>Recent Dictations</b> in the TuxTalk menu keeps your last 20. {paste_tip}
 
 <b>When it mishears a lot</b>

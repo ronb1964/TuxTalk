@@ -162,3 +162,66 @@ def test_esc_before_a_type_at_pause_recording_ends_types_no_held_cue(monkeypatch
     before, beeped = list(typed), list(beeps)
     type_at_pause.end_in_a_pause(message, True, True, True, "type", None)
     assert typed == before and beeps == beeped
+
+
+def test_esc_partway_through_a_dictation_brings_no_paste_it_notice(monkeypatch):
+    """Esc while the first of two lines goes in: the second stays out, and
+    no "only part of it was typed, paste it" notice argues with the Esc."""
+    from tuxtalk import notices
+    told = []
+    monkeypatch.setattr(notices, "report_undelivered", lambda *a: told.append(a))
+    message = rs.Message()
+    message.cancelled = True
+    pipeline._after_the_words("partial", "", "ENTER", " ", None, False, "type", message)
+    assert told == []
+
+
+def test_esc_before_the_first_key_keeps_what_undo_knows(monkeypatch):
+    """The dictation before is still in the app as it was: "delete last
+    sentence" must still find it."""
+    from tuxtalk import virtual_keyboard
+    monkeypatch.setattr(rs.state, "last_inserted_text", "Meet at noon. ")
+    outcome = delivery._delivery_stopped(virtual_keyboard.GaveUp("cancelled"), typed_some=False)
+    assert outcome == "cancelled" and rs.state.last_inserted_text == "Meet at noon. "
+
+
+def test_a_line_typed_through_wtype_counts_as_typed(monkeypatch):
+    """Esc before the next line after one went in through wtype is partway,
+    not "nothing typed": that line is in the app."""
+    from tuxtalk import keyboard_layout
+
+    def no_layout(text):
+        raise OSError("no libxkbcommon")
+
+    class Wtype:
+        returncode = 0
+
+        def __init__(self, *a, **k):
+            pass
+
+        def communicate(self, data=None, timeout=None):
+            return b"", b""
+    monkeypatch.setattr(keyboard_layout, "layout_key_events", no_layout)
+    monkeypatch.setattr(keyboard_output, "which", lambda name: "/usr/bin/wtype")
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", Wtype)
+    before = keyboard_output.this_thread.sends
+    assert keyboard_output.type_text_raw("Meet at noon.") is True
+    assert keyboard_output.this_thread.sends == before + 1
+
+
+def test_a_voice_edit_esc_stops_at_its_first_key_and_says_nothing_more(monkeypatch):
+    """Esc while the rewrite got ready to go in: the same check as for a
+    dictation, and no notice or beep after Esc's own."""
+    from tuxtalk import notices, voice_edit
+    message = rs.Message()
+    watched, told = [], []
+
+    def inject(text, mode, one_block=False, into=None, message=None):
+        watched.append(keyboard_output.this_thread.cancel_with)
+        return "cancelled"
+    monkeypatch.setattr(delivery, "inject_text", inject)
+    monkeypatch.setattr(notices, "report_undelivered", lambda *a: told.append(a))
+    monkeypatch.setattr(notices, "edit_problem", lambda *a: told.append(a))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: told.append(a))
+    assert voice_edit._type_rewrite("Rewritten.", "type", message, True, None) is False
+    assert watched == [message] and told == []

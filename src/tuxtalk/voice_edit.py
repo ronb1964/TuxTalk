@@ -300,10 +300,12 @@ def _type_rewrite(result, injection_mode, message, beeps_on, into):
     one block (see delivery.inject_text), as part of *message*, and only
     into *into* (a look, or None when the window isn't known); True when it
     all went in."""
-    from . import history
+    from . import history, keyboard_output
     try:
-        outcome = delivery.inject_text(result, injection_mode, one_block=True, into=into,
-                                       message=message)
+        # Esc while the rewrite gets ready to go in stops it at the first key.
+        with keyboard_output.until_cancelled(message):
+            outcome = delivery.inject_text(result, injection_mode, one_block=True, into=into,
+                                           message=message)
     except Exception as e:
         # The error's text can quote the rewrite, the user's own words.
         logger.error(f"Voice edit: typing the rewrite failed: {error_without_words(e)}")
@@ -311,6 +313,8 @@ def _type_rewrite(result, injection_mode, message, beeps_on, into):
         message.add(outcome, None)      # what's in the box isn't known now
     if outcome == "password_field":
         history.forget(result)
+    if outcome == "cancelled":
+        return False        # Esc said so itself; the selection is as it was
     if outcome == "moved":
         # The window changed between the last look and the keys: the
         # dictation's notice would blame a Right Ctrl the user may not use.

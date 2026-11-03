@@ -84,7 +84,7 @@ def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role
     notice when they didn't all go in; else the key *said* after them, or
     the automatic send's Enter when *press*. *space* is the auto-space left
     off before the key."""
-    if outcome == "cancelled":
+    if outcome == "cancelled" or (outcome == "partial" and message.cancelled):
         return              # Esc said so itself (recording.cancel_finishing)
     if outcome in delivery_notices.NOTICES:
         notices.report_undelivered(outcome, beeps_on)
@@ -457,7 +457,7 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
         send_countdown.say_held_back(words.held_back, job.message)
     if outcome == "ok":
         _carry_on_after(words, text, audio_f32, job)
-    if live.usage_stats:
+    if live.usage_stats and outcome != "cancelled":
         # After typing, so saving the counts never delays the text.
         # Counts only (words, seconds dictating); see stats.py. A correction
         # across a pause retypes the phrase before, counted when it went in.

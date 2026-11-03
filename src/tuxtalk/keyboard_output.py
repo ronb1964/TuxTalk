@@ -133,7 +133,7 @@ def _delivery_claim(claim):
     if this_thread.no_password_field:
         claim = _first(refuse_password_field, claim)
     if this_thread.cancel_with is not None:
-        claim = _then(claim, refuse_cancelled)
+        claim = _then(claim, functools.partial(refuse_cancelled, this_thread.cancel_with))
     return claim
 
 
@@ -156,12 +156,13 @@ def refuse_password_field() -> None:
         raise virtual_keyboard.GaveUp("password_field")
 
 
-def refuse_cancelled() -> None:
-    """GaveUp("cancelled") when Esc has cancelled the dictation being
-    delivered (this_thread.cancel_with) since its words were checked: Esc
-    a moment after the key comes up lands while the delivery looks at the
-    window and picks how to type, and none of its keys may go in."""
-    if this_thread.cancel_with.cancelled:
+def refuse_cancelled(message) -> None:
+    """GaveUp("cancelled") when Esc has cancelled *message*, the dictation
+    being delivered (until_cancelled), since its words were checked: Esc a
+    moment after the key comes up lands while the delivery looks at the
+    window and picks how to type, and none of its keys may go in. A line
+    already going in is typed to the end."""
+    if message.cancelled:
         logger.info("Not typed: Esc cancelled the dictation as it was about to go in")
         raise virtual_keyboard.GaveUp("cancelled")
 
@@ -446,7 +447,7 @@ def type_text_raw(text: str) -> bool:
         if this_thread.no_password_field:
             refuse_password_field()     # no claim of send_keys's asks it here
         if this_thread.cancel_with is not None:
-            refuse_cancelled()
+            refuse_cancelled(this_thread.cancel_with)
         # The real exit code, so the undo buffer tracks only typed text; a
         # bounded wait, so a stalled compositor can't freeze dictation; the
         # text on stdin ("-"), as every user can read a command line. wtype
@@ -463,7 +464,10 @@ def type_text_raw(text: str) -> bool:
             proc.communicate()
             logger.error(f"wtype timed out after {WTYPE_TIMEOUT_S}s; killed the process")
             return False
-        return proc.returncode == 0
+        if proc.returncode != 0:
+            return False
+        this_thread.sends += 1      # as send_keys counts: a stop after it is partway
+        return True
     # Not put on the clipboard instead: that would replace what the user
     # copied, unmarked for clipboard managers to keep. The failure notice
     # points to Recent Dictations, which holds it.

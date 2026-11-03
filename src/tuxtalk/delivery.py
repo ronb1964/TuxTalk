@@ -1,9 +1,11 @@
-"""Putting a finished dictation into the focused window: paste or type,
-as the window and the settings call for, with line breaks that don't send
-a chat message (Shift+Enter) and never into a password field. The outcome
-("ok", "partial", "failed", "password_field") says how much arrived, and
-the undo buffer holds only what did. Then what goes in after it: more typed
-onto it, a key pressed after it, and the automatic send's Enter."""
+"""Putting a finished dictation into the focused window: paste or type, as
+the window and the settings call for, with line breaks that don't send a
+chat message (Shift+Enter) and never into a password field. The outcome
+("ok", "partial", "failed", "password_field") says how much arrived, or
+what stopped it before its first key ("moved", "key_held", "keys_down",
+"cancelled" for Esc), and the undo buffer holds only what did. Then what
+goes in after it: more typed onto it, a key pressed after it, and the
+automatic send's Enter."""
 import os
 import re
 import time
@@ -297,8 +299,12 @@ def _delivery_stopped(stop, typed_some: bool) -> str:
     Right Ctrl or Right Alt dictation key stayed down, the window changed while typing waited for it
     (modifier_hotkeys), or it isn't the one the text had to go into
     (focused_window.claim_into); typing on any other way (wtype, the
-    clipboard) would do what the wait was there to prevent. *typed_some*:
-    earlier lines were typed before it gave up."""
+    clipboard) would do what the wait was there to prevent; or Esc
+    cancelled the dictation (keyboard_output.refuse_cancelled). *typed_some*:
+    earlier lines were typed before it gave up. Esc before the first key
+    leaves the app, and so what undo knows of it, as it was."""
+    if stop.reason == "cancelled" and not typed_some:
+        return "cancelled"          # logged where it gave up
     forget_typed()
     if stop.reason == "password_field":
         return "password_field"     # logged where it gave up
