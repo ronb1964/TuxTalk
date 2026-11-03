@@ -22,7 +22,12 @@ onnxruntime = [
 ]
 sounddevice = "*"
 evdev = "*"
-numpy = "*"
+# Same reason as onnxruntime: 2.3 drops Python 3.10 (the AppImage's), and 2.2
+# ships no Python 3.14 wheels, so a source install there would compile it.
+numpy = [
+    { version = "<2.3", python = "<3.11" },
+    { version = ">=2.3", python = ">=3.11" },
+]
 toml = "*"
 # "Write numbers as digits" (numbers.py): twenty-five -> 25 in eight languages.
 # A small Rust-built wheel (~380 KB) with wheels for every Python we support.
