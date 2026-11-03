@@ -212,6 +212,57 @@ The AppImage includes everything needed - just download and run!
 > - **Arch/Manjaro**: `sudo pacman -S fuse3`
 > - **openSUSE**: `sudo zypper install fuse3`
 
+### From source (any distro)
+
+For a distro without a TuxTalk package, or if you'd just rather. You need Python 3.10 to 3.14 (`python3 --version` tells you). The first run sets up the menu entry and start at login and offers Fix Typing, same as the other installs.
+
+1. Install the system packages. GTK's Python bindings can't come from pip, so your distro supplies those.
+
+   Arch, CachyOS, Manjaro:
+   ```bash
+   sudo pacman -S --needed python python-gobject python-cairo python-dbus python-evdev gtk3 libayatana-appindicator portaudio wl-clipboard
+   ```
+
+   Fedora:
+   ```bash
+   sudo dnf install python3-gobject python3-dbus python3-evdev gtk3 libayatana-appindicator-gtk3 portaudio wl-clipboard
+   ```
+
+   Debian, Ubuntu, Mint:
+   ```bash
+   sudo apt install python3-venv python3-gi python3-gi-cairo python3-dbus python3-evdev gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 libportaudio2 wl-clipboard
+   ```
+
+   openSUSE Tumbleweed:
+   ```bash
+   sudo zypper install python3-gobject python3-gobject-Gdk python3-gobject-cairo python3-dbus-python python3-evdev typelib-1_0-Gtk-3_0 typelib-1_0-AyatanaAppIndicator3-0_1 libportaudio2 wl-clipboard
+   ```
+
+2. Make the venv. It has to see the system packages from step 1.
+
+   ```bash
+   python3 -m venv --system-site-packages ~/.local/share/TuxTalk/venv
+   ```
+
+3. Install this release into it. The constraints file pins every library to the version I tested, and each one has a ready-made wheel, so nothing gets compiled.
+
+   ```bash
+   ~/.local/share/TuxTalk/venv/bin/pip install -c https://raw.githubusercontent.com/ronb1964/TuxTalk/v0.20.0/packaging/source-install-constraints.txt https://github.com/ronb1964/TuxTalk/archive/refs/tags/v0.20.0.tar.gz
+   ```
+
+4. Link the command and start it once.
+
+   ```bash
+   mkdir -p ~/.local/bin && ln -sf ~/.local/share/TuxTalk/venv/bin/tuxtalk ~/.local/bin/tuxtalk
+   ~/.local/share/TuxTalk/venv/bin/tuxtalk
+   ```
+
+   Arch and CachyOS don't have `~/.local/bin` on the PATH by default. The menu entry and start at login use the full path, so they work either way.
+
+To update, quit TuxTalk and run step 3 again with the new version. Check for Updates shows you the exact command. Uninstalling is the same as for every other install: Preferences, Updates & Backup, Uninstall TuxTalk…
+
+Want to work on TuxTalk instead of just using it? That's [DEV_SETUP.md](DEV_SETUP.md).
+
 ### Flatpak
 
 There's a sandboxed Flatpak build in `packaging/flatpak`, but it isn't published
@@ -579,48 +630,6 @@ sudo rm -r /etc/systemd/system/tuxtalk-hotkeys.service /etc/udev/rules.d/70-tuxt
 ### Tray icon not visible (GNOME)?
 - TuxTalk offers to install its GNOME extension on first run
 - Or manually: Preferences → Advanced → Show system check → Install Extension
-
-</details>
-
-<details>
-<summary><b>Building from source</b></summary>
-
-### From Source
-
-GTK's Python bindings can't be installed with pip, so they come from your
-system and the rest goes in a venv. `run-dev.sh` puts the two together.
-
-```bash
-# Prerequisites (Fedora/Nobara; other distros have the same packages under similar names)
-sudo dnf install -y portaudio-devel wl-clipboard \
-                    python3-gobject libayatana-appindicator-gtk3 libnotify
-
-# Clone and install
-git clone https://github.com/ronb1964/TuxTalk.git
-cd TuxTalk
-python3 -m venv .venv
-.venv/bin/pip install poetry
-.venv/bin/poetry install
-
-# Run
-./run-dev.sh
-```
-
-To type, TuxTalk needs to make a virtual keyboard through `/dev/uinput`. First-run
-setup's Fix Typing gives it that.
-
-To run the tests (swap in your Python version, `python3 --version` shows it):
-
-```bash
-xvfb-run -a dbus-run-session --config-file=tests/dbus-session.conf -- env \
-    PYTHONPATH=./src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14/site-packages \
-    .venv/bin/python -m pytest tests -q -p no:cacheprovider
-```
-
-They open windows, so they run on a hidden screen with a session bus of their
-own, and refuse to start without one.
-
-More in [DEV_SETUP.md](DEV_SETUP.md).
 
 </details>
 

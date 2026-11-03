@@ -262,7 +262,8 @@ Step 2 for a fix, re-run all of Step 10 afterwards.
 
 ### Step 11: Commit, Push, and Create GitHub Release
 First rewrite the README's "New in X.Y" section (and its link at the top)
-for this version, in plain words, from the CHANGELOG.
+for this version, in plain words, from the CHANGELOG, and bump the version in
+the README's install-from-source command.
 ```bash
 git add <changed files>
 git commit -m "..."

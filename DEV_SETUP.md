@@ -1,5 +1,7 @@
 # Working on TuxTalk
 
+To use TuxTalk from source rather than work on it, see [From source](README.md#from-source-any-distro) in the README.
+
 This is how to run TuxTalk from the source code and run its tests.
 
 ## What you need
