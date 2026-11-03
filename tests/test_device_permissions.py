@@ -121,30 +121,43 @@ def test_a_logitech_keyboard_read_through_the_input_group_is_hotkey_access(monke
     assert uinput_helper._readable_keyboards() == ["/dev/input/mx-keys"]
 
 
-@pytest.mark.parametrize("groups, egid, mode, acl, reached", [
-    ([77], 1000, 0o660, None, True),                     # in the input group
-    ([1000], 77, 0o660, None, True),                     # its effective group
-    ([1000, 55], 1000, 0o660, None, False),              # another group (OpenRGB's)
-    ([77], 1000, 0o600, None, False),                    # the group may not
-    # An ACL: the mode's group bits are its mask; group::--- with a user entry.
-    ([77], 1000, 0o660, [(0x01, 6, 0), (0x02, 6, 1000), (0x04, 0, 0),
-                         (0x10, 6, 0), (0x20, 0, 0)], False),
-    ([77], 1000, 0o660, [(0x01, 6, 0), (0x04, 6, 0), (0x10, 6, 0), (0x20, 0, 0)], True)])
+_ACL_GROUP_NONE_USER_RW = [(0x01, 6, 0), (0x02, 6, 1000), (0x04, 0, 0), (0x10, 6, 0),
+                           (0x20, 0, 0)]
+_ACL_GROUP_RW = [(0x01, 6, 0), (0x04, 6, 0), (0x10, 6, 0), (0x20, 0, 0)]
+_ACL_OTHER_RW = [(0x01, 6, 0), (0x04, 0, 0), (0x10, 6, 0), (0x20, 6, 0)]
+
+
+@pytest.mark.parametrize("groups, egid, file_gid, mode, acl, reached", [
+    ([77], 1000, 77, 0o660, None, True),                  # in the input group
+    ([1000], 77, 77, 0o660, None, True),                  # its effective group
+    ([1000, 55], 1000, 77, 0o660, None, False),           # not in the input group
+    ([77], 1000, 77, 0o600, None, False),                 # the group may not
+    ([77, 55], 1000, 55, 0o660, None, False),             # OpenRGB's own group
+    ([77], 1000, 55, 0o606, None, False),                 # open to everyone
+    ([77], 1000, 77, 0o660, _ACL_GROUP_NONE_USER_RW, False),  # only a user entry
+    ([77], 1000, 77, 0o660, _ACL_GROUP_RW, True),
+    ([77], 1000, 55, 0o660, _ACL_OTHER_RW, False)])       # everyone, through the ACL
 def test_a_node_counts_only_when_reached_through_the_input_group(
-        monkeypatch, tmp_path, groups, egid, mode, acl, reached):
+        monkeypatch, tmp_path, groups, egid, file_gid, mode, acl, reached):
     """A Logitech mouse given to the user through a one-device rule (an
-    ACL, or a group of its own) isn't the keyboard; the input group reads
-    them all."""
+    ACL, a group of its own, or rights for everyone) isn't the keyboard;
+    the input group is how the system gives keyboards out."""
     import grp
     from types import SimpleNamespace
     node = tmp_path / "event5"
     node.write_text("")
     monkeypatch.setattr(grp, "getgrnam", lambda name: SimpleNamespace(gr_gid=77))
+    monkeypatch.setattr(os, "geteuid", lambda: 1000)
     monkeypatch.setattr(os, "getgroups", lambda: groups)
     monkeypatch.setattr(os, "getegid", lambda: egid)
-    monkeypatch.setattr(os, "stat", lambda path: SimpleNamespace(st_mode=mode, st_gid=77))
+    monkeypatch.setattr(os, "stat", lambda path: SimpleNamespace(st_mode=mode, st_gid=file_gid))
     monkeypatch.setattr("tuxtalk.helper_keyboard_access.acl_of", lambda path: acl)
     assert uinput_helper._through_input_group(str(node)) is reached
+
+
+def test_root_reaches_a_keyboard_it_opened(monkeypatch):
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    assert uinput_helper._through_input_group("/dev/input/event5") is True
 
 
 def test_a_keyboard_unplugged_after_it_was_listed_is_skipped(monkeypatch):

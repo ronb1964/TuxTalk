@@ -105,8 +105,8 @@ def _readable_keyboards():
     udev rule (on Nobara and Bazzite) lets the user open it without the
     input group. Counted, it said typing works while F8 on the keyboard
     reached nothing, and Fix Typing wasn't offered. One reached through
-    the input group counts: the group reads every keyboard, an MX Keys or
-    kanata's included."""
+    the input group counts, an MX Keys or kanata's: that group is how the
+    system gives out keyboards."""
     paths = _readable_input_devices()
     try:
         from evdev import InputDevice
@@ -121,17 +121,23 @@ def _readable_keyboards():
 
 def _through_input_group(path) -> bool:
     """Whether this session reaches the node at *path* through the input
-    group: it's in the group, and the group may read and write the node,
-    its ACL included, as for the hotkey helper (helper_may)."""
-    from .helper_keyboard_access import READ, WRITE, UnknownAccess, acl_of, helper_may
+    group: it's in the group, and the group's own entry for the node (the
+    owning group's bits, or an ACL entry naming it) lets it read and
+    write, as helper_may judges it. What everyone else may do doesn't
+    count, nor does root's way in."""
+    from .helper_keyboard_access import ACL_OTHER, READ, WRITE, UnknownAccess, acl_of, helper_may
+    if os.geteuid() == 0:
+        return True
     try:
         gid = grp.getgrnam("input").gr_gid
         st = os.stat(path)
         acl = acl_of(path)
     except (KeyError, OSError, UnknownAccess):
         return False
-    in_group = gid in os.getgroups() or gid == os.getegid()
-    return in_group and helper_may(st.st_mode, st.st_gid, acl, gid, READ | WRITE)
+    if gid not in os.getgroups() and gid != os.getegid():
+        return False
+    group_only = None if acl is None else [e for e in acl if e[0] != ACL_OTHER]
+    return helper_may(st.st_mode & ~0o007, st.st_gid, group_only, gid, READ | WRITE)
 
 
 # Said by System check, the hotkey test and first run when the hotkey helper
