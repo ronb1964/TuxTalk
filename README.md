@@ -214,7 +214,7 @@ The AppImage includes everything needed - just download and run!
 
 ### From source (any distro)
 
-For a distro without a TuxTalk package, or if you'd just rather. You need Python 3.10 to 3.14 (`python3 --version` tells you). The first run sets up the menu entry and start at login and offers Fix Typing, same as the other installs.
+For a distro without a TuxTalk package, or if you'd just rather. You need Python 3.10 to 3.14 (`python3 --version` tells you). The first run sets up the menu entry and start at login, then offers Fix Typing, same as the other installs.
 
 1. Install the system packages. GTK's Python bindings can't come from pip, so your distro supplies those.
 
