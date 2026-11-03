@@ -9,6 +9,7 @@ import pathlib
 import re
 
 import pytest
+from gtk_text import toplevels
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 
@@ -50,7 +51,7 @@ def test_a_question_that_adds_its_own_buttons_keeps_its_close_button(Gtk):
 
 def _open_box(Gtk, text):
     """The visible message box whose main text is *text*, or None."""
-    return next((w for w in Gtk.Window.list_toplevels()
+    return next((w for w in toplevels()
                  if isinstance(w, Gtk.MessageDialog) and w.props.text == text
                  and w.get_visible()), None)
 
@@ -84,7 +85,7 @@ def test_installing_an_update_has_no_close_button(Gtk, monkeypatch):
     stub = types.SimpleNamespace(restart_app=lambda: None, _quitting=False)
     stub._install_not_cut_off = lambda install: tray.DictationTray._install_not_cut_off(stub, install)
     tray.DictationTray._download_update(stub, {"appimage_url": "https://x/TuxTalk.AppImage"})
-    box = next((w for w in Gtk.Window.list_toplevels()
+    box = next((w for w in toplevels()
                 if w.get_title() == "Updating TuxTalk" and w.get_visible()), None)
     assert box is not None and not box.get_deletable()
     may_finish.put(False)

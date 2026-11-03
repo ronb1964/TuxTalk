@@ -7,7 +7,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk  # noqa: E402
 
-from gtk_text import combo_ids, find, tree_text, widgets  # noqa: E402
+from gtk_text import combo_ids, find, toplevels, tree_text, widgets  # noqa: E402
 from tuxtalk.config import CLASSIC_CYAN_HEX  # noqa: E402
 
 
@@ -28,7 +28,7 @@ def _hex(rgba):
 
 
 def _open_pickers():
-    return [w for w in Gtk.Window.list_toplevels()
+    return [w for w in toplevels()
             if isinstance(w, Gtk.ColorChooserDialog) and w.get_visible()]
 
 

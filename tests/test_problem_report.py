@@ -312,7 +312,7 @@ def test_help_opens_the_report_as_a_window_of_its_own(window, monkeypatch):
     """Closing it as a window transient for Help made KWin 6.7.5 eat memory
     until the desktop froze; as a window of its own it doesn't. Opened from
     Help's button, it has no transient parent."""
-    from gtk_text import widgets
+    from gtk_text import toplevels, widgets
     monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)
     monkeypatch.setattr(Gtk.Window, "present", lambda self: None)
     # Not the real gathering: its thread would outlive this test's stand-ins
@@ -324,8 +324,7 @@ def test_help_opens_the_report_as_a_window_of_its_own(window, monkeypatch):
         button = next(w for w in widgets(dialog) if isinstance(w, Gtk.Button)
                       and w.get_label() == "Report a Problem\u2026")
         button.clicked()
-        report = next(w for w in Gtk.Window.list_toplevels()
-                      if w.get_title() == "Report a Problem")
+        report = next(w for w in toplevels() if w.get_title() == "Report a Problem")
         assert report.get_transient_for() is None
         report.destroy()
     finally:

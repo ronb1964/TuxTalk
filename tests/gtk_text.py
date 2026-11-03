@@ -4,10 +4,27 @@ Tests used to look for a label's text in the module's source. That breaks
 when the code moves to another file and keeps passing when the label is no
 longer shown; reading the built widgets does neither.
 """
+import gc
+
 import gi
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
+
+
+def toplevels():
+    """Gtk.Window.list_toplevels(), with Python's garbage collector paused
+    while PyGObject turns it into Python objects. The list doesn't hold its
+    windows, and a collection meanwhile can free one still in it: asking it
+    anything then crashed the test run in CI (pygobject#544). Once each has
+    its Python object, that object keeps it alive."""
+    was_on = gc.isenabled()
+    gc.disable()
+    try:
+        return Gtk.Window.list_toplevels()
+    finally:
+        if was_on:
+            gc.enable()
 
 
 def widgets(root):
