@@ -1,0 +1,248 @@
+"""CUDA is offered only where the speech library can use it.
+
+A distro-packaged TuxTalk (install type "system", such as an AUR package) may
+run a CTranslate2 compiled without CUDA. There, even with an NVIDIA card and
+CUDA's libraries installed, Preferences must not offer CUDA, a saved "cuda"
+shows as the processor, a backup with CUDA restores onto another device, and
+System check doesn't send the user to pick CUDA. Every other install runs
+PyPI's CTranslate2, which has CUDA, and is never checked.
+"""
+import subprocess
+from types import SimpleNamespace
+
+try:
+    import tomllib
+except ImportError:
+    import toml as tomllib
+
+import pytest
+
+from tuxtalk import cuda_helper, installation, prefs_speech, settings_backup
+from tuxtalk import prefs as P
+from tuxtalk.prefs import PreferencesWindow
+from tuxtalk.prefs_speech import SpeechSection
+from tuxtalk.prefs_system_check import SystemCheck
+
+
+@pytest.fixture(autouse=True)
+def fresh_answers():
+    """Each test asks afresh: both answers are cached for the whole run."""
+    cuda_helper.ctranslate2_has_cuda.cache_clear()
+    installation.system_package.cache_clear()
+    yield
+    cuda_helper.ctranslate2_has_cuda.cache_clear()
+    installation.system_package.cache_clear()
+
+
+def _answer(text):
+    return lambda argv, **kw: subprocess.CompletedProcess(argv, 0, stdout=text, stderr="")
+
+
+# --- the check itself ----------------------------------------------------------
+
+def test_a_ctranslate2_built_without_cuda_is_seen():
+    assert cuda_helper.probe_ctranslate2_cuda(run=_answer("no-cuda\n")) is False
+
+
+def test_a_cuda_build_counts_even_with_no_card_now():
+    assert cuda_helper.probe_ctranslate2_cuda(run=_answer("cuda\n")) is True
+
+
+def test_a_check_that_doesnt_answer_offers_no_cuda():
+    def hang(argv, **kw):
+        raise subprocess.TimeoutExpired(argv, 20)
+    assert cuda_helper.probe_ctranslate2_cuda(run=hang) is False
+
+
+def test_a_check_that_fails_offers_no_cuda():
+    def crashed(argv, **kw):
+        return subprocess.CompletedProcess(argv, 1, stdout="",
+                                           stderr="ModuleNotFoundError: ctranslate2")
+    assert cuda_helper.probe_ctranslate2_cuda(run=crashed) is False
+
+
+def test_the_check_never_wakes_the_graphics_card():
+    seen = {}
+
+    def run(argv, **kw):
+        seen.update(kw["env"])
+        return _answer("cuda\n")(argv)
+    cuda_helper.probe_ctranslate2_cuda(run=run)
+    assert seen["CUDA_VISIBLE_DEVICES"] == ""
+
+
+def test_the_check_asks_the_python_tuxtalk_runs_on():
+    argvs = []
+    cuda_helper.probe_ctranslate2_cuda(run=lambda argv, **kw: argvs.append(argv)
+                                       or _answer("cuda\n")(argv), python="/usr/bin/python3")
+    assert argvs[0][:2] == ["/usr/bin/python3", "-I"]
+
+
+def _no_probe(**kw):
+    raise AssertionError("only a system install is checked")
+
+
+@pytest.mark.parametrize("kind", ["appimage", "aur", "deb", "rpm", "package", "flatpak",
+                                  "source", "dev"])
+def test_only_a_system_install_is_checked(monkeypatch, kind):
+    monkeypatch.setattr(installation, "get_install_type", lambda: kind)
+    monkeypatch.setattr(cuda_helper, "probe_ctranslate2_cuda", _no_probe)
+    assert cuda_helper.ctranslate2_has_cuda() is True
+
+
+def test_a_system_install_is_checked_once(monkeypatch):
+    probes = []
+    monkeypatch.setattr(installation, "get_install_type", lambda: "system")
+    monkeypatch.setattr(cuda_helper, "probe_ctranslate2_cuda",
+                        lambda **kw: probes.append(1) or False)
+    assert cuda_helper.ctranslate2_has_cuda() is False
+    assert cuda_helper.ctranslate2_has_cuda() is False
+    assert probes == [1]
+
+
+# --- Preferences ---------------------------------------------------------------
+
+class FakeCombo:
+    def __init__(self):
+        self.ids, self.active = [], None
+
+    def remove_all(self):
+        self.ids = []
+
+    def append(self, id_, label):
+        self.ids.append(id_)
+
+    def set_active_id(self, id_):
+        self.active = id_
+
+    def set_tooltip_text(self, text):
+        pass
+
+
+@pytest.fixture
+def without_cuda_build(monkeypatch):
+    """A system install whose CTranslate2 was built without CUDA."""
+    monkeypatch.setattr(installation, "get_install_type", lambda: "system")
+    monkeypatch.setattr(cuda_helper, "probe_ctranslate2_cuda", lambda **kw: False)
+
+
+@pytest.fixture
+def prefs_on_nvidia_without_cuda_build(tmp_path, monkeypatch, without_cuda_build):
+    """The Speech section of Preferences, saved on CUDA, on an NVIDIA computer
+    with the system's CUDA libraries installed and Vulkan offered."""
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('device = "cuda"\nbeeps = true\n')
+    monkeypatch.setattr(P, "CONFIG_PATH", str(cfg))
+    opened = {"device": "cuda", "beeps": True, "model": "small", "language_mode": "auto"}
+    win = SimpleNamespace(config=dict(opened), _config_at_open=dict(opened),
+                          cuda_files_present=lambda: True, has_nvidia=lambda: True,
+                          vulkan_offered=lambda: True)
+    win.cuda_ready = lambda: PreferencesWindow.cuda_ready(win)
+    win.cuda_offered = lambda: PreferencesWindow.cuda_offered(win)
+    win.show_without_saving = lambda key, value: PreferencesWindow.show_without_saving(
+        win, key, value)
+    section = SimpleNamespace(win=win, config=win.config, window=None,
+                              device_combo=FakeCombo())
+    SpeechSection._fill_device_options(section)
+    return section
+
+
+def test_device_lists_no_cuda_where_the_speech_library_cant_use_it(
+        prefs_on_nvidia_without_cuda_build):
+    assert prefs_on_nvidia_without_cuda_build.device_combo.ids == ["cpu", "vulkan"]
+
+
+def test_a_saved_cuda_shows_as_cpu_there_and_stays_saved(prefs_on_nvidia_without_cuda_build):
+    section = prefs_on_nvidia_without_cuda_build
+    assert section.device_combo.active == "cpu"
+
+    section.config["beeps"] = False                 # the user's only change
+    assert PreferencesWindow.save_config(section.win) is True
+    with open(P.CONFIG_PATH) as f:
+        assert tomllib.loads(f.read())["device"] == "cuda"
+
+
+def test_large_v3_there_is_offered_through_vulkan(prefs_on_nvidia_without_cuda_build,
+                                                  monkeypatch):
+    section = prefs_on_nvidia_without_cuda_build
+    asked, switched = [], []
+    monkeypatch.setattr(prefs_speech, "show_message",
+                        lambda parent, kind, title, text="", buttons=None, keep_above=False:
+                        asked.append(text) or prefs_speech.Gtk.ResponseType.OK)
+    from tuxtalk import vulkan_setup_dialogs
+    monkeypatch.setattr(vulkan_setup_dialogs, "choose_light_or_full",
+                        lambda parent, model: pytest.fail("CUDA offered as Full"))
+    section._switch_to_vulkan_for_model = (
+        lambda model, confirm=True: switched.append((model, confirm)))
+
+    SpeechSection._set_up_large_v3(section)
+
+    assert asked and asked[0].startswith("Large-v3 can run on your graphics card through Vulkan.")
+    assert switched == [("large-v3", False)]
+
+
+def test_large_v3_there_reads_as_running_through_vulkan(prefs_on_nvidia_without_cuda_build):
+    assert (SpeechSection._large_v3_text(prefs_on_nvidia_without_cuda_build)
+            == "large-v3 — Whisper's best, on your graphics card (Vulkan)")
+
+
+def test_picking_large_v3_there_sets_it_up_rather_than_confirming_3_gb(
+        prefs_on_nvidia_without_cuda_build):
+    section = prefs_on_nvidia_without_cuda_build
+    section.config["device"] = "cpu"
+    done = []
+    section._updating_model = False
+    section._last_selected_model = "small"
+    section.set_choice = lambda key, value: done.append(("back to", value))
+    section._set_up_large_v3 = lambda: done.append("set up")
+    section._confirm_large_v3_download = lambda: done.append("3 GB?") or True
+    section._choose_model = lambda model: done.append(("chosen", model))
+    combo = SimpleNamespace(popdown=lambda: None, get_active_id=lambda: "large-v3")
+
+    SpeechSection._on_model_changed(section, combo)
+
+    assert done == [("back to", "small"), "set up"]
+
+
+def test_a_cuda_build_still_lists_cuda_on_nvidia(monkeypatch):
+    """Every other install type: as before, CUDA is listed on NVIDIA."""
+    monkeypatch.setattr(installation, "get_install_type", lambda: "appimage")
+    monkeypatch.setattr(cuda_helper, "probe_ctranslate2_cuda", _no_probe)
+    win = SimpleNamespace(config={"device": "cuda", "model": "small"},
+                          cuda_files_present=lambda: True, has_nvidia=lambda: True,
+                          vulkan_offered=lambda: True)
+    win.cuda_ready = lambda: PreferencesWindow.cuda_ready(win)
+    win.cuda_offered = lambda: PreferencesWindow.cuda_offered(win)
+    section = SimpleNamespace(win=win, config=win.config, device_combo=FakeCombo())
+    SpeechSection._fill_device_options(section)
+    assert section.device_combo.ids == ["cpu", "cuda", "vulkan"]
+    assert section.device_combo.active == "cuda"
+
+
+# --- backups and System check --------------------------------------------------
+
+def test_a_backup_with_cuda_restores_onto_another_device_there(monkeypatch, without_cuda_build):
+    monkeypatch.setattr(cuda_helper, "detect_nvidia_gpu", lambda: "NVIDIA GeForce RTX 4070")
+    assert settings_backup._device_works_here("cuda") is False
+
+
+class FakeLabel:
+    def __init__(self):
+        self.text = ""
+
+    def set_markup(self, markup):
+        self.text = markup
+
+    def set_text(self, text):
+        self.text = text
+
+
+def test_system_check_doesnt_send_the_user_to_pick_cuda_there(monkeypatch, without_cuda_build):
+    monkeypatch.setattr(cuda_helper, "has_talktype_cuda_libraries", lambda: False)
+    check = SimpleNamespace(win=SimpleNamespace(nvidia_gpu=lambda: "NVIDIA GeForce RTX 4070"),
+                            gpu_status_label=FakeLabel(), cuda_status_label=FakeLabel())
+    SystemCheck.check_gpu_status(check)
+    assert "NVIDIA GeForce RTX 4070" in check.gpu_status_label.text
+    assert ("CUDA isn't available: the speech library installed here was built without it. "
+            "Vulkan runs the models on your graphics card instead.") in check.cuda_status_label.text
+    assert "choose CUDA" not in check.cuda_status_label.text

@@ -216,6 +216,19 @@ class PreferencesWindow:
             logger.warning(f"Could not check for CUDA's files: {e}")
             return False
 
+    def cuda_ready(self):
+        """Whether dictation can run on CUDA now: the speech library was built
+        with it and CUDA's files are here."""
+        from .cuda_helper import ctranslate2_has_cuda
+        return self.cuda_files_present() and ctranslate2_has_cuda()
+
+    def cuda_offered(self):
+        """Whether the Device dropdown lists CUDA: its files are here, or an
+        NVIDIA card could use the download, and the speech library was built
+        with CUDA. The cheap checks come first: the library's is a program."""
+        from .cuda_helper import ctranslate2_has_cuda
+        return (self.cuda_files_present() or self.has_nvidia()) and ctranslate2_has_cuda()
+
     def nvidia_gpu(self):
         """The NVIDIA card's name (or True in a Flatpak), False if there is none.
 

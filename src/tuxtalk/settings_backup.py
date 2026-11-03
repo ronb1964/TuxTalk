@@ -312,8 +312,8 @@ def _checked(manifest, files):
 def _device_works_here(device):
     """Whether this computer can use *device*. CPU always can."""
     if device == "cuda":
-        from .cuda_helper import detect_nvidia_gpu
-        return bool(detect_nvidia_gpu())
+        from .cuda_helper import ctranslate2_has_cuda, detect_nvidia_gpu
+        return bool(detect_nvidia_gpu()) and ctranslate2_has_cuda()
     if device == "vulkan":
         from . import whisper_vulkan
         return whisper_vulkan.is_offered()

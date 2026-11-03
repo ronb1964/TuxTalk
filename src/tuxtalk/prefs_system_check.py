@@ -329,7 +329,8 @@ class SystemCheck(Tab):
         return False  # Don't repeat
 
     def check_gpu_status(self):
-        """Show the NVIDIA card and whether CUDA's files are installed."""
+        """Show the NVIDIA card and whether CUDA's files are installed, or
+        that the speech library here can't use CUDA at all."""
         try:
             from . import cuda_helper
             gpu_name = self.win.nvidia_gpu()
@@ -345,7 +346,11 @@ class SystemCheck(Tab):
                     self.gpu_status_label.set_markup(
                         '<span color="#4CAF50">✓ NVIDIA GPU detected</span>')
 
-                if has_cuda:
+                if not cuda_helper.ctranslate2_has_cuda():
+                    self.cuda_status_label.set_text(
+                        "CUDA isn't available: the speech library installed here was built "
+                        "without it. Vulkan runs the models on your graphics card instead.")
+                elif has_cuda:
                     self.cuda_status_label.set_markup(
                         '<span color="#4CAF50">✓ CUDA libraries installed</span>')
                 else:

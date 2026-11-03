@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Whether this computer has an NVIDIA graphics card and CUDA libraries to run
 the Whisper models on it: TuxTalk's own download (cuda_download) or the
-system's. Also tidies what earlier versions left in the download's folder."""
+system's, and whether the installed speech library was built to use them.
+Also tidies what earlier versions left in the download's folder."""
 
+import functools
 import os
 import subprocess
+import sys
+from typing import Optional
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -20,6 +24,17 @@ SUBPROCESS_TIMEOUT = 2
 # speech library (libcublas.so.12 not found). cuDNN isn't among them:
 # CTranslate2's Linux wheels are built without it since 4.7 (TuxTalk 0.16).
 REQUIRED_CUDA_LIBS = ("libcudart.so.12", "libcublas.so.12", "libcublasLt.so.12")
+
+# Run in a separate Python: importing CTranslate2 here would load it into
+# Preferences. A build without CUDA refuses the device name with this
+# ValueError (str_to_device in its devices.cc); a build with CUDA but no card
+# usable now fails otherwise, and still counts.
+_CUDA_PROBE = (
+    "import ctranslate2\n"
+    "try:\n    ctranslate2.get_supported_compute_types('cuda')\n"
+    "except ValueError as e:\n    print('no-cuda' if 'compiled with CUDA' in str(e) else 'cuda')\n"
+    "except Exception:\n    print('cuda')\n"
+    "else:\n    print('cuda')\n")
 
 def detect_nvidia_gpu():
     """Check if an NVIDIA GPU is present.
@@ -39,6 +54,40 @@ def detect_nvidia_gpu():
         return result.returncode == 0 and result.stdout.strip()
     except (OSError, subprocess.TimeoutExpired):    # not installed, not runnable, or hung
         return False
+
+def probe_ctranslate2_cuda(run=subprocess.run, python: Optional[str] = None) -> bool:
+    """Whether the CTranslate2 that *python* (this one by default) imports was
+    built with CUDA. Hidden from every graphics card, so the check never wakes
+    one. No clean answer (a hang, a crash, no CTranslate2) counts as without."""
+    argv = [python or sys.executable, "-I", "-c", _CUDA_PROBE]
+    try:
+        result = run(argv, env={**os.environ, "CUDA_VISIBLE_DEVICES": ""},
+                     capture_output=True, text=True, errors="replace", timeout=20)
+    except (OSError, subprocess.SubprocessError) as e:
+        why = str(e)
+    else:
+        answer = result.stdout.strip()
+        if result.returncode == 0 and answer == "cuda":
+            return True
+        if result.returncode == 0 and answer == "no-cuda":
+            logger.info("The installed CTranslate2 was built without CUDA; not offering CUDA")
+            return False
+        why = f"exit {result.returncode}, {answer or result.stderr.strip()[-200:]!r}"
+    logger.info(f"CTranslate2's CUDA check didn't answer ({why}); not offering CUDA")
+    return False
+
+
+@functools.lru_cache(maxsize=None)
+def ctranslate2_has_cuda() -> bool:
+    """Whether the speech library can run on CUDA here. Only a distro
+    package's TuxTalk (install type "system") is asked: it may run a
+    CTranslate2 the distro built without CUDA. Every other install runs
+    PyPI's, which has it. Cached: the answer can't change while TuxTalk runs."""
+    from .installation import get_install_type
+    if get_install_type() != "system":
+        return True
+    return probe_ctranslate2_cuda()
+
 
 def _has_required_libs(names) -> bool:
     """True if *names* (library file names) include every required library."""

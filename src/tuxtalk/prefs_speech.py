@@ -277,9 +277,9 @@ class SpeechSection(Tab):
 
     def _large_v3_text(self):
         """What the large-v3 entry says: what running it on this computer takes."""
-        if self.win.cuda_files_present():
+        if self.win.cuda_ready():
             return MODEL_TEXT["large-v3"]
-        if self.win.has_nvidia():
+        if self.win.cuda_offered():
             # Selectable: picking it offers CUDA's download.
             return "large-v3 — click to download required CUDA libraries"
         if self.win.vulkan_offered():
@@ -501,7 +501,7 @@ class SpeechSection(Tab):
                 self._choose_model(model)
                 return
         if model == "large-v3":
-            if not self.win.cuda_files_present():
+            if not self.win.cuda_ready():
                 self.set_choice("model", self._last_selected_model)
                 self._set_up_large_v3()
                 return
@@ -535,17 +535,18 @@ class SpeechSection(Tab):
             buttons=Gtk.ButtonsType.OK_CANCEL) == Gtk.ResponseType.OK
 
     def _set_up_large_v3(self):
-        """large-v3 picked without CUDA's files: on NVIDIA, Vulkan or CUDA;
-        on AMD or Intel graphics, Vulkan; with no graphics card, why not.
-        The Model dropdown already shows the model before, and only a
-        finished setup selects large-v3."""
-        if self.win.has_nvidia():
+        """large-v3 picked without CUDA ready: on NVIDIA, Vulkan or CUDA;
+        on other graphics, or NVIDIA with a speech library built without
+        CUDA, Vulkan; with no graphics card, why not. The Model dropdown
+        already shows the model before, and only a finished setup selects
+        large-v3."""
+        if self.win.cuda_offered():
             self._large_v3_on_nvidia()
         elif self.win.vulkan_offered():
             if show_message(
                     self.window, Gtk.MessageType.QUESTION,
                     "Large-v3 needs your graphics card",
-                    "Large-v3 can run on your AMD or Intel graphics through Vulkan. "
+                    "Large-v3 can run on your graphics card through Vulkan. "
                     f"That's a one-time download of a {ENGINE_SIZE_TEXT} graphics "
                     "engine and Large-v3 in its format (1 GB), then a quick check that "
                     "your graphics chip is really faster than your processor.",
@@ -603,23 +604,25 @@ class SpeechSection(Tab):
         CUDA is listed on every NVIDIA computer, like Vulkan, not only once
         its files are downloaded: people looking for their graphics card look
         here. Picking it before the download offers the download
-        (_on_device_changed).
+        (_on_device_changed). Not where the speech library was built without
+        CUDA (a distro's own build), which no download fixes.
         """
         combo = self.device_combo
         combo.remove_all()
         combo.append("cpu", "CPU")
         tooltip = "Processing device for AI transcription:\n• CPU: works on all computers, slower"
 
-        self._cuda_ready = self.win.cuda_files_present()
-        if self._cuda_ready or self.win.has_nvidia():
+        self._cuda_ready = self.win.cuda_ready()
+        if self.win.cuda_offered():
             combo.append("cuda", device_label("cuda", self.config.get("model"), self._cuda_ready))
             tooltip += ("\n• CUDA (NVIDIA): much faster for the Whisper models, a one-time "
                         f"{CUDA_SIZE_TEXT} download. Parakeet can't use it")
-        # Set to CUDA without its files, the service runs on the processor,
-        # so the dropdown shows CPU rather than claim CUDA. Only the display
-        # changes: a saved "cuda" stays on disk unless the user picks another
-        # device, so an unrelated OK can't drop the choice while CUDA's files
-        # are missing for a while.
+        # Set to CUDA without its files, or with a speech library built
+        # without it, the service runs on the processor, so the dropdown
+        # shows CPU rather than claim CUDA. Only the display changes: a saved
+        # "cuda" stays on disk unless the user picks another device, so an
+        # unrelated OK can't drop the choice while CUDA's files are missing
+        # for a while.
         if self.config["device"] == "cuda" and not self._cuda_ready:
             self.win.show_without_saving("device", "cpu")
 

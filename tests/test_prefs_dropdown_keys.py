@@ -106,8 +106,8 @@ def _speech(model, device):
     card without CUDA's files and no Vulkan, its fold open."""
     from tuxtalk.prefs_speech import SpeechSection
     config = dict(dataclasses.asdict(Settings()), model=model, device=device)
-    win = SimpleNamespace(config=config, window=None, cuda_files_present=lambda: False,
-                          has_nvidia=lambda: True, vulkan_offered=lambda: False)
+    win = SimpleNamespace(config=config, window=None, cuda_ready=lambda: False,
+                          cuda_offered=lambda: True, vulkan_offered=lambda: False)
     win.update_config = config.__setitem__
     win.show_without_saving = config.__setitem__
     speech = SpeechSection(win)
