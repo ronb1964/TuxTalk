@@ -539,6 +539,12 @@ Say a short phrase and TuxTalk types the full text: "my email" →
 user@example.com. Add your own in <b>Preferences → Words → Add Snippet</b>, then hold
 <b>{hold}</b>, say the phrase, let go.
 
+<b>Changed your mind as you let go</b>
+Press <b>Esc</b> right after you let go of <b>{hold}</b>: what isn't typed yet stays out,
+and nothing is sent after it. With Type at pause, the phrases already typed stay
+where they are. To clear them too, hold <b>{hold}</b>, say <b>delete everything</b>,
+let go.
+
 <b>Getting it back</b>
 <b>Recent Dictations</b> in the TuxTalk menu keeps your last 20. {paste_tip}
 

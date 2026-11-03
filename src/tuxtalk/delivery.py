@@ -264,7 +264,7 @@ def send_automatically(space: str, injection_mode: str, message) -> None:
 # inject_text's outcomes that are sure nothing was typed: it gave up before the
 # first key (_delivery_stopped). "failed" may follow some of it (wtype timing
 # out), and "password_field" earlier lines.
-_GAVE_UP_UNTYPED = frozenset({"moved", "key_held", "keys_down"})
+_GAVE_UP_UNTYPED = frozenset({"moved", "key_held", "keys_down", "cancelled"})
 
 
 def type_onto_dictation(text: str, injection_mode: str, into=None) -> str:

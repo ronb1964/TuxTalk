@@ -126,14 +126,22 @@ def _delivery_claim(claim):
     asked first, as focused_window.destination does. Both are asked in the
     claim, with the keyboard free (the accessibility bus has a quarter of a
     second to answer), after the clipboard and the layout are ready, and
-    for every send: each line, line break and paste key of a dictation."""
+    for every send: each line, line break and paste key of a dictation.
+    Last, right before the first key, whether Esc has cancelled it."""
     if claim is None and this_thread.into is not None:
         claim = functools.partial(focused_window.claim_into, this_thread.into)
-    if not this_thread.no_password_field:
-        return claim
+    if this_thread.no_password_field:
+        claim = _first(refuse_password_field, claim)
+    if this_thread.cancel_with is not None:
+        claim = _then(claim, refuse_cancelled)
+    return claim
 
+
+def _first(check, claim):
+    """*check*, then *claim* (None for none), in the claim: with the
+    keyboard free, before the claim's own checks."""
     def claimed():
-        refuse_password_field()
+        check()
         return claim() if claim is not None else lambda: None
     return claimed
 
@@ -146,6 +154,16 @@ def refuse_password_field() -> None:
     if focused_window.is_password(budget=atspi_helper.RECHECK_BUDGET_S):
         logger.warning("Stopped typing: a password field has the focus now")
         raise virtual_keyboard.GaveUp("password_field")
+
+
+def refuse_cancelled() -> None:
+    """GaveUp("cancelled") when Esc has cancelled the dictation being
+    delivered (this_thread.cancel_with) since its words were checked: Esc
+    a moment after the key comes up lands while the delivery looks at the
+    window and picks how to type, and none of its keys may go in."""
+    if this_thread.cancel_with.cancelled:
+        logger.info("Not typed: Esc cancelled the dictation as it was about to go in")
+        raise virtual_keyboard.GaveUp("cancelled")
 
 
 def checks_before_keys():
@@ -192,14 +210,16 @@ class _ThisThread(threading.local):
     how many sends went out whole, so a wait that gives up after earlier
     lines were typed stopped it partway, not before it began; the only
     window it may go into, else None; whether it's a dictation, which never
-    goes into a password field; whether its pastes keep the user's clipboard
-    (_keeping); and a last check its keys must pass right
+    goes into a password field; the dictation Esc may cancel (a
+    recording_state.Message), else None; whether its pastes keep the user's
+    clipboard (_keeping); and a last check its keys must pass right
     before the first goes down, else None (a held send's space on its own
     may not go out with Alt or a dictation key down:
     send_countdown.give_back_space)."""
     sends = 0
     into = None
     no_password_field = False
+    cancel_with = None
     keep_clipboard = False
     last_check = None
 
@@ -234,6 +254,12 @@ def delivering(into):
     password field (refuse_password_field), and with *into*, a look, only
     into that window (only_into)."""
     return _on_this_thread(into=into, no_password_field=True)
+
+
+def until_cancelled(message):
+    """Keys sent on this thread inside stop going in once Esc has cancelled
+    *message*, a recording_state.Message (refuse_cancelled); None: they don't."""
+    return _on_this_thread(cancel_with=message)
 
 
 def not_where_typed(focused, now=None) -> bool:
@@ -419,6 +445,8 @@ def type_text_raw(text: str) -> bool:
     if which("wtype"):
         if this_thread.no_password_field:
             refuse_password_field()     # no claim of send_keys's asks it here
+        if this_thread.cancel_with is not None:
+            refuse_cancelled()
         # The real exit code, so the undo buffer tracks only typed text; a
         # bounded wait, so a stalled compositor can't freeze dictation; the
         # text on stdin ("-"), as every user can read a command line. wtype

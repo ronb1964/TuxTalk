@@ -15,6 +15,7 @@ from . import (
     dictation_worker,
     engine,
     focused_window,
+    keyboard_output,
     last_dictation,
     modifier_hotkeys,
     notices,
@@ -83,6 +84,8 @@ def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role
     notice when they didn't all go in; else the key *said* after them, or
     the automatic send's Enter when *press*. *space* is the auto-space left
     off before the key."""
+    if outcome == "cancelled":
+        return              # Esc said so itself (recording.cancel_finishing)
     if outcome in delivery_notices.NOTICES:
         notices.report_undelivered(outcome, beeps_on)
     elif said:
@@ -429,7 +432,11 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
     chunked = job.chunk_role is not None
     said_before = last_dictation.remember_said(text, chunked, job.message, words.taken_back)
     try:
-        outcome = delivery.inject_text(text, job.injection_mode, message=job.message)
+        # Up to its first key: Esc can come while the delivery looks at the
+        # window. Not a correction that took the phrase before back
+        # (_still_wanted).
+        with keyboard_output.until_cancelled(None if words.taken_back else job.message):
+            outcome = delivery.inject_text(text, job.injection_mode, message=job.message)
     except Exception as e:
         # The transcription worked; only getting it into the window
         # didn't, so this is reported as undelivered, not as a

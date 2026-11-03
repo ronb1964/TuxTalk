@@ -79,6 +79,31 @@ def test_esc_before_the_words_are_heard_types_nothing(chat, keyboard, let_go, mo
     assert heard == ["see you at noon"]                # never even heard
 
 
+def test_esc_while_the_typing_gets_ready_types_nothing(chat, keyboard, let_go, monkeypatch):
+    """Esc a moment after the words were checked, while the delivery looks
+    at the focused window and picks how to type: Esc came 0.3 s after the
+    key and the words went in all the same, only the send held. Its first
+    key is the last moment to stop it."""
+    from tuxtalk import focused_window
+    focus, heard, typed, notices = chat
+    destination = focused_window.destination
+
+    def esc_meanwhile():
+        esc()
+        return destination()
+
+    def type_for_real(text, mode, one_block=False, *, where):
+        typed.append((text, focus[1]))
+        keyboard_output.type_text_raw(text)
+        return "ok"
+    monkeypatch.setattr(focused_window, "destination", esc_meanwhile)
+    monkeypatch.setattr(delivery, "deliver_text", type_for_real)
+    heard.append("see you at noon")
+    rec = let_go()
+    assert rec.message.cancelled
+    assert keyboard.events == [] and notices == []     # nothing typed, so nothing to send
+
+
 def test_esc_while_the_words_go_in_sends_nothing_after_them(chat, keyboard, let_go,
                                                             monkeypatch):
     """The words already going in are typed to the end; the automatic
