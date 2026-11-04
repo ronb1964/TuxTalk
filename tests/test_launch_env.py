@@ -51,6 +51,24 @@ def test_tuxtalks_own_variables_go():
     assert env == {"HOME": "/home/u"}
 
 
+def test_dev_venv_libraries_and_variables_are_gone():
+    venv = "/home/u/TuxTalk/.venv"
+    env = clean({"VIRTUAL_ENV": venv, "VIRTUAL_ENV_PROMPT": "(.venv) ",
+                 "LD_LIBRARY_PATH": f"{venv}/lib64/python3.14/site-packages/ctranslate2.libs"
+                                    ":/opt/mine/lib",
+                 "PATH": f"{venv}/bin:/usr/bin:/home/u/.venv-other/bin"}, venv=venv)
+    assert "VIRTUAL_ENV" not in env and "VIRTUAL_ENV_PROMPT" not in env
+    assert env["LD_LIBRARY_PATH"] == "/opt/mine/lib"
+    assert env["PATH"] == "/usr/bin:/home/u/.venv-other/bin"
+
+
+def test_outside_a_venv_nothing_extra_is_removed():
+    env = clean({"LD_LIBRARY_PATH": "/home/u/TuxTalk/.venv/lib:/opt/mine/lib",
+                 "PATH": "/home/u/TuxTalk/.venv/bin:/usr/bin"}, venv="")
+    assert env["LD_LIBRARY_PATH"] == "/home/u/TuxTalk/.venv/lib:/opt/mine/lib"
+    assert env["PATH"] == "/home/u/TuxTalk/.venv/bin:/usr/bin"
+
+
 def test_the_callers_environment_is_not_changed():
     original = {"PYTHONPATH": "/x", "HOME": "/home/u"}
     clean(original)
