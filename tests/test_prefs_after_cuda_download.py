@@ -331,7 +331,7 @@ def _picker(monkeypatch, answer):
 
 def test_picking_cuda_on_parakeet_asks_for_a_whisper_model(prefs, monkeypatch):
     stub = _picker(monkeypatch, "large-v3")
-    _speech()._finish_cuda_for_parakeet(stub, None)
+    _speech()._finish_cuda_for_parakeet(stub)
     assert stub.asked == [True]
     # Chosen, not applied yet: OK or Apply downloads the model and restarts.
     assert stub.config == {"model": "large-v3", "device": "cuda"}
@@ -339,5 +339,5 @@ def test_picking_cuda_on_parakeet_asks_for_a_whisper_model(prefs, monkeypatch):
 
 def test_keep_parakeet_puts_the_device_back(prefs, monkeypatch):
     stub = _picker(monkeypatch, None)
-    _speech()._finish_cuda_for_parakeet(stub, None)
+    _speech()._finish_cuda_for_parakeet(stub)
     assert stub.config == {"model": "parakeet-v3", "device": "vulkan"}

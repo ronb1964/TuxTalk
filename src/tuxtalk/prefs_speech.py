@@ -691,9 +691,9 @@ class SpeechSection(Tab):
         # These show dialogs: run them once the dropdown has closed, or its
         # list stays drawn on top of them.
         combo.popdown()
-        GLib.idle_add(then, combo)
+        GLib.idle_add(then)
 
-    def _finish_switch_to_vulkan(self, combo):
+    def _finish_switch_to_vulkan(self):
         """Keep Vulkan if its setup succeeds, otherwise put the dropdown back."""
         if self._setup_vulkan(self.config.get("model")):
             self.update_config("device", "vulkan")
@@ -702,7 +702,7 @@ class SpeechSection(Tab):
             self.set_choice("device", self._device_before)
         return False        # run once
 
-    def _finish_switch_to_cuda(self, combo):
+    def _finish_switch_to_cuda(self):
         """CUDA picked before its files are downloaded. The dropdown goes back
         to the device in use first: if the download is refused or fails, or
         Parakeet is kept, nothing changed. Once downloaded,
@@ -711,7 +711,7 @@ class SpeechSection(Tab):
         self._download_cuda()
         return False        # run once
 
-    def _finish_cuda_for_parakeet(self, combo):
+    def _finish_cuda_for_parakeet(self):
         """CUDA picked, already downloaded, with Parakeet selected. Choosing
         a Whisper model selects it and CUDA. Unlike after CUDA's download
         (_cuda_downloaded), nothing was done yet, so it's a choice like any

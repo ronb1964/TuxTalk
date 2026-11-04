@@ -12,12 +12,12 @@ from .desktop_detect import is_gnome, is_x11_session
 from .logger import setup_logger
 from .prefs_tab import Tab, fold, subheading
 from .progress_window import run_with_progress
+from .uinput_helper import FIX_TYPING_LABEL
 from .ui_style import WARNING_AMBER, show_message
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
 logger = setup_logger(__name__)
 
-FIX_TYPING_LABEL = "Fix Typing Permissions"
 SWITCH_TO_HELPER_LABEL = "Switch to Hotkey Helper"
 UPDATE_HELPER_LABEL = "Update Hotkey Helper"
 LEAVE_GROUP_LABEL = "Leave the 'input' Group"

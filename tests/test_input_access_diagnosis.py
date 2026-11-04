@@ -154,6 +154,16 @@ def test_a_hotkey_helper_that_isnt_answering_tells_the_user(monkeypatch, tmp_pat
     assert body == f"{uinput_helper.HELPER_NOT_ANSWERING}. {SYSTEM_CHECK}"
 
 
+def test_the_welcome_screen_gives_a_silent_helper_the_same_advice(monkeypatch, tmp_path):
+    """First run's reason comes from check_input_read_permission: it said
+    "Fix Typing sets it up again" where System check offers Update."""
+    socket_file = tmp_path / "hotkeys.sock"
+    socket_file.touch()
+    monkeypatch.setattr("tuxtalk.hotkey_helper_client.socket_path", lambda: str(socket_file))
+    assert uinput_helper.check_input_read_permission(hello=None) == (
+        False, f"{uinput_helper.HELPER_NOT_ANSWERING}.")
+
+
 def test_a_hotkey_helper_that_sees_no_keyboard_tells_the_user(monkeypatch, tmp_path):
     (title, body), = _service_start(monkeypatch, [_helper(tmp_path, True, 0)])
     assert title == "TuxTalk can't read your keyboard"

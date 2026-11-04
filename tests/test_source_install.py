@@ -30,9 +30,17 @@ def test_a_venv_path_with_a_space_is_quoted_in_full():
     assert cmd.startswith("'/home/ann/My Apps/venv/bin/pip' install -c ")
 
 
-def test_the_tuxtalk_command_is_the_one_in_the_venv(monkeypatch):
-    monkeypatch.setattr(sys, "prefix", "/home/ann/.local/share/TuxTalk/venv")
-    assert source_install.command() == "/home/ann/.local/share/TuxTalk/venv/bin/tuxtalk"
+def test_the_tuxtalk_command_is_the_one_in_the_venv(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "prefix", str(tmp_path / "venv"))
+    _make(tmp_path / "venv/bin/tuxtalk")
+    assert source_install.command() == str(tmp_path / "venv/bin/tuxtalk")
+
+
+def test_a_venv_without_its_tuxtalk_script_has_no_command(tmp_path, monkeypatch):
+    """TuxTalk run with python -m from a venv it wasn't pip-installed into:
+    no menu entry or start at login may point at a program that isn't there."""
+    monkeypatch.setattr(sys, "prefix", str(tmp_path / "venv"))
+    assert source_install.command() is None
 
 
 @pytest.fixture

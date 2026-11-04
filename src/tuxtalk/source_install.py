@@ -47,10 +47,10 @@ def _scripts_folder() -> str:
 def command() -> Optional[str]:
     """The `tuxtalk` command of this source install: the running venv's, or
     outside a venv the one pip put beside TuxTalk's package; None when that
-    one isn't there, so nothing is pointed at a missing program."""
-    if in_venv():
-        return f"{sys.prefix}/bin/tuxtalk"
-    script = os.path.join(_scripts_folder(), "tuxtalk")
+    one isn't there (TuxTalk run with python -m from where pip didn't put
+    it), so nothing is pointed at a missing program."""
+    folder = f"{sys.prefix}/bin" if in_venv() else _scripts_folder()
+    script = os.path.join(folder, "tuxtalk")
     return script if os.path.isfile(script) else None
 
 

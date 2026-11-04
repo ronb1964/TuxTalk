@@ -33,8 +33,12 @@ def _source_home(tmp_path, monkeypatch, venv_parent):
     monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_icon_caches", lambda base: None)
     # First run records start at login in the settings; keep that off the real ones.
     monkeypatch.setattr(config, "load_config", lambda: types.SimpleNamespace(launch_at_login=True))
+    command = prefix / "bin/tuxtalk"
+    command.parent.mkdir(parents=True)
+    command.write_text("#!/usr/bin/python3\n")
+    command.chmod(0o755)
     return types.SimpleNamespace(
-        command=f"{prefix}/bin/tuxtalk", menu_entry=menu_entry, autostart_entry=autostart_entry,
+        command=str(command), menu_entry=menu_entry, autostart_entry=autostart_entry,
         icons=home / ".local/share/icons/hicolor")
 
 

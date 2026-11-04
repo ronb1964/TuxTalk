@@ -141,7 +141,9 @@ def _through_input_group(path) -> bool:
 
 
 SYSTEM_CHECK_PATH = "Preferences → Advanced → System check"
-FIX_TYPING_PATH = f"{SYSTEM_CHECK_PATH} → Fix Typing Permissions"
+# System check's button (prefs_system_check), named by every notice that sends people there.
+FIX_TYPING_LABEL = "Fix Typing Permissions"
+FIX_TYPING_PATH = f"{SYSTEM_CHECK_PATH} → {FIX_TYPING_LABEL}"
 REPORT_A_PROBLEM_PATH = "Help → Problems → Report a Problem"
 
 # Said by System check, the hotkey test, first run and the notice at start
@@ -188,13 +190,11 @@ def check_input_read_permission(hello=_ASK):
             return (False, f"{HELPER_SEES_NO_KEYBOARD}.")
         return (True, "TuxTalk's hotkey helper reads the hotkeys. Hotkeys should work.")
     if helper_expected(socket_path()):
-        return (False, "TuxTalk's hotkey helper is installed but isn't answering, so "
-                       "the hotkeys won't work. Fix Typing sets it up again.")
-    readable = _readable_keyboards()
-    if readable:
+        return (False, f"{HELPER_NOT_ANSWERING}.")
+    if _readable_keyboards():
         return (True, "You can read input devices. Hotkeys should work.")
     return (False, "Cannot read any keyboard under /dev/input, so hotkeys "
-                   "cannot work. Fix Typing Permissions sets that up.")
+                   f"cannot work. {FIX_TYPING_LABEL} sets that up.")
 
 
 def check_all_device_permissions(hello=_ASK):
