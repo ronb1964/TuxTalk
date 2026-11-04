@@ -5,6 +5,7 @@ system's, and whether the installed speech library was built to use them.
 Also tidies what earlier versions left in the download's folder."""
 
 import functools
+import importlib.util
 import os
 import subprocess
 import sys
@@ -87,15 +88,30 @@ def probe_ctranslate2_cuda(run=subprocess.run, python: Optional[str] = None) -> 
     return False
 
 
+def _ctranslate2_outside(prefix: str) -> bool:
+    """Whether the CTranslate2 this Python finds lies outside *prefix*. Found,
+    not imported: importing it would load the speech library into Preferences.
+    None found counts as outside, so the check runs and says there is none."""
+    spec = importlib.util.find_spec("ctranslate2")
+    if spec is None or not spec.origin:
+        return True
+    return not os.path.realpath(spec.origin).startswith(os.path.realpath(prefix) + os.sep)
+
+
 @functools.lru_cache(maxsize=None)
 def ctranslate2_has_cuda() -> bool:
-    """Whether the speech library can run on CUDA here. Only a distro
-    package's TuxTalk (install type "system") is asked: it may run a
-    CTranslate2 the distro built without CUDA. Every other install runs
-    PyPI's, which has it. Cached: the answer can't change while TuxTalk runs."""
-    if installation.get_install_type() != "system":
-        return True
-    return probe_ctranslate2_cuda()
+    """Whether the speech library can run on CUDA here. Asked of a distro
+    package's TuxTalk (install type "system"), which may run a CTranslate2
+    the distro built without CUDA, and of a source install whose CTranslate2
+    isn't its own: a venv made with --system-site-packages, as the README's
+    is, keeps the distro's when its version meets the pin. Every other
+    install runs PyPI's, which has CUDA. Cached: the answer can't change
+    while TuxTalk runs."""
+    install_type = installation.get_install_type()
+    if install_type == "system" or (install_type == "source"
+                                    and _ctranslate2_outside(sys.prefix)):
+        return probe_ctranslate2_cuda()
+    return True
 
 
 def _has_required_libs(names) -> bool:

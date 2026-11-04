@@ -479,11 +479,17 @@ def _without_missing_cuda(settings):
     its files are missing. The model would load "on cuda" without them, then
     every dictation would fail inside the speech library (libcublas.so.12 not
     found), after the load-time fallback. The setting stays: downloading CUDA
-    again in Preferences fixes it."""
+    again in Preferences fixes it. A speech library built without CUDA (a
+    distro's own) goes to the processor too, without a word: loading it on
+    CUDA would fail and then send the user to a Preferences that lists none."""
     from . import cuda_helper
     from .parakeet_engine import is_parakeet
-    if (settings.device.lower() != "cuda" or is_parakeet(settings.model)
-            or cuda_helper.has_cuda_libraries()):
+    if settings.device.lower() != "cuda" or is_parakeet(settings.model):
+        return settings
+    if not cuda_helper.ctranslate2_has_cuda():
+        logger.info("Device is CUDA but the speech library here has no CUDA; using the processor")
+        return Settings(**{**vars(settings), "device": "cpu"})
+    if cuda_helper.has_cuda_libraries():
         return settings
     logger.warning("Device is CUDA but the CUDA libraries are missing; using the processor")
     notify_module.notify("The CUDA files are missing",

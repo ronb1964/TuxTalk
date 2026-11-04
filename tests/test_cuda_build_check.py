@@ -4,10 +4,14 @@ A distro-packaged TuxTalk (install type "system", such as an AUR package) may
 run a CTranslate2 compiled without CUDA. There, even with an NVIDIA card and
 CUDA's libraries installed, Preferences must not offer CUDA, a saved "cuda"
 shows as the processor, a backup with CUDA restores onto another device, and
-System check doesn't send the user to pick CUDA. Every other install runs
-PyPI's CTranslate2, which has CUDA, and is never checked.
+System check doesn't send the user to pick CUDA. A source install's venv,
+made with --system-site-packages, may use the distro's CTranslate2 the same
+way. Every other install runs PyPI's CTranslate2, which has CUDA, and is never
+checked.
 """
+import importlib.util
 import subprocess
+import sys
 from types import SimpleNamespace
 
 try:
@@ -95,11 +99,45 @@ def _no_probe(**kw):
 
 
 @pytest.mark.parametrize("kind", ["appimage", "aur", "deb", "rpm", "package", "flatpak",
-                                  "source", "dev"])
+                                  "dev"])
 def test_only_a_system_install_is_checked(monkeypatch, kind):
     monkeypatch.setattr(installation, "get_install_type", lambda: kind)
     monkeypatch.setattr(cuda_helper, "probe_ctranslate2_cuda", _no_probe)
     assert cuda_helper.ctranslate2_has_cuda() is True
+
+
+def _source_venv_finding_ctranslate2_at(monkeypatch, origin):
+    """A source install running from /home/ann/venv whose Python finds
+    CTranslate2 at *origin*."""
+    monkeypatch.setattr(installation, "get_install_type", lambda: "source")
+    monkeypatch.setattr(sys, "prefix", "/home/ann/venv")
+    real_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec",
+                        lambda name, *a: SimpleNamespace(origin=origin)
+                        if name == "ctranslate2" else real_find_spec(name, *a))
+
+
+def test_a_source_install_with_ctranslate2_in_its_venv_is_never_checked(monkeypatch):
+    _source_venv_finding_ctranslate2_at(
+        monkeypatch, "/home/ann/venv/lib/python3.14/site-packages/ctranslate2/__init__.py")
+    monkeypatch.setattr(cuda_helper, "probe_ctranslate2_cuda", _no_probe)
+    assert cuda_helper.ctranslate2_has_cuda() is True
+
+
+def test_a_source_venv_using_the_distros_ctranslate2_is_checked(monkeypatch):
+    """pip keeps the system's CTranslate2 when its version meets the pin, and
+    the distro may have built it without CUDA."""
+    _source_venv_finding_ctranslate2_at(
+        monkeypatch, "/usr/lib64/python3.14/site-packages/ctranslate2/__init__.py")
+    monkeypatch.setattr(cuda_helper, "probe_ctranslate2_cuda", lambda **kw: False)
+    assert cuda_helper.ctranslate2_has_cuda() is False
+
+
+def test_the_real_check_finds_cuda_in_pypis_ctranslate2():
+    """The probe script itself, run for real: a typo in it would read as "no
+    CUDA" and hide CUDA from every install that is checked."""
+    pytest.importorskip("ctranslate2")
+    assert cuda_helper.probe_ctranslate2_cuda() is True
 
 
 def test_a_system_install_is_checked_once(monkeypatch):
@@ -257,6 +295,20 @@ def test_the_restore_note_there_blames_the_speech_library_not_the_card(
     assert text == 'device = "cpu"\n'
     assert notes == ["The backup uses CUDA, which the speech library installed here "
                      "can't use, so the Device stays on CPU."]
+
+
+def test_a_saved_cuda_there_loads_on_the_processor_without_a_cuda_notice(
+        monkeypatch, without_cuda_build):
+    """Not loaded on CUDA first: that fails, then says "choose the device
+    again to try the graphics card", where Preferences lists no CUDA."""
+    from tuxtalk import model_helper
+    monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
+    loaded, notes = [], []
+    monkeypatch.setattr(model_helper, "download_model_with_progress",
+                        lambda *a, **k: loaded.append(k.get("device")) or object())
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: notes.append(a))
+    engine.build(SimpleNamespace(model="small", device="cuda"))
+    assert loaded == ["cpu"] and notes == []
 
 
 def test_large_v3_there_runs_as_medium_rather_than_on_the_processor(
