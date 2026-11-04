@@ -302,8 +302,10 @@ def build_or_exit(settings: Settings):
         from .model_helper import OFFERED_MODELS, is_model_cached_fast
         from .recommend import model_title
         try:
-            from .cuda_helper import has_cuda_libraries
-            has_cuda = has_cuda_libraries()
+            # As guard_large_v3_without_cuda: CUDA's files alone don't do when
+            # the speech library was built without CUDA.
+            from .cuda_helper import ctranslate2_has_cuda, has_cuda_libraries
+            has_cuda = has_cuda_libraries() and ctranslate2_has_cuda()
         except Exception as cuda_e:
             logger.info(f"Could not check for CUDA's files: {cuda_e}")
             has_cuda = False

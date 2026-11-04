@@ -29,12 +29,11 @@ from tuxtalk.prefs_system_check import SystemCheck
 
 
 @pytest.fixture(autouse=True)
-def fresh_answers():
+def fresh_answers(monkeypatch):
     """Each test asks afresh: both answers are cached for the whole run."""
-    cuda_helper.ctranslate2_has_cuda.cache_clear()
+    monkeypatch.setattr(cuda_helper, "_cuda_build", None)
     installation.system_package.cache_clear()
     yield
-    cuda_helper.ctranslate2_has_cuda.cache_clear()
     installation.system_package.cache_clear()
 
 
@@ -52,17 +51,28 @@ def test_a_cuda_build_counts_even_with_no_card_now():
     assert cuda_helper.probe_ctranslate2_cuda(run=_answer("cuda\n")) is True
 
 
-def test_a_check_that_doesnt_answer_offers_no_cuda():
+def test_a_check_that_hangs_gives_no_answer():
     def hang(argv, **kw):
         raise subprocess.TimeoutExpired(argv, kw["timeout"])
-    assert cuda_helper.probe_ctranslate2_cuda(run=hang) is False
+    assert cuda_helper.probe_ctranslate2_cuda(run=hang) is None
 
 
-def test_a_check_that_fails_offers_no_cuda():
+def test_a_check_that_fails_gives_no_answer():
     def crashed(argv, **kw):
         return subprocess.CompletedProcess(argv, 1, stdout="",
                                            stderr="ModuleNotFoundError: ctranslate2")
-    assert cuda_helper.probe_ctranslate2_cuda(run=crashed) is False
+    assert cuda_helper.probe_ctranslate2_cuda(run=crashed) is None
+
+
+def test_a_check_without_an_answer_offers_no_cuda_now_and_asks_again_next_time(monkeypatch):
+    """A check that timed out at a busy login doesn't hide a working CUDA
+    for as long as TuxTalk runs; a clean answer is kept."""
+    answers = [None, True]
+    monkeypatch.setattr(installation, "get_install_type", lambda: "system")
+    monkeypatch.setattr(cuda_helper, "probe_ctranslate2_cuda", lambda **kw: answers.pop(0))
+    assert cuda_helper.ctranslate2_has_cuda() is False
+    assert cuda_helper.ctranslate2_has_cuda() is True
+    assert cuda_helper.ctranslate2_has_cuda() is True and answers == []
 
 
 def test_the_check_never_wakes_the_graphics_card():

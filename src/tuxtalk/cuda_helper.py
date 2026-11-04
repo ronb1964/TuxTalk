@@ -4,7 +4,6 @@ the Whisper models on it: TuxTalk's own download (cuda_download) or the
 system's, and whether the installed speech library was built to use them.
 Also tidies what earlier versions left in the download's folder."""
 
-import functools
 import importlib.util
 import os
 import subprocess
@@ -60,10 +59,10 @@ def detect_nvidia_gpu():
     except (OSError, subprocess.TimeoutExpired):    # not installed, not runnable, or hung
         return False
 
-def probe_ctranslate2_cuda(run=subprocess.run, python: Optional[str] = None) -> bool:
+def probe_ctranslate2_cuda(run=subprocess.run, python: Optional[str] = None) -> Optional[bool]:
     """Whether the CTranslate2 that *python* (this one by default) imports was
     built with CUDA. Hidden from every graphics card, so the check never wakes
-    one. No clean answer (a hang, a crash, no CTranslate2) counts as without.
+    one. None when there's no clean answer (a hang, a crash, no CTranslate2).
 
     Not isolated (-I): TuxTalk itself finds a CTranslate2 the user installed
     with pip --user or through PYTHONPATH, so the check must find the same
@@ -85,7 +84,7 @@ def probe_ctranslate2_cuda(run=subprocess.run, python: Optional[str] = None) -> 
             return False
         why = f"exit {result.returncode}, {answer or result.stderr.strip()[-200:]!r}"
     logger.info(f"CTranslate2's CUDA check didn't answer ({why}); not offering CUDA")
-    return False
+    return None
 
 
 def _ctranslate2_outside(prefix: str) -> bool:
@@ -98,20 +97,27 @@ def _ctranslate2_outside(prefix: str) -> bool:
     return not os.path.realpath(spec.origin).startswith(os.path.realpath(prefix) + os.sep)
 
 
-@functools.lru_cache(maxsize=None)
+# ctranslate2_has_cuda's answer, once there is a clean one.
+_cuda_build: Optional[bool] = None
+
+
 def ctranslate2_has_cuda() -> bool:
     """Whether the speech library can run on CUDA here. Asked of a distro
     package's TuxTalk (install type "system"), which may run a CTranslate2
     the distro built without CUDA, and of a source install whose CTranslate2
     isn't its own: a venv made with --system-site-packages, as the README's
     is, keeps the distro's when its version meets the pin. Every other
-    install runs PyPI's, which has CUDA. Cached: the answer can't change
-    while TuxTalk runs."""
-    install_type = installation.get_install_type()
-    if install_type == "system" or (install_type == "source"
-                                    and _ctranslate2_outside(sys.prefix)):
-        return probe_ctranslate2_cuda()
-    return True
+    install runs PyPI's, which has CUDA. A clean answer is kept: it can't
+    change while TuxTalk runs. A check with none (a hang at a busy login, a
+    crash) counts as no CUDA this time and is asked again the next, so it
+    doesn't hide a working CUDA for the whole session."""
+    global _cuda_build
+    if _cuda_build is None:
+        install_type = installation.get_install_type()
+        checked = install_type == "system" or (install_type == "source"
+                                               and _ctranslate2_outside(sys.prefix))
+        _cuda_build = probe_ctranslate2_cuda() if checked else True
+    return bool(_cuda_build)
 
 
 def _has_required_libs(names) -> bool:

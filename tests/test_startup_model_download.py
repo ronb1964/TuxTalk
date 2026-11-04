@@ -137,6 +137,22 @@ def test_fallback_picks_the_nearest_downloaded_model(wanted, downloaded, cuda, e
     assert engine._pick_fallback_model(wanted, downloaded, cuda) == expected
 
 
+def test_cuda_files_alone_never_make_large_v3_the_fallback(monkeypatch):
+    """CUDA's files are on disk (an earlier download, or the system's), but
+    the speech library was built without CUDA: large-v3 would run on the
+    processor, far too slowly to use."""
+    from tuxtalk import cuda_helper
+    monkeypatch.setattr(model_helper, "download_model_with_progress",
+                        lambda name, **k: None if name == "parakeet-v3" else f"model:{name}")
+    monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: m in ("small", "large-v3"))
+    monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
+    monkeypatch.setattr(cuda_helper, "ctranslate2_has_cuda", lambda: False)
+    monkeypatch.setattr("tuxtalk.config.load_config", lambda: SimpleNamespace(model="parakeet-v3"))
+    monkeypatch.setattr("tuxtalk.config.save_config", lambda cfg: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: None)
+    assert engine.build_or_exit(_settings(model="parakeet-v3", device="cpu")) == "model:small"
+
+
 def test_cancel_falls_back_to_a_downloaded_model_and_saves_it(monkeypatch):
     import tuxtalk.config as config
     from tuxtalk import cuda_helper
