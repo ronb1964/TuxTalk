@@ -591,3 +591,26 @@ def test_a_flatpak_dictation_stops_before_a_line_break_into_a_password_field(mon
     monkeypatch.setattr(focused_window, "is_password", lambda **k: next(answers, True))
     assert delivery.inject_text("ab\ncd", "auto") == "password_field"
     assert [code for code, down in keys if down] == [30, 48]      # a, b: no Enter, no c or d
+
+
+def test_a_flatpak_dictation_cancelled_by_esc_while_the_portal_got_ready_types_nothing(
+        monkeypatch):
+    """Esc a moment after the dictation key came up, while the portal's
+    keyboard came back: the checks right before the keys
+    (keyboard_output.checks_before_keys) stop it, as they stop a dictation
+    on TuxTalk's own keyboard."""
+    from tuxtalk import libei_ctypes
+    from tuxtalk.output_backends import LibeiOutputBackend
+    message = rs.Message()
+    libei = _FakeLibei([(None, 1, 2),                       # ready for the session
+                        (None, 3),                          # paused before the keys
+                        (lambda: setattr(message, "cancelled", True), 2)])  # Esc, then back
+    monkeypatch.setattr(libei_ctypes, "load_libei", lambda: libei)
+    monkeypatch.setattr(libei_ctypes.time, "sleep", lambda s: None)
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
+    b = LibeiOutputBackend()
+    monkeypatch.setattr(b, "_run_handshake", lambda: (_portal_fd(), None))
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: b)
+    with keyboard_output.until_cancelled(message):
+        assert delivery.inject_text("see you at noon", "auto") == "cancelled"
+    assert libei.keys == []
