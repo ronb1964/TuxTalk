@@ -321,11 +321,12 @@ def _device_works_here(device):
 
 
 def _lacks(device):
-    """Why *device* doesn't work here, as the end of a sentence: a speech
-    library built without CUDA is no missing card."""
+    """Why *device* doesn't work here, as the end of a sentence: with an
+    NVIDIA card, a speech library built without CUDA; else the missing card,
+    whatever the library."""
     if device == "cuda":
-        from .cuda_helper import ctranslate2_has_cuda
-        if not ctranslate2_has_cuda():
+        from .cuda_helper import ctranslate2_has_cuda, detect_nvidia_gpu
+        if detect_nvidia_gpu() and not ctranslate2_has_cuda():
             return "the speech library installed here can't use"
     return "this computer doesn't have"
 

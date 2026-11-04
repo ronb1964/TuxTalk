@@ -355,20 +355,24 @@ def this_computer(hw, slower=False):
     """The line under the table saying which columns apply here. *slower*:
     the speed check found the processor faster than the graphics chip, which
     detect_hardware reports as no chip at all."""
+    from .cuda_helper import ctranslate2_has_cuda
     name = hw.gpu_name if hw.gpu_name not in (None, "graphics card") else "a graphics card"
-    if hw.gpu and hw.has_nvidia:
+    # A distro's speech library may be built without CUDA: the card alone isn't enough.
+    cuda = hw.has_nvidia and ctranslate2_has_cuda()
+    if hw.gpu and cuda:
         return f"Your computer: {name}, so all three columns work here."
     if hw.gpu:
-        return (f"Your computer: {name}, so the processor and Vulkan columns work here. "
-                f"CUDA needs an NVIDIA card.")
-    if slower and hw.has_nvidia:
+        why = ("The speech library installed here can't use CUDA." if hw.has_nvidia
+               else "CUDA needs an NVIDIA card.")
+        return f"Your computer: {name}, so the processor and Vulkan columns work here. {why}"
+    if slower and cuda:
         return ("Your computer: an NVIDIA card, but your processor was faster through "
                 "Vulkan in TuxTalk's speed check, so the processor and CUDA columns "
                 "apply here.")
     if slower:
         return ("Your computer: its graphics chip was slower than the processor in "
                 "TuxTalk's speed check, so the processor column applies here.")
-    if hw.has_nvidia:
+    if cuda:
         return ("Your computer: an NVIDIA card, but Vulkan isn't working on it, so the "
                 "processor and CUDA columns apply here.")
     return ("Your computer: no graphics chip TuxTalk can use, so the processor "

@@ -333,12 +333,52 @@ class FakeLabel:
         self.text = text
 
 
-def test_system_check_doesnt_send_the_user_to_pick_cuda_there(monkeypatch, without_cuda_build):
-    monkeypatch.setattr(cuda_helper, "has_talktype_cuda_libraries", lambda: False)
-    check = SimpleNamespace(win=SimpleNamespace(nvidia_gpu=lambda: "NVIDIA GeForce RTX 4070"),
+def _system_check(vulkan):
+    """System check's graphics card lines on an NVIDIA computer, *vulkan*
+    offered there or not."""
+    check = SimpleNamespace(win=SimpleNamespace(nvidia_gpu=lambda: "NVIDIA GeForce RTX 4070",
+                                                vulkan_offered=lambda: vulkan),
                             gpu_status_label=FakeLabel(), cuda_status_label=FakeLabel())
     SystemCheck.check_gpu_status(check)
+    return check
+
+
+def test_system_check_doesnt_send_the_user_to_pick_cuda_there(monkeypatch, without_cuda_build):
+    monkeypatch.setattr(cuda_helper, "has_talktype_cuda_libraries", lambda: False)
+    check = _system_check(vulkan=True)
     assert "NVIDIA GeForce RTX 4070" in check.gpu_status_label.text
     assert ("CUDA isn't available: the speech library installed here was built without it. "
             "Vulkan runs the models on your graphics card instead.") in check.cuda_status_label.text
     assert "choose CUDA" not in check.cuda_status_label.text
+
+
+def test_system_check_there_promises_no_vulkan_where_it_isnt_offered(
+        monkeypatch, without_cuda_build):
+    monkeypatch.setattr(cuda_helper, "has_talktype_cuda_libraries", lambda: False)
+    assert _system_check(vulkan=False).cuda_status_label.text == (
+        "CUDA isn't available: the speech library installed here was built without it.")
+
+
+# --- "What works with what?" ----------------------------------------------------
+
+def test_what_works_with_what_doesnt_say_cuda_works_there(without_cuda_build):
+    from tuxtalk import recommend
+    line = recommend.this_computer(recommend.Hardware("NVIDIA GeForce RTX 4070", True))
+    assert line == ("Your computer: NVIDIA GeForce RTX 4070, so the processor and Vulkan "
+                    "columns work here. The speech library installed here can't use CUDA.")
+    for slower in (False, True):
+        assert "CUDA column" not in recommend.this_computer(recommend.Hardware(None, True),
+                                                            slower)
+
+
+def test_the_restore_note_on_a_computer_without_nvidia_blames_the_missing_card(
+        tmp_path, monkeypatch, without_cuda_build):
+    """Without a card, CUDA wouldn't work with any speech library; and the
+    library isn't checked for it."""
+    monkeypatch.setattr(cuda_helper, "detect_nvidia_gpu", lambda: False)
+    monkeypatch.setattr(cuda_helper, "probe_ctranslate2_cuda", _no_probe)
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.toml"))
+    notes = []
+    assert settings_backup._fit_device('device = "cuda"\n', notes) == 'device = "cpu"\n'
+    assert notes == ["The backup uses CUDA, which this computer doesn't have, so the Device "
+                     "stays on CPU."]

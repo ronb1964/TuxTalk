@@ -347,9 +347,11 @@ class SystemCheck(Tab):
                         '<span color="#4CAF50">✓ NVIDIA GPU detected</span>')
 
                 if not cuda_helper.ctranslate2_has_cuda():
-                    self.cuda_status_label.set_text(
-                        "CUDA isn't available: the speech library installed here was built "
-                        "without it. Vulkan runs the models on your graphics card instead.")
+                    text = ("CUDA isn't available: the speech library installed here was "
+                            "built without it.")
+                    if self.win.vulkan_offered():
+                        text += " Vulkan runs the models on your graphics card instead."
+                    self.cuda_status_label.set_text(text)
                 elif has_cuda:
                     self.cuda_status_label.set_markup(
                         '<span color="#4CAF50">✓ CUDA libraries installed</span>')
