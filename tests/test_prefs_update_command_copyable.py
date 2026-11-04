@@ -37,3 +37,16 @@ def test_the_update_command_of_a_source_install_can_be_selected_and_copied(monke
     assert label.get_selectable()
     assert label.get_line_wrap()
     assert source_install.update_command("0.21.0") in label.get_text()
+
+
+def test_a_release_tag_with_markup_characters_still_shows_the_message(monkeypatch):
+    """Pango rejects a label whose markup holds a bare & or <, and the user
+    would see no message and no command at all."""
+    monkeypatch.setattr(installation, "get_install_type", lambda: "dev")
+    tab = _tab_with_a_real_status_label()
+
+    UpdatesTab._handle_update_result(tab, {
+        "success": True, "update_available": True, "current_version": "0.20.0",
+        "latest_version": "0.22.0 <R&D>"}, SimpleNamespace(set_sensitive=lambda _: None))
+
+    assert "TuxTalk 0.22.0 <R&D> is available." in tab.update_status_label.get_text()

@@ -547,10 +547,9 @@ class UpdatesTab(Tab):
             else:
                 self.download_btn.hide()
                 if method == "manual":
-                    extra = guidance["message"]
+                    extra = esc(guidance["message"])     # it holds the tag
                     if guidance.get("command"):
-                        cmd = GLib.markup_escape_text(guidance["command"])
-                        extra += f"\n<tt>{cmd}</tt>"
+                        extra += f"\n<tt>{esc(guidance['command'])}</tt>"
                     self.update_status_label.set_markup(
                         "\n".join(status_lines) + "\n\n" + extra)
             if release.get("html_url"):
