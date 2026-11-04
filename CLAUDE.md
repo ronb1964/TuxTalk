@@ -335,8 +335,8 @@ AUR votes only move when asked for — the package sat at zero from December
 
 Ron, 2026-11-01: marketing stays in this project, with steps so nothing is
 missed (Mastodon went quiet from 0.18 to 0.19 because no step named it).
-Draft every text in Ron's voice (ron-voice skill), each one saying how
-TuxTalk is made ("SAYING HOW TUXTALK IS MADE" below), show Ron all of them
+Draft every text in Ron's voice (ron-voice skill), saying how TuxTalk is
+made where "SAYING HOW TUXTALK IS MADE" (below) calls for it, show Ron all of them
 together, and post each only after his OK. Every place we've ever posted is
 in Obsidian "TalkType/Where TuxTalk is posted": start from its "Owed right
 now" list, and update it with what went where (and the per-release log,
@@ -671,15 +671,16 @@ Preferences shows from 51 settings to about 26; keep it there:
   Hands-free, Mistakes, Problems): a new feature goes where people would
   use it, and Help names keys from the settings, never hard-coded F8.
 
-## SAYING HOW TUXTALK IS MADE — EVERY NEW PUBLIC POST
+## SAYING HOW TUXTALK IS MADE — WHERE WE INTRODUCE IT
 
 Ron can't code; Claude writes TuxTalk and Ron designs, tests and uses it
-daily. **Every** new post, pitch, forum thread, announcement or listing says
-so up front, in plain words, never buried and never left for someone to
-discover in the commit history (the Lemmy thread on 2026-10-16 went bad for
-exactly that). A reply inside a conversation that already said it (an issue,
-a discussion, a Mastodon or forum thread) doesn't repeat it (Ron, 2026-11-04),
-and when it is said, the wording changes from post to post.
+daily. A post that introduces TuxTalk somewhere (a new forum thread, a pitch,
+a listing, a post to people who may not know it yet) says so up front, in
+plain words, never buried and never left for someone to discover in the
+commit history (the Lemmy thread on 2026-10-16 went bad for exactly that); so
+does any post where it really matters to the reader. Replies in a
+conversation don't repeat it: in every reply it gets repetitive and reads as
+AI (Ron, 2026-11-04). When it is said, the wording changes from post to post.
 Pair it with the proof that a person is responsible: thousands of automated
 tests and CI, testing on several distros in VMs, the hotkey helper's review by
 an outside developer (guelz), guelz's PR merged, Ron dictating nearly everything he writes with it.
