@@ -96,7 +96,7 @@ def test_a_remappers_keyboard_is_listened_to_but_never_held(setup, capsys):
     the service is told that's how this keyboard works, with the journal
     saying so once rather than at every dictation (issue #23)."""
     helper, kb, connect, say, heard, _seat = setup
-    kb.listen_only_reason = "a program's keyboard and mouse in one"
+    kb.listen_only = "a program's keyboard and mouse in one"
     sock = _ready(connect, say, heard)
     capsys.readouterr()
     for _ in range(2):
@@ -160,8 +160,7 @@ def test_a_keyboard_refused_read_write_is_watched_read_only_and_never_held(
     monkeypatch.setattr(hh, "fcntl", evdev)
     helper.scan()
     kb = helper.keyboards[str(node)]
-    assert kb.listen_only_reason
-    assert "never held: it may only be read here" in capsys.readouterr().out
+    assert kb.listen_only and "never held: it may only be read here" in capsys.readouterr().out
     sock = _ready(connect, say, heard)
     node.chmod(0o644)
     with node.open("ab") as events:
@@ -218,7 +217,7 @@ def test_a_keyboard_that_is_a_mouse_too_is_read_with_its_motion_kept_out(
     monkeypatch.setattr(hh, "made_through_uinput", lambda rdev: False)
     helper.scan()
     kb = helper.keyboards[str(node)]
-    assert kb.name == name and kb.mouse and kb.listen_only_reason is None
+    assert kb.name == name and kb.mouse and kb.listen_only is None
     assert len(evdev.masks) == 1
 
 
@@ -279,7 +278,7 @@ def test_a_programs_keyboard_and_mouse_in_one_is_never_held(setup, monkeypatch, 
                                                name="kanata"))
     monkeypatch.setattr(hh, "made_through_uinput", lambda rdev: True)
     helper.scan()
-    assert helper.keyboards[str(node)].listen_only_reason == "a program's keyboard and mouse in one"
+    assert helper.keyboards[str(node)].listen_only == "a program's keyboard and mouse in one"
 
 
 def test_only_key_events_are_asked_of_the_kernel(monkeypatch):
@@ -354,7 +353,7 @@ def _read_only_beside(helper, kb):
     """A keyboard that may only be read, in the real keyboards' group with
     the setup's writable *kb* (two keyboards, one of them 0640)."""
     other = FakeKeyboard("/dev/input/event-read-only")
-    other.listen_only_reason = "it may only be read here"
+    other.listen_only = "it may only be read here"
     kb.group = other.group = "real"
     helper.keyboards[other.path] = other
     return other
@@ -403,10 +402,10 @@ def test_a_read_only_keyboard_made_writable_is_opened_again_to_be_held(setup, mo
     node = _device(tmp_path / "input", writable=False)
     monkeypatch.setattr(hh, "fcntl", FakeEvdev(_LETTERS))
     helper.scan()
-    assert helper.keyboards[str(node)].listen_only_reason == hh.READ_ONLY
+    assert helper.keyboards[str(node)].listen_only == hh.READ_ONLY
     node.chmod(0o644)
     helper.scan()
-    assert helper.keyboards[str(node)].listen_only_reason is None
+    assert helper.keyboards[str(node)].listen_only is None
 
 
 def test_an_input_folder_that_cant_be_listed_is_said_once(setup, tmp_path, capsys):
@@ -458,4 +457,4 @@ def test_a_read_only_keyboard_isnt_opened_again_while_its_hotkey_is_held(
     helper.on_key(held, F8, 0)
     assert heard(sock) == ["UP 66"]
     helper.scan()
-    assert helper.keyboards[str(node)].listen_only_reason is None
+    assert helper.keyboards[str(node)].listen_only is None

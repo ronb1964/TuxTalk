@@ -451,10 +451,10 @@ def check_keyboard(keys, name):
 class Keyboard:
     """One open /dev/input/event* keyboard and the keys down on it."""
 
-    def __init__(self, path, fd, name, down, virtual, group, listen_only_reason=None, mouse=False):
+    def __init__(self, path, fd, name, down, virtual, group, listen_only=None, mouse=False):
         """*down*: the keys down when it was opened; *virtual*: a program may
-        have made it; *group*: device_group's answer; *listen_only_reason*: why
-        it is never held nor written to, or None; *mouse*: it's a mouse too
+        have made it; *group*: device_group's answer; *listen_only*: why it
+        is never held nor written to, or None; *mouse*: it's a mouse too
         (check_keyboard)."""
         self.path, self.fd, self.name, self.virtual, self.group = path, fd, name, virtual, group
         self.mouse = mouse
@@ -463,7 +463,7 @@ class Keyboard:
         # types; holding it would freeze the one and swallow the other. And
         # one opened read-only (open_node): writing to it fails, so its keys
         # couldn't be told to go up before holding it.
-        self.listen_only_reason = listen_only_reason
+        self.listen_only = listen_only
         self.said_listen_only = False      # logged once that it's never held
         self.down = set(down)
         # The modifiers the desktop saw go down on this keyboard: only these
@@ -527,10 +527,10 @@ class Keyboard:
         state = bytearray(KEY_BYTES)
         fcntl.ioctl(fd, EVIOCGKEY(len(state)), state, True)
         if pointer and made_through_uinput(st.st_rdev):
-            listen_only_reason = "a program's keyboard and mouse in one"
+            listen_only = "a program's keyboard and mouse in one"
         else:
-            listen_only_reason = READ_ONLY if read_only else None
-        return cls(path, fd, name, bits(state), virtual, group, listen_only_reason, mouse=pointer)
+            listen_only = READ_ONLY if read_only else None
+        return cls(path, fd, name, bits(state), virtual, group, listen_only, mouse=pointer)
 
     def current_group(self):
         """Its group as its node's permissions and udev's data say now
@@ -700,7 +700,7 @@ class Helper:
         read-write by this scan, so it can be held again. Not while a key
         someone watches is down on it: closing lets it go, which would end a
         recording mid-hold. A later scan does it."""
-        if keyboard.listen_only_reason != READ_ONLY or not os.access(keyboard.path, os.W_OK):
+        if keyboard.listen_only != READ_ONLY or not os.access(keyboard.path, os.W_OK):
             return
         if any(keyboard.down & (c.bare | c.combos.keys()) for c in self.clients.values()):
             return
@@ -739,8 +739,7 @@ class Helper:
         self.unreadable.pop(path, None)
         self.too_many.pop(path, None)
         self.keyboards[path] = keyboard
-        reason = keyboard.listen_only_reason
-        never_held = f", never held: {reason}" if reason else ""
+        never_held = f", never held: {keyboard.listen_only}" if keyboard.listen_only else ""
         log(f"watching keyboard {keyboard.name!r} ({path}){never_held}")
 
     def drop_keyboard(self, keyboard, why="gone"):
@@ -1015,11 +1014,11 @@ class Helper:
         groups = {self.keyboards[path].group for path in origins}
         wanted = set(mods) | {code for _, code in presses}
         for keyboard in self.keyboards.values():
-            if keyboard.listen_only_reason and (keyboard.path in origins or (
+            if keyboard.listen_only and (keyboard.path in origins or (
                     keyboard.group in groups and keyboard.down & wanted)):
                 if not keyboard.said_listen_only:
                     keyboard.said_listen_only = True
-                    log(f"not holding keyboard {keyboard.name!r}: {keyboard.listen_only_reason}")
+                    log(f"not holding keyboard {keyboard.name!r}: {keyboard.listen_only}")
                 return True
         return False
 
@@ -1064,7 +1063,7 @@ class Helper:
         of its group only has its modifiers hidden the same way. A
         listen-only keyboard is never held or written to: its keys reach the
         desktop as they are."""
-        if keyboard.listen_only_reason:
+        if keyboard.listen_only:
             return False            # holds none of them (listen_only_holding)
         if keyboard.mouse and not is_origin:
             return self.never_hold_mouse(keyboard, codes)
