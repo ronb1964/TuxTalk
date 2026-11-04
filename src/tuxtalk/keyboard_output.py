@@ -287,10 +287,13 @@ def press_key(key: str, why: str, claim=None) -> bool:
     sends a chat message, runs a command or submits a form; Tab moves on to
     a form's next box. Undo can't reach what's behind either; the caller
     forgets the dictation once it's pressed (delivery.press_key). Not
-    pressed, a key stuck down says so (an automatic send says it its own way).
-    *claim* can still stop it right before it goes down (send_countdown)."""
+    pressed, a key stuck down says so (an automatic send says it its own way),
+    and Esc said so itself (until_cancelled). *claim* can still stop it
+    right before it goes down (send_countdown)."""
     time.sleep(0.05)   # let the app take in the typed text first
     if not output_backend().press_keys([((), key)], claim=claim):
+        if this_thread.cancel_with is not None and this_thread.cancel_with.cancelled:
+            return False        # logged in refuse_cancelled
         logger.warning(f"{key.title()} not pressed ({why})")
         if claim is None and modifier_hotkeys.stuck():
             notify_module.notify(*delivery_notices.key_not_pressed(key))

@@ -58,14 +58,18 @@ def press_said(key: str, chunk_role, after_words: bool = False, message=None) ->
     first, or tried, and the key goes only where they went, and only if all
     of them did (send_countdown.press_where_sent), as an automatic Enter
     does. Said alone it goes wherever the focus is: people type a password
-    by hand, then say "press enter" to log in."""
+    by hand, then say "press enter" to log in; Esc a moment before stops it
+    at its first key (keyboard_output.until_cancelled), and says so itself."""
     why = f'said "press {key.lower()}"'
     if (key == "TAB" and pastes_broken(focused_window.window_class())
             and not focused_window.is_password()):
-        outcome = (send_countdown.type_where_sent("    ", key, message,
-                                                 delivery.type_onto_dictation)
-                   if after_words else delivery.type_onto_dictation("    ", "type"))
-        if outcome not in (None, "ok"):
+        if after_words:
+            outcome = send_countdown.type_where_sent("    ", key, message,
+                                                     delivery.type_onto_dictation)
+        else:
+            with keyboard_output.until_cancelled(message):
+                outcome = delivery.type_onto_dictation("    ", "type")
+        if outcome not in (None, "ok", "cancelled"):
             logger.warning(f"Tab not typed as four spaces ({outcome})")
             if outcome == "key_held":
                 notify_module.notify(*delivery_notices.key_not_pressed(key))
@@ -73,7 +77,8 @@ def press_said(key: str, chunk_role, after_words: bool = False, message=None) ->
     if after_words:
         pressed = send_countdown.press_where_sent(key, why, message, delivery.press_key)
     else:
-        pressed = delivery.press_key(key, why)
+        with keyboard_output.until_cancelled(message):
+            pressed = delivery.press_key(key, why)
     if pressed and chunk_role is not None:
         type_at_pause.start_afresh(message)
 

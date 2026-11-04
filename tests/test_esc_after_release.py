@@ -243,3 +243,45 @@ def test_esc_before_the_first_key_keeps_the_window_undo_goes_to(monkeypatch):
     monkeypatch.setattr(delivery, "deliver_text", take_window_then_esc)
     assert delivery.inject_text("Hello.", "type") == "cancelled"
     assert (rs.state.last_inserted_window, rs.state.last_inserted_where) == ("kwrite", ("kwrite", 7))
+
+
+def test_esc_before_a_press_enter_said_alone_presses_nothing(chat, keyboard, let_go,
+                                                           monkeypatch):
+    """Only "press enter" said, then Esc while the Enter waited its turn: it
+    went all the same, sending whatever was in the box, and Esc's own beep
+    is all that's said."""
+    focus, heard, typed, notices = chat
+    told = []
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: told.append(a))
+    press = keyboard_output.press_key
+
+    def esc_then_press(*a, **k):
+        esc()
+        return press(*a, **k)
+    monkeypatch.setattr(keyboard_output, "press_key", esc_then_press)
+    heard.append("press enter")
+    let_go()
+    assert keyboard.events == [] and notices == [] and told == []
+
+
+def test_esc_before_a_press_tab_said_alone_types_no_spaces(chat, keyboard, let_go, monkeypatch):
+    """Claude Desktop gets four spaces for "press tab": Esc while they got
+    ready to go in, and they went in all the same."""
+    from tuxtalk import focused_window
+    focus, heard, typed, notices = chat
+    focus[0] = "com.anthropic.Claude"
+    destination = focused_window.destination
+
+    def esc_meanwhile():
+        esc()
+        return destination()
+
+    def type_for_real(text, mode, one_block=False, *, where):
+        typed.append((text, focus[1]))
+        keyboard_output.type_text_raw(text)
+        return "ok"
+    monkeypatch.setattr(focused_window, "destination", esc_meanwhile)
+    monkeypatch.setattr(delivery, "deliver_text", type_for_real)
+    heard.append("press tab")
+    let_go()
+    assert keyboard.events == [] and notices == []
