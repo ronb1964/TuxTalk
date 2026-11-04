@@ -14,6 +14,7 @@ import warnings
 from pathlib import Path
 
 from .config import get_data_dir
+from .launch_env import CUDA_HIDDEN_BY_TUXTALK
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -41,6 +42,7 @@ if not _cuda_lib_dir().exists():
 
     if not _has_gpu:
         os.environ['CUDA_VISIBLE_DEVICES'] = ''
+        os.environ[CUDA_HIDDEN_BY_TUXTALK] = '1'
         logger.info("No CUDA libraries found - forcing CPU-only mode")
 
     # Without TuxTalk's CUDA download, missing-CUDA-library warnings are expected noise.

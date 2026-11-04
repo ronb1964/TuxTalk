@@ -432,7 +432,7 @@ def release_desktop_hotkeys() -> None:
 
 # The GDK_BACKEND the service's own (SERVICE_GDK_BACKEND) took the place of,
 # "" for none, kept in the service's environment.
-_USERS_GDK_BACKEND = "TUXTALK_USERS_GDK_BACKEND"
+USERS_GDK_BACKEND = "TUXTALK_USERS_GDK_BACKEND"
 
 
 def build_service_env(base_env=None):
@@ -444,7 +444,7 @@ def build_service_env(base_env=None):
     """
     env = dict(os.environ if base_env is None else base_env)
     # The user's own, for Preferences the service opens (launch_preferences).
-    env[_USERS_GDK_BACKEND] = env.get("GDK_BACKEND", "")
+    env[USERS_GDK_BACKEND] = env.get("GDK_BACKEND", "")
     env["GDK_BACKEND"] = SERVICE_GDK_BACKEND
     return env
 
@@ -483,8 +483,8 @@ def launch_preferences(tab=None):
     doesn't open on a click.
     """
     env = os.environ.copy()
-    if _USERS_GDK_BACKEND in env:
-        users = env.pop(_USERS_GDK_BACKEND)
+    if USERS_GDK_BACKEND in env:
+        users = env.pop(USERS_GDK_BACKEND)
         if users:
             env["GDK_BACKEND"] = users
         else:

@@ -128,11 +128,11 @@ def test_preferences_opened_from_the_service_gets_the_users_gdk_backend(monkeypa
                         lambda cmd, env=None: started.append(env))
     base = {"GDK_BACKEND": users} if users else {}
     service_env = service_launcher.build_service_env(base)
-    for name in ("GDK_BACKEND", service_launcher._USERS_GDK_BACKEND):
+    for name in ("GDK_BACKEND", service_launcher.USERS_GDK_BACKEND):
         monkeypatch.setenv(name, service_env[name])
     AppInstance.show_preferences(None)
     assert started[0].get("GDK_BACKEND", "") == users
-    assert service_launcher._USERS_GDK_BACKEND not in started[0]
+    assert service_launcher.USERS_GDK_BACKEND not in started[0]
 
 
 def test_preferences_from_the_tray_keeps_the_callers_gdk_backend(monkeypatch):
@@ -140,7 +140,7 @@ def test_preferences_from_the_tray_keeps_the_callers_gdk_backend(monkeypatch):
     started = []
     monkeypatch.setattr(service_launcher.subprocess, "Popen",
                         lambda cmd, env=None: started.append(env))
-    monkeypatch.delenv(service_launcher._USERS_GDK_BACKEND, raising=False)
+    monkeypatch.delenv(service_launcher.USERS_GDK_BACKEND, raising=False)
     monkeypatch.setenv("GDK_BACKEND", "wayland")
     service_launcher.launch_preferences()
     assert started[0]["GDK_BACKEND"] == "wayland"

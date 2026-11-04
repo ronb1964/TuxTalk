@@ -9,6 +9,7 @@ how this TuxTalk was installed is installation.
 
 import json
 import logging
+import os
 import re
 import subprocess
 import threading
@@ -17,7 +18,7 @@ import urllib.error
 from pathlib import Path
 from typing import Optional, Tuple
 
-from . import gnome_extensions
+from . import gnome_extensions, launch_env
 from .extension_helper import EXTENSION_UUID
 
 logger = logging.getLogger(__name__)
@@ -343,7 +344,7 @@ def check_for_updates() -> dict:
 def open_release_page(url: str):
     """Open release page in browser."""
     try:
-        subprocess.run(["xdg-open", url], check=True)
+        subprocess.run(["xdg-open", url], check=True, env=launch_env.clean(os.environ))
     except Exception as e:
         logger.error(f"Could not open release page: {e}")
 
