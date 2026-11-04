@@ -40,6 +40,20 @@ before 0.15.0, so older entries use that name.
   connects after you log in.
 - System check doesn't ask for a restart anymore when the hotkey helper
   from Fix Typing is what's set up, since that one needs none.
+- Esc stops more of what's left after you let go. Saying only "press
+  enter" won't press it, a voice edit's Delete or Bold won't go in, and
+  "clear everything" leaves your text alone.
+- When "edit that" ends without changing anything, because you pressed Esc
+  or the AI wasn't ready or the window changed, it lets go of the text it
+  selected. Before, your next words replaced your dictation. Your
+  clipboard comes back the way it was too.
+- After Esc on a dictation that stopped on "and", the next one starts with
+  a capital again.
+- On a Logitech keyboard, with kanata, or on a keyboard the hotkey helper
+  can only read, Shift+F8 waits for you to let go of Shift before it
+  copies the text, so the copy can't go wrong.
+- A Logitech mouse that can only be read isn't called "your keyboard"
+  anymore.
 
 ## [0.20.0] - 2026-11-02
 
