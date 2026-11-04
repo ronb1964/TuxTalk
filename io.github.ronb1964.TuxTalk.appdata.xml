@@ -95,6 +95,19 @@
   </screenshots>
 
   <releases>
+    <release version="0.21.0" date="2026-11-04">
+      <description>
+        <p>Install TuxTalk from its source code, and Esc stops what's left after you let go</p>
+        <ul>
+          <li>Install from source on any distro, with a menu entry, start at login, its own update command and a clean uninstall</li>
+          <li>A tuxtalk package on the AUR, built from source with Arch's own packages</li>
+          <li>CUDA is offered only where the installed speech library can use it</li>
+          <li>When the keyboard can't be read at start, a notice says so and where to fix it</li>
+          <li>Esc stops "press enter" said alone, a voice edit's keys and voice commands, and "edit that" lets go of your text when it changes nothing</li>
+          <li>Shift+F8 waits for Shift to come up on keyboards the hotkey helper can't hide it on</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.20.0" date="2026-11-02">
       <description>
         <p>A voice detector that tells your voice from the noise around you</p>

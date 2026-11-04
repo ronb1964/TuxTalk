@@ -3,7 +3,7 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [0.21.0] - unreleased
+## [0.21.0] - 2026-11-04
 
 - TuxTalk can be installed from its source code on any distro now. The
   README has the steps, under Installation, From source. It sets up its own
