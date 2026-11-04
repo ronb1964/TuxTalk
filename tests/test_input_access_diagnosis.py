@@ -75,25 +75,28 @@ def test_with_the_helper_possible_it_leads_with_fix_typing_and_no_restart(monkey
     assert "with no restart" in msg and "usermod" not in msg
 
 
-def test_points_at_permissions_when_user_is_already_a_member(monkeypatch):
-    """Being in the group but seeing no devices is a different problem entirely."""
+def test_a_member_whose_keyboard_still_cant_be_read_is_sent_to_report_a_problem(monkeypatch):
+    """Being in the group but seeing no devices is a different problem
+    entirely, one Fix Typing can't fix. It goes in a notice, so plain
+    words: no device-node modes."""
     gid = _input_gid()
     monkeypatch.setattr("os.getgroups", lambda: [1000, gid])
     msg = input_access_advice()
 
-    assert "/dev/input" in msg
+    assert "Help → Problems → Report a Problem" in msg
     # Must NOT tell someone already in the group to add themselves again.
-    assert "usermod" not in msg
+    assert "usermod" not in msg and "Fix Typing Permissions" not in msg
+    assert "crw" not in msg
 
 
-def test_survives_systems_with_no_input_group(monkeypatch):
+def test_a_system_with_no_input_group_is_sent_to_report_a_problem(monkeypatch):
     """Never crash the service while trying to explain a failure."""
     def _boom(name):
         raise KeyError(name)
 
     monkeypatch.setattr("grp.getgrnam", _boom)
     msg = input_access_advice()
-    assert msg, "must still return something explanatory"
+    assert "Help → Problems → Report a Problem" in msg
 
 
 SYSTEM_CHECK = "Open Preferences → Advanced → System check."

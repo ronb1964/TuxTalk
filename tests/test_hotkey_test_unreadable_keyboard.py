@@ -141,7 +141,16 @@ def test_with_the_hotkey_helper_the_notice_asks_for_no_restart(monkeypatch):
     monkeypatch.setattr(uinput_helper, "input_group_pending_restart", lambda: False)
     monkeypatch.setattr(secure_input, "can_install", lambda: (True, ""))
     notice = hkd._hotkey_test_notice(False)
-    assert "Fix Typing Permissions" in notice and "restart" not in notice
+    assert uinput_helper.FIX_TYPING_PATH in notice and "restart" not in notice
+
+
+def test_without_the_hotkey_helper_the_notice_names_fix_typing_and_a_restart(monkeypatch):
+    """The same path as System check and the notices, so nobody looks for two places."""
+    from tuxtalk import secure_input
+    monkeypatch.setattr(uinput_helper, "input_group_pending_restart", lambda: False)
+    monkeypatch.setattr(secure_input, "can_install", lambda: (False, "no systemd"))
+    notice = hkd._hotkey_test_notice(False)
+    assert uinput_helper.FIX_TYPING_PATH in notice and "restart" in notice
 
 
 class _Notice:

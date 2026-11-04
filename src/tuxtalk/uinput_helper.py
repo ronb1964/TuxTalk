@@ -142,13 +142,14 @@ def _through_input_group(path) -> bool:
 
 SYSTEM_CHECK_PATH = "Preferences → Advanced → System check"
 FIX_TYPING_PATH = f"{SYSTEM_CHECK_PATH} → Fix Typing Permissions"
+REPORT_A_PROBLEM_PATH = "Help → Problems → Report a Problem"
 
 # Said by System check, the hotkey test, first run and the notice at start
 # when the hotkey helper answers but reads no keyboard (issue #26). Its
 # journal names each device it left out and why, and Report a Problem
 # includes that.
 HELPER_SEES_NO_KEYBOARD = ("The hotkey helper can't see your keyboard, so the dictation keys "
-                           "can't work. Help → Problems → Report a Problem has its log")
+                           f"can't work. {REPORT_A_PROBLEM_PATH} has its log")
 # Said by System check and the notice at start. The service keeps trying an
 # installed helper (connect_helper) rather than reading the keyboards
 # itself, and System check's Update starts it again.
@@ -229,11 +230,9 @@ def check_udev_rule_exists():
 # helper's typing rule applies at once.
 TYPING_RESTART_PENDING = ("TuxTalk can't type yet: restart your computer to finish "
                           "the typing setup.")
-TYPING_NO_PERMISSION = ("TuxTalk doesn't have permission to type. Open Preferences, "
-                        "Advanced, Fix Typing Permissions.")
-TYPING_NO_PERMISSION_RESTART = ("TuxTalk doesn't have permission to type. Open Preferences, "
-                                "Advanced, Fix Typing Permissions, then restart your "
-                                "computer.")
+TYPING_NO_PERMISSION = f"TuxTalk doesn't have permission to type. Open {FIX_TYPING_PATH}."
+TYPING_NO_PERMISSION_RESTART = (f"TuxTalk doesn't have permission to type. Open "
+                                f"{FIX_TYPING_PATH}, then restart your computer.")
 
 
 def _username():
@@ -281,10 +280,12 @@ def input_access_advice() -> str:
     try:
         group = grp.getgrnam("input")
     except KeyError:
-        return "This system has no 'input' group at all."
+        return ("Fix Typing can't help on this system, which has no 'input' group. "
+                f"{REPORT_A_PROBLEM_PATH} has what's needed to find out why.")
     if group.gr_gid in os.getgroups():
-        return ("This user is in the 'input' group, so the device nodes themselves "
-                "are wrong: /dev/input/event* should be 'crw-rw---- root input'.")
+        return ("You're in the 'input' group, yet the keyboard can't be read, so Fix "
+                f"Typing can't help. {REPORT_A_PROBLEM_PATH} has what's needed to find "
+                "out why.")
     if input_group_pending_restart():
         # A new login isn't always enough: a lingering user session keeps
         # the old group list.

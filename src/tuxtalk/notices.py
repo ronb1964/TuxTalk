@@ -1,8 +1,10 @@
 """What the dictation service tells the user when something went wrong:
-nothing heard from the microphone, a dictation that didn't reach the
-window, a refused password field, a voice edit that didn't happen. The
-wording lives in delivery_notices.py and edit_notices.py; this decides how
-it's said (a notification, a label over the window, the cancel beep)."""
+nothing heard from the microphone, a microphone that wouldn't open, no
+keyboard reaching it at start, a dictation that didn't reach the window,
+a refused password field, a voice edit that didn't happen. Most of the
+wording lives in delivery_notices.py and edit_notices.py (the keyboard's
+in uinput_helper.py and hotkeys.py, the microphone's here); this decides
+how it's said (a notification, a label over the window, the cancel beep)."""
 import os
 
 import sounddevice as sd

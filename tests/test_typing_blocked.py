@@ -46,7 +46,7 @@ def test_never_granted_points_at_fix_typing(host):
     host.writable = False
     host.apply()
     reason = U.typing_blocked_reason()
-    assert "Fix Typing Permissions" in reason and "restart" in reason.lower()
+    assert U.FIX_TYPING_PATH in reason and "restart" in reason.lower()
 
 
 def test_with_the_hotkey_helper_the_fix_needs_no_restart(host, monkeypatch):
@@ -57,7 +57,7 @@ def test_with_the_hotkey_helper_the_fix_needs_no_restart(host, monkeypatch):
     host.writable = False
     host.apply()
     reason = U.typing_blocked_reason()
-    assert "Fix Typing Permissions" in reason and "restart" not in reason.lower()
+    assert U.FIX_TYPING_PATH in reason and "restart" not in reason.lower()
 
 
 def test_nothing_wrong_returns_none(host):

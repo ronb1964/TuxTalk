@@ -207,11 +207,11 @@ def _partial_bytes(cache, repo, missing, cancel_event=None):
     """What a cut-off download already holds of the *missing* files
     ((name, size) pairs): each file's own ".incomplete" blob, which
     huggingface_hub before 1.18 goes on from, up to that file's size. A
-    part an earlier version left is counted with 1.18 and later too, though
-    they start the file again (CODE_HEALTH.md, row 81). A blob is named by the
-    file's current ETag, so a part left from another file, another model in
-    the repo or an older version isn't counted; looked up only when there
-    are parts at all, and no more once *cancel_event* is set."""
+    part an earlier huggingface_hub left is counted with 1.18 and later too,
+    though those start the file again (CODE_HEALTH row 81). A blob is named
+    by the file's current ETag, so a part left from another file, another
+    model in the repo or an older version isn't counted; looked up only
+    when there are parts at all, and no more once *cancel_event* is set."""
     import stat
     from huggingface_hub.file_download import repo_folder_name
     blobs = os.path.join(cache, repo_folder_name(repo_id=repo, repo_type="model"), "blobs")
@@ -355,7 +355,8 @@ def _fetch_and_check(repo, filename, fetch, cancel_event, report, arrived):
     """*fetch*() *filename* from *repo*, with retries, then check its SHA256
     (_check_download) if hub_pins names one and the file *arrived*() now or
     its check is owed from an earlier try cut short: its file may be in the
-    cache since, or arrive with no new bytes when it's resumed. Raises what
+    cache since, or arrive with no new bytes when it's resumed (before
+    huggingface_hub 1.18). Raises what
     the fetch or the check raised."""
     from huggingface_hub.errors import RemoteEntryNotFoundError
     from .download_utils import check_owed, set_check_owed, with_retries

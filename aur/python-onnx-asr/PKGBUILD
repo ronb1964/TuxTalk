@@ -38,6 +38,8 @@ check() {
     site_packages=$(python -c "import site; print(site.getsitepackages()[0])")
     rm -rf test_dir
     python -m installer --destdir=test_dir dist/*.whl
+    # The wheel just built, and the sdist's root for the top-level
+    # preprocessors package test_build.py imports, which the wheel leaves out.
     export PYTHONPATH="$PWD/test_dir$site_packages:$PWD"
     export HF_HUB_OFFLINE=1 HF_HOME="$PWD/test_dir/hf-home"
     python -m pytest -p no:cacheprovider tests/onnx_asr/test_cli.py \

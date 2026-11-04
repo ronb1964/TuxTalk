@@ -86,11 +86,10 @@ def _hotkey_test_notice(service_can_read):
                 "once you restart your computer to finish the typing setup.")
     if secure_input.can_install()[0]:
         # The hotkey helper: its hotkeys work as soon as it's installed.
-        return ("TuxTalk can't read the keyboard yet. These keys will work after "
-                "Preferences, Advanced, Fix Typing Permissions.")
-    return ("TuxTalk can't read the keyboard yet. These keys will work after "
-            "Preferences, Advanced, Fix Typing Permissions, and a restart of "
-            "your computer.")
+        return (f"TuxTalk can't read the keyboard yet. Open {uinput_helper.FIX_TYPING_PATH} "
+                "and these keys will work.")
+    return (f"TuxTalk can't read the keyboard yet. Open {uinput_helper.FIX_TYPING_PATH}, "
+            "then restart your computer, and these keys will work.")
 
 
 def _reading_notice(keyboards):
