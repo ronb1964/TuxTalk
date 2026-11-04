@@ -678,9 +678,12 @@ daily. A post that introduces TuxTalk somewhere (a new forum thread, a pitch,
 a listing, a post to people who may not know it yet) says so up front, in
 plain words, never buried and never left for someone to discover in the
 commit history (the Lemmy thread on 2026-10-16 went bad for exactly that); so
-does any post where it really matters to the reader. Replies in a
-conversation don't repeat it: in every reply it gets repetitive and reads as
-AI (Ron, 2026-11-04). When it is said, the wording changes from post to post.
+does any post where it really matters to the reader. Each release's texts
+(the GitHub release notes, the Discussions announcement, the Mastodon post)
+carry one short line near the end, since new people find TuxTalk there.
+Replies in a conversation don't repeat it: in every reply it gets repetitive
+and reads as AI (Ron, 2026-11-04). When it is said, the wording changes from
+post to post.
 Pair it with the proof that a person is responsible: thousands of automated
 tests and CI, testing on several distros in VMs, the hotkey helper's review by
 an outside developer (guelz), guelz's PR merged, Ron dictating nearly everything he writes with it.
