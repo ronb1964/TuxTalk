@@ -234,15 +234,13 @@ def test_no_setup_needed_when_both_halves_work(monkeypatch):
     assert ok is True
 
 
-def test_a_hotkey_helper_that_does_not_answer_is_not_called_working(monkeypatch):
+def test_a_hotkey_helper_that_does_not_answer_is_not_called_working(monkeypatch, tmp_path):
     """Installed (its socket is there) but not answering: System check said
     "Hotkeys should work" while the dictation key did nothing."""
-    import types
-    closed = []
-    silent = types.SimpleNamespace(sock=None, helper_keyboards=None,
-                                   close=lambda: closed.append(True))
-    monkeypatch.setattr("tuxtalk.hotkey_helper_client.connect_helper", lambda: silent)
+    socket_file = tmp_path / "helper.sock"
+    socket_file.touch()                     # the file is there; nothing listens on it
+    monkeypatch.setenv("TUXTALK_HOTKEYS_SOCKET", str(socket_file))
     monkeypatch.setattr("tuxtalk.uinput_helper._readable_keyboards", lambda: [])
     ok, reason = check_input_read_permission()
-    assert ok is False and "answering" in reason and closed
+    assert ok is False and "answering" in reason
 

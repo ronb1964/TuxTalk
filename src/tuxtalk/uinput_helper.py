@@ -157,33 +157,45 @@ HELPER_NOT_ANSWERING = ("TuxTalk's hotkey helper is installed but isn't answerin
                         "dictation key won't work. Updating it starts it again")
 
 
-def check_input_read_permission():
+# check_input_read_permission's default: ask the hotkey helper itself.
+_ASK = object()
+
+
+def check_input_read_permission(hello=_ASK):
     """(has_access, reason): whether the dictation service will hear the
-    hotkeys, through the hotkey helper or from /dev/input itself."""
-    from .hotkey_helper_client import connect_helper
-    helper = connect_helper()
-    if helper is not None:
-        answering = helper.sock is not None
-        sees_none = helper.helper_keyboards == 0    # None: before 1.12 it doesn't say
-        helper.close()
-        if answering and sees_none:
+    hotkeys, through the hotkey helper or from /dev/input itself.
+    *hello* is secure_input.helper_hello()'s answer for a caller that asked
+    already (None: nothing answered); each ask is a connection that waits
+    for the helper, so a screen checking several things asks once."""
+    from . import secure_input
+    from .hotkey_helper_client import socket_path
+    if hello is _ASK:
+        hello = secure_input.helper_hello()
+    if hello is not None:
+        if hello[1] == 0:           # None: before 1.12 the helper doesn't say
             return (False, f"{HELPER_SEES_NO_KEYBOARD}.")
-        if answering:
-            return (True, "TuxTalk's hotkey helper reads the hotkeys. Hotkeys should work.")
-        # The service keeps trying an installed helper (connect_helper)
-        # rather than reading the keyboards itself, so a silent one means
-        # no hotkeys until it answers again.
-        return (False, "TuxTalk's hotkey helper is installed but isn't answering, so "
-                       "the hotkeys won't work. Fix Typing sets it up again.")
-    if _readable_keyboards():
+        return (True, "TuxTalk's hotkey helper reads the hotkeys. Hotkeys should work.")
+    # The service keeps trying an installed helper (connect_helper) rather
+    # than reading the keyboards itself, so a silent one means no hotkeys
+    # until it answers again. Someone still in the input group reads them
+    # as before while the helper's socket isn't there.
+    not_answering = (False, "TuxTalk's hotkey helper is installed but isn't answering, so "
+                            "the hotkeys won't work. Fix Typing sets it up again.")
+    if os.path.exists(socket_path()):
+        return not_answering
+    readable = _readable_keyboards()
+    if secure_input.is_installed() and not readable:
+        return not_answering
+    if readable:
         return (True, "You can read input devices. Hotkeys should work.")
     return (False, "Cannot read any keyboard under /dev/input, so hotkeys "
                    "cannot work. Fix Typing Permissions sets that up.")
 
 
-def check_all_device_permissions():
+def check_all_device_permissions(hello=_ASK):
     """(has_access, reason) for both permissions TuxTalk needs: typing
     through /dev/uinput, and the hotkeys (the helper, or /dev/input).
+    *hello*: check_input_read_permission's.
 
     They are granted by different mechanisms (logind can hand out an ACL on
     /dev/uinput while /dev/input needs the helper or the 'input' group), so
@@ -192,7 +204,7 @@ def check_all_device_permissions():
     hotkey could ever be read.
     """
     ok_uinput, uinput_reason = check_uinput_permission()
-    ok_input, input_reason = check_input_read_permission()
+    ok_input, input_reason = check_input_read_permission(hello)
 
     if ok_uinput and ok_input:
         return (True, "Typing and hotkeys both have the access they need.")

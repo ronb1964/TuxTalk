@@ -26,14 +26,15 @@ def _prefs_with_perms(monkeypatch, *, all_ok, udev, in_group, hotkey_ok=False,
     from tuxtalk import uinput_helper as uh
 
     monkeypatch.setattr(secure_input, "is_installed", lambda: helper_installed)
-    monkeypatch.setattr(secure_input, "running_version", lambda: helper_version)
+    monkeypatch.setattr(secure_input, "helper_hello",
+                        lambda: (helper_version, None) if helper_version else None)
 
     monkeypatch.setattr(uh, "check_all_device_permissions",
-                        lambda: (all_ok, "reason"))
+                        lambda hello: (all_ok, "reason"))
     monkeypatch.setattr(uh, "check_udev_rule_exists", lambda: udev)
     monkeypatch.setattr(uh, "check_user_in_input_group", lambda: in_group)
     monkeypatch.setattr(uh, "check_input_read_permission",
-                        lambda: (hotkey_ok, "reason"))
+                        lambda hello: (hotkey_ok, "reason"))
 
     prefs = prefs_mod.SystemCheck(SimpleNamespace(config={}))
     prefs.typing_status_label = ShownWidget()

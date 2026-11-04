@@ -123,34 +123,21 @@ def test_the_flatpak_needs_no_note(monkeypatch):
 
 
 def test_a_running_helper_counts_as_hotkeys_working(monkeypatch):
-    from tuxtalk import uinput_helper, hotkey_helper_client
-
-    class Connected:
-        sock = object()             # it answered
-        helper_keyboards = None     # a helper before 1.12 doesn't say how many it reads
-
-        def close(self):
-            pass
-    monkeypatch.setattr(hotkey_helper_client, "connect_helper", lambda: Connected())
+    from tuxtalk import uinput_helper
     monkeypatch.setattr(uinput_helper, "_readable_keyboards", lambda: [])
+    # A helper before 1.12 doesn't say how many keyboards it reads (None).
+    monkeypatch.setattr(si, "helper_hello", lambda: ("1.11", None))
     ok, reason = uinput_helper.check_input_read_permission()
     assert ok and "hotkey helper" in reason
-    Connected.helper_keyboards = 2
+    monkeypatch.setattr(si, "helper_hello", lambda: ("1.13", 2))
     assert uinput_helper.check_input_read_permission()[0]
 
 
 def test_a_helper_that_reads_no_keyboard_doesnt_count_as_hotkeys_working(monkeypatch):
     """Issue #26: it answered, so first run and the typing checks said the
     hotkeys should work while it read no keyboard at all."""
-    from tuxtalk import uinput_helper, hotkey_helper_client
-
-    class Blind:
-        sock = object()
-        helper_keyboards = 0
-
-        def close(self):
-            pass
-    monkeypatch.setattr(hotkey_helper_client, "connect_helper", lambda: Blind())
+    from tuxtalk import uinput_helper
+    monkeypatch.setattr(si, "helper_hello", lambda: ("1.13", 0))
     ok, reason = uinput_helper.check_input_read_permission()
     assert not ok and "can't see your keyboard" in reason
 
@@ -166,7 +153,7 @@ def test_first_run_fix_with_the_helper_asks_for_no_restart(monkeypatch):
 def test_preferences_offers_the_helper_to_input_group_users(monkeypatch):
     from tuxtalk import prefs_system_check as P, uinput_helper
 
-    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
+    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda hello: (True, ""))
     monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: False)
     monkeypatch.setattr(si, "can_install", lambda: (True, ""))
     prefs = P.SystemCheck(SimpleNamespace(config={}))
@@ -176,22 +163,22 @@ def test_preferences_offers_the_helper_to_input_group_users(monkeypatch):
     assert prefs.fix_typing_button.sensitive
     assert "'input' group" in prefs.typing_status_label.markup
 
-    monkeypatch.setattr(si, "running_version", lambda: hotkey_helper.VERSION)
+    monkeypatch.setattr(si, "helper_hello", lambda: (hotkey_helper.VERSION, None))
     prefs._show_typing_status()
     assert prefs.fix_typing_button.label == "✓ Ready" and not prefs.fix_typing_button.sensitive
 
 
 def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False, read_only=(),
-                  also_mice=()):
+                  also_mice=(), watched=None):
     from tuxtalk import prefs_system_check as P, uinput_helper
 
-    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
+    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda hello: (True, ""))
     monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: in_group)
     monkeypatch.setattr("tuxtalk.helper_keyboard_access.read_only_keyboards",
                         lambda: read_only)
     monkeypatch.setattr("tuxtalk.helper_keyboard_access.keyboards_also_mice",
                         lambda: also_mice)
-    monkeypatch.setattr(si, "running_version", lambda: running)
+    monkeypatch.setattr(si, "helper_hello", lambda: (running, watched))
     monkeypatch.setattr(si, "is_installed", lambda: installed)
     prefs = P.SystemCheck(SimpleNamespace(config={}))
     prefs.typing_status_label, prefs.fix_typing_button = ShownWidget(), ShownWidget()
@@ -238,9 +225,8 @@ def test_a_helper_that_sees_no_keyboard_is_said_plainly(monkeypatch, access):
     """Not "Fix Typing and restart" either: with no keyboard read, the
     access check fails too, and neither would help."""
     from tuxtalk import uinput_helper
-    monkeypatch.setattr(si, "keyboards_watched", lambda: 0)
-    P, prefs = _typing_prefs(monkeypatch, running=hotkey_helper.VERSION)
-    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (access, ""))
+    P, prefs = _typing_prefs(monkeypatch, running=hotkey_helper.VERSION, watched=0)
+    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda hello: (access, ""))
     prefs._show_typing_status()
     assert "see your keyboard, so the dictation keys can" in \
         prefs.typing_status_label.markup
@@ -250,8 +236,7 @@ def test_a_helper_that_sees_no_keyboard_is_said_plainly(monkeypatch, access):
 
 @pytest.mark.parametrize("watched", [None, 1])          # None: a 1.11 helper, which doesn't say
 def test_a_helper_that_doesn_t_say_or_sees_a_keyboard_is_ready(monkeypatch, watched):
-    monkeypatch.setattr(si, "keyboards_watched", lambda: watched)
-    _P, prefs = _typing_prefs(monkeypatch, running=hotkey_helper.VERSION)
+    _P, prefs = _typing_prefs(monkeypatch, running=hotkey_helper.VERSION, watched=watched)
     assert "✓ Ready" in prefs.typing_status_label.markup
     assert "keyboard, so" not in prefs.typing_status_label.markup
 
@@ -315,9 +300,9 @@ def test_which_shortcuts_the_helper_refuses(shortcut, refused):
 def test_a_hand_edited_shortcut_that_cant_work_is_warned_about(monkeypatch):
     from tuxtalk import prefs_system_check as P, uinput_helper
 
-    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
+    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda hello: (True, ""))
     monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: False)
-    monkeypatch.setattr(si, "running_version", lambda: hotkey_helper.VERSION)
+    monkeypatch.setattr(si, "helper_hello", lambda: (hotkey_helper.VERSION, None))
     prefs = P.SystemCheck(SimpleNamespace(config={}))
     prefs.typing_status_label, prefs.fix_typing_button = ShownWidget(), ShownWidget()
     prefs.win.config = {"voice_commands_hotkey": "Ctrl+Shift+H", "paste_last_hotkey": "Ctrl+Alt+P"}
@@ -414,11 +399,11 @@ def test_system_check_asks_for_a_restart_only_where_fix_typing_needs_one(
     restart, so "and restart" would send helper users to reboot for nothing."""
     from tuxtalk import prefs_system_check as P, uinput_helper
 
-    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (False, ""))
+    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda hello: (False, ""))
     monkeypatch.setattr(uinput_helper, "check_udev_rule_exists", lambda: False)
     monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: False)
-    monkeypatch.setattr(uinput_helper, "check_input_read_permission", lambda: (True, ""))
-    monkeypatch.setattr(si, "running_version", lambda: None)
+    monkeypatch.setattr(uinput_helper, "check_input_read_permission", lambda hello: (True, ""))
+    monkeypatch.setattr(si, "helper_hello", lambda: None)
     monkeypatch.setattr(si, "is_installed", lambda: False)
     monkeypatch.setattr(si, "can_install", lambda: (helper_possible, ""))
     markup, label, offered, ok = P._typing_state([])

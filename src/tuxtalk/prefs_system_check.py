@@ -62,16 +62,20 @@ def _typing_state(refused_shortcuts):
     from . import secure_input, uinput_helper
     from .hotkey_helper import VERSION as HELPER_VERSION
     installed = secure_input.is_installed()
+    # One ask of the helper for the whole check: each is a connection GTK's
+    # thread waits on.
+    hello = secure_input.helper_hello()
+    answered, watched = (hello[0], hello[1]) if hello else (None, None)
     # Before the access check, which fails then too: Fix Typing and a
     # restart wouldn't help. A helper before 1.12 doesn't say (None).
-    if installed and secure_input.keyboards_watched() == 0:
+    if installed and watched == 0:
         return (f'<span color="{WARNING_AMBER}">⚠ '
                 f'{GLib.markup_escape_text(uinput_helper.HELPER_SEES_NO_KEYBOARD)}</span>',
                 None, False, False)
     # Both halves, not just uinput: on Fedora a logind ACL can grant
     # /dev/uinput while /dev/input, which the hotkeys need, stays unreadable.
-    has_access, _reason = uinput_helper.check_all_device_permissions()
-    running = secure_input.running_version() if has_access else None
+    has_access, _reason = uinput_helper.check_all_device_permissions(hello)
+    running = answered if has_access else None
     versions = f'({GLib.markup_escape_text(running or "")} → {HELPER_VERSION})'
     if secure_input.needs_update(running) and installed:
         # A TuxTalk update brought a helper it needs: the old one keeps
@@ -89,14 +93,14 @@ def _typing_state(refused_shortcuts):
         return state
     if has_access:
         return _input_group_state()
-    if installed and secure_input.running_version() is None:
+    if installed and answered is None:
         # The service keeps trying an installed helper (connect_helper), so
         # a silent one means no hotkeys; installing it again starts it, and
         # the service connects within a second, with no restart.
         return (f'<span color="{WARNING_AMBER}">⚠ '
                 f'{GLib.markup_escape_text(uinput_helper.HELPER_NOT_ANSWERING)}</span>',
                 UPDATE_HELPER_LABEL, True, False)
-    return _no_access_state()
+    return _no_access_state(hello)
 
 
 def _helper_state(refused_shortcuts):
@@ -129,9 +133,9 @@ def _input_group_state():
             _READY, False, True)
 
 
-def _no_access_state():
-    """_typing_state without access. "Configured, just needs a restart" is
-    only true when BOTH halves of setup were done: the udev rule
+def _no_access_state(hello):
+    """_typing_state without access (*hello*: the helper's answer). "Configured,
+    just needs a restart" is only true when BOTH halves of setup were done: the udev rule
     (uinput, typing) AND 'input' group membership in the system database
     (hotkey reading). With only the rule, Fix Typing stays offered: it runs
     usermod."""
@@ -141,7 +145,7 @@ def _no_access_state():
                 'please restart your computer</span>', "✓ Configured", False, False)
     # Without /dev/input the hotkey is never seen, so no mode of output can
     # help; say so rather than offer a fallback.
-    hotkey_ok, _ = uinput_helper.check_input_read_permission()
+    hotkey_ok, _ = uinput_helper.check_input_read_permission(hello)
     blocked = "TuxTalk can't type" if hotkey_ok else "The dictation key won't work"
     # The same choice Fix Typing makes (secure_input.fix_permissions): the
     # hotkey helper works at once, only the 'input' group needs a restart.
