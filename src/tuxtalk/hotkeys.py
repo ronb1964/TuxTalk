@@ -596,6 +596,7 @@ def _keys_to_watch(cfg: Settings, devices):
         diagnosis = uinput_helper.input_access_diagnosis()
         logger.error(diagnosis)
         print(diagnosis, file=sys.stderr)
+        notices.warn_no_keyboard(cfg.hotkey)
     if keys.voice_cmds_combo:
         logger.info(f"Voice Commands hotkey: {keys.vc_hotkey_str}")
     return keys

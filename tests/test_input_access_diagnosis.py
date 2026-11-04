@@ -94,3 +94,41 @@ def test_survives_systems_with_no_input_group(monkeypatch):
     monkeypatch.setattr("grp.getgrnam", _boom)
     msg = input_access_diagnosis()
     assert msg, "must still return something explanatory"
+
+
+def _service_start_with_no_keyboard(monkeypatch, hold_key):
+    """What the user is told when the service starts after setup with a hold
+    key chosen and no readable keyboard: the notifications as (title, body)."""
+    from tuxtalk import first_run_marker, hotkeys, notify
+    from tuxtalk.config import Settings
+
+    sent = []
+    monkeypatch.setattr(notify, "_send", lambda title, body: sent.append((title, body)))
+    monkeypatch.setattr(first_run_marker, "is_first_run", lambda: False)
+    monkeypatch.setattr(secure_input, "can_install", lambda: (True, ""))
+    hotkeys._keys_to_watch(Settings(hotkey=hold_key), [])
+    return sent
+
+
+@pytest.mark.parametrize("hold_key", ["F8", "Right Ctrl"])
+def test_a_service_that_cant_read_the_keyboard_tells_the_user_once(monkeypatch, hold_key):
+    """The log and the terminal were the only places: the user pressed the
+    key, nothing happened and nothing said why. Said even with notifications
+    off (it goes through notify.notify, like the silent microphone), naming
+    the key they chose and where Fix Typing is."""
+    (title, body), = _service_start_with_no_keyboard(monkeypatch, hold_key)
+    assert title == "TuxTalk can't read your keyboard"
+    assert body.startswith(f"{hold_key} won't start dictation yet.")
+    assert "Preferences → Advanced → System check → Fix Typing Permissions" in body
+    assert "no restart" in body
+
+
+def test_a_service_that_reads_a_keyboard_says_nothing(monkeypatch):
+    from tuxtalk import first_run_marker, hotkeys, notify
+    from tuxtalk.config import Settings
+
+    sent = []
+    monkeypatch.setattr(notify, "_send", lambda title, body: sent.append(title))
+    monkeypatch.setattr(first_run_marker, "is_first_run", lambda: False)
+    hotkeys._keys_to_watch(Settings(hotkey="F8"), [object()])
+    assert sent == []

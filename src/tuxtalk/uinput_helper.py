@@ -259,31 +259,37 @@ def typing_blocked_reason():
     return None
 
 
-def input_access_diagnosis() -> str:
-    """Why no keyboard is readable, as advice the user can act on, for the
-    service's log and the terminal it was started from. evdev's
-    list_devices() skips the nodes this user can't open, rather than
-    raising, so without this the service looks healthy while ignoring
-    every key."""
+FIX_TYPING_PATH = "Preferences \u2192 Advanced \u2192 System check \u2192 Fix Typing Permissions"
+
+
+def input_access_advice() -> str:
+    """What to do when no keyboard is readable, for the user: the
+    service's log, the terminal it was started from and the notice at
+    start. evdev's list_devices() skips the nodes this user can't open,
+    rather than raising, so without this the service looks healthy while
+    ignoring every key."""
     from .secure_input import can_install
-    head = "No readable keyboard found, so the hotkeys can't work. "
     if can_install()[0]:
-        return head + ("Open Preferences, Advanced, Fix Typing Permissions: it installs "
-                       "TuxTalk's hotkey helper, with no restart.")
+        return (f"Open {FIX_TYPING_PATH}: it installs TuxTalk's hotkey helper, "
+                "with no restart.")
     try:
         group = grp.getgrnam("input")
     except KeyError:
-        return head + "This system has no 'input' group at all."
+        return "This system has no 'input' group at all."
     if group.gr_gid in os.getgroups():
-        return head + ("This user is in the 'input' group, so the device nodes themselves "
-                       "are wrong: /dev/input/event* should be 'crw-rw---- root input'.")
+        return ("This user is in the 'input' group, so the device nodes themselves "
+                "are wrong: /dev/input/event* should be 'crw-rw---- root input'.")
     if input_group_pending_restart():
         # A new login isn't always enough: a lingering user session keeps
         # the old group list.
-        return head + ("Setup already put you in the 'input' group: restart the computer "
-                       "to finish it.")
-    return head + ("Open Preferences, Advanced, Fix Typing Permissions, then restart "
-                   "the computer.")
+        return ("Setup already put you in the 'input' group: restart the computer "
+                "to finish it.")
+    return f"Open {FIX_TYPING_PATH}, then restart the computer."
+
+
+def input_access_diagnosis() -> str:
+    """input_access_advice with its reason first, for the log."""
+    return "No readable keyboard found, so the hotkeys can't work. " + input_access_advice()
 
 
 def get_fix_script_content():

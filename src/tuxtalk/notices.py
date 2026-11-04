@@ -30,12 +30,24 @@ SILENT_MIC_NOTICE = ("TuxTalk heard only silence. If you spoke, check that the m
                      "Preferences \u2192 Audio.")
 
 
+NO_KEYBOARD_TITLE = "TuxTalk can't read your keyboard"
+
+
 def warn_silent_mic():
     """The microphone sent nothing at all (silence.is_dead_mic). Always
     said, like a dictation that didn't arrive: a dead wireless mic otherwise
     looks like TuxTalk ignoring you."""
     logger.warning("The microphone sent only silence (muted, unplugged or the wrong one?)")
     notify_module.notify(SILENT_MIC_TITLE, SILENT_MIC_NOTICE)
+
+
+def warn_no_keyboard(hold_key: str):
+    """The service started after setup with no keyboard it can read, so
+    *hold_key* will do nothing. Always said, once per start: the log alone
+    left people pressing a key that did nothing, with no word why."""
+    notify_module.notify(
+        NO_KEYBOARD_TITLE,
+        f"{hold_key} won't start dictation yet. {uinput_helper.input_access_advice()}")
 
 
 def device_name(idx) -> str:
