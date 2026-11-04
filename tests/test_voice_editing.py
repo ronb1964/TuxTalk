@@ -793,6 +793,63 @@ def test_shift_held_too_long_cancels_the_edit(keyloop, monkeypatch):
     assert keyloop["stops"] == 0 and cancelled and "Shift" in cancelled[0]
 
 
+class HelperRefusal(FakeKeyboard):
+    """The hotkey helper as the loop sees it, whose answer to hiding the
+    hold key and Shift was *hidden* (no: a mouse too, or a keyboard it may
+    only read, held that Shift, and the desktop saw it down all along)."""
+    def __init__(self, held_sequence, hidden):
+        super().__init__(held_sequence)
+        self.hidden = hidden
+
+
+@pytest.fixture
+def hold_edit(keyloop, monkeypatch):
+    """A Shift+F8 edit through the hotkey helper: returns hold(keyboard),
+    which presses Shift+F8 and lets go of F8, and what was cancelled."""
+    from tuxtalk import modifier_hotkeys
+    monkeypatch.setattr(modifier_hotkeys, "_noted", ([], frozenset()))
+    monkeypatch.setattr(modifier_hotkeys, "_hidden", (frozenset(), ()))
+    monkeypatch.setattr(keyboard_devices, "is_keyboard_device", lambda d: True)
+    monkeypatch.setattr(modifier_hotkeys, "is_keyboard_device", lambda d: True)
+    monkeypatch.setattr(hotkeys, "EDIT_SHIFT_WAIT_S", 0.05)
+    cancelled = []
+    monkeypatch.setattr(recording, "cancel_recording",
+                        lambda rec, b, n, reason="": cancelled.append(reason))
+    # As the real grab and release do it: the helper's keyboard noted with
+    # the keys asked hidden, and forgotten when the grab ends.
+    monkeypatch.setattr(keyboard_grab, "release_all", lambda: modifier_hotkeys.note_hidden(()))
+
+    def hold(kb):
+        modifier_hotkeys.note([kb], F8, F9)
+        monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding",
+                            lambda devs, codes: modifier_hotkeys.note_hidden(codes, [kb]))
+        hotkeys._handle_key_event(KeyEvent(F8, 1), F8, F9, None, {SHIFT}, [kb], Cfg(), 0)
+        hotkeys._handle_key_event(KeyEvent(F8, 0), F8, F9, None, {SHIFT}, [kb], Cfg(), 0)
+    return hold, cancelled
+
+
+def test_a_hold_edit_waits_for_a_shift_the_helper_couldnt_hide(hold_edit, keyloop):
+    """The desktop still saw Shift down when F8 came up, so the edit's
+    Ctrl+C would have arrived as Ctrl+Shift+C (a browser's inspector)."""
+    hold, cancelled = hold_edit
+    kb = HelperRefusal([[SHIFT], [SHIFT], []], hidden=False)
+    hold(kb)
+    assert keyloop["stops"] == 1 and cancelled == [] and kb.seq == [[]]
+
+
+def test_a_hold_edit_with_that_shift_held_on_is_cancelled_before_any_key(hold_edit, keyloop):
+    hold, cancelled = hold_edit
+    hold(HelperRefusal([[SHIFT]], hidden=False))
+    assert keyloop["stops"] == 0 and cancelled and "Shift" in cancelled[0]
+
+
+def test_a_hold_edit_whose_shift_was_hidden_goes_on_at_once(hold_edit, keyloop):
+    """The desktop was told Shift went up: still held, it's no harm."""
+    hold, cancelled = hold_edit
+    hold(HelperRefusal([[SHIFT]], hidden=True))
+    assert keyloop["stops"] == 1 and cancelled == []
+
+
 def test_an_empty_copy_still_puts_the_clipboard_back(monkeypatch):
     board = FakeBoard(selected="")
     board.install(monkeypatch)

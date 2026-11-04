@@ -168,6 +168,15 @@ def shortcut_keys_down() -> bool:
     return bool(keys_down(_keyboards()) & (SHORTCUT_MODIFIERS - _hidden_now()))
 
 
+def shift_shown() -> bool:
+    """Whether a Shift the desktop can see is down on the hotkey loop's
+    keyboards: one a grab hides aside. A voice edit's Shift stays seen when
+    the hotkey helper refused to hide it (a keyboard that's a mouse too, or
+    one it may only read, holds it), or held on a keyboard TuxTalk never
+    grabs (keyboard_grab.grab_keyboards_hiding)."""
+    return bool(keys_down(_keyboards()) & (SHIFT_CODES - _hidden_now()))
+
+
 def shortcut_keys_maybe_down() -> bool:
     """As shortcut_keys_down, for a check made with TuxTalk's keyboard held,
     right before a key: nothing it asks may wait. The hotkey helper's last

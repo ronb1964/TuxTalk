@@ -398,9 +398,13 @@ def _on_hold_key(event, hold_key, held_modifiers, devices, cfg, input_device_idx
         _dictation_key_up(hold_key)
         stops, rs.state.hold_stops = rs.state.hold_stops, None
         if rs.state.is_recording and stops is rs.state.current:
+            # Asked while the grab is held: letting go forgets what it hid.
+            shift_shown = rs.state.current.edit_mode and modifier_hotkeys.shift_shown()
             # Let go of the keyboards before typing, so the user's own keys
             # reach the app again
             keyboard_grab.release_all()
+            if shift_shown and _edit_cancelled_for_shift(devices, cfg):
+                return
             _stop_recording(cfg)
     elif event.value == 1:
         rs.state.hold_stops = None
@@ -456,16 +460,25 @@ def _stop_edit(shift, devices, cfg) -> bool:
     # A hold edit holds the keyboards (brushing the toggle key mid-hold
     # lands here): let go first, or they stay grabbed for the whole edit.
     keyboard_grab.release_all()
-    # If Shift is down again, wait for the user to let go, or the Ctrl+C
-    # that copies the selection would arrive as Ctrl+Shift+C. Hiding it
-    # with injected key events, as the hold key does, would replay them
-    # after a slow edit and start a new recording by itself.
-    if shift and not keyboard_grab.wait_for_keys_up(devices, SHIFT_CODES, EDIT_SHIFT_WAIT_S):
-        recording.cancel_recording(rs.state.current, cfg.beeps, cfg.notify,
-                                   "Voice edit cancelled: let go of Shift to finish it")
+    # If Shift is down again, wait for the user to let go. Hiding it with
+    # injected key events, as the hold key does, would replay them after a
+    # slow edit and start a new recording by itself.
+    if shift and _edit_cancelled_for_shift(devices, cfg):
         return True
     _stop_recording(cfg)
     return False
+
+
+def _edit_cancelled_for_shift(devices, cfg) -> bool:
+    """Wait for a Shift the desktop sees down to be let go before a voice
+    edit goes on: the Ctrl+C that copies the selection would arrive as
+    Ctrl+Shift+C (a browser's inspector). True, with the edit cancelled
+    and the user told, when it stays down."""
+    if keyboard_grab.wait_for_keys_up(devices, SHIFT_CODES, EDIT_SHIFT_WAIT_S):
+        return False
+    recording.cancel_recording(rs.state.current, cfg.beeps, cfg.notify,
+                               "Voice edit cancelled: let go of Shift to finish it")
+    return True
 
 
 def _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_combo):
