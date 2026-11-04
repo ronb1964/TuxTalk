@@ -227,14 +227,38 @@ def _let_go_of_selection(expected, where) -> None:
     Right stops at the words' end, before that space, and in LibreOffice
     Writer moves one character on from where the selection starts. Only
     into *where*, the window it was selected in; nothing for a selection
-    the user made (*expected* None)."""
+    the user made (*expected* None).
+
+    Only while the dictation is still what's selected (_still_selected):
+    the AI can take seconds, and a user who typed on after Esc has replaced
+    it already; the keys would then select their own text, for the next key
+    typed to replace, and move their cursor on."""
     if expected is None:
+        return
+    if not _still_selected(expected, where):
+        logger.info("Voice edit: the dictation isn't selected any more; nothing let go of")
         return
     from . import voice_navigation as nav
     selected_with = nav.chords(nav.parse("select that"), expected) or []
     back = [(mods, "RIGHT") for mods, _key in reversed(selected_with)]
     if back and not keyboard_output.output_backend().press_keys(back, claim=_only_into(*where)):
         logger.warning("Voice edit: couldn't let go of the selection")
+
+
+def _still_selected(expected, where) -> bool:
+    """Whether *expected* is what's selected in *where* now, copied again
+    with Ctrl+C there (only there), the user's clipboard put back as after
+    the edit's own copy."""
+    from . import clipboard
+    try:
+        selected, put_back = clipboard.copy_selection(
+            lambda: keyboard_output.send_copy_keystroke(_only_into(*where)))
+    except clipboard.ClipboardUnavailable:
+        return False
+    if selected is None:
+        return False        # copy_selection put the clipboard back itself
+    _put_clipboard_back(put_back, None)
+    return _comparable(selected) == _comparable(expected)
 
 
 # _edit_with_keys's answer for an instruction that needs the text rewritten.

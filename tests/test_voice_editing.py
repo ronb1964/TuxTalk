@@ -418,7 +418,7 @@ def test_edit_that_leaves_text_changed_by_hand_alone(edit_env, monkeypatch):
                                      "org.kde.kwrite", 0.0, rs.state.current.message,
                                      expected="We finished the electrical today.")
     assert not done and edit_env["typed"] == [] and problems == ["not_the_dictation"]
-    assert edit_env["put_back"] == 1                # the clipboard is put back
+    assert edit_env["put_back"] == 2    # after the edit's copy, and the look before letting go
 
 
 def test_an_edit_waiting_its_turn_leaves_another_windows_selection_alone(edit_env, monkeypatch):

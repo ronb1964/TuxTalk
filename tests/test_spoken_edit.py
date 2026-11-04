@@ -350,9 +350,9 @@ def edit_that(edit_env, monkeypatch):
     monkeypatch.setattr(rs.state, "last_inserted_where", where)
     monkeypatch.setattr(rs.state.current.message, "edit_waiting", None)
 
-    def run():
-        assert voice_edit.handle_spoken_edit("Edit that, make it more formal.", None, False,
-                                             "type", rs.state.current.message)
+    def run(said="Edit that, make it more formal."):
+        assert voice_edit.handle_spoken_edit(said, None, False, "type",
+                                             rs.state.current.message)
         return pressed
     return run
 
@@ -395,4 +395,21 @@ def test_edit_that_partly_typed_leaves_the_cursor_where_typing_stopped(edit_env,
     of, and Right keys would move the cursor."""
     monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: "partial")
     monkeypatch.setattr(notices, "report_undelivered", lambda *a: None)
+    assert edit_that() == [SELECT_DICTATED]
+
+
+def test_edit_that_typed_over_after_esc_moves_nothing_of_the_users(edit_env, edit_that,
+                                                                   monkeypatch):
+    """Esc, and the user typed on while the AI still worked: their first key
+    replaced the dictation, and undoing the selection seconds later selected
+    their own text and moved their cursor. The selection is looked at
+    again first, and only the dictation is let go of."""
+    message = rs.state.current.message
+    answer = edit_env["engine"].edit
+
+    def esc_then_typed_over(text, instruction):
+        monkeypatch.setattr(message, "cancelled", True)
+        edit_env["selection"]["text"] = None            # nothing selected any more
+        return answer(text, instruction)
+    monkeypatch.setattr(edit_env["engine"], "edit", esc_then_typed_over)
     assert edit_that() == [SELECT_DICTATED]
