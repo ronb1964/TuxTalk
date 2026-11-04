@@ -333,7 +333,8 @@ now" list, and update it with what went where (and the per-release log,
 
 1. **GitHub:** the release notes with the AUR line, and the Discussions →
    Announcements post (Step 11).
-2. **AUR:** bump `tuxtalk-appimage` (`aur/`, memory "Publishing to the AUR").
+2. **AUR:** bump `tuxtalk-appimage` and `tuxtalk` (`aur/`, memory "Publishing to
+   the AUR"), and `python-onnx-asr` whenever poetry.lock's onnx-asr changes.
 3. **Mastodon** (@ronb1964 on mastodon.social, in the debug Chrome): one
    post, under 500 characters: what changed for the user, a link,
    #Linux #FOSS, and #Accessibility when it helps.

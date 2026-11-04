@@ -171,6 +171,16 @@ yay -S tuxtalk-appimage
 paru -S tuxtalk-appimage
 ```
 
+That one installs in seconds, and it's the one I'd pick.
+
+If you'd rather have TuxTalk built from source with Arch's own packages, there's `tuxtalk` too:
+
+```bash
+yay -S tuxtalk
+```
+
+It builds five AUR packages first, and two of them take a while to compile (ctranslate2, and python-tokenizers on plain Arch). When your helper asks which python-onnxruntime to install, pick `python-onnxruntime-cpu`, because the other choices pull in CUDA or ROCm. That ctranslate2 is built without CUDA, so TuxTalk won't offer CUDA on this one, but the graphics card still works through Vulkan. The two packages conflict, so installing one removes the other. Typing then needs setting up again, and System check offers Fix Typing.
+
 Installed it and it works? A
 [vote on the AUR page](https://aur.archlinux.org/packages/tuxtalk-appimage)
 helps other Arch users find it — one click if you're logged in.
