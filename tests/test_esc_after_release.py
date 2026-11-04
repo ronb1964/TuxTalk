@@ -341,11 +341,12 @@ def test_esc_before_clear_everything_clears_nothing(chat, keyboard, let_go, monk
     assert keyboard.events == [] and told == []
 
 
-def test_esc_between_select_all_and_backspace_still_clears(chat, keyboard, let_go, monkeypatch):
-    """Ctrl+A went in, then Esc: the Backspace still goes. Kept back, it
-    would leave the whole box selected for the next key typed to replace."""
+def test_esc_between_select_all_and_backspace_keeps_the_box(chat, keyboard, let_go, monkeypatch):
+    """Ctrl+A went in, then Esc: no Backspace empties the box, and Right
+    lets go of the select-all, which the next key typed would replace."""
     focus, heard, typed, notices = chat
     _esc_before_send(monkeypatch, 2)
     heard.append("clear everything")
     let_go()
-    assert ecodes.KEY_BACKSPACE in [code for code, down in keyboard.events if down]
+    pressed = [code for code, down in keyboard.events if down]
+    assert ecodes.KEY_BACKSPACE not in pressed and pressed[-1] == ecodes.KEY_RIGHT

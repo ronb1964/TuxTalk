@@ -329,14 +329,19 @@ def ctrl_keys(letter: str, shift: bool = False) -> list:
 
 def send_select_all_delete():
     """Ctrl+A, then Backspace: "delete everything" clears the whole box,
-    whatever put the text there. The Backspace goes after a Ctrl+A that went
-    in even when Esc came between them: the whole box left selected would be
-    replaced by the next key the user types."""
+    whatever put the text there. Esc between them keeps the box: Right lets
+    go of the select-all instead (at its end, in GTK, Qt, browsers and
+    LibreOffice), which the next key the user types would replace."""
     if not send_keys(ctrl_keys("a"), what="select-all"):
         return False
     time.sleep(0.05)
-    with until_cancelled(None):
-        return send_keys([(14, 1), (14, 0)], what="delete")    # KEY_BACKSPACE
+    if send_keys([(14, 1), (14, 0)], what="delete"):    # KEY_BACKSPACE
+        return True
+    if esc_cancelled():
+        right = KEY_CODES["RIGHT"]
+        with until_cancelled(None):
+            send_keys([(right, 1), (right, 0)], what="unselect")
+    return False
 
 
 _OUTPUT_BACKEND = None
