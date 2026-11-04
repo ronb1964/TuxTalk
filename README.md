@@ -21,7 +21,7 @@
 <p align="center">
   <a href="https://tuxtalk.app/"><b>Website</b></a> &nbsp;&bull;&nbsp;
   <a href="#installation">Install</a> &nbsp;&bull;&nbsp;
-  <a href="#new-in-020">New in 0.20</a> &nbsp;&bull;&nbsp;
+  <a href="#new-in-021">New in 0.21</a> &nbsp;&bull;&nbsp;
   <a href="#what-it-does">What it does</a> &nbsp;&bull;&nbsp;
   <a href="#all-the-features">All the features</a> &nbsp;&bull;&nbsp;
   <a href="#how-its-made">How it's made</a> &nbsp;&bull;&nbsp;
@@ -44,17 +44,15 @@ Claude, Anthropic's AI, writes the code. I test it and use it every day, and I h
 
 ---
 
-## New in 0.20
+## New in 0.21
 
-**A voice detector.** TuxTalk used to go by loudness, so a dryer's thump, a fan or dishes in the kitchen counted as you talking. Now it has a small voice detector built in (Silero VAD, 1.3 MB, nothing to download), and hands-free and Type at pause both ask it. Hands-free next to a dryer stops by itself far more often now. In our tests with 125 people reading in seven kinds of noise, the times it never stopped went from 1,195 to 353, and what's left is other people talking in the background, which is a voice too. A soft voice is heard like a loud one, and a cough or a clatter after your last word gets typed as "Yeah." a lot less.
+**Install it from source.** If your distro doesn't have a TuxTalk package, or you'd just rather not use the AppImage, the README has steps under Installation that work on any distro. TuxTalk gets its own Python folder with your distro's GTK bindings and the library versions we test with, plus a tuxtalk command, a menu entry and start at login. Check for Updates shows you the one command for the next version, and Uninstall cleans it all up.
 
-**"Quote" as a word.** "I want to quote him on that" used to come out with a quote mark in the middle. Now it's the word when the words around it say so, and "he said quote hello quote" still puts hello in quotes. "Begin quote" and "end quote" work too.
+**A tuxtalk package on the AUR.** It builds TuxTalk on your computer from the release source, using Arch's own Python packages, which is what the Arch Wiki folks asked for. tuxtalk-appimage is still there and still the quicker install.
 
-**Esc right after you let go.** It cancels the dictation now, and an automatic send with it, up until the text starts going in.
+**Esc stops more, when there's time.** Esc can only stop what hasn't happened yet. If TuxTalk runs on your processor, or a long paragraph is still being typed, or the AI is rewriting something, there's a second or more after you let go, and in that time Esc now stops a "press enter", a "clear everything" or a voice edit too, not just the words. On a fast graphics card a short dictation is usually in before you can reach Esc, and that's normal. To take one back then, hold F8 and say "delete last sentence", or press Ctrl+Z.
 
-**Logitech keyboards work with the hotkey helper.** Somebody on CachyOS had F8 do nothing at all on an MX Keys, and the hotkey test said it was working. A Logitech receiver tells Linux its keyboards are mice too, and the helper skipped anything that looked like a mouse. The helper (now 1.13) reads them, and a keyboard it's only allowed to read too. The hotkey test only says Working once dictation can really hear the key, TuxTalk says so when the helper can't read your keyboard, and Report a Problem includes the helper's own log. It only asks you to update the helper where that may matter, like a computer with a Logitech keyboard or mouse.
-
-**Safer updates and graphics card.** A .deb or .rpm update is checked again somewhere only root can write before it's installed, the graphics engine only answers TuxTalk, and the CUDA download is pinned to the version we tested. The .rpm installs on openSUSE now, too. The [changelog](CHANGELOG.md) has the rest.
+**When the keyboard can't be read, it says so.** If the hotkey helper is gone or stopped when TuxTalk starts and nothing else can read your keyboard, you get a notice naming your dictation key and where to fix it, instead of a key that does nothing. The [changelog](CHANGELOG.md) has the rest, Shift+F8 on Logitech keyboards included.
 
 ---
 
