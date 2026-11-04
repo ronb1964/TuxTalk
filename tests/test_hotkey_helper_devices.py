@@ -60,6 +60,35 @@ def test_the_helper_knows_the_name_tuxtalk_types_with():
     assert hh.OWN_KEYBOARD_NAME == virtual_keyboard.NAME
 
 
+def test_the_refusals_that_end_a_compose_are_the_helpers_own_words():
+    """TuxTalk ends a Compose the helper refused to hide when the refusal
+    is one of these: reworded in the helper alone, the compose would be
+    left and swallow the next keys typed."""
+    import inspect
+    from tuxtalk import hotkey_helper_client
+    source = inspect.getsource(hh.Helper.start_hide)
+    for why in hotkey_helper_client.REFUSED_ON_A_REAL_KEYBOARD:
+        assert f'return "ERR {why}"' in source
+
+
+@pytest.mark.parametrize("keys", [
+    list(range(16, 26)),            # a keyboard's top letter row
+    [30, 31, 32],                   # just three letters
+    [30, 31, 59, 60],               # two letters and F-keys: a remote, say
+    [116],                          # a power button
+    [],
+])
+def test_tuxtalk_and_the_helper_agree_on_what_a_keyboard_is(keys):
+    """The helper can't import TuxTalk's test, so it keeps its own."""
+    from tuxtalk import keyboard_devices
+    try:
+        hh.check_keyboard(set(keys), "a keyboard")
+        helper_reads_it = True
+    except hh.Skipped:
+        helper_reads_it = False
+    assert keyboard_devices.has_letter_keys(keys) is helper_reads_it
+
+
 def test_a_remappers_keyboard_is_listened_to_but_never_held(setup, capsys):
     """kanata's keyboard carries the mouse's motion and the text TuxTalk
     types: held while the hotkey is down, the mouse froze and the dictation

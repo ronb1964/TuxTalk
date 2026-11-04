@@ -51,9 +51,12 @@ KeyEvent = namedtuple("KeyEvent", "type code value")
 # answer coming in after the next press must not confirm.
 Asked = namedtuple("Asked", "command codes press", defaults=((), None))
 
-# The helper's refusals of a HIDE that it gives only once it has found that
-# no listen-only keyboard (a remapper's, or one it may only read) holds any
-# of it: the press reached the desktop from a real keyboard as it was.
+# The helper's refusals of a HIDE that never come for a remapper's keyboard:
+# the press reached the desktop from a real keyboard as it was. Since 1.13
+# they come only once no listen-only keyboard (a remapper's, or one it may
+# only read) holds any of the press. Helpers 1.11 and 1.12 give them before
+# any listen-only check, but there a remapper's keyboard is a group of its
+# own, so they can't come for kanata's either.
 REFUSED_ON_A_REAL_KEYBOARD = frozenset({"couldn't hide the keys",
                                         "couldn't hold the keyboard"})
 
@@ -316,7 +319,7 @@ class HelperKeyboard:
 
     def capabilities(self, verbose=False):
         """Enough for keyboard_devices.is_keyboard_device: letter keys, no pointer."""
-        from .keyboard_devices import LETTER_KEYS
+        from .hotkey_helper import LETTER_KEYS
         return {EV_KEY: sorted(LETTER_KEYS)}
 
     def write(self, event_type, code, value):
