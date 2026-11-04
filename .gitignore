@@ -128,6 +128,9 @@ aur-repo/
 # The same for the package after the 0.15.0 rename
 # (ssh://aur@aur.archlinux.org/tuxtalk-appimage.git).
 aur-repo-tuxtalk/
+# The same for the source packages (tuxtalk and python-onnx-asr), each cloned
+# from its own AUR repository into a folder here.
+aur-publish/
 
 # ============================================
 # Build artifacts & generated files
