@@ -27,8 +27,8 @@ conflicts=('tuxtalk-appimage' 'talktype-appimage' 'talktype')
 # Removes the hotkey helper TuxTalk set up when the package goes.
 install=tuxtalk.install
 source=("tuxtalk-${pkgver}.tar.gz::https://github.com/ronb1964/TuxTalk/archive/refs/tags/v${pkgver}.tar.gz")
-# The release sets this from the tagged archive; the archive doesn't exist
-# before the tag does.
+# The release that bumps pkgver sets this from the new tag's archive. The
+# v0.20.0 archive is older code without the system install type.
 sha256sums=('SKIP')
 
 build() {

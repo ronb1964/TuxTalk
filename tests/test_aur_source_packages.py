@@ -217,7 +217,9 @@ def test_tuxtalk_and_the_appimage_package_cant_be_installed_together():
 
 
 def test_removing_the_package_removes_the_hotkey_helper_and_an_upgrade_keeps_it():
+    assert pkgbuild_values(TUXTALK / "PKGBUILD", "install")["install"] == ["tuxtalk.install"]
     hook = (TUXTALK / "tuxtalk.install").read_text()
+    assert hook == (ROOT / "aur/tuxtalk-appimage.install").read_text()
     assert re.findall(r"^(\w+)\(\)", hook, re.M) == ["pre_remove"]
     helper_files = removed_paths((ROOT / "packaging/before-remove.sh").read_text())
     assert len(helper_files) == 5
