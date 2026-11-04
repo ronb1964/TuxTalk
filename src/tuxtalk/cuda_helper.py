@@ -97,8 +97,13 @@ def _ctranslate2_outside(prefix: str) -> bool:
     return not os.path.realpath(spec.origin).startswith(os.path.realpath(prefix) + os.sep)
 
 
-# ctranslate2_has_cuda's answer, once there is a clean one.
+# ctranslate2_has_cuda's answer, once there is one to keep, and how many of
+# its checks didn't answer. A check that hangs waits up to
+# CTRANSLATE2_CHECK_TIMEOUT, on GTK's thread in Preferences, so after
+# CHECK_TRIES of them no CUDA is the answer for the process.
 _cuda_build: Optional[bool] = None
+_unanswered = 0
+CHECK_TRIES = 2
 
 
 def ctranslate2_has_cuda() -> bool:
@@ -109,15 +114,22 @@ def ctranslate2_has_cuda() -> bool:
     is, keeps the distro's when its version meets the pin. Every other
     install runs PyPI's, which has CUDA. A clean answer is kept: it can't
     change while TuxTalk runs. A check with none (a hang at a busy login, a
-    crash) counts as no CUDA this time and is asked again the next, so it
-    doesn't hide a working CUDA for the whole session."""
-    global _cuda_build
+    crash) counts as no CUDA that time and is tried once more on the next
+    question, so one slow start doesn't hide a working CUDA for the whole
+    session; a second without one is kept as no CUDA."""
+    global _cuda_build, _unanswered
     if _cuda_build is None:
         install_type = installation.get_install_type()
         checked = install_type == "system" or (install_type == "source"
                                                and _ctranslate2_outside(sys.prefix))
-        _cuda_build = probe_ctranslate2_cuda() if checked else True
-    return bool(_cuda_build)
+        answer = probe_ctranslate2_cuda() if checked else True
+        if answer is None:
+            _unanswered += 1
+            if _unanswered < CHECK_TRIES:
+                return False
+            answer = False
+        _cuda_build = answer
+    return _cuda_build
 
 
 def _has_required_libs(names) -> bool:

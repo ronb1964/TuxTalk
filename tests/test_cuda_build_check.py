@@ -33,6 +33,7 @@ from tuxtalk.prefs_system_check import SystemCheck
 def fresh_answers(monkeypatch):
     """Each test asks afresh: both answers are cached for the whole run."""
     monkeypatch.setattr(cuda_helper, "_cuda_build", None)
+    monkeypatch.setattr(cuda_helper, "_unanswered", 0)
     installation.system_package.cache_clear()
     yield
     installation.system_package.cache_clear()
@@ -63,6 +64,18 @@ def test_a_check_that_fails_gives_no_answer():
         return subprocess.CompletedProcess(argv, 1, stdout="",
                                            stderr="ModuleNotFoundError: ctranslate2")
     assert cuda_helper.probe_ctranslate2_cuda(run=crashed) is None
+
+
+def test_a_check_that_never_answers_is_tried_twice_then_left(monkeypatch):
+    """A CTranslate2 whose import hangs held Preferences up to 10 s at every
+    question about CUDA; after a second try without an answer it's no CUDA
+    for as long as TuxTalk runs."""
+    probes = []
+    monkeypatch.setattr(installation, "get_install_type", lambda: "system")
+    monkeypatch.setattr(cuda_helper, "probe_ctranslate2_cuda",
+                        lambda **kw: probes.append(1))
+    assert [cuda_helper.ctranslate2_has_cuda() for _ in range(4)] == [False] * 4
+    assert len(probes) == 2
 
 
 def test_a_check_without_an_answer_offers_no_cuda_now_and_asks_again_next_time(monkeypatch):
