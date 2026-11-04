@@ -77,6 +77,8 @@ def _clear_text_box(beeps_on, notify_on):
                                                                 (("CTRL",), "U")]))
     else:
         cleared = _sent_into(where, backend.select_all_delete)
+    if cleared == "cancelled":
+        return
     if cleared == "moved":
         notices.edit_problem("focus_moved", beeps_on)
     elif cleared:
@@ -97,15 +99,18 @@ def _sent_into(where, send):
     """*send*(), a call of the output backend, with its keys going only into
     *where*, the look the command was checked against (keyboard_output.only_into):
     True when they went in, "moved" when another window had the focus by
-    the time they would have, else False."""
+    the time they would have, "cancelled" when Esc stopped them (said
+    already: the caller says nothing more), else False."""
     try:
         with keyboard_output.only_into(where):
             if send():
                 return True
     except virtual_keyboard.GaveUp as stop:
         # The portal's way of saying it (output_backends._with_session).
-        return "moved" if stop.reason == "moved" else False
+        return stop.reason if stop.reason in ("moved", "cancelled") else False
     # The virtual keyboard's: it doesn't say why nothing was sent.
+    if keyboard_output.esc_cancelled():
+        return "cancelled"
     return "moved" if focused_window.changed(where, focused_window.look()) else False
 
 
@@ -129,6 +134,8 @@ def _backspace_last(delete_count, label, beeps_on, notify_on, where):
         beeps.beep(beeps_on, *CANCEL_BEEP)
         if notify_on:
             notify_module.notify("Undo stopped partway", "Some of the text may still be there.")
+        return
+    if deleted == "cancelled":
         return
     if deleted == "moved":
         notices.edit_problem("focus_moved", beeps_on)
@@ -295,6 +302,8 @@ def handle_navigation(raw: str, beeps_on: bool, where=None) -> bool:
     except Exception as e:
         logger.error(f"Voice command: pressing the keys failed: {e}")
         pressed = False
+    if pressed == "cancelled":
+        return True         # nothing moved
     # The cursor has moved (or may have): undo's character count no longer
     # matches the document, and "delete last word" would eat the wrong text.
     rs.state.last_inserted_text = ""

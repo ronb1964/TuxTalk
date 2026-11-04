@@ -317,16 +317,21 @@ def _before_the_words(raw: str, audio_f32, job: _Job):
 
 
 def _ran_as_command(raw: str, job: _Job) -> bool:
-    """Whether the whole dictation was a command, and was run instead of typed."""
-    return (voice_commands.handle_undo(raw, job.beeps_on, job.notify_on)
-            # Select and move by voice ("select the last sentence"), TuxTalk Labs.
-            or voice_commands.handle_navigation(raw, job.beeps_on)
-            # "fix that word": Fix a Word on the dictation before this one.
-            or voice_commands.handle_fix_word(raw, job.beeps_on)
-            # "edit that, make it shorter": voice editing without its key, on
-            # what was just typed (TuxTalk Labs, with voice editing on).
-            or voice_edit.handle_spoken_edit(raw, job.chunk_role, job.beeps_on,
-                                             job.injection_mode, job.message))
+    """Whether the whole dictation was a command, and was run instead of
+    typed. Esc a moment before stops the keys of undo and of select and
+    move at the first ("clear everything" emptied the box after it)."""
+    with keyboard_output.until_cancelled(job.message):
+        if (voice_commands.handle_undo(raw, job.beeps_on, job.notify_on)
+                # Select and move by voice ("select the last sentence"), TuxTalk Labs.
+                or voice_commands.handle_navigation(raw, job.beeps_on)
+                # "fix that word": Fix a Word on the dictation before this one.
+                or voice_commands.handle_fix_word(raw, job.beeps_on)):
+            return True
+    # "edit that, make it shorter": voice editing without its key, on what
+    # was just typed (TuxTalk Labs, with voice editing on). It checks Esc
+    # itself, and must undo its own selection after one.
+    return voice_edit.handle_spoken_edit(raw, job.chunk_role, job.beeps_on,
+                                         job.injection_mode, job.message)
 
 
 def _key_to_press(raw: str, said: str, job: _Job):

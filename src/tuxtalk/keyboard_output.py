@@ -263,6 +263,14 @@ def until_cancelled(message):
     return _on_this_thread(cancel_with=message)
 
 
+def esc_cancelled() -> bool:
+    """Whether Esc has cancelled the dictation the keys sent on this thread
+    belong to (until_cancelled): keys it stopped need no notice, as Esc
+    said so itself (refuse_cancelled logs it)."""
+    message = this_thread.cancel_with
+    return message is not None and message.cancelled
+
+
 def not_where_typed(focused, now=None) -> bool:
     """Whether the focused window, of class *focused*, is known to be another
     one than the last dictation or phrase went to, for undo, select and move,
@@ -292,8 +300,8 @@ def press_key(key: str, why: str, claim=None) -> bool:
     right before it goes down (send_countdown)."""
     time.sleep(0.05)   # let the app take in the typed text first
     if not output_backend().press_keys([((), key)], claim=claim):
-        if this_thread.cancel_with is not None and this_thread.cancel_with.cancelled:
-            return False        # logged in refuse_cancelled
+        if esc_cancelled():
+            return False
         logger.warning(f"{key.title()} not pressed ({why})")
         if claim is None and modifier_hotkeys.stuck():
             notify_module.notify(*delivery_notices.key_not_pressed(key))
@@ -321,11 +329,14 @@ def ctrl_keys(letter: str, shift: bool = False) -> list:
 
 def send_select_all_delete():
     """Ctrl+A, then Backspace: "delete everything" clears the whole box,
-    whatever put the text there."""
+    whatever put the text there. The Backspace goes after a Ctrl+A that went
+    in even when Esc came between them: the whole box left selected would be
+    replaced by the next key the user types."""
     if not send_keys(ctrl_keys("a"), what="select-all"):
         return False
     time.sleep(0.05)
-    return send_keys([(14, 1), (14, 0)], what="delete")    # KEY_BACKSPACE
+    with until_cancelled(None):
+        return send_keys([(14, 1), (14, 0)], what="delete")    # KEY_BACKSPACE
 
 
 _OUTPUT_BACKEND = None

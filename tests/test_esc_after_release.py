@@ -314,3 +314,37 @@ def test_esc_on_a_dictation_cut_off_on_and_leaves_the_next_one_capitalised(chat,
     assert typed == [] and not rs.state.continue_mid_sentence
     let_go()
     assert typed == [("See you there.", CHAT_WINDOW[1])]
+
+
+def _esc_before_send(monkeypatch, nth):
+    """Esc while the *nth* send of keys (from 1) waits its turn."""
+    sends = []
+
+    def wait_while_held(destination=None):
+        sends.append(1)
+        if len(sends) == nth:
+            esc()
+        return lambda: None
+    monkeypatch.setattr("tuxtalk.modifier_hotkeys.wait_while_held", wait_while_held)
+
+
+def test_esc_before_clear_everything_clears_nothing(chat, keyboard, let_go, monkeypatch):
+    """"clear everything", then Esc while its Ctrl+A waited: the whole box
+    was deleted all the same, and only Esc's own beep says anything."""
+    focus, heard, typed, notices = chat
+    told = []
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: told.append(a))
+    _esc_before_send(monkeypatch, 1)
+    heard.append("clear everything")
+    let_go()
+    assert keyboard.events == [] and told == []
+
+
+def test_esc_between_select_all_and_backspace_still_clears(chat, keyboard, let_go, monkeypatch):
+    """Ctrl+A went in, then Esc: the Backspace still goes. Kept back, it
+    would leave the whole box selected for the next key typed to replace."""
+    focus, heard, typed, notices = chat
+    _esc_before_send(monkeypatch, 2)
+    heard.append("clear everything")
+    let_go()
+    assert ecodes.KEY_BACKSPACE in [code for code, down in keyboard.events if down]
