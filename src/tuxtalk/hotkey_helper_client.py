@@ -405,10 +405,9 @@ def connect_helper(path=None):
     here would leave the hotkeys dead until TuxTalk restarts. Someone still
     in it (they kept the group when switching, or couldn't leave it) reads
     them as before while the helper's socket isn't there."""
-    from . import secure_input, uinput_helper
+    from .uinput_helper import helper_expected
     path = path or socket_path()
-    if not os.path.exists(path) and (not secure_input.is_installed()
-                                     or uinput_helper._readable_keyboards()):
+    if not helper_expected(path):
         return None
     keyboard = HelperKeyboard(path)
     if not keyboard.connect():

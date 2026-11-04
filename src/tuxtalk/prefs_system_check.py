@@ -65,7 +65,7 @@ def _typing_state(refused_shortcuts):
     # One ask of the helper for the whole check: each is a connection GTK's
     # thread waits on.
     hello = secure_input.helper_hello()
-    answered, watched = (hello[0], hello[1]) if hello else (None, None)
+    answered, watched = hello or (None, None)
     # Before the access check, which fails then too: Fix Typing and a
     # restart wouldn't help. A helper before 1.12 doesn't say (None).
     if installed and watched == 0:

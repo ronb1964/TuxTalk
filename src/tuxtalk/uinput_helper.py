@@ -157,6 +157,18 @@ HELPER_NOT_ANSWERING = ("TuxTalk's hotkey helper is installed but isn't answerin
                         "dictation key won't work. Updating it starts it again")
 
 
+def helper_expected(socket_file):
+    """Whether the hotkeys come from the hotkey helper, answering or not: its
+    socket (*socket_file*) is there, or it's installed and the user can't
+    read a keyboard themselves. The service keeps trying an installed helper
+    (connect_helper) rather than reading the keyboards itself, so a silent
+    one means no hotkeys until it answers again. Someone still in the input
+    group reads them as before while the socket isn't there."""
+    from . import secure_input
+    return os.path.exists(socket_file) or (secure_input.is_installed()
+                                           and not _readable_keyboards())
+
+
 # check_input_read_permission's default: ask the hotkey helper itself.
 _ASK = object()
 
@@ -175,17 +187,10 @@ def check_input_read_permission(hello=_ASK):
         if hello[1] == 0:           # None: before 1.12 the helper doesn't say
             return (False, f"{HELPER_SEES_NO_KEYBOARD}.")
         return (True, "TuxTalk's hotkey helper reads the hotkeys. Hotkeys should work.")
-    # The service keeps trying an installed helper (connect_helper) rather
-    # than reading the keyboards itself, so a silent one means no hotkeys
-    # until it answers again. Someone still in the input group reads them
-    # as before while the helper's socket isn't there.
-    not_answering = (False, "TuxTalk's hotkey helper is installed but isn't answering, so "
-                            "the hotkeys won't work. Fix Typing sets it up again.")
-    if os.path.exists(socket_path()):
-        return not_answering
+    if helper_expected(socket_path()):
+        return (False, "TuxTalk's hotkey helper is installed but isn't answering, so "
+                       "the hotkeys won't work. Fix Typing sets it up again.")
     readable = _readable_keyboards()
-    if secure_input.is_installed() and not readable:
-        return not_answering
     if readable:
         return (True, "You can read input devices. Hotkeys should work.")
     return (False, "Cannot read any keyboard under /dev/input, so hotkeys "
@@ -195,7 +200,7 @@ def check_input_read_permission(hello=_ASK):
 def check_all_device_permissions(hello=_ASK):
     """(has_access, reason) for both permissions TuxTalk needs: typing
     through /dev/uinput, and the hotkeys (the helper, or /dev/input).
-    *hello*: check_input_read_permission's.
+    *hello*: the same as for check_input_read_permission.
 
     They are granted by different mechanisms (logind can hand out an ACL on
     /dev/uinput while /dev/input needs the helper or the 'input' group), so
