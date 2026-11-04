@@ -513,6 +513,22 @@ def test_the_mouse_motion_of_a_keyboard_and_mouse_is_kept_from_the_reader(monkey
     assert masked == [5]
 
 
+def test_a_scan_asks_each_device_what_it_reports_once(monkeypatch):
+    """Every few seconds a scan opens every node under /dev/input: asking a
+    keyboard twice whether it's a mouse too doubled that work."""
+    monkeypatch.setattr(keyboard_devices, "mask_to_keys", lambda fd: None)
+    asked = []
+    devices = {"/dev/input/event5": _mx_keys(), "/dev/input/event3": keyboard(),
+               "/dev/input/event4": mouse()}
+    for path, dev in devices.items():
+        dev.path, dev.fd = path, int(path[-1])
+        answer = dev.capabilities
+        dev.capabilities = lambda absinfo=True, path=path, answer=answer: (
+            asked.append(path) or answer())
+    keyboard_devices.open_new_keyboards([], lambda: list(devices), devices.__getitem__)
+    assert sorted(asked) == sorted(devices)
+
+
 def test_the_apps_own_virtual_keyboard_is_not_grabbed():
     """TuxTalk types on it: grabbed while recording (Type at pause), what it
     types would never reach the app."""

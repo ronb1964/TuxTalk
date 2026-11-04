@@ -140,10 +140,11 @@ def open_new_keyboards(devices, list_devices, input_device) -> list:
                 _undecodable.add(path)
                 logger.info(f"Leaving out the device at {path}: its name isn't UTF-8 ({e})")
             continue
-        if not is_keyboard_device(dev):
+        caps = _keyboard_capabilities(dev)
+        if caps is None:
             close_devices([dev])
             continue
-        if is_keyboard_and_mouse(dev):
+        if _is_pointer(caps):
             try:
                 mask_to_keys(dev.fd)
             except OSError as e:
