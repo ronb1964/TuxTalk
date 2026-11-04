@@ -97,9 +97,9 @@ def test_keyboards_the_helper_may_only_read_are_found(nodes):
     read_only = make("event3", 0o640)
     make("event4", 0o660)                                   # writable: 1.11 reads it
     make("event5", 0o640, keys=[116])                       # a power button
-    also_mouse = make("event6", 0o640, keys=LETTERS + [0x110], rel=[0])  # a Logitech one
+    make("event6", 0o640, keys=LETTERS + [0x110], rel=[0])  # a Logitech one: a mouse too
     make("event7", 0o600)                                   # unreadable: 1.12 can't either
-    assert scan() == [read_only, also_mouse]
+    assert scan() == [read_only]
     assert scan("no-such-group") == []
 
 
@@ -208,3 +208,26 @@ def test_a_keyboard_a_program_made_isnt_one_plugged_in(nodes, tmp_path):
     (tmp_path / "char" / f"{os.major(rdev)}:{os.minor(rdev)}").symlink_to(
         "/sys/devices/virtual/input/input40/event20")
     assert not _plugged_in(tmp_path)
+
+
+@pytest.mark.parametrize("logi, says", [
+    (True, "both at once"),
+    (False, "can only be read"),
+])
+def test_a_read_only_logitech_mouse_isnt_called_a_read_only_keyboard(nodes, tmp_path,
+                                                                    monkeypatch, logi, says):
+    """Beside helper 1.11, a Logitech mouse the input group may only read
+    (it reports a keyboard's keys too) made TuxTalk say "Your keyboard can
+    only be read", though the keyboard was fine. Helpers before 1.13 skip
+    it for being a mouse too: that's the reason given."""
+    from tuxtalk import secure_input
+    make, scan, udev = nodes
+    make("event3", 0o660)                                       # the keyboard, read-write
+    if logi:
+        make("event5", 0o640, keys=LETTERS + [0x110], rel=[0, 1])
+    else:
+        make("event5", 0o640)
+    read_only, also_mice = scan(), _also_mice(tmp_path, udev)
+    monkeypatch.setattr(access, "read_only_keyboards", lambda: read_only)
+    monkeypatch.setattr(access, "keyboards_also_mice", lambda: also_mice)
+    assert says in secure_input.missed_keyboard_reason("1.11")

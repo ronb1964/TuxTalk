@@ -176,9 +176,14 @@ def keyboards_also_mice(input_dir="/dev/input", sys_dir="/sys/class/input", grou
 def read_only_keyboards(input_dir="/dev/input", sys_dir="/sys/class/input", group="input",
                         udev_dir=UDEV_DATA_DIR):
     """The event nodes of seat0's keyboards that the helper may read but
-    not write. The paths can be moved for tests."""
+    not write, mice too aside: a helper before 1.12 leaves those out for
+    being mice as well (before 1.13), whatever their node allows, and a
+    read-only Logitech mouse is no reason to say the keyboard can only be
+    read (keyboards_also_mice speaks for them). The paths can be moved
+    for tests."""
     return [node for node, st, writable in _helper_readable(input_dir, group)
             if not writable and _is_keyboard(sys_dir, os.path.basename(node))
+            and not _is_mouse(sys_dir, os.path.basename(node))
             and udev_seat(st.st_rdev, udev_dir) == "seat0"]
 
 
