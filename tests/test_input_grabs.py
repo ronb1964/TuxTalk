@@ -574,6 +574,24 @@ class _HeldKeyboard(FakeDevice):
         pass
 
 
+def test_a_dictation_asks_each_keyboard_what_it_reports_once():
+    """Each dictation's grab asked every keyboard twice: once whether it's
+    a keyboard, again whether it's a mouse too."""
+    asked = []
+    real = _HeldKeyboard("USB Keyboard", keyboard()._caps, "/dev/input/event3")
+    mx = _HeldKeyboard("MX Keys", _mx_keys()._caps, "/dev/input/event5", held=[])
+    for dev in (real, mx):
+        answer = dev.capabilities
+        dev.capabilities = lambda absinfo=True, dev=dev, answer=answer: (
+            asked.append(dev.path) or answer())
+    try:
+        keyboard_grab.grab_keyboards_hiding([real, mx], {ecodes.KEY_F8})
+    finally:
+        keyboard_grab.release_all()
+        keyboard_grab._injected_pending.clear()
+    assert sorted(asked) == ["/dev/input/event3", "/dev/input/event5"]
+
+
 def test_a_key_remappers_keyboard_is_never_grabbed_or_written_to():
     """Held during a recording, kanata's keyboard would freeze the mouse
     and swallow what TuxTalk types meanwhile (Type at pause, typing while

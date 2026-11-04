@@ -44,8 +44,8 @@ def is_pointer(keys, rel) -> bool:
     """Whether a device reporting the key codes *keys* and the relative axes
     *rel* is a mouse too: pointer motion (REL_X) with a mouse button,
     libinput's test, not the EV_REL type. The K800 keyboard declares EV_REL
-    with no motion axis. The same rule as has_letter_keys's, and the helper's
-    (Keyboard._probe)."""
+    with no motion axis. Shared, as has_letter_keys is: the same rule as the
+    helper's own (Keyboard._probe)."""
     return REL_X in rel and BTN_LEFT in keys
 
 
@@ -79,8 +79,16 @@ def is_keyboard_and_mouse(dev) -> bool:
     the mouse that long, and a remapper's (kanata's) would swallow the
     dictation being typed too, when the remapper has taken TuxTalk's
     virtual keyboard as well. Told by is_pointer."""
+    return keyboard_is_mouse_too(dev) is True
+
+
+def keyboard_is_mouse_too(dev):
+    """None when *dev* isn't a keyboard to read (is_keyboard_device), else
+    whether it's a mouse too (is_keyboard_and_mouse), from one look at
+    what it reports: every scan and every dictation's grab asks each
+    device."""
     caps = _keyboard_capabilities(dev)
-    return caps is not None and _is_pointer(caps)
+    return None if caps is None else _is_pointer(caps)
 
 
 def _keyboard_capabilities(dev):
@@ -147,11 +155,11 @@ def open_new_keyboards(devices, list_devices, input_device) -> list:
                 _undecodable.add(path)
                 logger.info(f"Leaving out the device at {path}: its name isn't UTF-8 ({e})")
             continue
-        caps = _keyboard_capabilities(dev)
-        if caps is None:
+        mouse_too = keyboard_is_mouse_too(dev)
+        if mouse_too is None:
             close_devices([dev])
             continue
-        if _is_pointer(caps):
+        if mouse_too:
             try:
                 mask_to_keys(dev.fd)
             except OSError as e:

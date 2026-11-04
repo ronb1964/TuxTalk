@@ -102,9 +102,10 @@ def grab_keyboards_hiding(devices, codes) -> None:
     """
     keyboards, shown = [], set()    # shown: keys the desktop may still see down
     for dev in devices:
-        if not keyboard_devices.is_keyboard_device(dev):
+        mouse_too = keyboard_devices.keyboard_is_mouse_too(dev)
+        if mouse_too is None:
             continue
-        if keyboard_devices.is_keyboard_and_mouse(dev):
+        if mouse_too:
             # Held there, the desktop sees the key down all along: typing
             # under a Right Ctrl would turn into shortcuts.
             shown |= codes & keys_down([dev])
