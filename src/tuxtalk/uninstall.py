@@ -148,10 +148,12 @@ ICON_SIZES = ("256x256", "128x128", "64x64", "48x48", "32x32")
 PACKAGES = {"deb": "tuxtalk", "rpm": "tuxtalk", "aur": "tuxtalk-appimage"}
 # How the user removes a package the uninstall couldn't; pacman for the rest.
 REMOVE_COMMANDS = {"deb": "sudo apt remove", "rpm": "sudo dnf remove"}
-# pacman with -s: without it the AUR package's own dependencies, hundreds of
-# MB, stay behind as orphans. -s takes only those nothing else needs and the
-# user didn't install themselves.
-PACMAN_REMOVE = "pacman -Rs"
+# pacman, by install type. -s for the tuxtalk package (a system install):
+# without it its own AUR dependencies, hundreds of MB, stay behind as orphans;
+# -s takes only those nothing else needs and the user didn't install
+# themselves. Plain -R for tuxtalk-appimage: its fuse2 is what the user's other
+# AppImages start with, and no package tells pacman so.
+PACMAN_REMOVE = {"system": "pacman -Rs", "aur": "pacman -R"}
 
 FEEDBACK_URL = "https://github.com/ronb1964/TuxTalk/discussions"
 
@@ -434,7 +436,7 @@ def _package_lines(plan):
                    f"ZYPP_LOCK_TIMEOUT={wait} zypper --non-interactive remove {name}; "
                    f"else rpm -e {name}; fi")
     else:
-        command = f"{PACMAN_REMOVE} --noconfirm {name}"
+        command = f"{PACMAN_REMOVE[plan.install_type]} --noconfirm {name}"
     return (f'if ! out=$( {{ {command}; }} </dev/null 2>&1 ); then\n'
             f'    echo {secure_input.PACKAGE_NOT_REMOVED}\n'
             f'    printf "%s\\n" "$out" | tail -n 3\n'
@@ -900,8 +902,9 @@ def _program_text(plan, result):
     gone. Nothing is named for deleting whole: a venv elsewhere and a prefix
     outside one may hold other programs."""
     if result.package_failed:
-        command = (f"{REMOVE_COMMANDS.get(plan.install_type, f'sudo {PACMAN_REMOVE}')} "
-                   f"{shlex.quote(plan.package)}")
+        remove = (REMOVE_COMMANDS.get(plan.install_type)
+                  or f"sudo {PACMAN_REMOVE[plan.install_type]}")
+        command = f"{remove} {shlex.quote(plan.package)}"
         return ("The package manager wouldn't remove the program itself (it may be "
                 f"busy with an update). Remove it later with:\n"
                 f"<tt>{GLib.markup_escape_text(command)}</tt>")

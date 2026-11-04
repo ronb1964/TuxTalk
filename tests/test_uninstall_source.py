@@ -228,7 +228,7 @@ def test_the_package_installs_keep_their_words(home):
     """The packages' closing lines are as they were before system installs came in."""
     for install_type, command in (("deb", "sudo apt remove tuxtalk"),
                                   ("rpm", "sudo dnf remove tuxtalk"),
-                                  ("aur", "sudo pacman -Rs tuxtalk-appimage")):
+                                  ("aur", "sudo pacman -R tuxtalk-appimage")):
         plan = uninstall.find(home, install_type)
         assert f"<tt>{command}</tt>" in _done(plan, package_failed=True)
     assert "Remove the tuxtalk package with your package manager to finish." in \
