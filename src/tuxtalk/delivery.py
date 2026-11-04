@@ -151,7 +151,7 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
         # Words that may be in the app make it the last dictation, which
         # "fix that word" works on; refused before its first key, the
         # dictation before stays the last.
-        if outcome not in _GAVE_UP_UNTYPED and not (outcome == "password_field"
+        if outcome not in GAVE_UP_UNTYPED and not (outcome == "password_field"
                                                     and before.password):
             rs.state.last_message = message
         message.add(outcome, landed)
@@ -272,7 +272,7 @@ def send_automatically(space: str, injection_mode: str, message) -> None:
 # inject_text's outcomes that are sure nothing was typed: it gave up before the
 # first key (_delivery_stopped). "failed" may follow some of it (wtype timing
 # out), and "password_field" earlier lines.
-_GAVE_UP_UNTYPED = frozenset({"moved", "key_held", "keys_down", "cancelled"})
+GAVE_UP_UNTYPED = frozenset({"moved", "key_held", "keys_down", "cancelled"})
 
 
 def type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
@@ -286,7 +286,7 @@ def type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
     outcome = inject_text(text, injection_mode, into=into)
     if outcome == "ok":
         rs.state.last_inserted_text = kept[0] + text
-    elif outcome in _GAVE_UP_UNTYPED:
+    elif outcome in GAVE_UP_UNTYPED:
         # The window too: typing takes it for the dictation's before the first key.
         (rs.state.last_inserted_text, rs.state.continue_mid_sentence, rs.state.nav_context,
          last.shown, rs.state.last_inserted_window, rs.state.last_inserted_where) = kept

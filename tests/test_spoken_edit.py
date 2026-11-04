@@ -18,6 +18,8 @@ from tuxtalk import engine
 from tuxtalk import notices
 from tuxtalk import delivery
 from tuxtalk import voice_edit
+from tuxtalk import focused_window
+from voice_edit_rig import fake_edit_world
 
 S = "SHIFT"
 
@@ -312,3 +314,85 @@ def test_edit_that_selects_nothing_in_a_window_switched_to_before_the_keys(editi
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     assert _said("Edit that, make it shorter.")
     assert pressed == [] and edits == [] and problems == ["shortcut_failed"]
+
+
+# --- what "edit that" selected, when it changes nothing ----------------------------
+
+@pytest.fixture
+def edit_env(monkeypatch):
+    """The voice edit's outside parts faked (voice_edit_rig)."""
+    return fake_edit_world(monkeypatch)
+
+
+DICTATED = "We finished the electrical today. "
+# What "edit that" presses to select DICTATED, and the keys that undo it.
+SELECT_DICTATED = [((), "LEFT")] + [(("SHIFT",), "LEFT")] * len(DICTATED.rstrip())
+LET_GO_OF_IT = [(("SHIFT",), "RIGHT")] * len(DICTATED.rstrip()) + [((), "RIGHT")]
+
+
+@pytest.fixture
+def edit_that(edit_env, monkeypatch):
+    """"edit that, make it more formal" said right after DICTATED went into
+    KWrite: edit_that() runs it, through the real edit_selection. Returns
+    the chords pressed, one list per press."""
+    where = ("org.kde.kwrite", ("tray", "{doc}"))
+    pressed = []
+
+    class Backend:
+        def press_keys(self, chords, claim=None):
+            pressed.append(list(chords))
+            return True
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
+    monkeypatch.setattr(live, "voice_editing", True)
+    monkeypatch.setattr(focused_window, "look", lambda: where)
+    monkeypatch.setattr(rs.state, "last_inserted_text", DICTATED)
+    monkeypatch.setattr(rs.state, "last_inserted_window", where[0])
+    monkeypatch.setattr(rs.state, "last_inserted_where", where)
+    monkeypatch.setattr(rs.state.current.message, "edit_waiting", None)
+
+    def run():
+        assert voice_edit.handle_spoken_edit("Edit that, make it more formal.", None, False,
+                                             "type", rs.state.current.message)
+        return pressed
+    return run
+
+
+def test_esc_while_edit_that_is_rewritten_undoes_its_selection(edit_env, edit_that,
+                                                               monkeypatch):
+    """"edit that, make it more formal", then Esc while the AI rewrote it:
+    the dictation stayed selected, and the next key the user typed replaced
+    it. Its selection is undone key for key, the cursor back after the
+    space, where the next dictation goes on ("today. See you", not
+    "today.See you"; a lone Right in LibreOffice Writer lands inside it)."""
+    message = rs.state.current.message
+    answer = edit_env["engine"].edit
+
+    def esc_meanwhile(text, instruction):
+        monkeypatch.setattr(message, "cancelled", True)
+        return answer(text, instruction)
+    monkeypatch.setattr(edit_env["engine"], "edit", esc_meanwhile)
+    assert edit_that() == [SELECT_DICTATED, LET_GO_OF_IT]
+    assert edit_env["typed"] == [] and edit_env["engine"].asked
+
+
+def test_edit_that_with_the_ai_not_ready_lets_go_of_its_selection(edit_env, edit_that):
+    """The edit stopped with a notice and the dictation still selected: the
+    user's next words replaced it."""
+    edit_env["engine"].ready = False
+    assert edit_that() == [SELECT_DICTATED, LET_GO_OF_IT]
+    assert edit_env["typed"] == [] and edit_env["notices"]
+
+
+def test_edit_that_the_ai_left_as_it_was_lets_go_of_its_selection(edit_env, edit_that):
+    edit_env["engine"].answer = DICTATED.rstrip()
+    assert edit_that() == [SELECT_DICTATED, LET_GO_OF_IT]
+    assert edit_env["typed"] == [] and "may already read that way" in edit_env["notices"][0]
+
+
+def test_edit_that_partly_typed_leaves_the_cursor_where_typing_stopped(edit_env, edit_that,
+                                                                      monkeypatch):
+    """Part of the rewrite replaced the selection: there's none to let go
+    of, and Right keys would move the cursor."""
+    monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: "partial")
+    monkeypatch.setattr(notices, "report_undelivered", lambda *a: None)
+    assert edit_that() == [SELECT_DICTATED]

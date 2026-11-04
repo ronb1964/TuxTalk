@@ -3,6 +3,7 @@ change it ("make this more formal"), and the selection is rewritten by the
 local AI model.
 """
 import threading
+import types
 
 import pytest
 
@@ -259,7 +260,7 @@ def test_turning_one_off_keeps_the_engine_for_the_other(no_engine):
 from evdev import ecodes
 import numpy as np
 
-from tuxtalk import history
+from voice_edit_rig import fake_edit_world
 
 F8, F9 = ecodes.KEY_F8, ecodes.KEY_F9
 SHIFT = ecodes.KEY_LEFTSHIFT
@@ -353,41 +354,8 @@ def test_shift_f9_edits_without_arming_hands_free(keyloop):
 
 @pytest.fixture
 def edit_env(monkeypatch):
-    """_transcribe_and_edit with every outside part faked."""
-    seen = {"notices": [], "typed": [], "history": [], "put_back": 0, "beeps": []}
-
-    class Engine:
-        ready = True
-        answer = "We completed the electrical work today."
-        asked = []
-
-        def is_ready(self):
-            return self.ready
-
-        def edit(self, text, instruction):
-            self.asked.append((text, instruction))
-            return self.answer
-
-    engine = Engine()
-    monkeypatch.setattr(live, "ai_engine", engine)
-    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "make it more professional")
-    monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda a, sr: False)
-    selection = {"text": "We finished the electrical today."}
-
-    def copy_selection(send_copy):
-        def put_back(also=()):
-            seen["put_back"] += 1
-        return selection["text"], put_back
-    monkeypatch.setattr(cb, "copy_selection", copy_selection)
-    monkeypatch.setattr(delivery, "inject_text", lambda text, mode, one_block=False, **kw: seen["typed"].append(text) or "ok")
-    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: seen["notices"].append(msg))
-    monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *a: seen["beeps"].append(a))
-    monkeypatch.setattr(history, "add_entry", lambda text: seen["history"].append(text))
-    monkeypatch.setattr(voice_edit, "EDIT_RESTORE_DELAY_S", 0)
-    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
-    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
-    seen["engine"], seen["selection"] = engine, selection
-    return seen
+    """_transcribe_and_edit with every outside part faked (voice_edit_rig)."""
+    return fake_edit_world(monkeypatch)
 
 
 def run_edit(where=None):
@@ -410,31 +378,14 @@ def test_esc_while_the_ai_rewrites_leaves_the_selection_alone(edit_env, monkeypa
     assert edit_env["typed"] == [] and edit_env["history"] == []
 
 
-def test_esc_while_edit_that_is_rewritten_lets_go_of_what_it_selected(edit_env, keyboard,
-                                                                      monkeypatch):
-    """"edit that, make it more formal", then Esc while the AI rewrote it:
-    the dictation "edit that" had selected stayed selected, and the next
-    key the user typed replaced it. Right lets go of it, the cursor at its
-    end, where the dictation left it."""
-    where = ("org.kde.kwrite", ("tray", "{doc}"))
-    message = rs.state.current.message
-    monkeypatch.setattr(live, "voice_editing", True)
-    monkeypatch.setattr(focused_window, "look", lambda: where)
-    monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", "", ""))
-    monkeypatch.setattr(rs.state, "last_inserted_text", "We finished the electrical today. ")
-    monkeypatch.setattr(rs.state, "last_inserted_window", where[0])
-    monkeypatch.setattr(rs.state, "last_inserted_where", where)
-    monkeypatch.setattr(message, "edit_waiting", None)
-    answer = edit_env["engine"].edit
-
-    def esc_meanwhile(text, instruction):
-        monkeypatch.setattr(message, "cancelled", True)
-        return answer(text, instruction)
-    monkeypatch.setattr(edit_env["engine"], "edit", esc_meanwhile)
-    assert voice_edit.handle_spoken_edit("Edit that, make it more formal.", None, False, "type",
-                                         message)
-    assert edit_env["typed"] == [] and edit_env["engine"].asked
-    assert keyboard.events[-2:] == [(106, 1), (106, 0)]          # Right
+def test_a_shift_f8_selection_stays_after_esc(edit_env, monkeypatch):
+    """The user's own selection is theirs: nothing presses a key over it."""
+    pressed = []
+    monkeypatch.setattr(keyboard_output, "output_backend",
+                        lambda: types.SimpleNamespace(press_keys=lambda *a, **k: pressed.append(a)))
+    monkeypatch.setattr(rs.state.current.message, "cancelled", True)
+    run_edit()
+    assert pressed == [] and edit_env["typed"] == []
 
 
 def test_edit_that_rewrites_what_it_selected_however_the_lines_are_spaced(edit_env):
