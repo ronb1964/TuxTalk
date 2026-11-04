@@ -179,6 +179,13 @@ def test_pip_into_usr_local_is_not_taken_for_a_package():
     assert _type("/usr/local/lib/python3.14/site-packages/tuxtalk/installation.py") == "source"
 
 
+def test_a_venv_under_opt_is_a_source_install_not_a_package():
+    """Taken for the .deb, Check for Updates offered to install the package
+    beside it as root, and Uninstall ran apt and left the venv."""
+    assert _type("/opt/envs/tt/lib/python3.14/site-packages/tuxtalk/installation.py",
+                 pkg_query=lambda: "deb") == "source"
+
+
 def test_a_git_checkout_is_still_the_development_version():
     assert _type("/home/ron/Projects/TuxTalk/src/tuxtalk/installation.py") == "dev"
 

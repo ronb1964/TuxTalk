@@ -19,6 +19,12 @@ APPIMAGE_DIR = os.path.expanduser("~/AppImages")
 APPIMAGE_NAME = "TuxTalk.AppImage"
 APPIMAGE_PATH = os.path.join(APPIMAGE_DIR, APPIMAGE_NAME)
 
+# TuxTalk's own folders under /opt: the .deb and .rpm unpack the AppImage's
+# tree into /opt/talktype (packaging/stage-from-appimage.sh), and the AUR
+# package owns /opt/tuxtalk. Any other folder there, a venv say, is the
+# user's, and is told apart like one anywhere else.
+_PACKAGE_TREES = ("/opt/talktype/", "/opt/tuxtalk/")
+
 
 def _own_appimage(appimage_env, appdir_env, module_path) -> str:
     """*appimage_env* (APPIMAGE) when it names the AppImage this code runs
@@ -107,8 +113,7 @@ def get_install_type(*, appimage_env=None, flatpak_env=None, appdir_env=None,
     if "/.mount_" in module_path:
         # Mounted AppImage without the APPIMAGE env — treat as self-managed.
         return "appimage"
-    if module_path.startswith("/opt/"):
-        # .deb/.rpm ship the extracted tree under /opt/talktype.
+    if module_path.startswith(_PACKAGE_TREES):
         return pkg_query() or "package"
     return _python_package_type(module_path) or "dev"
 
