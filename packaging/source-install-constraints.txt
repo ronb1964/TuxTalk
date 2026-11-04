@@ -39,4 +39,3 @@ tokenizers==0.22.1
 toml==0.10.2
 tqdm==4.67.1
 typer-slim==0.20.0
-typing-extensions==4.15.0

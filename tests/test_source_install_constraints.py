@@ -76,12 +76,14 @@ def missing_wheels(python):
 
 def test_the_constraints_file_matches_poetry_lock():
     assert mc.render(LOCK.read_text()) == CONSTRAINTS.read_text(), (
-        "poetry.lock changed: run python3 packaging/make-constraints.py and commit the file")
+        "poetry.lock changed: run .venv/bin/python packaging/make-constraints.py and commit the file")
 
 
-def test_evdev_comes_from_the_distro_and_dev_tools_stay_out():
+def test_what_the_system_provides_is_left_unpinned_and_dev_tools_stay_out():
+    """evdev has no wheel; typing-extensions is needed newer by system packages (pydantic on
+    CachyOS) that the venv sees, and a pin below that makes pip end with an ERROR."""
     names = {name for name, _, _ in _pins()}
-    assert "evdev" not in names
+    assert not names & {"evdev", "typing-extensions"}
     assert not names & {"pytest", "ruff", "black", "fonttools", "pillow"}
 
 
