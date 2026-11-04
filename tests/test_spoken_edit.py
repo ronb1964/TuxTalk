@@ -19,7 +19,11 @@ from tuxtalk import notices
 from tuxtalk import delivery
 from tuxtalk import voice_edit
 from tuxtalk import focused_window
-from voice_edit_rig import fake_edit_world
+from tuxtalk import clipboard
+from voice_edit_rig import FakeBoard, fake_edit_world
+
+# The real one, before a test's fake world replaces it.
+REAL_COPY_SELECTION = clipboard.copy_selection
 
 S = "SHIFT"
 
@@ -422,3 +426,52 @@ def test_edit_that_with_a_move_it_cant_make_lets_go_of_its_selection(edit_env, e
     The dictation was left selected."""
     monkeypatch.setattr(live, "voice_navigation", True)
     assert edit_that("Edit that, select the last word.") == [SELECT_DICTATED, LET_GO_OF_IT]
+
+
+class HeldTimer:
+    """threading.Timer, held until the test says the time has passed."""
+    pending = []
+
+    def __init__(self, delay, fn, kwargs=None):
+        self.call = lambda: fn(**(kwargs or {}))
+
+    def start(self):
+        HeldTimer.pending.append(self.call)
+
+
+def _time_passes():
+    """A second or more goes by: every timer started so far runs."""
+    while HeldTimer.pending:
+        HeldTimer.pending.pop(0)()
+
+
+@pytest.mark.parametrize("typed_over", [False, True])
+def test_after_esc_on_edit_that_the_users_clipboard_comes_back(edit_env, edit_that, monkeypatch,
+                                                               typed_over):
+    """Esc while the AI rewrote it, so the selection is looked at once more
+    before it's let go of: a second copy through the clipboard. Typed over
+    meanwhile, that copy waits for a selection that never comes, and the
+    edit's own restore, a second after the first copy, found the second
+    copy's probe and gave up; the second copy then put back the first one's
+    text. The user's next Ctrl+V pasted the dictation."""
+    board = FakeBoard(data=b"the user's clipboard", selected=DICTATED.rstrip())
+    board.install(monkeypatch)
+    monkeypatch.setattr(clipboard, "copy_selection", REAL_COPY_SELECTION)
+    monkeypatch.setattr(keyboard_output, "send_copy_keystroke", lambda claim=None: board.ctrl_c())
+    monkeypatch.setattr(voice_edit, "EDIT_RESTORE_DELAY_S", 1.0)
+    monkeypatch.setattr(HeldTimer, "pending", [])
+    monkeypatch.setattr("threading.Timer", HeldTimer)
+    monkeypatch.setattr("time.sleep", lambda s: _time_passes())     # the copy's wait
+    message = rs.state.current.message
+    answer = edit_env["engine"].edit
+
+    def esc_meanwhile(text, instruction):
+        monkeypatch.setattr(message, "cancelled", True)
+        if typed_over:
+            board.selected = None
+        return answer(text, instruction)
+    monkeypatch.setattr(edit_env["engine"], "edit", esc_meanwhile)
+    pressed = edit_that()
+    _time_passes()
+    assert board.data == b"the user's clipboard"
+    assert len(pressed) == (1 if typed_over else 2)

@@ -192,19 +192,16 @@ def _comparable(text: str) -> list:
     return text.translate(PLAIN_LOOKALIKES).casefold().split()
 
 
-def _refused_selection(selected, expected, put_back, get_instruction, where,
-                       beeps_on) -> bool:
+def _refused_selection(selected, expected, get_instruction, where, beeps_on) -> bool:
     """True, with the user told, when *selected* isn't text to change:
     nothing is selected, or "edit that" counted back over other words than
     *expected* (typed into by hand, or the cursor moved, since it was
-    dictated). Then the clipboard the selection was copied through is put
-    back."""
+    dictated)."""
     if not selected:
         _nothing_selected(get_instruction, expected is not None, where, beeps_on)
         return True
     if expected is not None and _comparable(selected) != _comparable(expected):
         logger.info("Voice edit: the selection isn't the dictation any more")
-        _put_clipboard_back(put_back, None)
         notices.edit_problem("not_the_dictation", beeps_on)
         return True
     return False
@@ -247,8 +244,10 @@ def _let_go_of_selection(expected, where) -> None:
 
 def _still_selected(expected, where) -> bool:
     """Whether *expected* is what's selected in *where* now, copied again
-    with Ctrl+C there (only there), the user's clipboard put back as after
-    the edit's own copy."""
+    with Ctrl+C there (only there). What this copy found on the clipboard
+    (the edit's own copy) goes back at once, no paste being under way;
+    the edit's restore runs after it (edit_selection) and puts back the
+    user's clipboard over it."""
     from . import clipboard
     try:
         selected, put_back = clipboard.copy_selection(
@@ -257,7 +256,7 @@ def _still_selected(expected, where) -> bool:
         return False
     if selected is None:
         return False        # copy_selection put the clipboard back itself
-    _put_clipboard_back(put_back, None)
+    put_back()
     return _comparable(selected) == _comparable(expected)
 
 
@@ -391,72 +390,96 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
 
     When nothing changed (Esc, the AI not ready, the window changed), what
     "edit that" selected is let go of: left selected, the next key the user
-    types would replace the dictation."""
+    types would replace the dictation.
+
+    The user's clipboard, which the selection was copied through, goes back
+    last, after the second look at the selection that letting go of it
+    takes: in any other order a copy saves the other's text as the user's."""
     where = (focused_class, window)
-    done = _change_selection(get_instruction, beeps_on, injection_mode, where, t0, message,
-                             expected)
-    if done is _UNCHANGED:
-        _let_go_of_selection(expected, where)
-        return False
-    return done
+    restore = []
+    try:
+        done = _change_selection(get_instruction, beeps_on, injection_mode, where, t0, message,
+                                 expected, restore)
+        if done is _UNCHANGED:
+            _let_go_of_selection(expected, where)
+            return False
+        return done
+    finally:
+        for put_back in restore:
+            put_back()
 
 
-def _change_selection(get_instruction, beeps_on, injection_mode, where, t0, message, expected):
+def _change_selection(get_instruction, beeps_on, injection_mode, where, t0, message, expected,
+                      restore):
     """edit_selection's work: True when the change went in, _UNCHANGED when
     nothing in the app changed, False when something did (part of a
-    rewrite, a select or move command)."""
-    from . import clipboard
+    rewrite, a select or move command). Once it has copied a selection,
+    *restore* gets what puts the user's clipboard back, for edit_selection
+    to run last."""
     focused_class, window = where
     # Before copying the selection or hearing the instruction; checked
     # again before the rewrite replaces it.
     if _cancelled(message) or notices.refuse_password_field(beeps_on):
         return _UNCHANGED
     # The selection first, so "select some text first" comes up even when
-    # nothing was said. Ctrl+C in a terminal switched to during the password
-    # check would stop the program running there.
+    # nothing was said.
+    copied = _copy_selection(where, beeps_on, message)
+    if copied is None:
+        return _UNCHANGED
+    selected, put_back = copied
+    result = None
+    if selected:
+        # Late-bound: *result* is the rewrite by then, if any, which may
+        # still be on the clipboard after it was pasted.
+        restore.append(lambda: _put_clipboard_back(put_back, result))
+    if _refused_selection(selected, expected, get_instruction, where, beeps_on):
+        return _UNCHANGED
+    instruction = get_instruction()
+    # Esc while it was heard: "Cancelled by ESC" was said, and nothing
+    # may change the selection after it.
+    if _cancelled(message):
+        return _UNCHANGED
+    if not instruction:
+        notices.edit_problem("no_instruction", beeps_on)
+        return _UNCHANGED
+    # Esc a moment before stops their keys at the first.
+    with keyboard_output.until_cancelled(message):
+        moved = voice_commands.navigate(instruction, beeps_on, where)
+        if moved is not None:
+            return False if moved else _UNCHANGED
+        logger.info(f"Voice edit: {live.loggable(instruction)} ({len(selected)} characters)")
+        keys = _edit_with_keys(instruction, focused_class, window, beeps_on, message)
+    if keys is not _NOT_A_KEY_EDIT:
+        return True if keys else _UNCHANGED
+    result = _rewritten(selected, instruction, beeps_on)
+    # Esc while the AI rewrote it: nothing replaces the selection.
+    if result is None or _cancelled(message) or notices.refuse_password_field(beeps_on):
+        return _UNCHANGED
+    logger.info(f"Voice edit result: {live.loggable(result)} "
+                f"(took {time.time() - t0:.2f}s)")
+    return _rewrite_over_selection(result, injection_mode, message, beeps_on, where)
+
+
+def _copy_selection(where, beeps_on, message):
+    """(the text selected in *where*, or None, and what puts the user's
+    clipboard back), copied with Ctrl+C there only: Ctrl+C in a terminal
+    switched to during the password check would stop the program running
+    there. None, with the user told, when it couldn't be copied."""
+    from . import clipboard
     copy_sent = []
 
     def send_copy():
-        copy_sent.append(keyboard_output.send_copy_keystroke(_only_into(focused_class, window)))
+        copy_sent.append(keyboard_output.send_copy_keystroke(_only_into(*where)))
         return copy_sent[-1]
     try:
-        selected, put_back = clipboard.copy_selection(send_copy)
+        copied = clipboard.copy_selection(send_copy)
     except clipboard.ClipboardUnavailable:
         notices.edit_problem("no_clipboard", beeps_on)
-        return _UNCHANGED
+        return None
     if copy_sent == [False]:
-        _not_pressed(focused_class, window, beeps_on, message)
-        return _UNCHANGED
-    if _refused_selection(selected, expected, put_back, get_instruction, where, beeps_on):
-        return _UNCHANGED
-    result = None
-    try:
-        instruction = get_instruction()
-        # Esc while it was heard: "Cancelled by ESC" was said, and nothing
-        # may change the selection after it.
-        if _cancelled(message):
-            return _UNCHANGED
-        if not instruction:
-            notices.edit_problem("no_instruction", beeps_on)
-            return _UNCHANGED
-        # Esc a moment before stops their keys at the first.
-        with keyboard_output.until_cancelled(message):
-            moved = voice_commands.navigate(instruction, beeps_on, where)
-            if moved is not None:
-                return False if moved else _UNCHANGED
-            logger.info(f"Voice edit: {live.loggable(instruction)} ({len(selected)} characters)")
-            keys = _edit_with_keys(instruction, focused_class, window, beeps_on, message)
-        if keys is not _NOT_A_KEY_EDIT:
-            return True if keys else _UNCHANGED
-        result = _rewritten(selected, instruction, beeps_on)
-        # Esc while the AI rewrote it: nothing replaces the selection.
-        if result is None or _cancelled(message) or notices.refuse_password_field(beeps_on):
-            return _UNCHANGED
-        logger.info(f"Voice edit result: {live.loggable(result)} "
-                    f"(took {time.time() - t0:.2f}s)")
-        return _rewrite_over_selection(result, injection_mode, message, beeps_on, where)
-    finally:
-        _put_clipboard_back(put_back, result)
+        _not_pressed(*where, beeps_on, message)
+        return None
+    return copied
 
 
 def _rewrite_over_selection(result, injection_mode, message, beeps_on, where):

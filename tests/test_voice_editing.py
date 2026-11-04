@@ -9,6 +9,7 @@ import pytest
 
 from conftest import KeyEvent
 from tuxtalk import clipboard as cb
+from voice_edit_rig import FakeBoard
 from tuxtalk import keyboard_grab
 from tuxtalk import keyboard_devices
 from tuxtalk import keyboard_output
@@ -18,37 +19,6 @@ from tuxtalk import pipeline
 
 
 # --- 1. grabbing the selection ------------------------------------------------------
-
-class FakeBoard:
-    """The Wayland clipboard as wl-paste / wl-copy see it, plus an app that
-    copies *selected* to it when it gets Ctrl+C (None = nothing selected)."""
-
-    def __init__(self, data=b"what I copied", selected="the selected text"):
-        self.data, self.mime = data, "text/plain;charset=utf-8"
-        self.selected = selected
-        self.sensitive_writes = []
-
-    def install(self, monkeypatch):
-        monkeypatch.setattr(cb, "_wl_paste_types",
-                            lambda: [] if self.data is None else [self.mime])
-        monkeypatch.setattr(cb, "_wl_paste", lambda mime: self.data)
-        monkeypatch.setattr(cb, "_wl_copy_bytes", self.write)
-        monkeypatch.setattr(cb, "_wl_clear", lambda: self.write(None, None))
-        monkeypatch.setattr(cb, "_wl_copy_sensitive", self.write_sensitive)
-
-    def write(self, data, mime, sensitive=False):
-        self.data, self.mime = data, mime or self.mime
-        self.written_sensitive = sensitive
-
-    def write_sensitive(self, text):
-        self.sensitive_writes.append(text)
-        self.data = text.encode()
-
-    def ctrl_c(self):
-        if self.selected is not None:
-            self.data = self.selected.encode()
-        return True
-
 
 def test_returns_the_selection_and_puts_the_clipboard_back(monkeypatch):
     board = FakeBoard()
