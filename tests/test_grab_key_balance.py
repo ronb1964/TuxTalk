@@ -86,6 +86,7 @@ def kb(monkeypatch):
     keyboard_grab._injected_pending.clear()
     keyboard_grab.grabbed_devices.clear()
     monkeypatch.setattr(keyboard_devices, "is_keyboard_device", lambda d: True)
+    monkeypatch.setattr(keyboard_devices, "keyboard_is_mouse_too", lambda d: False)
     monkeypatch.setattr(recording, "start_recording",
                         lambda *a, **k: setattr(rs.state, "is_recording", True) or rs.state.current)
     stops = []
