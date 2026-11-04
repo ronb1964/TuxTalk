@@ -12,8 +12,10 @@ license=('MIT')
 # CUDA build; Parakeet runs on the processor, so the cpu one is enough.
 # python-faster-whisper pulls python-ctranslate2, which Arch builds without
 # CUDA, so TuxTalk's graphics-card choices here are Vulkan and the processor.
+# Fix Typing sets up the hotkey helper through pkexec, which polkit provides.
 depends=('python' 'python-gobject' 'python-cairo' 'python-dbus' 'python-evdev' 'gtk3'
-         'libayatana-appindicator' 'wl-clipboard' 'python-numpy' 'python-toml'
+         'libayatana-appindicator' 'hicolor-icon-theme' 'polkit' 'wl-clipboard'
+         'python-numpy' 'python-toml'
          'python-faster-whisper' 'python-ctranslate2' 'python-onnx-asr'
          'python-onnxruntime' 'python-sounddevice' 'python-text2num'
          'python-huggingface-hub' 'python-av' 'python-tqdm')
@@ -21,6 +23,7 @@ makedepends=('python-build' 'python-installer' 'python-poetry-core')
 optdepends=(
     'pipewire-pulse: PipeWire audio support'
     'pulseaudio: PulseAudio support'
+    'vulkan-icd-loader: run speech models on the graphics card (Vulkan)'
 )
 # The AppImage package and the older TalkType ones install the same command.
 conflicts=('tuxtalk-appimage' 'talktype-appimage' 'talktype')

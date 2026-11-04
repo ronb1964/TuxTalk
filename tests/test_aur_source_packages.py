@@ -64,6 +64,15 @@ ARCH_PACKAGE = {
     "tqdm": "python-tqdm",
 }
 
+# The Arch package for each program TuxTalk runs and can't work without:
+# Fix Typing and every other root step go through pkexec, and pasting on
+# Wayland through wl-copy and wl-paste.
+ARCH_PROGRAM = {
+    "pkexec": "polkit",
+    "wl-copy": "wl-clipboard",
+    "wl-paste": "wl-clipboard",
+}
+
 
 def pkgbuild_values(pkgbuild: pathlib.Path, *names: str) -> dict[str, list[str]]:
     """The values `names` have once the PKGBUILD is sourced, each as a list."""
@@ -195,6 +204,14 @@ def test_every_dependency_tuxtalk_imports_has_its_arch_package():
     assert {ARCH_PACKAGE[name] for name in wanted} <= depends
 
 
+def test_every_program_tuxtalk_cant_work_without_has_its_arch_package():
+    source = "".join(path.read_text() for path in (ROOT / "src/tuxtalk").rglob("*.py"))
+    for program in ARCH_PROGRAM:
+        assert f'"{program}"' in source, program
+    depends = set(pkgbuild_values(TUXTALK / "PKGBUILD", "depends")["depends"])
+    assert set(ARCH_PROGRAM.values()) <= depends, sorted(set(ARCH_PROGRAM.values()) - depends)
+
+
 def test_tuxtalk_builds_from_arch_packages_without_pip():
     assert_builds_from_arch_packages(TUXTALK / "PKGBUILD")
     needs = pkgbuild_values(TUXTALK / "PKGBUILD", "makedepends")["makedepends"]
@@ -206,6 +223,7 @@ def test_a_system_install_gets_the_files_its_windows_and_menu_are_named_after():
     assert "usr/share/applications/io.github.ronb1964.TuxTalk.desktop" in package
     assert "s/^Exec=AppRun/Exec=tuxtalk/" in package
     assert "hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg" in package
+    assert "hicolor-icon-theme" in pkgbuild_values(TUXTALK / "PKGBUILD", "depends")["depends"]
     for name in ("io.github.ronb1964.TuxTalk.desktop", "io.github.ronb1964.TuxTalk.png",
                  "icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg", "LICENSE"):
         assert name in package and (ROOT / name).exists(), name
