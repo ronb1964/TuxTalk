@@ -6,11 +6,12 @@ pkgdesc="Voice dictation for Linux: hold a key, talk, and your words are typed f
 arch=('any')
 url="https://tuxtalk.app/"
 license=('MIT')
-# Everything comes from Arch's repositories or the AUR, so pacman updates it
-# with the rest of the system and nothing is downloaded from PyPI.
-# python-onnxruntime is provided by python-onnxruntime-cpu and by the
-# CUDA build; Parakeet runs on the processor, so the cpu one is enough.
-# python-faster-whisper pulls python-ctranslate2, which Arch builds without
+# Everything comes from Arch's repositories or the AUR, so pacman and the
+# AUR helper update it with the rest of the system and nothing is
+# downloaded from PyPI.
+# python-onnxruntime is provided by python-onnxruntime-cpu and by the CUDA
+# and ROCm builds; Parakeet runs on the processor, so the cpu one is enough.
+# python-faster-whisper pulls python-ctranslate2, which the AUR builds without
 # CUDA, so TuxTalk's graphics-card choices here are Vulkan and the processor.
 # Fix Typing sets up the hotkey helper through pkexec, which polkit provides.
 depends=('python' 'python-gobject' 'python-cairo' 'python-dbus' 'python-evdev' 'gtk3'

@@ -16,9 +16,10 @@ before 0.15.0, so older entries use that name.
   quit TuxTalk first. Uninstall takes out the folder and the tuxtalk link.
   If you put it in a venv somewhere else it tells you how to remove it with
   pip, and doesn't touch it.
-- If your distro's package put TuxTalk under /usr (the tuxtalk package on
-  the AUR is coming), it knows. Updates point you at your AUR helper and
-  Uninstall removes it with pacman.
+- If your distro's package put TuxTalk under /usr, like the tuxtalk package
+  on the AUR does, it knows. Check for Updates gives you the AUR helper
+  command and tells you to quit TuxTalk first, and Uninstall removes it
+  with pacman.
 - CUDA is only offered where the speech library installed on your computer
   can use it. Before, a build without CUDA still listed it because the
   NVIDIA libraries were there. If you'd saved CUDA anyway, it shows as the
@@ -31,9 +32,12 @@ before 0.15.0, so older entries use that name.
   packages, and a second package, python-onnx-asr, comes along for
   Parakeet. tuxtalk-appimage is still there and still the quicker install.
   The two can't be installed together, so pacman asks you to pick one.
+  After an upgrade, quit TuxTalk and open it again. pacman reminds you.
 - If TuxTalk can't read the keyboard when it starts, say the hotkey helper
-  is gone, F8 used to do nothing and say nothing. Now a notification tells
-  you, names your dictation key and sends you to Fix Typing.
+  is gone or stopped, F8 used to do nothing and say nothing. Now a
+  notification tells you and says where to fix it. It stays quiet when
+  there's just no keyboard plugged in yet, like a Bluetooth one that
+  connects after you log in.
 - System check doesn't ask for a restart anymore when the hotkey helper
   from Fix Typing is what's set up, since that one needs none.
 
