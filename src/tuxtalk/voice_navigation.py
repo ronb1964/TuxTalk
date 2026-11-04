@@ -38,7 +38,7 @@ class Command:
     step: tuple = ()
 
 
-def _norm(text: str) -> str:
+def normalize(text: str) -> str:
     """Lower case, letters, digits and single spaces; no "please"."""
     s = re.sub(r"[^\w\s']", " ", (text or "").lower())
     s = " ".join(s.split())
@@ -92,7 +92,7 @@ _COMPILED = [(re.compile(rf"^(?:{pattern})$"), build) for pattern, build in _RUL
 
 def parse(text: str):
     """The Command *text* is, or None when it's dictation to type."""
-    said = _norm(text)
+    said = normalize(text)
     if not said:
         return None
     for pattern, build in _COMPILED:
