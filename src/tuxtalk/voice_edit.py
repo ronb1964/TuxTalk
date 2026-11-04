@@ -172,15 +172,16 @@ def _nothing_selected(get_instruction, spoken: bool, where, beeps_on):
     notices.edit_problem("no_selection", beeps_on)
 
 
-def _put_clipboard_back(put_back, pasted):
+def _put_clipboard_back(put_back, went_in):
     """Put back the clipboard the selection was copied through: at once
-    when no rewrite went in, else a moment later (EDIT_RESTORE_DELAY_S) so
-    a paste still under way finishes first. The rewrite (*pasted*) may
-    still be on the clipboard, whole or (pasted a line at a time) its last
-    line; that may be replaced."""
-    if not pasted:
+    when no rewrite went in (*went_in* empty), else a moment later
+    (EDIT_RESTORE_DELAY_S) so a paste still under way finishes first. The
+    rewrite that went in, whole or in part, may still be on the clipboard,
+    whole or (pasted a line at a time) its last line; that may be replaced."""
+    if not went_in:
         put_back()
         return
+    pasted = went_in[-1]
     also = (pasted, *pasted.split("\n"))
     if EDIT_RESTORE_DELAY_S:
         threading.Timer(EDIT_RESTORE_DELAY_S, put_back, kwargs={"also": also}).start()
@@ -431,11 +432,9 @@ def _change_selection(get_instruction, beeps_on, injection_mode, where, t0, mess
     if copied is None:
         return _UNCHANGED
     selected, put_back = copied
-    pasted = None
+    went_in = []        # the rewrite, once it went in (_rewrite_over_selection)
     if selected:
-        # Late-bound: *pasted* is the rewrite by then if it went in, whole
-        # or in part, and may still be on the clipboard.
-        restore.append(lambda: _put_clipboard_back(put_back, pasted))
+        restore.append(lambda: _put_clipboard_back(put_back, went_in))
     if _refused_selection(selected, expected, get_instruction, where, beeps_on):
         return _UNCHANGED
     instruction = get_instruction()
@@ -461,10 +460,7 @@ def _change_selection(get_instruction, beeps_on, injection_mode, where, t0, mess
         return _UNCHANGED
     logger.info(f"Voice edit result: {live.loggable(result)} "
                 f"(took {time.time() - t0:.2f}s)")
-    done = _rewrite_over_selection(result, injection_mode, message, beeps_on, where)
-    if done is not _UNCHANGED:
-        pasted = result
-    return done
+    return _rewrite_over_selection(result, injection_mode, message, beeps_on, where, went_in)
 
 
 def _copy_selection(where, beeps_on, message):
@@ -489,9 +485,10 @@ def _copy_selection(where, beeps_on, message):
     return copied
 
 
-def _rewrite_over_selection(result, injection_mode, message, beeps_on, where):
+def _rewrite_over_selection(result, injection_mode, message, beeps_on, where, went_in):
     """Type *result* over the selection in *where*, the window the edit
-    started in, as _change_selection's last step, and answer as it does."""
+    started in, as _change_selection's last step, and answer as it does.
+    *went_in* gets *result* once some or all of it went in."""
     from . import history
     history.add_entry(result)
     focused_class, window = where
@@ -508,6 +505,7 @@ def _rewrite_over_selection(result, injection_mode, message, beeps_on, where):
     outcome = _type_rewrite(result, injection_mode, message, beeps_on, into)
     if outcome in delivery.GAVE_UP_UNTYPED:
         return _UNCHANGED
+    went_in.append(result)
     return outcome == "ok"
 
 

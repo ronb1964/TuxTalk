@@ -475,3 +475,28 @@ def test_after_esc_on_edit_that_the_users_clipboard_comes_back(edit_env, edit_th
     _time_passes()
     assert board.data == b"the user's clipboard"
     assert len(pressed) == (1 if typed_over else 2)
+
+
+@pytest.mark.parametrize("outcome", ["ai_not_ready", "no_change", "rewritten"])
+def test_the_users_clipboard_waits_only_for_a_pasted_rewrite(edit_env, edit_that, monkeypatch,
+                                                             outcome):
+    """The second before the user's clipboard comes back lets an app read
+    a pasted rewrite. An edit that changed nothing kept the dictation on
+    the clipboard that second as well, so a quick Ctrl+V after the notice
+    pasted it instead of what the user had copied."""
+    board = FakeBoard(data=b"the user's clipboard", selected=DICTATED.rstrip())
+    board.install(monkeypatch)
+    monkeypatch.setattr(clipboard, "copy_selection",
+                        lambda send: REAL_COPY_SELECTION(send, sleep=lambda s: None))
+    monkeypatch.setattr(keyboard_output, "send_copy_keystroke", lambda claim=None: board.ctrl_c())
+    monkeypatch.setattr(voice_edit, "EDIT_RESTORE_DELAY_S", 1.0)
+    monkeypatch.setattr(HeldTimer, "pending", [])
+    monkeypatch.setattr("threading.Timer", HeldTimer)
+    if outcome == "ai_not_ready":
+        edit_env["engine"].ready = False
+    elif outcome == "no_change":
+        edit_env["engine"].answer = DICTATED.rstrip()
+    edit_that()
+    assert (board.data == b"the user's clipboard") is (outcome != "rewritten")
+    _time_passes()
+    assert board.data == b"the user's clipboard"
