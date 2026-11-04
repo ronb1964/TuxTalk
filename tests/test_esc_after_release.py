@@ -248,11 +248,12 @@ def test_esc_before_the_first_key_keeps_the_window_undo_goes_to(monkeypatch):
 def test_esc_before_a_press_enter_said_alone_presses_nothing(chat, keyboard, let_go,
                                                            monkeypatch):
     """Only "press enter" said, then Esc while the Enter waited its turn: it
-    went all the same, sending whatever was in the box, and Esc's own beep
-    is all that's said."""
+    went all the same, sending whatever was in the box. Esc's own beep is
+    all that's said, even with a key down that a refused key would blame."""
     focus, heard, typed, notices = chat
     told = []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: told.append(a))
+    monkeypatch.setattr("tuxtalk.modifier_hotkeys.stuck", lambda: True)
     press = keyboard_output.press_key
 
     def esc_then_press(*a, **k):
