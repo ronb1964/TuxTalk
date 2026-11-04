@@ -1,0 +1,29 @@
+# Maintainer: Ron Brand <ronb1964@gmail.com>
+pkgname=python-onnx-asr
+_name=onnx_asr
+pkgver=0.12.0
+pkgrel=1
+pkgdesc="Speech recognition with ONNX models (Parakeet, Whisper, GigaAM and others)"
+arch=('any')
+url="https://github.com/istupakov/onnx-asr"
+license=('MIT')
+depends=('python' 'python-numpy' 'python-onnxruntime')
+optdepends=('python-huggingface-hub: download models from the Hugging Face Hub')
+# The build hook generates the preprocessors as .onnx files with onnxscript
+# and ml-dtypes, so those two are needed to build but not to run.
+makedepends=('python-build' 'python-installer' 'python-hatchling' 'python-hatch-vcs'
+             'python-onnxscript' 'python-ml-dtypes')
+source=("https://files.pythonhosted.org/packages/source/o/onnx-asr/${_name}-${pkgver}.tar.gz")
+sha256sums=('c1fcacddbced392f9f769ed5c6223f4ce739a6e4549346de33b9b520d4ead713')
+
+build() {
+    cd "${_name}-${pkgver}"
+    # hatch-vcs would otherwise ask git, and the sdist is not a checkout.
+    SETUPTOOLS_SCM_PRETEND_VERSION="$pkgver" python -m build --wheel --no-isolation
+}
+
+package() {
+    cd "${_name}-${pkgver}"
+    python -m installer --destdir="$pkgdir" dist/*.whl
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
