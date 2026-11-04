@@ -146,7 +146,10 @@ def third_party_imports() -> set[str]:
     names: set[str] = set()
     for path in (ROOT / "src/tuxtalk").rglob("*.py"):
         names |= imported_modules(path.read_text())
-    return names - set(sys.stdlib_module_names) - {"tuxtalk"}
+    # tomllib is the standard library from Python 3.11, Arch's included, but
+    # not on the 3.10 the AppImage and Ubuntu 22.04's CI run, where config
+    # falls back to the toml package (an Arch dependency of its own).
+    return names - set(sys.stdlib_module_names) - {"tuxtalk", "tomllib"}
 
 
 def removed_paths(script: str) -> set[str]:
