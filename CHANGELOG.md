@@ -3,6 +3,30 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [0.21.0] - unreleased
+
+- TuxTalk can be installed from its source code on any distro now. The
+  README has the steps, under Installation, From source. It sets up its own
+  Python folder in ~/.local/share/TuxTalk/venv with your distro's GTK
+  bindings and the library versions we test with, and gives you a tuxtalk
+  command and a menu entry with its icon. First run is the same as the
+  AppImage: start at login and Fix Typing. We tried it in four VMs.
+- TuxTalk doesn't update itself when it's installed that way. Check for
+  Updates shows you the one command that installs the new version, and you
+  quit TuxTalk first. Uninstall takes out the folder and the tuxtalk link.
+  If you put it in a venv somewhere else it tells you how to remove it with
+  pip, and doesn't touch it.
+- If your distro's package put TuxTalk under /usr (the tuxtalk package on
+  the AUR is coming), it knows. Updates point you at your AUR helper and
+  Uninstall removes it with pacman.
+- CUDA is only offered where the speech library installed on your computer
+  can use it. Before, a build without CUDA still listed it because the
+  NVIDIA libraries were there. If you'd saved CUDA anyway, it shows as the
+  processor now, large-v3 runs as medium instead of crawling, and a backup
+  with CUDA restores onto another device.
+- The update command in Preferences, Updates & Backup, can be selected and
+  copied.
+
 ## [0.20.0] - 2026-11-02
 
 - TuxTalk now has a voice detector (Silero VAD, 1.3 MB, built in, nothing
