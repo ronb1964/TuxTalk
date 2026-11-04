@@ -456,12 +456,13 @@ def test_after_esc_on_edit_that_the_users_clipboard_comes_back(edit_env, edit_th
     text. The user's next Ctrl+V pasted the dictation."""
     board = FakeBoard(data=b"the user's clipboard", selected=DICTATED.rstrip())
     board.install(monkeypatch)
-    monkeypatch.setattr(clipboard, "copy_selection", REAL_COPY_SELECTION)
+    # The copy's wait lets every timer run; only its own sleep, not every thread's.
+    monkeypatch.setattr(clipboard, "copy_selection",
+                        lambda send: REAL_COPY_SELECTION(send, sleep=lambda s: _time_passes()))
     monkeypatch.setattr(keyboard_output, "send_copy_keystroke", lambda claim=None: board.ctrl_c())
     monkeypatch.setattr(voice_edit, "EDIT_RESTORE_DELAY_S", 1.0)
     monkeypatch.setattr(HeldTimer, "pending", [])
     monkeypatch.setattr("threading.Timer", HeldTimer)
-    monkeypatch.setattr("time.sleep", lambda s: _time_passes())     # the copy's wait
     message = rs.state.current.message
     answer = edit_env["engine"].edit
 

@@ -11,26 +11,10 @@ except ImportError:
     import toml as tomllib
 from types import SimpleNamespace
 
+from conftest import FakeCombo
 from tuxtalk import prefs as P
 from tuxtalk.prefs import PreferencesWindow
 from tuxtalk.prefs_speech import SpeechSection
-
-
-class FakeCombo:
-    def __init__(self):
-        self.ids, self.active = [], None
-
-    def remove_all(self):
-        self.ids = []
-
-    def append(self, id_, label):
-        self.ids.append(id_)
-
-    def set_active_id(self, id_):
-        self.active = id_
-
-    def set_tooltip_text(self, text):
-        pass
 
 
 def test_an_unrelated_ok_keeps_the_saved_cuda_choice(tmp_path, monkeypatch):

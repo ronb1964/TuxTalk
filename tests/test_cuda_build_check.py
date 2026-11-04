@@ -21,6 +21,7 @@ except ImportError:
 
 import pytest
 
+from conftest import FakeCombo
 from tuxtalk import config, cuda_helper, engine, installation, prefs_speech, settings_backup
 from tuxtalk import prefs as P
 from tuxtalk.prefs import PreferencesWindow
@@ -143,11 +144,26 @@ def test_a_source_venv_using_the_distros_ctranslate2_is_checked(monkeypatch):
     assert cuda_helper.ctranslate2_has_cuda() is False
 
 
+def _from_pypi(name):
+    """Whether the installed *name* is PyPI's manylinux wheel rather than a
+    distro's own build (which, for CTranslate2, may lack CUDA)."""
+    from importlib import metadata
+    try:
+        return "manylinux" in (metadata.distribution(name).read_text("WHEEL") or "")
+    except metadata.PackageNotFoundError:
+        return False
+
+
 def test_the_real_check_finds_cuda_in_pypis_ctranslate2():
     """The probe script itself, run for real: a typo in it would read as "no
-    CUDA" and hide CUDA from every install that is checked."""
+    CUDA" and hide CUDA from every install that is checked. A distro's
+    CTranslate2, perhaps built without CUDA, must still get a clean answer."""
     pytest.importorskip("ctranslate2")
-    assert cuda_helper.probe_ctranslate2_cuda() is True
+    answer = cuda_helper.probe_ctranslate2_cuda()
+    if not _from_pypi("ctranslate2"):
+        assert answer in (True, False)
+        pytest.skip("not PyPI's CTranslate2, which may be built without CUDA")
+    assert answer is True
 
 
 def test_a_system_install_is_checked_once(monkeypatch):
@@ -161,23 +177,6 @@ def test_a_system_install_is_checked_once(monkeypatch):
 
 
 # --- Preferences ---------------------------------------------------------------
-
-class FakeCombo:
-    def __init__(self):
-        self.ids, self.active = [], None
-
-    def remove_all(self):
-        self.ids = []
-
-    def append(self, id_, label):
-        self.ids.append(id_)
-
-    def set_active_id(self, id_):
-        self.active = id_
-
-    def set_tooltip_text(self, text):
-        pass
-
 
 @pytest.fixture
 def without_cuda_build(monkeypatch):
