@@ -137,6 +137,25 @@ def test_another_installs_uninstall_names_the_source_install_it_takes(home, inst
             in uninstall.confirm_text(plan, 0))
 
 
+def test_an_uninstall_from_another_venv_names_the_readme_venv_it_takes(home, tmp_path):
+    """Both installed: the README's venv goes with the downloads, so the
+    question has to say so; the venv running stays and isn't promised."""
+    venv = tmp_path / "envs/tt"
+    (venv / "bin").mkdir(parents=True)
+    plan = _source(home, venv)
+    assert home / VENV in plan.downloads
+    assert ("•  TuxTalk installed from its source code, in ~/.local/share/TuxTalk/venv"
+            in uninstall.confirm_text(plan, 0))
+    uninstall.remove_files(plan, delete_personal=False, delete_shared=False)
+    assert not (home / VENV).exists() and (venv / "bin").is_dir()
+
+
+def test_an_uninstall_outside_a_venv_names_the_readme_venv_it_takes(home):
+    plan = uninstall.find(home, "source", prefix="/usr", base_prefix="/usr")
+    assert ("•  TuxTalk installed from its source code, in ~/.local/share/TuxTalk/venv"
+            in uninstall.confirm_text(plan, 0))
+
+
 def test_a_source_installs_own_question_doesnt_name_its_venv_twice(home):
     assert "in ~/.local/share/TuxTalk/venv" not in uninstall.confirm_text(_source(home), 0)
 

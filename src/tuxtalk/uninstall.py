@@ -667,24 +667,29 @@ def _size_text(size):
     return f"{max(1, round(size / 1000 ** 2))} MB"
 
 
+def _runs_from_readme_venv(plan):
+    """Whether the TuxTalk being uninstalled is the README's source install."""
+    return (plan.install_type == "source" and plan.venv_elsewhere is None
+            and not plan.outside_venv)
+
+
 def _program_line(plan):
     """The question's line for the program itself, or None when the
     uninstall leaves it (_program_text then says how to remove it)."""
     if plan.install_type == "appimage":
         return "TuxTalk itself (its AppImage)"
     if plan.install_type == "source":
-        if plan.venv_elsewhere is None and not plan.outside_venv:
-            return "TuxTalk itself (installed from its source code)"
-        return None
+        return ("TuxTalk itself (installed from its source code)"
+                if _runs_from_readme_venv(plan) else None)
     return f"TuxTalk itself (the {plan.package} package)" if plan.package else None
 
 
 def _source_venv_line(plan):
-    """The question's line for the README's source-install venv when an
-    uninstall of another install (the AppImage, a package) takes it too:
-    it is TuxTalk's, but not the copy the user is thinking of."""
+    """The question's line for the README's source-install venv when the
+    uninstall of another copy (the AppImage, a package, a venv elsewhere)
+    takes it too: it is TuxTalk's, but not the copy the user is thinking of."""
     venv = plan.home / ".local" / "share" / config.DATA_DIR / source_install.VENV_NAME
-    if plan.install_type == "source" or venv not in plan.downloads or venv.is_symlink():
+    if _runs_from_readme_venv(plan) or venv not in plan.downloads or venv.is_symlink():
         return None
     return f"TuxTalk installed from its source code, in {_shown(venv, plan.home)}"
 
