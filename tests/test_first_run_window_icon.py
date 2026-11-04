@@ -163,10 +163,31 @@ def test_a_launcher_left_on_the_download_moves_to_the_installed_copy(home):
     installed = home / "AppImages" / "TuxTalk.AppImage"
     installed.parent.mkdir()
     installed.write_text("")
+    installed.chmod(0o755)
     _launcher(home, home / "Downloads" / "TuxTalk-v0.18.0-x86_64.AppImage")
     assert desktop_launcher.repair_stale_launcher()
     assert f"Exec={installed}\n" in (home / "apps" / "tuxtalk.desktop").read_text()
     assert not desktop_launcher.repair_stale_launcher()         # once
+
+
+def test_a_launcher_left_by_a_deleted_source_install_moves_to_the_installed_copy(home):
+    """The venv it started is gone: the menu entry started nothing."""
+    installed = home / "AppImages" / "TuxTalk.AppImage"
+    installed.parent.mkdir()
+    installed.write_text("")
+    installed.chmod(0o755)
+    _launcher(home, home / ".local/share/TuxTalk/venv/bin/tuxtalk")
+    assert desktop_launcher.repair_stale_launcher()
+    assert f"Exec={installed}\n" in (home / "apps" / "tuxtalk.desktop").read_text()
+
+
+def test_a_launcher_starting_another_program_thats_there_stays(home):
+    installed = home / "AppImages" / "TuxTalk.AppImage"
+    installed.parent.mkdir()
+    installed.write_text("")
+    installed.chmod(0o755)
+    _launcher(home, "/bin/sh")
+    assert not desktop_launcher.repair_stale_launcher()
 
 
 def test_a_launcher_is_left_alone_until_the_installed_copy_is_there(home):

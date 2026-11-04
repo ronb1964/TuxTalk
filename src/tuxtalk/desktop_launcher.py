@@ -201,9 +201,10 @@ def repair_stale_launcher() -> bool:
     AppImage running then (point_at_running_appimage), usually in
     Downloads; a later update puts the copy in place, but the menu kept
     starting the old download. Only a self-managed AppImage's own launcher,
-    and only one that starts another TuxTalk AppImage. True if rewritten."""
+    and only one that starts another TuxTalk AppImage or a program that
+    isn't there (a source install's venv since deleted). True if rewritten."""
     from . import config
-    from .autostart import stale_appimage_target
+    from .autostart import program_missing, stale_appimage_target
     if (config.DEV_MODE or not os.path.isfile(installation.APPIMAGE_PATH)
             or installation.get_install_type(pkg_query=lambda: "package") != "appimage"):
         return False
@@ -213,7 +214,10 @@ def repair_stale_launcher() -> bool:
     except OSError:
         return False            # no launcher yet
     exec_cmd = next((l[len("Exec="):] for l in text.splitlines() if l.startswith("Exec=")), "")
-    target = None if _HIDDEN_ENTRY_MARK in text else stale_appimage_target(exec_cmd)
+    if _HIDDEN_ENTRY_MARK in text:
+        return False
+    target = stale_appimage_target(exec_cmd) or (exec_cmd if program_missing(exec_cmd)
+                                                  else None)
     if target is None:
         return False
     ok, msg = create_desktop_launcher()
