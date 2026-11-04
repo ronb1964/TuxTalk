@@ -6,7 +6,8 @@ import os
 import re
 import time
 
-from . import beeps, focused_window, keyboard_output, last_dictation, notices, virtual_keyboard
+from . import (beeps, delivery, focused_window, keyboard_output, last_dictation, notices,
+               virtual_keyboard)
 from . import live_settings as live
 from . import notify as notify_module
 from . import recording_state as rs
@@ -69,7 +70,10 @@ def _clear_text_box(beeps_on, notify_on):
     TuxTalk's typing or not. In a terminal Ctrl+A jumps to the start of the
     line and Backspace there deletes nothing, so the line is cleared the
     shell's way: Ctrl+E to its end, Ctrl+U back to the prompt (bash, zsh,
-    fish; Ctrl+A is also screen's prefix key)."""
+    fish; Ctrl+A is also screen's prefix key). Esc partway leaves the cursor
+    at the end of the box or line, past text TuxTalk never typed, so undo
+    and the next dictation stop counting on the last one; from here Esc
+    partway and Esc before the first key look the same."""
     backend = keyboard_output.output_backend()
     where = focused_window.look()
     if is_terminal_class(where[0]):
@@ -78,13 +82,12 @@ def _clear_text_box(beeps_on, notify_on):
     else:
         cleared = _sent_into(where, backend.select_all_delete)
     if cleared == "cancelled":
+        delivery.forget_typed()
         return
     if cleared == "moved":
         notices.edit_problem("focus_moved", beeps_on)
     elif cleared:
-        rs.state.last_inserted_text = ""
-        last_dictation.forget_shown()
-        rs.state.continue_mid_sentence = False
+        delivery.forget_typed()
         beeps.beep(beeps_on, *READY_BEEP)
         if notify_on:
             notify_module.notify("Cleared the text box", "")

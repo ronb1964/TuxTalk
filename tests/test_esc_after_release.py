@@ -350,3 +350,20 @@ def test_esc_between_select_all_and_backspace_keeps_the_box(chat, keyboard, let_
     let_go()
     pressed = [code for code, down in keyboard.events if down]
     assert ecodes.KEY_BACKSPACE not in pressed and pressed[-1] == ecodes.KEY_RIGHT
+
+
+def test_after_esc_stops_clear_everything_delete_that_deletes_nothing(chat, keyboard, let_go,
+                                                                     monkeypatch):
+    """Ctrl+A went in, then Esc: Right left the cursor at the end of the
+    box, past text TuxTalk never typed. "delete last sentence" then must
+    not backspace the last dictation's length from there."""
+    focus, heard, typed, notices = chat
+    monkeypatch.setattr(rs.state, "last_inserted_text", "Meet at noon. ")
+    monkeypatch.setattr(rs.state, "last_inserted_window", focus[0])
+    _esc_before_send(monkeypatch, 2)
+    heard.append("clear everything")
+    let_go()
+    keyboard.events.clear()
+    heard.append("delete last sentence")
+    let_go()
+    assert ecodes.KEY_BACKSPACE not in [code for code, down in keyboard.events if down]
