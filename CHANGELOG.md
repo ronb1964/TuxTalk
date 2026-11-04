@@ -26,6 +26,16 @@ before 0.15.0, so older entries use that name.
   with CUDA restores onto another device.
 - The update command in Preferences, Updates & Backup, can be selected and
   copied.
+- Arch users can install the tuxtalk package from the AUR now. It's built
+  on your computer from the release source with Arch's own Python
+  packages, and a second package, python-onnx-asr, comes along for
+  Parakeet. tuxtalk-appimage is still there and still the quicker install.
+  The two can't be installed together, so pacman asks you to pick one.
+- If TuxTalk can't read the keyboard when it starts, say the hotkey helper
+  is gone, F8 used to do nothing and say nothing. Now a notification tells
+  you, names your dictation key and sends you to Fix Typing.
+- System check doesn't ask for a restart anymore when the hotkey helper
+  from Fix Typing is what's set up, since that one needs none.
 
 ## [0.20.0] - 2026-11-02
 
