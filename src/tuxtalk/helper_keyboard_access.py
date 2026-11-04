@@ -26,8 +26,8 @@ import grp
 import os
 import struct
 
-from .hotkey_helper import (BTN_LEFT, LETTER_KEYS, REL_X, SYS_CHAR_DIR, UDEV_DATA_DIR,
-                            made_through_uinput, udev_seat)
+from .hotkey_helper import SYS_CHAR_DIR, UDEV_DATA_DIR, made_through_uinput, udev_seat
+from .keyboard_devices import has_letter_keys, is_pointer
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -107,18 +107,18 @@ def _sysfs_bits(path):
 
 
 def _is_keyboard(sys_dir, name):
-    """Whether event node *name* has letter keys, as the helper decides
-    (hotkey_helper.check_keyboard), from sysfs."""
-    keys = _sysfs_bits(os.path.join(sys_dir, name, "device", "capabilities", "key")) or set()
-    return len(keys & LETTER_KEYS) >= 3
+    """Whether event node *name* has letter keys (has_letter_keys, as the
+    helper decides), from sysfs."""
+    return has_letter_keys(
+        _sysfs_bits(os.path.join(sys_dir, name, "device", "capabilities", "key")) or ())
 
 
 def _is_mouse(sys_dir, name):
-    """Whether event node *name* has a mouse's motion and left button, as
-    the helper decides (Keyboard._probe), from sysfs."""
+    """Whether event node *name* is a mouse too (is_pointer, as the helper
+    decides), from sysfs."""
     caps = os.path.join(sys_dir, name, "device", "capabilities")
-    return (BTN_LEFT in (_sysfs_bits(os.path.join(caps, "key")) or ())
-            and REL_X in (_sysfs_bits(os.path.join(caps, "rel")) or ()))
+    return is_pointer(_sysfs_bits(os.path.join(caps, "key")) or (),
+                      _sysfs_bits(os.path.join(caps, "rel")) or ())
 
 
 def _event_nodes(input_dir):

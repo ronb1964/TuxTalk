@@ -14,7 +14,7 @@ missing, and their tests stand in for both.
 import contextlib
 import select
 
-from .hotkey_helper import mask_to_keys
+from .hotkey_helper import BTN_LEFT, LETTER_KEYS, REL_X, mask_to_keys
 from .logger import setup_logger
 from .virtual_keyboard import NAME as VIRTUAL_KEYBOARD_NAME
 
@@ -25,14 +25,28 @@ try:
 except ImportError:     # no evdev: nothing can read /dev/input anyway
     _ecodes = None
 
-# Letter keys, used to tell a real keyboard from a device that merely reports
-# key events (power buttons, lid switches, mouse buttons, game controllers,
-# consumer-control nodes). Built by name, not as a numeric range: evdev codes
-# follow the physical scancode order of a PC keyboard, so KEY_A..KEY_Z spans
-# the home row and several punctuation keys while leaving KEY_M outside it.
-LETTER_KEYS = frozenset(
-    getattr(_ecodes, f"KEY_{letter}") for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-) if _ecodes else frozenset()
+
+def has_letter_keys(keys) -> bool:
+    """Whether a device reporting the key codes *keys* has a keyboard's
+    letter keys (three or more of them), which tell a real keyboard from a
+    device that merely reports key events: power buttons, lid switches,
+    mouse buttons, game controllers, consumer-control nodes.
+
+    The rule TuxTalk judges devices by, from python-evdev here and from
+    sysfs in helper_keyboard_access, with the hotkey helper's numbers
+    (LETTER_KEYS). The helper's own copy of it (check_keyboard) stays in
+    its file, which runs as root on its own and imports nothing of
+    TuxTalk's."""
+    return len(set(keys) & LETTER_KEYS) >= 3
+
+
+def is_pointer(keys, rel) -> bool:
+    """Whether a device reporting the key codes *keys* and the relative axes
+    *rel* is a mouse too: pointer motion (REL_X) with a mouse button,
+    libinput's test, not the EV_REL type. The K800 keyboard declares EV_REL
+    with no motion axis. The same rule as has_letter_keys's, and the helper's
+    (Keyboard._probe)."""
+    return REL_X in rel and BTN_LEFT in keys
 
 
 def is_keyboard_device(dev) -> bool:
@@ -64,12 +78,7 @@ def is_keyboard_and_mouse(dev) -> bool:
     is never grabbed or written to: held for a recording, it would freeze
     the mouse that long, and a remapper's (kanata's) would swallow the
     dictation being typed too, when the remapper has taken TuxTalk's
-    virtual keyboard as well.
-
-    The test is pointer motion (REL_X) with a mouse button, libinput's,
-    not the EV_REL type: the K800 keyboard declares EV_REL with no motion
-    axis, and as a mouse it would be left ungrabbed and its hotkey leak
-    through."""
+    virtual keyboard as well. Told by is_pointer."""
     caps = _keyboard_capabilities(dev)
     return caps is not None and _is_pointer(caps)
 
@@ -84,13 +93,11 @@ def _keyboard_capabilities(dev):
     except Exception as e:      # unplugged, or a node evdev can't describe
         logger.info(f"Could not read what {getattr(dev, 'name', dev)} reports: {e}")
         return None
-    keys = set(caps.get(_ecodes.EV_KEY) or [])
-    return caps if len(keys & LETTER_KEYS) >= 3 else None
+    return caps if has_letter_keys(caps.get(_ecodes.EV_KEY) or ()) else None
 
 
 def _is_pointer(caps) -> bool:
-    return (_ecodes.REL_X in (caps.get(_ecodes.EV_REL) or [])
-            and _ecodes.BTN_LEFT in (caps.get(_ecodes.EV_KEY) or []))
+    return is_pointer(caps.get(_ecodes.EV_KEY) or (), caps.get(_ecodes.EV_REL) or ())
 
 
 # How often to look for keyboards plugged in (or back) meanwhile: often enough
