@@ -27,7 +27,8 @@ optdepends=(
 )
 # The AppImage package and the older TalkType ones install the same command.
 conflicts=('tuxtalk-appimage' 'talktype-appimage' 'talktype')
-# Removes the hotkey helper TuxTalk set up when the package goes.
+# Removes the hotkey helper TuxTalk set up when the package goes, and says
+# to restart TuxTalk after an upgrade.
 install=tuxtalk.install
 source=("tuxtalk-${pkgver}.tar.gz::https://github.com/ronb1964/TuxTalk/archive/refs/tags/v${pkgver}.tar.gz")
 # The release that bumps pkgver sets this from the new tag's archive. The

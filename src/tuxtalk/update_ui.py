@@ -65,9 +65,11 @@ def get_update_guidance(install_type: str, latest_version: str, *,
         msg = (f"TuxTalk {v} is available. Quit TuxTalk, update it the way you "
                f"installed it, then open TuxTalk again.")
     elif aur_package:
+        # Like a source install, the update replaces the files a running
+        # TuxTalk still imports from.
         cmd = f"yay -S {aur_package}   # or: paru -S {aur_package}"
-        msg = (f"TuxTalk {v} is available. You installed it from the AUR — "
-               f"update with your AUR helper:")
+        msg = (f"TuxTalk {v} is available. You installed it from the AUR. "
+               f"Quit TuxTalk, run this in a terminal, then open TuxTalk again:")
     elif install_type == "dev":
         cmd = "git pull   # in your TuxTalk project folder"
         msg = (f"TuxTalk {v} is available. You're running the development "

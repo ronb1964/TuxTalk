@@ -237,12 +237,22 @@ def test_tuxtalk_and_the_appimage_package_cant_be_installed_together():
 
 def test_removing_the_package_removes_the_hotkey_helper_and_an_upgrade_keeps_it():
     assert pkgbuild_values(TUXTALK / "PKGBUILD", "install")["install"] == ["tuxtalk.install"]
-    hook = (TUXTALK / "tuxtalk.install").read_text()
-    assert hook == (ROOT / "aur/tuxtalk-appimage.install").read_text()
-    assert re.findall(r"^(\w+)\(\)", hook, re.M) == ["pre_remove"]
+    hook = TUXTALK / "tuxtalk.install"
+    appimage_hook = ROOT / "aur/tuxtalk-appimage.install"
+    assert shell_function(hook, "pre_remove") == shell_function(appimage_hook, "pre_remove")
+    assert re.findall(r"^(\w+)\(\)", hook.read_text(), re.M) == ["pre_remove", "post_upgrade"]
     helper_files = removed_paths((ROOT / "packaging/before-remove.sh").read_text())
     assert len(helper_files) == 5
-    assert removed_paths(hook) == helper_files
+    assert removed_paths(hook.read_text()) == helper_files
+
+
+def test_an_upgrade_says_to_restart_tuxtalk_and_leaves_the_hotkey_helper_alone():
+    """The upgrade replaces TuxTalk's files under the running tray and
+    service, which load some of them only when first used."""
+    upgrade = shell_function(TUXTALK / "tuxtalk.install", "post_upgrade")
+    assert [line.split()[0] for line in upgrade.splitlines()] == ["echo"]
+    assert "Quit" in upgrade and "open it again" in upgrade
+    assert "tuxtalk-hotkeys" not in upgrade
 
 
 def test_tuxtalk_srcinfo_says_what_the_pkgbuild_says():

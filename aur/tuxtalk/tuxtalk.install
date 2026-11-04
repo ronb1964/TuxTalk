@@ -16,3 +16,10 @@ pre_remove() {
     udevadm control --reload-rules >/dev/null 2>&1 || true
     udevadm trigger --action=change --sysname-match=uinput >/dev/null 2>&1 || true
 }
+
+# An upgrade replaces TuxTalk's files under a TuxTalk that's running, which
+# loads some of them only when they're first used. The AppImage package
+# doesn't need this: the running AppImage keeps the old one it mounted.
+post_upgrade() {
+    echo "==> Restart TuxTalk to run the new version: Quit it from its menu, then open it again."
+}

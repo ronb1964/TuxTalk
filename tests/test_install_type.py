@@ -242,9 +242,13 @@ def test_a_pip_install_outside_a_venv_is_told_to_update_it_as_it_was_installed(m
         "Installed from source: update it the way you installed it.")
 
 
-def test_a_system_install_from_the_aur_is_told_its_aur_helper_command():
+def test_a_system_install_from_the_aur_is_told_its_aur_helper_command_and_to_quit_first():
+    """The AUR helper replaces TuxTalk's files under the running tray and
+    service, which load some of them only when first used."""
     g = get_update_guidance("system", "0.21.0", owner=lambda: "tuxtalk")
     assert g["command"] == "yay -S tuxtalk   # or: paru -S tuxtalk"
+    assert g["message"] == ("TuxTalk 0.21.0 is available. You installed it from the AUR. "
+                            "Quit TuxTalk, run this in a terminal, then open TuxTalk again:")
 
 
 def test_a_system_install_with_no_known_owner_is_sent_to_its_package_manager():
