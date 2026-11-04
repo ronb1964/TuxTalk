@@ -160,15 +160,20 @@ def _format_selection(fmt, focused_class, window, beeps_on, message) -> bool:
     return True
 
 
-def _nothing_selected(get_instruction, spoken: bool, where, beeps_on):
+def _nothing_selected(get_instruction, spoken: bool, where, beeps_on, message):
     """Nothing is selected. "select the last sentence" needs nothing
     selected: it makes the selection the next edit works on, in *where*,
     the window the edit started in. Anything else says to select some text
     first. The clipboard is already back (copy_selection does that)."""
     if live.voice_navigation and not spoken:
         said = get_instruction()
-        if said and voice_commands.handle_navigation(said, beeps_on, where):
+        # Esc while it was heard: "Cancelled by ESC" was said, and nothing
+        # may select after it. Esc a moment before stops the keys at the first.
+        if _cancelled(message):
             return
+        with keyboard_output.until_cancelled(message):
+            if said and voice_commands.handle_navigation(said, beeps_on, where):
+                return
     notices.edit_problem("no_selection", beeps_on)
 
 
@@ -197,13 +202,13 @@ def _comparable(text: str) -> list:
     return text.translate(PLAIN_LOOKALIKES).casefold().split()
 
 
-def _refused_selection(selected, expected, get_instruction, where, beeps_on) -> bool:
+def _refused_selection(selected, expected, get_instruction, where, beeps_on, message) -> bool:
     """True, with the user told, when *selected* isn't text to change:
     nothing is selected, or "edit that" counted back over other words than
     *expected* (typed into by hand, or the cursor moved, since it was
     dictated)."""
     if not selected:
-        _nothing_selected(get_instruction, expected is not None, where, beeps_on)
+        _nothing_selected(get_instruction, expected is not None, where, beeps_on, message)
         return True
     if expected is not None and _comparable(selected) != _comparable(expected):
         logger.info("Voice edit: the selection isn't the dictation any more")
@@ -435,7 +440,7 @@ def _change_selection(get_instruction, beeps_on, injection_mode, where, t0, mess
     went_in = []        # the rewrite, once it went in (_rewrite_over_selection)
     if selected:
         restore.append(lambda: _put_clipboard_back(put_back, went_in))
-    if _refused_selection(selected, expected, get_instruction, where, beeps_on):
+    if _refused_selection(selected, expected, get_instruction, where, beeps_on, message):
         return _UNCHANGED
     instruction = get_instruction()
     # Esc while it was heard: "Cancelled by ESC" was said, and nothing

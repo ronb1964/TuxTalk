@@ -13,6 +13,7 @@ from voice_edit_rig import FakeBoard
 from tuxtalk import keyboard_grab
 from tuxtalk import keyboard_devices
 from tuxtalk import keyboard_output
+from tuxtalk.output_backends import VirtualKeyboardOutputBackend
 from tuxtalk.beeps import CANCEL_BEEP, READY_BEEP
 from tuxtalk import recording
 from tuxtalk import pipeline
@@ -1433,12 +1434,33 @@ def test_the_edit_key_understands_select_commands_with_nothing_selected(edit_env
     assert len(pressed) == 1 and edit_env["notices"] == [] and edit_env["typed"] == []
 
 
+@pytest.mark.parametrize("esc_when", ["heard", "keys"])
+def test_esc_on_a_select_command_with_nothing_selected_selects_nothing(
+        edit_env, monkeypatch, keyboard, esc_when):
+    """Shift+F8, nothing selected, "select the last sentence", Esc: no keys, no word."""
+    message = rs.state.current.message
+    monkeypatch.setattr(message, "cancelled", False)
+
+    def esc(*args):
+        message.cancelled = True
+        return "select the last sentence" if esc_when == "heard" else (lambda: None)
+    monkeypatch.setattr(live, "voice_navigation", True)
+    monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
+    monkeypatch.setattr(rs.state, "last_inserted_text", "One. Two.")
+    monkeypatch.setattr(speech_engine, "transcribe", esc if esc_when == "heard"
+                        else lambda audio, lang: "select the last sentence")
+    if esc_when == "keys":
+        monkeypatch.setattr("tuxtalk.modifier_hotkeys.wait_while_held", esc)
+    edit_env["selection"]["text"] = ""
+    run_edit()
+    assert keyboard.events == [] and edit_env["notices"] == []
+
+
 def test_select_with_the_edit_key_goes_only_into_the_window_it_was_said_in(
         edit_env, monkeypatch, keyboard):
     """Shift+F8 in KWrite with nothing selected, "select the line", and a
     click into another document while it was transcribed: the selection
     keys went into that one."""
-    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     kwrite, other = ("org.kde.kwrite", ("tray", "{1}")), ("org.kde.kwrite", ("tray", "{2}"))
     focus = [kwrite]
 
