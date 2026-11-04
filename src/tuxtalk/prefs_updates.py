@@ -395,6 +395,8 @@ class UpdatesTab(Tab):
             getattr(self.update_status_box, f"set_margin_{side}")(10)
         self.update_status_label = Gtk.Label(xalign=0)
         self.update_status_label.set_line_wrap(True)
+        # An update command can be 200 characters: the user copies it, not retypes it.
+        self.update_status_label.set_selectable(True)
         self.update_status_box.pack_start(self.update_status_label, False, False, 0)
         self.update_actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.update_actions_box.set_margin_top(10)
