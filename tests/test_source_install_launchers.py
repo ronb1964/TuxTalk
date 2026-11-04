@@ -118,6 +118,32 @@ def test_help_quotes_a_venv_path_with_a_space_for_a_shortcut(source_home_with_sp
     assert control.shortcut_command() == f"'{source_home_with_space.command}' --toggle"
 
 
+@pytest.fixture
+def no_tuxtalk_script(source_home, monkeypatch):
+    """A pip install outside a venv whose `tuxtalk` script isn't where pip
+    puts it (source_install.command() finds none)."""
+    from tuxtalk import source_install
+    monkeypatch.setattr(source_install, "command", lambda: None)
+    return source_home
+
+
+def test_without_its_tuxtalk_script_no_menu_entry_points_at_a_missing_program(
+        no_tuxtalk_script):
+    ok, _ = desktop_launcher.create_desktop_launcher()
+    assert not ok and not no_tuxtalk_script.menu_entry.exists()
+    assert desktop_launcher.create_hidden_desktop_entry() is False
+    assert not no_tuxtalk_script.menu_entry.exists()
+
+
+def test_without_its_tuxtalk_script_start_at_login_isnt_written(no_tuxtalk_script):
+    assert autostart.set_autostart(True) is False
+    assert not no_tuxtalk_script.autostart_entry.exists()
+
+
+def test_without_its_tuxtalk_script_help_suggests_the_plain_command(no_tuxtalk_script):
+    assert control.shortcut_command() == "tuxtalk --toggle"
+
+
 def test_the_icon_list_ends_with_the_packages_own_png_then_the_users_copy():
     from tuxtalk import app_icon
     files = app_icon.icon_files()

@@ -50,12 +50,12 @@ def desktop_exec_program(path: str) -> str:
     return '"' + quoted.replace("\\", "\\\\").replace("\n", "\\n") + '"'
 
 
-def get_launch_command(prefer_installed_appimage: bool = False) -> str:
+def get_launch_command(prefer_installed_appimage: bool = False) -> str | None:
     """Return the most portable command to launch the tray.
 
     Order: dev script → self-managed AppImage path → a source install's own
     `tuxtalk` (the copy running is the one that starts at login, even beside
-    a packaged one) → packaged launcher
+    a packaged one; None when pip's script isn't there) → packaged launcher
     (absolute; the AUR's too) → PATH lookup → bare interpreter (last
     resort). See the module docstring for why the packaged launcher must win
     over a bare-Python invocation.
@@ -85,7 +85,8 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
         return appimage_command
 
     if installation.get_install_type() == "source":
-        return desktop_exec_program(source_install.command())
+        program = source_install.command()
+        return desktop_exec_program(program) if program else None
 
     # Installed .deb/.rpm: prefer the KNOWN ABSOLUTE launcher, not `which`
     # (a stray ~/.local/bin/tuxtalk must never be written into autostart).
@@ -284,6 +285,9 @@ def set_autostart(enable: bool, prefer_installed_appimage: bool = False,
 
     if enable:
         exec_cmd = command or get_launch_command(prefer_installed_appimage)
+        if not exec_cmd:
+            logger.info("Start at login not set up: this TuxTalk's tuxtalk command wasn't found")
+            return False
         icon_path = get_icon_path()
         app_name = "TuxTalk (Dev)" if config.DEV_MODE else "TuxTalk"
         comment = AUTOSTART_COMMENT_DEV if config.DEV_MODE else AUTOSTART_COMMENT

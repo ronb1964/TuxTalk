@@ -54,10 +54,16 @@ def get_update_guidance(install_type: str, latest_version: str, *,
         cmd = f"flatpak update {APP_ID}"
         msg = (f"TuxTalk {v} is available. Update through Flatpak (your software "
                f"center may also update it automatically):")
-    elif install_type == "source":
+    elif install_type == "source" and source_install.in_venv():
         cmd = source_install.update_command(v)
         msg = (f"TuxTalk {v} is available. You installed it from its source code. "
                f"Quit TuxTalk, run this in a terminal, then open TuxTalk again:")
+    elif install_type == "source":
+        # pip outside a venv: no pip of this prefix to name, and only the
+        # user knows whether it was --user, sudo or something else.
+        cmd = None
+        msg = (f"TuxTalk {v} is available. Quit TuxTalk, update it the way you "
+               f"installed it, then open TuxTalk again.")
     elif aur_package:
         cmd = f"yay -S {aur_package}   # or: paru -S {aur_package}"
         msg = (f"TuxTalk {v} is available. You installed it from the AUR — "

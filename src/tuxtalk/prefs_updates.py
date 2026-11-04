@@ -10,7 +10,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import GLib, Gtk, Pango
 
-from . import installation
+from . import installation, source_install
 from .desktop_detect import is_gnome
 from .logger import setup_logger
 from .prefs_tab import Tab, dropdown, subheading
@@ -59,6 +59,8 @@ def how_it_updates_text(install_type, owner=installation.system_package):
         if pkg:
             return f"Installed from the AUR: update with your AUR helper (yay -S {pkg})."
         return "Installed by your system's package manager: update TuxTalk with it."
+    if install_type == "source" and not source_install.in_venv():
+        return "Installed from source: update it the way you installed it."
     return {
         "appimage": "Updates install and TuxTalk restarts by itself.",
         "rpm": package, "deb": package, "package": package,

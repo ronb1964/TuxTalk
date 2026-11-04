@@ -229,10 +229,10 @@ def ask_running(action, tray_starting=lambda: False, bus=None,
 
 def shortcut_command():
     """The command Help suggests for a desktop shortcut on this install: the
-    AppImage file for a self-managed AppImage, the venv's own `tuxtalk` for a
-    source install (it is on no PATH), else the `tuxtalk` launcher (.deb,
-    .rpm and AUR; a package started from another AppImage's terminal sees
-    that one's APPIMAGE). The full path, shell-quoted: GNOME runs a custom
+    AppImage file for a self-managed AppImage, a source install's own
+    `tuxtalk` (a venv's is on no PATH) when it is there, else the `tuxtalk`
+    launcher (.deb, .rpm and AUR; a package started from another AppImage's
+    terminal sees that one's APPIMAGE). The full path, shell-quoted: GNOME runs a custom
     shortcut without a shell, so "~" isn't expanded there, and a folder with
     a space would split the path."""
     import shlex
@@ -241,8 +241,9 @@ def shortcut_command():
     appimage = installation.get_running_appimage_path()
     if appimage and install_type == "appimage":
         return f"{shlex.quote(appimage)} --toggle"
-    if install_type == "source":
-        return f"{shlex.quote(source_install.command())} --toggle"
+    program = source_install.command() if install_type == "source" else None
+    if program:
+        return f"{shlex.quote(program)} --toggle"
     return "tuxtalk --toggle"
 
 

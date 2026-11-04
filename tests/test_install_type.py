@@ -222,6 +222,19 @@ def test_a_source_install_is_shown_the_install_command_and_told_to_quit_first(mo
     assert "Quit TuxTalk, run this in a terminal, then open TuxTalk again" in g["message"]
 
 
+def test_a_pip_install_outside_a_venv_is_told_to_update_it_as_it_was_installed(monkeypatch):
+    """No command: /usr/bin/pip doesn't exist, and pip into the system's own
+    Python is refused on most distros."""
+    monkeypatch.setattr(sys, "prefix", "/usr")
+    monkeypatch.setattr(sys, "base_prefix", "/usr")
+    g = get_update_guidance("source", "0.21.0")
+    assert g["command"] is None
+    assert g["message"] == ("TuxTalk 0.21.0 is available. Quit TuxTalk, update it the way "
+                            "you installed it, then open TuxTalk again.")
+    assert how_it_updates_text("source") == (
+        "Installed from source: update it the way you installed it.")
+
+
 def test_a_system_install_from_the_aur_is_told_its_aur_helper_command():
     g = get_update_guidance("system", "0.21.0", owner=lambda: "tuxtalk")
     assert g["command"] == "yay -S tuxtalk   # or: paru -S tuxtalk"

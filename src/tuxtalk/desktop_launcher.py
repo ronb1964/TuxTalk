@@ -107,9 +107,10 @@ def point_at_running_appimage(running: str) -> None:
         logger.warning(f"Could not repoint the menu launcher: {msg}")
 
 
-def _launcher_program() -> str:
+def _launcher_program() -> Optional[str]:
     """What the menu entry of this install starts: a source install's own
-    `tuxtalk` command, else the AppImage in ~/AppImages."""
+    `tuxtalk` command (None when pip's script isn't there), else the AppImage
+    in ~/AppImages."""
     if installation.get_install_type(pkg_query=lambda: "package") == "source":
         return source_install.command()
     return installation.APPIMAGE_PATH
@@ -121,10 +122,13 @@ def create_desktop_launcher(exec_path: Optional[str] = None) -> Tuple[bool, str]
     *exec_path*: the running AppImage, when the copy there failed.
     (success, message for the user)."""
     try:
+        exec_path = exec_path or _launcher_program()
+        if not exec_path:
+            logger.info("No menu launcher written: this TuxTalk's tuxtalk command wasn't found")
+            return (False, "TuxTalk's tuxtalk command wasn't found.")
         os.makedirs(os.path.dirname(DESKTOP_FILE_PATH), exist_ok=True)
         icon_name = install_app_icon() or "audio-input-microphone"
         version = __version__
-        exec_path = exec_path or _launcher_program()
         logger.info(f"Desktop launcher Exec path: {exec_path}")
         # Quoted where it must be: a download named "TuxTalk (1).AppImage"
         # was cut at the space, and the menu entry opened nothing.
@@ -240,13 +244,17 @@ def create_hidden_desktop_entry() -> bool:
             return False        # other installs ship their own launcher
         if os.path.lexists(DESKTOP_FILE_PATH):
             return False
-        icon_name = install_app_icon() or "audio-input-microphone"
-        os.makedirs(os.path.dirname(DESKTOP_FILE_PATH), exist_ok=True)
         # Exec is required for a valid entry; the running program exists now.
         if install_type == "source":
             running = source_install.command()
         else:
             running = installation.get_running_appimage_path() or installation.APPIMAGE_PATH
+        if not running:
+            logger.info("No hidden desktop entry written: this TuxTalk's tuxtalk command "
+                        "wasn't found")
+            return False
+        icon_name = install_app_icon() or "audio-input-microphone"
+        os.makedirs(os.path.dirname(DESKTOP_FILE_PATH), exist_ok=True)
         exec_path = desktop_exec_program(running)
         tmp = DESKTOP_FILE_PATH + ".tmp"
         with open(tmp, "w") as f:
