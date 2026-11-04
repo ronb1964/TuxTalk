@@ -87,10 +87,9 @@ _PYTHON_FLAGS = re.compile(r"-[bBdEiIOPqsSuvx]+")
 
 
 def interpreter_target(argv):
-    """("module", name) for ``<python> -m name``, ("script", file name) for
-    ``<python> path``, else None. Only the interpreter's own flags (and -X's
-    or -W's value) may come first: ``python3 -c '...' -m tuxtalk.app`` runs
-    '...', not TuxTalk."""
+    """("module", name) for ``<python> -m name``, else None. Only the
+    interpreter's own flags (and -X's or -W's value) may come first:
+    ``python3 -c '...' -m tuxtalk.app`` runs '...', not TuxTalk."""
     argv = list(argv)
     if not argv or not os.path.basename(argv[0]).startswith("python"):
         return None
@@ -102,10 +101,8 @@ def interpreter_target(argv):
             args = args[1:]
         else:
             break
-    if args[:1] == ["-m"]:
-        return ("module", args[1]) if len(args) > 1 else None
-    if args and not args[0].startswith("-"):
-        return ("script", os.path.basename(args[0]))
+    if args[:1] == ["-m"] and len(args) > 1:
+        return ("module", args[1])
     return None
 
 

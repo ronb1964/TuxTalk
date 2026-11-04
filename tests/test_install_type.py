@@ -252,6 +252,13 @@ def test_a_system_install_with_no_known_owner_is_sent_to_its_package_manager():
     assert g["command"] is None and "package manager you installed it with" in g["message"]
 
 
+def test_a_package_install_of_unknown_kind_is_sent_to_its_package_manager_or_github():
+    g = get_update_guidance("package", "0.21.0")
+    assert g["command"] is None and g["message"] == (
+        "TuxTalk 0.21.0 is available. Please update using your system's package manager, "
+        "or download it from the release page.")
+
+
 def test_preferences_says_in_one_line_how_each_new_type_updates():
     assert how_it_updates_text("source") == ("Installed from source: Check for Updates shows "
                                              "the command that installs the new version.")

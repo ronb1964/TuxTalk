@@ -9,11 +9,10 @@ the recording loop runs in "tuxtalk.app", every one of those globals is
 invisible over there and transcription dies with `NameError: name 'model'`.
 
 The loop is reached through EvdevInputBackend.start(), which does
-`from . import app`, so it always runs in "tuxtalk.app". The AppImage's
-bin/dictate is a setuptools console script that does
-`from tuxtalk.app import main`, the correct package name; the `-m` entry must
-behave the same by delegating to the package module's main(). The Flatpak also
-launches with `python3 -m tuxtalk.app`, so this guard protects it too.
+`from . import app`, so it always runs in "tuxtalk.app". The `-m` entry must
+therefore delegate to the package module's main(). Every install starts the
+service that way (the tray launches `python3 -m tuxtalk.app`, the Flatpak
+too), so this guard protects them all.
 """
 
 import subprocess

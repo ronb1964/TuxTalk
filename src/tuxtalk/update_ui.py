@@ -72,11 +72,13 @@ def get_update_guidance(install_type: str, latest_version: str, *,
         cmd = "git pull   # in your TuxTalk project folder"
         msg = (f"TuxTalk {v} is available. You're running the development "
                f"version — update with git:")
-    else:  # 'package' / a system install no known package owns / unknown
+    elif install_type == "system":      # no package pacman knows owns it
         cmd = None
         msg = (f"TuxTalk {v} is available. Update it with the package manager you "
-               f"installed it with." if install_type == "system" else
-               f"TuxTalk {v} is available. Please update using your system's "
+               f"installed it with.")
+    else:  # 'package' / unknown
+        cmd = None
+        msg = (f"TuxTalk {v} is available. Please update using your system's "
                f"package manager, or download it from the release page.")
     return {"update_method": "manual", "can_auto_update": False,
             "message": msg, "command": cmd}
@@ -273,8 +275,9 @@ def _update_heading(content, current, latest):
 
 
 def _how_to_update(content, guidance):
-    """For package, AUR and Flatpak installs, which update through their own
-    tools: how, and the exact command, selectable to copy."""
+    """For every install TuxTalk doesn't update itself (a package, the AUR,
+    Flatpak, a source install, a checkout): how, and the exact command when
+    there is one, selectable to copy."""
     how_label = Gtk.Label()
     how_label.set_line_wrap(True)
     how_label.set_halign(Gtk.Align.START)

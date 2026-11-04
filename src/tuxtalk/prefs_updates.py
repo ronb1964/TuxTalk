@@ -526,10 +526,12 @@ class UpdatesTab(Tab):
 
         self.update_status_label.set_markup("\n".join(status_lines))
 
-        # How TuxTalk was installed decides whether it can auto-update. Only a
-        # self-managed AppImage can be swapped in place; package/AUR/Flatpak
-        # users get instructions + the release link, never an AppImage download
-        # (which fails on package installs, e.g. missing libfuse.so.2).
+        # How TuxTalk was installed decides whether it can auto-update. A
+        # self-managed AppImage is swapped in place and a .deb/.rpm installed
+        # through the package manager; every other install gets instructions
+        # (a source install the command to paste) and the release link, never
+        # an AppImage download (which fails on package installs, e.g. missing
+        # libfuse.so.2).
         from . import update_install, update_ui
         install_type = installation.get_install_type()
         guidance = update_ui.get_update_guidance(install_type, latest)
