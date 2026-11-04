@@ -223,7 +223,7 @@ def test_a_voice_edit_esc_stops_at_its_first_key_and_says_nothing_more(monkeypat
     monkeypatch.setattr(notices, "report_undelivered", lambda *a: told.append(a))
     monkeypatch.setattr(notices, "edit_problem", lambda *a: told.append(a))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: told.append(a))
-    assert voice_edit._type_rewrite("Rewritten.", "type", message, True, None) is False
+    assert voice_edit._type_rewrite("Rewritten.", "type", message, True, None) == "cancelled"
     assert watched == [message] and told == []
 
 

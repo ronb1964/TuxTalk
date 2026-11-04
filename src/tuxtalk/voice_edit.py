@@ -104,14 +104,18 @@ def _only_into(focused_class, window):
     return functools.partial(focused_window.claim_into, (focused_class, window))
 
 
-def _not_pressed(focused_class, window, beeps_on) -> None:
+def _not_pressed(focused_class, window, beeps_on, message) -> None:
     """Tell the user why keys meant for the selection didn't go in: the
-    window changed right before them (the claim), or they couldn't be sent."""
+    window changed right before them (the claim), or they couldn't be sent.
+    Nothing when Esc stopped them (keyboard_output.until_cancelled): it said
+    so itself."""
+    if message.cancelled:
+        return
     moved = focus_moved(focused_class, window)
     notices.edit_problem("focus_moved" if moved else "shortcut_failed", beeps_on)
 
 
-def _delete_selection(focused_class, window, beeps_on) -> bool:
+def _delete_selection(focused_class, window, beeps_on, message) -> bool:
     """"Delete this": Delete on the selection, still selected in
     *focused_class*. True when it was pressed. Transcribing can take
     seconds, and Delete must not reach a window the user has switched to
@@ -127,14 +131,14 @@ def _delete_selection(focused_class, window, beeps_on) -> bool:
         return False
     if not keyboard_output.send_keys([(111, 1), (111, 0)], what="delete",     # KEY_DELETE
                                      claim=_only_into(focused_class, window)):
-        _not_pressed(focused_class, window, beeps_on)
+        _not_pressed(focused_class, window, beeps_on, message)
         return False
     logger.info("Voice edit: deleted the selection")
     beeps.beep(beeps_on, *READY_BEEP)
     return True
 
 
-def _format_selection(fmt, focused_class, window, beeps_on) -> bool:
+def _format_selection(fmt, focused_class, window, beeps_on, message) -> bool:
     """Bold, italic or underline (*fmt*, voice_edit_rules.formatting) with
     the app's own shortcut on the selection, still selected. True when it
     was pressed."""
@@ -149,7 +153,7 @@ def _format_selection(fmt, focused_class, window, beeps_on) -> bool:
         return False
     claim = _only_into(focused_class, window)
     if not all(keyboard_output.send_format_shortcut(kind, claim) for kind in fmt):
-        _not_pressed(focused_class, window, beeps_on)
+        _not_pressed(focused_class, window, beeps_on, message)
         return False
     logger.info(f"Voice edit: {', '.join(fmt)} with the app's shortcut ({focused_class})")
     beeps.beep(beeps_on, *READY_BEEP)
@@ -206,30 +210,48 @@ def _refused_selection(selected, expected, put_back, get_instruction, where,
     return False
 
 
-def _cancelled(message) -> bool:
-    """Whether Esc cancelled *message*'s recording: after its key was let go
-    (recording.cancel_finishing), or "edit that" in a phrase of a recording
-    still going."""
-    if message.cancelled:
-        logger.info("Voice edit not done: the recording was cancelled")
-    return message.cancelled
+def _esc_stopped(message, expected, where) -> bool:
+    """Whether Esc cancelled *message*'s recording, with the selection as it
+    was: after its key was let go (recording.cancel_finishing), or "edit
+    that" in a phrase of a recording still going. What "edit that" selected
+    itself (*expected* set) is let go of then: left selected, the next key
+    the user types would replace the dictation."""
+    if not message.cancelled:
+        return False
+    logger.info("Voice edit not done: the recording was cancelled")
+    _let_go_of_selection(expected, where)
+    return True
+
+
+def _let_go_of_selection(expected, where) -> None:
+    """Esc stopped an edit before it changed anything: what "edit that"
+    selected itself (*expected* set) is let go of with Right, as "unselect"
+    presses it (voice_navigation), the cursor at its end, where the
+    dictation left it. Only into *where*, the window it was selected in.
+    A selection the user made stays."""
+    if expected is None:
+        return
+    if not keyboard_output.output_backend().press_keys([((), "RIGHT")],
+                                                       claim=_only_into(*where)):
+        logger.warning("Voice edit: couldn't let go of the selection after Esc")
 
 
 # _edit_with_keys's answer for an instruction that needs the text rewritten.
 _NOT_A_KEY_EDIT = object()
 
 
-def _edit_with_keys(instruction, focused_class, window, beeps_on):
+def _edit_with_keys(instruction, focused_class, window, beeps_on, message):
     """Deleting and formatting, which need no AI and press keys only: what
-    the edit returned, or _NOT_A_KEY_EDIT for a rewrite."""
+    the edit returned, or _NOT_A_KEY_EDIT for a rewrite. Esc a moment
+    before stops the keys at the first (keyboard_output.until_cancelled)."""
     if voice_edit_rules.is_delete(instruction):
-        return _delete_selection(focused_class, window, beeps_on)
+        return _delete_selection(focused_class, window, beeps_on, message)
     fmt = voice_edit_rules.formatting(instruction)
     if fmt == voice_edit_rules.CANT_FORMAT:
         notices.edit_problem("cant_format", beeps_on)
         return None
     if fmt:
-        return _format_selection(fmt, focused_class, window, beeps_on)
+        return _format_selection(fmt, focused_class, window, beeps_on, message)
     return _NOT_A_KEY_EDIT
 
 
@@ -298,8 +320,8 @@ def _apply_steps(selected, steps, beeps_on):
 def _type_rewrite(result, injection_mode, message, beeps_on, into):
     """Type or paste *result* over the selection, which is still active, in
     one block (see delivery.inject_text), as part of *message*, and only
-    into *into* (a look, or None when the window isn't known); True when it
-    all went in."""
+    into *into* (a look, or None when the window isn't known); its outcome,
+    "ok" when it all went in."""
     from . import history
     try:
         # Esc while the rewrite gets ready to go in stops it at the first key.
@@ -314,7 +336,7 @@ def _type_rewrite(result, injection_mode, message, beeps_on, into):
     if outcome == "password_field":
         history.forget(result)
     if outcome == "cancelled":
-        return False        # Esc said so itself; nothing replaced the selection
+        return outcome      # Esc said so itself; nothing replaced the selection
     if outcome == "moved":
         # The window changed between the last look and the keys: the
         # dictation's notice would blame a Right Ctrl the user may not use.
@@ -323,7 +345,7 @@ def _type_rewrite(result, injection_mode, message, beeps_on, into):
         notices.report_undelivered(outcome, beeps_on)
     else:
         beeps.beep(beeps_on, *READY_BEEP)
-    return outcome == "ok"
+    return outcome
 
 
 def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0, message,
@@ -336,10 +358,11 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
     selection that holds other words isn't changed. *window* says which of
     the app's windows it is, where the desktop says (focus_moved). True
     when the change went in."""
-    from . import clipboard, history
+    from . import clipboard
+    where = (focused_class, window)
     # Before copying the selection or hearing the instruction; checked
     # again before the rewrite replaces it.
-    if _cancelled(message) or notices.refuse_password_field(beeps_on):
+    if _esc_stopped(message, expected, where) or notices.refuse_password_field(beeps_on):
         return
     # The selection first, so "select some text first" comes up even when
     # nothing was said. Ctrl+C in a terminal switched to during the password
@@ -355,47 +378,62 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
         notices.edit_problem("no_clipboard", beeps_on)
         return
     if copy_sent == [False]:
-        _not_pressed(focused_class, window, beeps_on)
+        _not_pressed(focused_class, window, beeps_on, message)
         return
-    if _refused_selection(selected, expected, put_back, get_instruction,
-                          (focused_class, window), beeps_on):
+    if _refused_selection(selected, expected, put_back, get_instruction, where, beeps_on):
         return
     result = None
     try:
         instruction = get_instruction()
         # Esc while it was heard: "Cancelled by ESC" was said, and nothing
         # may change the selection after it.
-        if _cancelled(message):
+        if _esc_stopped(message, expected, where):
             return
         if not instruction:
             notices.edit_problem("no_instruction", beeps_on)
             return
-        if voice_commands.handle_navigation(instruction, beeps_on, (focused_class, window)):
+        if voice_commands.handle_navigation(instruction, beeps_on, where):
             return
         logger.info(f"Voice edit: {live.loggable(instruction)} ({len(selected)} characters)")
-        keys = _edit_with_keys(instruction, focused_class, window, beeps_on)
+        with keyboard_output.until_cancelled(message):
+            keys = _edit_with_keys(instruction, focused_class, window, beeps_on, message)
         if keys is not _NOT_A_KEY_EDIT:
+            if not keys and message.cancelled:
+                _let_go_of_selection(expected, where)   # Esc stopped the keys
             return keys
         result = _rewritten(selected, instruction, beeps_on)
-        # Esc while the AI rewrote it: the selection stays as it is.
-        if result is None or _cancelled(message) or notices.refuse_password_field(beeps_on):
+        # Esc while the AI rewrote it: nothing replaces the selection.
+        if (_esc_stopped(message, expected, where) or result is None
+                or notices.refuse_password_field(beeps_on)):
             return
         logger.info(f"Voice edit result: {live.loggable(result)} "
                     f"(took {time.time() - t0:.2f}s)")
-        history.add_entry(result)
-        into = (focused_class, window)
-        if focused_class is None:
-            # Typed unchecked, as ordinary dictation is: refusing here would
-            # turn voice editing off wherever the window can't be found.
-            logger.info("Voice edit: the focused window is unknown, so typing goes ahead unchecked")
-            into = None
-        elif focus_moved(focused_class, window):
-            # Typing now would put the rewrite into whatever window has focus.
-            notices.edit_problem("window_changed", beeps_on)
-            return
-        return _type_rewrite(result, injection_mode, message, beeps_on, into)
+        return _rewrite_over_selection(result, injection_mode, message, beeps_on, expected,
+                                       where)
     finally:
         _put_clipboard_back(put_back, result)
+
+
+def _rewrite_over_selection(result, injection_mode, message, beeps_on, expected, where) -> bool:
+    """Type *result* over the selection in *where*, the window the edit
+    started in, as edit_selection's last step; True when it all went in."""
+    from . import history
+    history.add_entry(result)
+    focused_class, window = where
+    into = where
+    if focused_class is None:
+        # Typed unchecked, as ordinary dictation is: refusing here would
+        # turn voice editing off wherever the window can't be found.
+        logger.info("Voice edit: the focused window is unknown, so typing goes ahead unchecked")
+        into = None
+    elif focus_moved(focused_class, window):
+        # Typing now would put the rewrite into whatever window has focus.
+        notices.edit_problem("window_changed", beeps_on)
+        return False
+    outcome = _type_rewrite(result, injection_mode, message, beeps_on, into)
+    if outcome == "cancelled":
+        _let_go_of_selection(expected, where)       # Esc before its first key
+    return outcome == "ok"
 
 
 def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str,

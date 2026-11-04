@@ -410,6 +410,33 @@ def test_esc_while_the_ai_rewrites_leaves_the_selection_alone(edit_env, monkeypa
     assert edit_env["typed"] == [] and edit_env["history"] == []
 
 
+def test_esc_while_edit_that_is_rewritten_lets_go_of_what_it_selected(edit_env, keyboard,
+                                                                      monkeypatch):
+    """"edit that, make it more formal", then Esc while the AI rewrote it:
+    the dictation "edit that" had selected stayed selected, and the next
+    key the user typed replaced it. Right lets go of it, the cursor at its
+    end, where the dictation left it."""
+    where = ("org.kde.kwrite", ("tray", "{doc}"))
+    message = rs.state.current.message
+    monkeypatch.setattr(live, "voice_editing", True)
+    monkeypatch.setattr(focused_window, "look", lambda: where)
+    monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", "", ""))
+    monkeypatch.setattr(rs.state, "last_inserted_text", "We finished the electrical today. ")
+    monkeypatch.setattr(rs.state, "last_inserted_window", where[0])
+    monkeypatch.setattr(rs.state, "last_inserted_where", where)
+    monkeypatch.setattr(message, "edit_waiting", None)
+    answer = edit_env["engine"].edit
+
+    def esc_meanwhile(text, instruction):
+        monkeypatch.setattr(message, "cancelled", True)
+        return answer(text, instruction)
+    monkeypatch.setattr(edit_env["engine"], "edit", esc_meanwhile)
+    assert voice_edit.handle_spoken_edit("Edit that, make it more formal.", None, False, "type",
+                                         message)
+    assert edit_env["typed"] == [] and edit_env["engine"].asked
+    assert keyboard.events[-2:] == [(106, 1), (106, 0)]          # Right
+
+
 def test_edit_that_rewrites_what_it_selected_however_the_lines_are_spaced(edit_env):
     """The selection holds the dictation, with the app's own line ends and
     spaces: that is the text "edit that" counted back over."""
@@ -1175,6 +1202,33 @@ def test_esc_while_the_instruction_is_heard_deletes_nothing(edit_env, keys_sent,
     monkeypatch.setattr(speech_engine, "transcribe", heard_then_esc)
     run_edit()
     assert keys_sent == [] and edit_env["typed"] == [] and edit_env["put_back"] == 1
+
+
+@pytest.mark.parametrize("said, focused", [
+    ("Delete this.", "org.kde.kwrite"),
+    ("Make this bold.", "libreoffice-writer"),
+])
+def test_esc_while_a_delete_or_bold_waits_presses_nothing(edit_env, keyboard, monkeypatch,
+                                                         said, focused):
+    """Esc a moment after the key came up, while the Delete or the Ctrl+B
+    waited (a Right Ctrl dictation key still down): it went all the same,
+    after "Cancelled by ESC", and nothing else is said."""
+    where = (focused, ("tray", "{doc}"))
+    message = rs.state.current.message
+    problems = []
+    monkeypatch.setattr(focused_window, "look", lambda: where)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focused)
+    monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", "", ""))
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: said)
+    monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: problems.append(kind))
+
+    def wait_while_held(destination=None):
+        def before_press():
+            monkeypatch.setattr(message, "cancelled", True)     # Esc, while the key waited
+        return before_press
+    monkeypatch.setattr("tuxtalk.modifier_hotkeys.wait_while_held", wait_while_held)
+    run_edit(where=where)
+    assert keyboard.events == [] and problems == [] and edit_env["beeps"] == []
 
 
 def test_esc_before_the_edit_s_turn_copies_nothing(edit_env, monkeypatch):
