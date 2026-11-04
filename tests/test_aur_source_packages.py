@@ -37,7 +37,8 @@ done
 """
 
 SRCINFO_KEYS = ("pkgdesc", "url", "pkgver", "pkgrel", "arch", "license", "source",
-                "sha256sums", "depends", "makedepends", "optdepends", "conflicts", "install")
+                "sha256sums", "depends", "makedepends", "checkdepends", "optdepends", "conflicts",
+                "install")
 
 # The Arch package that provides each Python package TuxTalk needs, under the
 # name pyproject.toml gives it and the name it is imported by. A name missing
