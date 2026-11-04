@@ -590,16 +590,47 @@ def _keys_to_watch(cfg: Settings, devices):
         return None
 
     # A hotkey is configured and onboarding is done, so from here on every
-    # keypress is supposed to reach us. If no device could be opened, say so
-    # now rather than running a poll loop over an empty device list forever.
-    if not devices:
-        diagnosis = uinput_helper.input_access_diagnosis()
-        logger.error(diagnosis)
-        print(diagnosis, file=sys.stderr)
-        notices.warn_no_keyboard(cfg.hotkey)
+    # keypress is supposed to reach us. If none can, say so now rather than
+    # running a poll loop that hears nothing, forever.
+    problem = _why_no_hotkey_reaches_us(cfg.hotkey, devices)
+    if problem is not None:
+        for_log, for_user = problem
+        logger.error(for_log)
+        print(for_log, file=sys.stderr)
+        notices.warn_no_keyboard(for_user)
     if keys.voice_cmds_combo:
         logger.info(f"Voice Commands hotkey: {keys.vc_hotkey_str}")
     return keys
+
+
+def _why_no_hotkey_reaches_us(hold_key: str, devices):
+    """(for the log, for the user) when no keyboard reaches the service at
+    start, or None: the hotkey helper isn't answering, or it or this
+    service reads no keyboard while one is plugged in. With none plugged
+    in yet (a Bluetooth one connects after login) nothing is wrong: the
+    rescan, or the helper, picks it up when it comes."""
+    from .helper_keyboard_access import keyboard_plugged_in
+    from .hotkey_helper_client import HelperKeyboard
+    helper = next((dev for dev in devices if isinstance(dev, HelperKeyboard)), None)
+    if helper is not None and helper.sock is None:
+        return _from_system_check(uinput_helper.HELPER_NOT_ANSWERING)
+    reads_none = not devices if helper is None else helper.helper_keyboards == 0
+    if not reads_none:
+        return None
+    if not keyboard_plugged_in():
+        logger.info("No keyboard is plugged in yet; the hotkeys work once one is")
+        return None
+    if helper is not None:
+        return _from_system_check(uinput_helper.HELPER_SEES_NO_KEYBOARD)
+    advice = uinput_helper.input_access_advice()
+    return (f"No readable keyboard found, so the hotkeys can't work. {advice}",
+            f"{hold_key} won't start dictation yet. {advice}")
+
+
+def _from_system_check(state: str):
+    """(for the log, for the user) from what System check says about the
+    hotkey helper, with where that is for the user."""
+    return state, f"{state}. Open {uinput_helper.SYSTEM_CHECK_PATH}."
 
 
 def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys") -> None:

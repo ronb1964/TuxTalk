@@ -140,11 +140,20 @@ def _through_input_group(path) -> bool:
     return helper_may(st.st_mode & ~0o007, st.st_gid, group_only, gid, READ | WRITE)
 
 
-# Said by System check, the hotkey test and first run when the hotkey helper
-# answers but reads no keyboard (issue #26). Its journal names each device
-# it left out and why, and Report a Problem includes that.
+SYSTEM_CHECK_PATH = "Preferences → Advanced → System check"
+FIX_TYPING_PATH = f"{SYSTEM_CHECK_PATH} → Fix Typing Permissions"
+
+# Said by System check, the hotkey test, first run and the notice at start
+# when the hotkey helper answers but reads no keyboard (issue #26). Its
+# journal names each device it left out and why, and Report a Problem
+# includes that.
 HELPER_SEES_NO_KEYBOARD = ("The hotkey helper can't see your keyboard, so the dictation keys "
                            "can't work. Help → Problems → Report a Problem has its log")
+# Said by System check and the notice at start. The service keeps trying an
+# installed helper (connect_helper) rather than reading the keyboards
+# itself, and System check's Update starts it again.
+HELPER_NOT_ANSWERING = ("TuxTalk's hotkey helper is installed but isn't answering, so the "
+                        "dictation key won't work. Updating it starts it again")
 
 
 def check_input_read_permission():
@@ -259,15 +268,12 @@ def typing_blocked_reason():
     return None
 
 
-FIX_TYPING_PATH = "Preferences \u2192 Advanced \u2192 System check \u2192 Fix Typing Permissions"
-
-
 def input_access_advice() -> str:
-    """What to do when no keyboard is readable, for the user: the
-    service's log, the terminal it was started from and the notice at
-    start. evdev's list_devices() skips the nodes this user can't open,
-    rather than raising, so without this the service looks healthy while
-    ignoring every key."""
+    """What to do when a keyboard is plugged in and none is readable, for
+    the user: the service's log, the terminal it was started from and the
+    notice at start. evdev's list_devices() skips the nodes this user can't
+    open, rather than raising, so without this the service looks healthy
+    while ignoring every key."""
     from .secure_input import can_install
     if can_install()[0]:
         return (f"Open {FIX_TYPING_PATH}: it installs TuxTalk's hotkey helper, "
@@ -285,11 +291,6 @@ def input_access_advice() -> str:
         return ("Setup already put you in the 'input' group: restart the computer "
                 "to finish it.")
     return f"Open {FIX_TYPING_PATH}, then restart the computer."
-
-
-def input_access_diagnosis() -> str:
-    """input_access_advice with its reason first, for the log."""
-    return "No readable keyboard found, so the hotkeys can't work. " + input_access_advice()
 
 
 def get_fix_script_content():

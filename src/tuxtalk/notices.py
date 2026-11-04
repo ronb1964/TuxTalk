@@ -41,13 +41,12 @@ def warn_silent_mic():
     notify_module.notify(SILENT_MIC_TITLE, SILENT_MIC_NOTICE)
 
 
-def warn_no_keyboard(hold_key: str):
-    """The service started after setup with no keyboard it can read, so
-    *hold_key* will do nothing. Always said, once per start: the log alone
-    left people pressing a key that did nothing, with no word why."""
-    notify_module.notify(
-        NO_KEYBOARD_TITLE,
-        f"{hold_key} won't start dictation yet. {uinput_helper.input_access_advice()}")
+def warn_no_keyboard(why: str):
+    """The service started after setup and no keyboard reaches it, so the
+    hold key will do nothing; *why* says so and where to fix it. Always
+    said, once per start: the log alone left people pressing a key that
+    did nothing, with no word why."""
+    notify_module.notify(NO_KEYBOARD_TITLE, why)
 
 
 def device_name(idx) -> str:

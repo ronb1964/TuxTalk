@@ -16,6 +16,10 @@ ACL when it has one (its mode's group bits are then the ACL's mask), else
 from the mode bits, the group's when the node belongs to "input" and the
 others' when it doesn't. Only keyboards on seat0 count, as the helper reads
 no other seat's.
+
+The same sysfs reading tells the service at start whether a keyboard is
+plugged in at all (keyboard_plugged_in), so it says it can't read one only
+when there is one to read.
 """
 import errno
 import grp
@@ -176,3 +180,13 @@ def read_only_keyboards(input_dir="/dev/input", sys_dir="/sys/class/input", grou
     return [node for node, st, writable in _helper_readable(input_dir, group)
             if not writable and _is_keyboard(sys_dir, os.path.basename(node))
             and udev_seat(st.st_rdev, udev_dir) == "seat0"]
+
+
+def keyboard_plugged_in(input_dir="/dev/input", sys_dir="/sys/class/input",
+                        char_dir=SYS_CHAR_DIR):
+    """Whether a keyboard is plugged in, whoever may open it; one a program
+    made through uinput (TuxTalk's own, a remapper's) doesn't count. The
+    paths can be moved for tests."""
+    return any(_is_keyboard(sys_dir, os.path.basename(node))
+               and not made_through_uinput(st.st_rdev, char_dir)
+               for node, st in _event_nodes(input_dir))

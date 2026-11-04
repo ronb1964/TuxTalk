@@ -93,9 +93,9 @@ def _typing_state(refused_shortcuts):
         # The service keeps trying an installed helper (connect_helper), so
         # a silent one means no hotkeys; installing it again starts it, and
         # the service connects within a second, with no restart.
-        return (f'<span color="{WARNING_AMBER}">⚠ TuxTalk\'s hotkey helper is installed but '
-                'isn\'t answering, so the dictation key won\'t work. Updating it '
-                'starts it again</span>', UPDATE_HELPER_LABEL, True, False)
+        return (f'<span color="{WARNING_AMBER}">⚠ '
+                f'{GLib.markup_escape_text(uinput_helper.HELPER_NOT_ANSWERING)}</span>',
+                UPDATE_HELPER_LABEL, True, False)
     return _no_access_state()
 
 

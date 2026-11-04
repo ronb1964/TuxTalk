@@ -181,3 +181,30 @@ def test_another_seats_keyboard_and_mouse_is_left_out(nodes, tmp_path):
     rdev = os.stat(tmp_path / "input" / "event5").st_rdev
     (udev / f"c{os.major(rdev)}:{os.minor(rdev)}").write_text("E:ID_SEAT=seat1\n")
     assert _also_mice(tmp_path, udev) == []
+
+
+def _plugged_in(tmp_path):
+    return access.keyboard_plugged_in(str(tmp_path / "input"), str(tmp_path / "sys"),
+                                      str(tmp_path / "char"))
+
+
+def test_a_keyboard_counts_as_plugged_in_even_when_it_cant_be_opened(nodes, tmp_path):
+    """A keyboard TuxTalk has no permission for is still there, and that's
+    what the notice at start is about; a power button is no keyboard."""
+    make, _scan, _udev = nodes
+    make("event3", 0o660, keys=[116])
+    assert not _plugged_in(tmp_path)
+    make("event4", 0o600)
+    assert _plugged_in(tmp_path)
+
+
+def test_a_keyboard_a_program_made_isnt_one_plugged_in(nodes, tmp_path):
+    """TuxTalk's own virtual keyboard, or a remapper's, is there from the
+    start: with only that, no keyboard is plugged in yet."""
+    make, _scan, _udev = nodes
+    make("event5", 0o600)
+    rdev = os.stat(tmp_path / "input" / "event5").st_rdev
+    (tmp_path / "char").mkdir()
+    (tmp_path / "char" / f"{os.major(rdev)}:{os.minor(rdev)}").symlink_to(
+        "/sys/devices/virtual/input/input40/event20")
+    assert not _plugged_in(tmp_path)
