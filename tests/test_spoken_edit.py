@@ -413,3 +413,12 @@ def test_edit_that_typed_over_after_esc_moves_nothing_of_the_users(edit_env, edi
         return answer(text, instruction)
     monkeypatch.setattr(edit_env["engine"], "edit", esc_then_typed_over)
     assert edit_that() == [SELECT_DICTATED]
+
+
+def test_edit_that_with_a_move_it_cant_make_lets_go_of_its_selection(edit_env, edit_that,
+                                                                      monkeypatch):
+    """"edit that, select the last word": "edit that" has just taken the
+    dictation, so there's no word to count back over and nothing moves.
+    The dictation was left selected."""
+    monkeypatch.setattr(live, "voice_navigation", True)
+    assert edit_that("Edit that, select the last word.") == [SELECT_DICTATED, LET_GO_OF_IT]

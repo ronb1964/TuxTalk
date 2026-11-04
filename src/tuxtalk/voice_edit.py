@@ -441,8 +441,9 @@ def _change_selection(get_instruction, beeps_on, injection_mode, where, t0, mess
             return _UNCHANGED
         # Esc a moment before stops their keys at the first.
         with keyboard_output.until_cancelled(message):
-            if voice_commands.handle_navigation(instruction, beeps_on, where):
-                return False
+            moved = voice_commands.navigate(instruction, beeps_on, where)
+            if moved is not None:
+                return False if moved else _UNCHANGED
             logger.info(f"Voice edit: {live.loggable(instruction)} ({len(selected)} characters)")
             keys = _edit_with_keys(instruction, focused_class, window, beeps_on, message)
         if keys is not _NOT_A_KEY_EDIT:

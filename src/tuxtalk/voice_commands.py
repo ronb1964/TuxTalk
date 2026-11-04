@@ -268,18 +268,25 @@ def handle_navigation(raw: str, beeps_on: bool, where=None) -> bool:
     was one of voice_navigation's commands, done or refused with a notice;
     False to type it as text. *where* is the window the keys may go into, a
     look (a voice edit's, taken when it started), else the one looked at here."""
+    return navigate(raw, beeps_on, where) is not None
+
+
+def navigate(raw: str, beeps_on: bool, where=None):
+    """handle_navigation's work: None when *raw* isn't a select or move
+    command; else whether its keys went in. False: refused with a notice,
+    or stopped by Esc, and nothing moved."""
     if not live.voice_navigation:
-        return False
+        return None
     from . import voice_navigation as nav
     command = nav.parse(raw)
     if command is None:
-        return False
+        return None
     logger.info(f"Voice command: {command.name}")
     if where is None:
         where = focused_window.look()
     if is_terminal_class(where[0]):
         notices.edit_problem("nav_terminal", beeps_on)
-        return True
+        return False
     # Right after a dictation the cursor is at its end; after an exact move,
     # nav_context says where in it. Only in the window it was typed into:
     # dictating into a chat, then saying "select the last sentence" in Writer
@@ -295,7 +302,7 @@ def handle_navigation(raw: str, beeps_on: bool, where=None) -> bool:
         # One message for "just restarted" and "dictated somewhere else since":
         # both come down to the one rule (it teaches the rule, too).
         notices.edit_problem("nothing_said", beeps_on)
-        return True
+        return False
     try:
         pressed = _sent_into(where, lambda: keyboard_output.output_backend()
                              .press_keys(plan.chords))
@@ -303,7 +310,7 @@ def handle_navigation(raw: str, beeps_on: bool, where=None) -> bool:
         logger.error(f"Voice command: pressing the keys failed: {e}")
         pressed = False
     if pressed == "cancelled":
-        return True         # nothing moved
+        return False        # nothing moved
     # The cursor has moved (or may have): undo's character count no longer
     # matches the document, and "delete last word" would eat the wrong text.
     rs.state.last_inserted_text = ""
@@ -315,7 +322,7 @@ def handle_navigation(raw: str, beeps_on: bool, where=None) -> bool:
     else:
         notices.edit_problem("focus_moved" if pressed == "moved" else "shortcut_failed",
                              beeps_on)
-    return True
+    return pressed is True
 
 
 def spoken_edit_target():
