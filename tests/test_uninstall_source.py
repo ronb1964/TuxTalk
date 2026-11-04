@@ -181,22 +181,22 @@ def test_a_source_install_in_the_readmes_venv_needs_nothing_more(home):
     assert "to finish" not in text
 
 
-def test_a_pacman_owned_system_install_is_removed_with_pacman(home):
+def test_a_pacman_owned_system_install_goes_with_the_dependencies_nothing_else_needs(home):
     plan = uninstall.find(home, "system", owner=lambda: "tuxtalk")
     assert plan.package == "tuxtalk" and plan.needs_root
-    assert "pacman -R --noconfirm tuxtalk" in uninstall.root_script(plan, False)
+    assert "pacman -Rs --noconfirm tuxtalk" in uninstall.root_script(plan, False)
 
 
 def test_a_package_name_from_pacman_is_quoted_for_the_shell(home):
     plan = uninstall.find(home, "system", owner=lambda: "tux talk;rm")
     script = uninstall.root_script(plan, False)
-    assert "pacman -R --noconfirm 'tux talk;rm'" in script
-    assert "<tt>sudo pacman -R &apos;tux talk;rm&apos;</tt>" in _done(plan, package_failed=True)
+    assert "pacman -Rs --noconfirm 'tux talk;rm'" in script
+    assert "<tt>sudo pacman -Rs &apos;tux talk;rm&apos;</tt>" in _done(plan, package_failed=True)
 
 
 def test_a_failed_pacman_removal_names_the_command(home):
     plan = uninstall.find(home, "system", owner=lambda: "tuxtalk")
-    assert "<tt>sudo pacman -R tuxtalk</tt>" in _done(plan, package_failed=True)
+    assert "<tt>sudo pacman -Rs tuxtalk</tt>" in _done(plan, package_failed=True)
 
 
 def test_a_system_install_pacman_doesnt_own_is_left_to_its_package_manager(home):
@@ -228,7 +228,7 @@ def test_the_package_installs_keep_their_words(home):
     """The packages' closing lines are as they were before system installs came in."""
     for install_type, command in (("deb", "sudo apt remove tuxtalk"),
                                   ("rpm", "sudo dnf remove tuxtalk"),
-                                  ("aur", "sudo pacman -R tuxtalk-appimage")):
+                                  ("aur", "sudo pacman -Rs tuxtalk-appimage")):
         plan = uninstall.find(home, install_type)
         assert f"<tt>{command}</tt>" in _done(plan, package_failed=True)
     assert "Remove the tuxtalk package with your package manager to finish." in \

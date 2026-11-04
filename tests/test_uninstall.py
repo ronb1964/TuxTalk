@@ -417,7 +417,7 @@ def test_the_hugging_face_cache_follows_its_own_settings(tmp_path):
     ("deb", "apt-get -o DPkg::Lock::Timeout=120 remove -y tuxtalk"),
     ("rpm", "dnf remove -y tuxtalk"),
     ("rpm", "ZYPP_LOCK_TIMEOUT=120 zypper --non-interactive remove tuxtalk"),
-    ("aur", "pacman -R --noconfirm tuxtalk-appimage"),
+    ("aur", "pacman -Rs --noconfirm tuxtalk-appimage"),
 ])
 def test_the_root_script_removes_the_package_last(home, install_type, command):
     script = uninstall.root_script(_find(home, install_type), leave_group=False)
