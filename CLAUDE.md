@@ -84,6 +84,10 @@ may miss."
 - **NEVER run `./build-release.sh` without asking Ron first**
 - Say: "Ready to build the AppImage?" and WAIT for confirmation
 - There may be other fixes needed. Don't assume the work is done.
+- The version bump (`pyproject.toml`, `src/tuxtalk/__init__.py`) moves, in
+  the same commit, the README's install-from-source command and
+  `aur/tuxtalk`'s pkgver with its `.SRCINFO` (`sha256sums` stays SKIP until
+  the tag): tests pin all three to pyproject, so the suite passes at the bump.
 
 ### Step 3: Build the AppImage
 ```bash
@@ -109,6 +113,12 @@ cd /home/ron/Projects/TuxTalk/tests/vm
 python3 -u run.py test kde suse mint debian --appimage ~/AppImages/TuxTalk-vX.X.X-x86_64.AppImage
 python3 -u run.py test silverblue zorin ubuntu pop --appimage ~/AppImages/TuxTalk-vX.X.X-x86_64.AppImage
 ```
+- The two ways in without a package file, in the CachyOS VM: the README's
+  From source steps from snapshot tuxtalk-clean (part 1's Task 8 driver,
+  the archive served inside the VM), and `makepkg` of `aur/python-onnx-asr`
+  and `aur/tuxtalk` from snapshot tuxtalk-aur-deps. Then the suite on Arch's
+  current library versions (`~/.cache/tuxtalk-arch-venv`, `PYTHONPATH=./src`
+  only; CODE_HEALTH row 82 b).
 - Every fail is fixed (back to Step 2) or explained to Ron before Step 5.
   "Misheard" is the computer voice, not TuxTalk.
 - Then give Ron only what the VMs can't do (the report's last section: the
@@ -262,8 +272,7 @@ Step 2 for a fix, re-run all of Step 10 afterwards.
 
 ### Step 11: Commit, Push, and Create GitHub Release
 First rewrite the README's "New in X.Y" section (and its link at the top)
-for this version, in plain words, from the CHANGELOG, and bump the version in
-the README's install-from-source command.
+for this version, in plain words, from the CHANGELOG.
 ```bash
 git add <changed files>
 git commit -m "..."
@@ -335,6 +344,9 @@ now" list, and update it with what went where (and the per-release log,
    Announcements post (Step 11).
 2. **AUR:** bump `tuxtalk-appimage` and `tuxtalk` (`aur/`, memory "Publishing to
    the AUR"), and `python-onnx-asr` whenever poetry.lock's onnx-asr changes.
+   After the tag, before pushing `tuxtalk`: its real `sha256sums` from the
+   tagged archive (one `makepkg` in the CachyOS VM from snapshot
+   tuxtalk-aur-deps, then `makepkg --printsrcinfo > .SRCINFO`), committed.
 3. **Mastodon** (@ronb1964 on mastodon.social, in the debug Chrome): one
    post, under 500 characters: what changed for the user, a link,
    #Linux #FOSS, and #Accessibility when it helps.
