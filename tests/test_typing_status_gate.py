@@ -13,6 +13,8 @@ restart" and DISABLE the only button that would add them.
 """
 
 
+import html
+
 from stand_ins import ShownWidget
 
 
@@ -98,7 +100,7 @@ def test_a_hotkey_helper_that_isnt_answering_offers_to_set_it_up_again(monkeypat
     prefs = _prefs_with_perms(monkeypatch, all_ok=False, udev=True, in_group=True,
                               helper_installed=True)
     assert prefs._show_typing_status() is False
-    assert "isn't answering" in prefs.typing_status_label.markup
+    assert "isn't answering" in html.unescape(prefs.typing_status_label.markup)
     assert prefs.fix_typing_button.label == UPDATE_HELPER_LABEL
     assert prefs.fix_typing_button.sensitive is True
 
