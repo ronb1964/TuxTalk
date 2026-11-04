@@ -116,9 +116,11 @@ python3 -u run.py test silverblue zorin ubuntu pop --appimage ~/AppImages/TuxTal
 - The two ways in without a package file, in the CachyOS VM: the README's
   From source steps from snapshot tuxtalk-clean (part 1's Task 8 driver,
   the archive served inside the VM), and `makepkg` of `aur/python-onnx-asr`
-  and `aur/tuxtalk` from snapshot tuxtalk-aur-deps. Then the suite on Arch's
-  current library versions (`~/.cache/tuxtalk-arch-venv`, `PYTHONPATH=./src`
-  only; CODE_HEALTH row 82 b).
+  and `aur/tuxtalk` from snapshot tuxtalk-aur-deps. The tag doesn't exist
+  yet: `aur/tuxtalk` builds from a test copy whose source is the local
+  `git archive --prefix=TuxTalk-X.X.X/ HEAD`, its sha256 in the copy only.
+  Then the suite on Arch's current library versions
+  (`~/.cache/tuxtalk-arch-venv`, `PYTHONPATH=./src` only; CODE_HEALTH row 82 b).
 - Every fail is fixed (back to Step 2) or explained to Ron before Step 5.
   "Misheard" is the computer voice, not TuxTalk.
 - Then give Ron only what the VMs can't do (the report's last section: the
@@ -343,10 +345,12 @@ now" list, and update it with what went where (and the per-release log,
 1. **GitHub:** the release notes with the AUR line, and the Discussions →
    Announcements post (Step 11).
 2. **AUR:** bump `tuxtalk-appimage` and `tuxtalk` (`aur/`, memory "Publishing to
-   the AUR"), and `python-onnx-asr` whenever poetry.lock's onnx-asr changes.
+   the AUR"). `python-onnx-asr` is bumped in the same change as any
+   poetry.lock onnx-asr change (its test fails until then).
    After the tag, before pushing `tuxtalk`: its real `sha256sums` from the
-   tagged archive (one `makepkg` in the CachyOS VM from snapshot
-   tuxtalk-aur-deps, then `makepkg --printsrcinfo > .SRCINFO`), committed.
+   tagged archive (`makepkg -g` in the CachyOS VM from snapshot
+   tuxtalk-aur-deps, its line over the SKIP: makepkg with SKIP computes none;
+   then one `makepkg` and `makepkg --printsrcinfo > .SRCINFO`), committed.
 3. **Mastodon** (@ronb1964 on mastodon.social, in the debug Chrome): one
    post, under 500 characters: what changed for the user, a link,
    #Linux #FOSS, and #Accessibility when it helps.
