@@ -231,6 +231,35 @@ def desktop_launcher_exists() -> bool:
         return False
 
 
+def launcher_starts_nothing() -> bool:
+    """True when the menu launcher starts a program that isn't there: one
+    left by an AppImage since deleted, or by a venv since moved."""
+    from .autostart import program_missing
+    try:
+        with open(DESKTOP_FILE_PATH) as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return False            # no launcher
+    exec_cmd = next((l[len("Exec="):] for l in lines if l.startswith("Exec=")), "")
+    return _HIDDEN_ENTRY_MARK not in lines and program_missing(exec_cmd)
+
+
+def repair_source_launcher() -> bool:
+    """Point a source install's menu launcher at its own `tuxtalk` when the
+    program the launcher starts is gone (launcher_starts_nothing). One
+    starting a program that's there, another install the user keeps, stays.
+    True if rewritten."""
+    from . import config
+    if (config.DEV_MODE
+            or installation.get_install_type(pkg_query=lambda: "package") != "source"
+            or not launcher_starts_nothing()):
+        return False
+    ok, msg = create_desktop_launcher()
+    logger.info("Repaired the menu launcher: the program it started isn't there" if ok
+                else f"Could not repair the menu launcher: {msg}")
+    return ok
+
+
 def create_hidden_desktop_entry() -> bool:
     """Write a hidden tuxtalk.desktop for a self-managed AppImage or a source
     install that has no launcher yet. KDE and GNOME find a window's icon

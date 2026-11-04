@@ -149,3 +149,56 @@ def test_the_icon_list_ends_with_the_packages_own_png_then_the_users_copy():
     files = app_icon.icon_files()
     assert files[-2:] == [str(ROOT / "src/tuxtalk/icons/io.github.ronb1964.TuxTalk.png"),
                           app_icon.user_icon_file()]
+
+
+def _entries_starting(source_home, program):
+    """A menu entry and a start-at-login entry, both starting *program*."""
+    for entry in (source_home.menu_entry, source_home.autostart_entry):
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        entry.write_text(f"[Desktop Entry]\nName=TuxTalk\nExec={program}\nType=Application\n")
+
+
+def _start_tuxtalk_again(monkeypatch):
+    """TuxTalk started after its first run, as far as the login and menu
+    entries are concerned (the service and update check are left out)."""
+    from tuxtalk import tray
+    monkeypatch.setattr(tray.GLib, "timeout_add", lambda *a: None)
+    tray._start_normally(types.SimpleNamespace(_auto_start_service=lambda ms: None,
+                                               auto_check_for_updates=None), None, None)
+
+
+def test_first_run_replaces_a_menu_entry_left_by_a_deleted_appimage(source_home, tmp_path):
+    _entries_starting(source_home, tmp_path / "home/AppImages/TuxTalk.AppImage")
+    assert appimage_copy.put_in_place() == (False, True)
+    assert f"Exec={source_home.command}\n" in source_home.menu_entry.read_text()
+
+
+def test_at_start_entries_that_start_an_old_venvs_tuxtalk_are_pointed_at_this_one(
+        source_home, tmp_path, monkeypatch):
+    """The venv was moved, or made again elsewhere: the menu and start at
+    login started a program that isn't there any more."""
+    _entries_starting(source_home, tmp_path / "old-venv/bin/tuxtalk")
+    _start_tuxtalk_again(monkeypatch)
+    assert f"Exec={source_home.command}\n" in source_home.menu_entry.read_text()
+    assert f"Exec={source_home.command}\n" in source_home.autostart_entry.read_text()
+
+
+def test_at_start_entries_that_start_another_install_the_user_keeps_stay(
+        source_home, tmp_path, monkeypatch):
+    other = tmp_path / "other-venv/bin/tuxtalk"
+    other.parent.mkdir(parents=True)
+    other.write_text("#!/bin/sh\n")
+    other.chmod(0o755)
+    _entries_starting(source_home, other)
+    _start_tuxtalk_again(monkeypatch)
+    assert f"Exec={other}\n" in source_home.menu_entry.read_text()
+    assert f"Exec={other}\n" in source_home.autostart_entry.read_text()
+
+
+def test_at_start_a_start_at_login_turned_off_stays_off(source_home, tmp_path, monkeypatch):
+    _entries_starting(source_home, tmp_path / "old-venv/bin/tuxtalk")
+    source_home.autostart_entry.write_text(source_home.autostart_entry.read_text()
+                                           + "Hidden=true\n")
+    _start_tuxtalk_again(monkeypatch)
+    assert "Hidden=true\n" in source_home.autostart_entry.read_text()
+    assert source_home.command not in source_home.autostart_entry.read_text()

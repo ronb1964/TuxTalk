@@ -31,9 +31,11 @@ def put_in_place():
     package's launcher, the AUR's included, is the package manager's: a copy
     of the AUR's AppImage would override it and never be updated by pacman.
     Returns whether TuxTalk is (or will be) in ~/AppImages and whether a
-    launcher was made, for the Ready screen."""
+    launcher was made, for the Ready screen. A source install's launcher
+    that starts a program no longer there is replaced."""
     from . import installation
-    from .desktop_launcher import create_desktop_launcher, desktop_launcher_exists
+    from .desktop_launcher import (create_desktop_launcher, desktop_launcher_exists,
+                                   launcher_starts_nothing)
     installed = launcher_created = False
     copy_from = None
     try:
@@ -42,7 +44,8 @@ def put_in_place():
             installed, current_path = installation.running_appimage_location()
             if not installed and current_path:
                 copy_from, installed = current_path, True       # it will be, once copied
-        if install_type in ("appimage", "source") and not desktop_launcher_exists():
+        stale = install_type == "source" and launcher_starts_nothing()
+        if install_type in ("appimage", "source") and (stale or not desktop_launcher_exists()):
             launcher_created, msg = create_desktop_launcher()
             logger.info("Desktop launcher created" if launcher_created
                         else f"Could not create the desktop launcher: {msg}")

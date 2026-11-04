@@ -406,6 +406,19 @@ def stale_appimage_target(exec_cmd):
     return target
 
 
+def program_missing(exec_cmd) -> bool:
+    """Whether the program the Exec= value *exec_cmd* starts isn't there: a
+    path that isn't a program, or a name not on PATH. An entry with no
+    program says nothing either way, so it counts as there."""
+    import shutil
+    program, _ = _exec_program(exec_cmd)
+    if not program:
+        return False
+    if "/" in program:
+        return not (os.path.isfile(program) and os.access(program, os.X_OK))
+    return shutil.which(program) is None
+
+
 def repair_stale_appimage_autostart() -> bool:
     """Point an existing launch-at-login entry at the installed AppImage.
 
@@ -436,4 +449,23 @@ def repair_stale_appimage_autostart() -> bool:
                     f"now {installation.APPIMAGE_PATH}")
         return True
     return False
+
+
+def repair_source_autostart() -> bool:
+    """Point a source install's launch-at-login entry at its own `tuxtalk`
+    when the program the entry starts is gone: an AppImage since deleted, or
+    a venv since moved. An entry turned off, or one starting a program
+    that's there (another install the user keeps), stays as it is. True if
+    the entry was rewritten."""
+    from . import config
+    if config.DEV_MODE or installation.get_install_type(pkg_query=lambda: "package") != "source":
+        return False
+    lines = _enabled_entry()
+    if lines is None:
+        return False
+    exec_cmd = next((line[len("Exec="):] for line in lines if line.startswith("Exec=")), "")
+    if not program_missing(exec_cmd) or not set_autostart(True):
+        return False
+    logger.info(f"Repaired launch at login: it started {exec_cmd}, which isn't there")
+    return True
 

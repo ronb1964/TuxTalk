@@ -771,11 +771,14 @@ def _start_normally(tray, command, open_window):
     # AppImage from Downloads; point it at the installed copy.
     # Older entries also still carry a stale description.
     try:
-        from .autostart import (repair_stale_appimage_autostart,
-                                refresh_autostart_comment)
-        from .desktop_launcher import repair_stale_launcher
+        from .autostart import (refresh_autostart_comment, repair_source_autostart,
+                                repair_stale_appimage_autostart)
+        from .desktop_launcher import repair_source_launcher, repair_stale_launcher
         repair_stale_appimage_autostart()
         repair_stale_launcher()     # first run's copy failed, an update put it there
+        # A source install's entries may start a deleted AppImage or a moved venv.
+        repair_source_autostart()
+        repair_source_launcher()
         refresh_autostart_comment()
     except Exception as e:
         logger.info(f"Could not check the login entry: {e}")
