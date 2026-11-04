@@ -36,9 +36,10 @@ def test_the_installation_section_has_the_from_source_part_and_points_developers
     assert "### From source (any distro)" in text and "DEV_SETUP.md" in text
 
 
-def test_the_readme_offers_the_aur_source_package_and_keeps_the_appimage_one_recommended():
+def test_the_readme_arch_part_says_what_the_source_package_costs_and_which_onnxruntime():
     arch = _readme().split("### Arch Linux (AUR)")[1].split("### Debian")[0]
-    assert "yay -S tuxtalk-appimage" in arch
-    assert "yay -S tuxtalk\n" in arch or "yay -S tuxtalk " in arch
-    assert "from source" in arch and "python-onnxruntime-cpu" in arch
+    assert "yay -S tuxtalk-appimage" in arch and "yay -S tuxtalk\n" in arch
+    assert "built from source" in arch and "takes a while to compile" in arch
+    assert "python-onnxruntime-cpu" in arch
+    assert "won't offer CUDA" in arch and "Vulkan" in arch
     assert arch.index("tuxtalk-appimage") < arch.index("python-onnxruntime-cpu")
