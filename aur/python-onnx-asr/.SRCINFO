@@ -5,6 +5,7 @@ pkgbase = python-onnx-asr
 	url = https://github.com/istupakov/onnx-asr
 	arch = any
 	license = MIT
+	checkdepends = python-pytest
 	makedepends = python-build
 	makedepends = python-installer
 	makedepends = python-hatchling
