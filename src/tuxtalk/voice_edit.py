@@ -172,12 +172,16 @@ def _nothing_selected(get_instruction, spoken: bool, where, beeps_on):
     notices.edit_problem("no_selection", beeps_on)
 
 
-def _put_clipboard_back(put_back, result):
-    """Put back the clipboard the selection was copied through, a moment
-    later (EDIT_RESTORE_DELAY_S) so a paste still under way finishes first.
-    A pasted rewrite (*result*) may still be on the clipboard, whole or
-    (pasted a line at a time) its last line; that may be replaced."""
-    also = (result, *result.split("\n")) if result else ()
+def _put_clipboard_back(put_back, pasted):
+    """Put back the clipboard the selection was copied through: at once
+    when no rewrite went in, else a moment later (EDIT_RESTORE_DELAY_S) so
+    a paste still under way finishes first. The rewrite (*pasted*) may
+    still be on the clipboard, whole or (pasted a line at a time) its last
+    line; that may be replaced."""
+    if not pasted:
+        put_back()
+        return
+    also = (pasted, *pasted.split("\n"))
     if EDIT_RESTORE_DELAY_S:
         threading.Timer(EDIT_RESTORE_DELAY_S, put_back, kwargs={"also": also}).start()
     else:
@@ -427,11 +431,11 @@ def _change_selection(get_instruction, beeps_on, injection_mode, where, t0, mess
     if copied is None:
         return _UNCHANGED
     selected, put_back = copied
-    result = None
+    pasted = None
     if selected:
-        # Late-bound: *result* is the rewrite by then, if any, which may
-        # still be on the clipboard after it was pasted.
-        restore.append(lambda: _put_clipboard_back(put_back, result))
+        # Late-bound: *pasted* is the rewrite by then if it went in, whole
+        # or in part, and may still be on the clipboard.
+        restore.append(lambda: _put_clipboard_back(put_back, pasted))
     if _refused_selection(selected, expected, get_instruction, where, beeps_on):
         return _UNCHANGED
     instruction = get_instruction()
@@ -457,7 +461,10 @@ def _change_selection(get_instruction, beeps_on, injection_mode, where, t0, mess
         return _UNCHANGED
     logger.info(f"Voice edit result: {live.loggable(result)} "
                 f"(took {time.time() - t0:.2f}s)")
-    return _rewrite_over_selection(result, injection_mode, message, beeps_on, where)
+    done = _rewrite_over_selection(result, injection_mode, message, beeps_on, where)
+    if done is not _UNCHANGED:
+        pasted = result
+    return done
 
 
 def _copy_selection(where, beeps_on, message):

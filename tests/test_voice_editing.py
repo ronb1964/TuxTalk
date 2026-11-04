@@ -550,6 +550,36 @@ def test_the_clipboard_comes_back_even_when_typing_fails(edit_env, monkeypatch):
     assert edit_env["put_back"] == 1
 
 
+# The real one, before a test's fake world replaces it.
+REAL_COPY_SELECTION = cb.copy_selection
+
+
+@pytest.mark.parametrize("outcome", ["ai_not_ready", "no_change", "rewritten"])
+def test_the_clipboard_waits_only_for_a_pasted_rewrite(edit_env, monkeypatch, outcome):
+    """The second before the user's clipboard comes back lets an app read
+    a pasted rewrite. An edit that changed nothing kept the selection on
+    the clipboard that second as well, so a quick Ctrl+V after the notice
+    pasted the selection instead of what the user had copied."""
+    board = FakeBoard(data=b"the user's clipboard", selected=edit_env["selection"]["text"])
+    board.install(monkeypatch)
+    monkeypatch.setattr(cb, "copy_selection",
+                        lambda send: REAL_COPY_SELECTION(send, sleep=lambda s: None))
+    monkeypatch.setattr(keyboard_output, "send_copy_keystroke", lambda claim=None: board.ctrl_c())
+    monkeypatch.setattr(voice_edit, "EDIT_RESTORE_DELAY_S", 1.0)
+    later = []
+    monkeypatch.setattr(threading, "Timer", lambda delay, fn, kwargs=None: types.SimpleNamespace(
+        start=lambda: later.append(lambda: fn(**(kwargs or {})))))
+    if outcome == "ai_not_ready":
+        edit_env["engine"].ready = False
+    elif outcome == "no_change":
+        edit_env["engine"].answer = edit_env["selection"]["text"]
+    run_edit()
+    assert (board.data == b"the user's clipboard") is (outcome != "rewritten")
+    for restore in later:
+        restore()
+    assert board.data == b"the user's clipboard"
+
+
 # --- 5. KDE and GNOME hold Shift + the keys back -----------------------------------------
 
 from tuxtalk import kwin_hotkeys, gnome_hotkeys
