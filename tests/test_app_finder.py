@@ -2,6 +2,7 @@
 import pytest
 
 from tuxtalk.app_commands import parse
+from tuxtalk import app_finder
 from tuxtalk.app_finder import AppEntry, find, install_kind, program_name
 
 
@@ -119,3 +120,44 @@ def test_install_kind_from_the_command():
     assert install_kind("env X=1 /snap/bin/firefox %u") == "snap"
     assert install_kind("/home/ron/Apps/Tool-1.2.AppImage --no-sandbox") == "appimage"
     assert install_kind("/usr/bin/firefox %u") == ""
+
+
+class FakeMenuApp:
+    def __init__(self, app_id, command, categories=""):
+        self.app_id, self.command, self.categories = app_id, command, categories
+
+    def get_id(self):
+        return self.app_id
+
+    def get_commandline(self):
+        return self.command
+
+    def get_categories(self):
+        return self.categories
+
+
+def test_kde_terminal_setting_is_read(tmp_path, monkeypatch):
+    kdeglobals = tmp_path / "kdeglobals"
+    kdeglobals.write_text("[General]\nTerminalApplication=kitty\n")
+    monkeypatch.setattr(app_finder, "_KDEGLOBALS", str(kdeglobals))
+    assert app_finder._kde_terminal() == "kitty"
+
+
+def test_a_broken_or_missing_kdeglobals_means_no_setting(tmp_path, monkeypatch):
+    kdeglobals = tmp_path / "kdeglobals"
+    kdeglobals.write_bytes(b"[General]\nTerminalApplication=kon\xffsole\n")
+    monkeypatch.setattr(app_finder, "_KDEGLOBALS", str(kdeglobals))
+    assert app_finder._kde_terminal().startswith("kon")
+    kdeglobals.write_text("no section header\n")
+    assert app_finder._kde_terminal() == ""
+    monkeypatch.setattr(app_finder, "_KDEGLOBALS", str(tmp_path / "missing"))
+    assert app_finder._kde_terminal() == ""
+
+
+def test_terminal_is_kdes_choice_else_the_only_emulator():
+    konsole = FakeMenuApp("konsole.desktop", "konsole", "System;TerminalEmulator;")
+    kitty = FakeMenuApp("kitty.desktop", "/usr/bin/kitty", "System;TerminalEmulator;")
+    other = FakeMenuApp("kate.desktop", "kate", "Utility;")
+    assert app_finder._terminal_id([konsole, kitty, other], "kitty") == "kitty.desktop"
+    assert app_finder._terminal_id([konsole, other], "") == "konsole.desktop"
+    assert app_finder._terminal_id([konsole, kitty], "") is None

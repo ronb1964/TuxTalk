@@ -233,7 +233,13 @@ def _kde_terminal():
     """KDE's chosen terminal program from kdeglobals, or "" when it isn't set."""
     parser = configparser.ConfigParser(interpolation=None, strict=False)
     try:
-        parser.read(os.path.expanduser(_KDEGLOBALS), encoding="utf-8")
+        # errors="replace": one bad byte in a file KDE owns must not stop
+        # every open command.
+        with open(os.path.expanduser(_KDEGLOBALS), encoding="utf-8",
+                  errors="replace") as f:
+            parser.read_file(f)
+    except FileNotFoundError:
+        return ""
     except (OSError, configparser.Error) as exc:
         log.info("Couldn't read kdeglobals for the terminal: %s", exc)
         return ""
