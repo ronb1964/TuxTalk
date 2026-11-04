@@ -382,7 +382,7 @@
     </div>
     <div class="extras">
       <div><h3>Hears your voice, not the room</h3><p>TuxTalk listens for a voice now, not just for sound. A fan, a dryer or dishes in the sink don't keep hands-free going, and a cough after you finish mostly doesn't get typed as "Yeah." It's built in, so there's nothing extra to download.</p></div>
-      <div><h3>Changed your mind?</h3><p>Let go of the key and press Esc right away, and nothing gets typed or sent. Anything already in the box stays put, so a stray Esc never costs you a paragraph.</p></div>
+      <div><h3>Changed your mind?</h3><p>Press Esc while TuxTalk is still working and whatever hasn't gone in yet is dropped, a "press enter" included. On a fast graphics card a short sentence is often in before you can reach Esc, so say "delete last sentence" to take it back. Anything already in the box stays put.</p></div>
       <div><h3>Quotes</h3><p>Say "he said quote hello quote" and hello goes in quotes. "I want to quote him on that" stays words.</p></div>
       <div><h3>Pauses your music</h3><p>Music and videos pause while you dictate and pick back up when you're done. I had a YouTube video going once and it turned "isn't it" into "Venezuela".</p></div>
       <div><h3>Turns other sounds down</h3><p>For what pausing can't reach, like a Discord call or a game. It's off until you turn it on, and it only changes what you hear. A call still hears your mic.</p></div>
@@ -538,10 +538,16 @@
         <div class="cmd"><code>yay -S tuxtalk-appimage</code><button class="copy" type="button">Copy</button></div>
         <a class="btn btn-main" href="https://aur.archlinux.org/packages/tuxtalk-appimage" target="_blank" rel="noopener">AUR page</a>
       </div>
+      <div class="dl-row">
+        <div><h3>AUR, built from source</h3><p class="for">Arch, with Arch's own Python packages</p></div>
+        <div class="cmd"><code>yay -S tuxtalk</code><button class="copy" type="button">Copy</button></div>
+        <a class="btn btn-main" href="https://aur.archlinux.org/packages/tuxtalk" target="_blank" rel="noopener">AUR page</a>
+      </div>
     </div>
     <div class="dl-after">
       <p>The Download buttons take you to the newest release on GitHub. Grab the file that ends in .AppImage, .deb or .rpm. What changed in each version is in the <a href="https://github.com/ronb1964/TuxTalk/blob/main/CHANGELOG.md" target="_blank" rel="noopener">changelog</a>.</p>
       <p>The first time it runs, TuxTalk asks for your admin password once. That sets up its hotkey helper, the one small piece that reads the keyboard, and lets TuxTalk type into other apps. No restart needed. On a system without systemd it uses the input group instead, tells you why, and then it does need a restart.</p>
+      <p>On another distro and rather not use a package? The README has <a href="https://github.com/ronb1964/TuxTalk#from-source-any-distro" target="_blank" rel="noopener">steps to install it from source</a>, in a folder of its own. tuxtalk-appimage is the quicker install on Arch, and the two can't be installed together.</p>
       <p>The AppImage needs fusermount, which almost every desktop already has. If it won't start, install the fuse3 package. No Flatpak yet. If you'd like one, <a href="https://github.com/ronb1964/TuxTalk/discussions/6" target="_blank" rel="noopener">vote in the poll</a>.</p>
     </div>
 
