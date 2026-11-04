@@ -135,7 +135,7 @@ def _no_access_state():
     (uinput, typing) AND 'input' group membership in the system database
     (hotkey reading). With only the rule, Fix Typing stays offered: it runs
     usermod."""
-    from . import uinput_helper
+    from . import secure_input, uinput_helper
     if uinput_helper.check_udev_rule_exists() and uinput_helper.check_user_in_input_group():
         return ('<span color="#FF9800">⚠ Permissions configured - '
                 'please restart your computer</span>', "✓ Configured", False, False)
@@ -143,8 +143,11 @@ def _no_access_state():
     # help; say so rather than offer a fallback.
     hotkey_ok, _ = uinput_helper.check_input_read_permission()
     blocked = "TuxTalk can't type" if hotkey_ok else "The dictation key won't work"
+    # The same choice Fix Typing makes (secure_input.fix_permissions): the
+    # hotkey helper works at once, only the 'input' group needs a restart.
+    restart = "" if secure_input.can_install()[0] else " and restart"
     return (f'<span color="#FF9800">⚠ {blocked} until you run '
-            'Fix Typing and restart</span>', FIX_TYPING_LABEL, True, False)
+            f'Fix Typing{restart}</span>', FIX_TYPING_LABEL, True, False)
 
 
 class SystemCheck(Tab):

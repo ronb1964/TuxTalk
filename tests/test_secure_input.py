@@ -402,3 +402,24 @@ def test_a_helper_too_old_for_any_keyboard_says_what_is_certain(monkeypatch):
     assert si.missed_keyboard_reason("1.4") is None and si.needs_update("1.4")
     assert "too old" in si.outdated_reason("1.4")
     assert "Right Ctrl" in update_offers.helper_update_text("1.4")
+
+
+@pytest.mark.parametrize("helper_possible, wording", [
+    (True, "until you run Fix Typing</span>"),
+    (False, "until you run Fix Typing and restart</span>"),
+])
+def test_system_check_asks_for_a_restart_only_where_fix_typing_needs_one(
+        monkeypatch, helper_possible, wording):
+    """The hotkey helper takes effect at once; only the input group needs a
+    restart, so "and restart" would send helper users to reboot for nothing."""
+    from tuxtalk import prefs_system_check as P, uinput_helper
+
+    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (False, ""))
+    monkeypatch.setattr(uinput_helper, "check_udev_rule_exists", lambda: False)
+    monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: False)
+    monkeypatch.setattr(uinput_helper, "check_input_read_permission", lambda: (True, ""))
+    monkeypatch.setattr(si, "running_version", lambda: None)
+    monkeypatch.setattr(si, "is_installed", lambda: False)
+    monkeypatch.setattr(si, "can_install", lambda: (helper_possible, ""))
+    markup, label, offered, ok = P._typing_state([])
+    assert wording in markup and label == P.FIX_TYPING_LABEL and offered and not ok
