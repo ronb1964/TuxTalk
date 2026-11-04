@@ -261,7 +261,7 @@ def test_right_ctrl_on_a_read_only_keyboard_still_holds_typing_up(rig, right_ctr
     helper, kb, client, loop, calls = rig
     monkeypatch.setattr(live, "voice_editing", True)
     read_only = FakeKeyboard("/dev/input/event-read-only")
-    read_only.listen_only = "it may only be read here"
+    read_only.listen_only_reason = "it may only be read here"
     kb.group = read_only.group = "real"
     helper.keyboards[read_only.path] = read_only
     try:
