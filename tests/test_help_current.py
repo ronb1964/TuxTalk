@@ -84,11 +84,14 @@ def _tips(monkeypatch, flatpak=False, **settings):
 
 
 def test_help_says_how_a_source_install_and_the_aur_package_update():
-    """Read from Help's markup (tabs()), where the bold and the command show."""
+    """Read from Help's markup (tabs()), where the bold and the command show.
+    Only the AUR package that exists is named: anyone could register an
+    unpublished name and be installed in its place."""
     from tuxtalk import help_text
     markup = "\n".join(text for _title, text in help_text.tabs())
     assert "<b>From source:</b>" in markup
-    assert "<tt>yay -S tuxtalk</tt>" in markup
+    assert "<tt>yay -S tuxtalk-appimage</tt>" in markup
+    assert "<tt>yay -S tuxtalk</tt>" not in markup
 
 
 def test_tips_name_your_own_keys(monkeypatch):
