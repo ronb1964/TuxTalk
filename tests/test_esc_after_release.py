@@ -285,3 +285,32 @@ def test_esc_before_a_press_tab_said_alone_types_no_spaces(chat, keyboard, let_g
     heard.append("press tab")
     let_go()
     assert keyboard.events == [] and notices == []
+
+
+def test_esc_on_a_dictation_cut_off_on_and_leaves_the_next_one_capitalised(chat, keyboard,
+                                                                          let_go, monkeypatch):
+    """"meet me at noon and", then Esc before its first key: nothing went in,
+    yet the next dictation began in lowercase, carrying on a sentence that
+    isn't on the screen."""
+    from tuxtalk import focused_window
+    focus, heard, typed, notices = chat
+    destination = focused_window.destination
+    escs = [esc]
+
+    def esc_meanwhile():
+        if escs:
+            escs.pop()()
+        return destination()
+
+    def type_for_real(text, mode, one_block=False, *, where):
+        keyboard_output.type_text_raw(text)
+        typed.append((text, focus[1]))
+        rs.state.last_inserted_text = text
+        return "ok"
+    monkeypatch.setattr(focused_window, "destination", esc_meanwhile)
+    monkeypatch.setattr(delivery, "deliver_text", type_for_real)
+    heard.extend(["meet me at noon and", "see you there"])
+    let_go()
+    assert typed == [] and not rs.state.continue_mid_sentence
+    let_go()
+    assert typed == [("See you there.", CHAT_WINDOW[1])]

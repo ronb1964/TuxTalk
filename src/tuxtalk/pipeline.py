@@ -125,6 +125,7 @@ class _Words(NamedTuple):
     taken_back: str         # the phrase backspaced for a correction across a pause
     held_mark: str | None   # the mark held back for the next phrase to decide
     held_back: str          # the word ("and") the automatic Enter was held back on, or ""
+    cut_off: str            # the word ("and") they were cut off on: what's said next carries on
 
 
 def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
@@ -366,7 +367,6 @@ def _shape_text(raw: str, said: str, key, job: _Job):
     if cut_off:
         # The engine may have put its own period after the "and".
         text = re.sub(r"\.(\s*)$", r"\1", text)
-        rs.state.continue_mid_sentence = True
     taken_back = ""
     if across:
         corrected = _correction_or_held_cue(text, job)
@@ -386,7 +386,8 @@ def _shape_text(raw: str, said: str, key, job: _Job):
         # Kept for a send that's held, which types it after all.
         core = text.rstrip(" ")
         space_left_off, text = text[len(core):], core
-    return _Words(text, raw, said, press, space_left_off, taken_back, held_mark, held_back)
+    return _Words(text, raw, said, press, space_left_off, taken_back, held_mark, held_back,
+                  cut_off)
 
 
 def _end_of_sentence(words: _Words, audio_f32, job: _Job) -> _Words:
@@ -485,7 +486,11 @@ def _keep_for_the_sentence(words: _Words, text: str, audio_f32, job: _Job) -> No
 
 
 def _carry_on_after(words: _Words, text: str, audio_f32, job: _Job) -> None:
-    """A Type at pause phrase went in: how the next phrase carries on from it."""
+    """The words went in: how the next phrase or dictation carries on from
+    them. Not before: one cut off on "and" that Esc kept out would make the
+    next begin in lowercase."""
+    if words.cut_off:
+        rs.state.continue_mid_sentence = True
     if job.chunk_role == "middle" and not live.chunk_context_marks and not words.press:
         # Without the context pass the engine's own mark decides: after
         # a comma or none, the next chunk carries on lowercase.
