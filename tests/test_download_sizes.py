@@ -56,3 +56,10 @@ def test_reading_a_size_doesnt_load_gtk():
     code = ("import sys, tuxtalk.recommend, tuxtalk.cuda_helper; "
             "sys.exit('gi.repository.Gtk' in sys.modules)")
     assert subprocess.run([sys.executable, "-c", code], timeout=60).returncode == 0
+
+
+def test_the_website_gives_the_cuda_size_the_app_shows():
+    """The website said "1.4 GB" while Preferences said 585 MB."""
+    import pathlib
+    site = (pathlib.Path(__file__).resolve().parent.parent / "docs/index.html").read_text()
+    assert f"CUDA, a {cuda_download.DOWNLOAD_SIZE_TEXT} download" in site

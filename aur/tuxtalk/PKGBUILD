@@ -22,8 +22,8 @@ depends=('python' 'python-gobject' 'python-cairo' 'python-dbus' 'python-evdev' '
          'python-huggingface-hub' 'python-av' 'python-tqdm')
 makedepends=('python-build' 'python-installer' 'python-poetry-core')
 optdepends=(
-    'pipewire-pulse: PipeWire audio support'
-    'pulseaudio: PulseAudio support'
+    'pipewire-pulse: turn other sound down and set the mic volume, on PipeWire (pactl, paplay)'
+    'pulseaudio: turn other sound down and set the mic volume, on PulseAudio (pactl, paplay)'
     'vulkan-icd-loader: run speech models on the graphics card (Vulkan)'
 )
 # The AppImage package and the older TalkType ones install the same command.

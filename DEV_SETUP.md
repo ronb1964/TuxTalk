@@ -45,11 +45,19 @@ That starts the tray with `DEV_MODE=1`, which keeps its settings and downloads a
 
 Don't start it with `poetry run`: Poetry's environment can't see the system PyGObject and it stops on `import gi`.
 
-To stop it, use Quit TuxTalk in the tray menu. If something is stuck, this stops only TuxTalk's own Python processes and nothing else that happens to have "tuxtalk" in its command line:
+To stop it, use Quit TuxTalk in the tray menu. If that doesn't work because something's stuck, list what's running first:
 
 ```bash
-pkill -f -- '-m tuxtalk\.'
+pgrep -a -f -- '-m tuxtalk\.(tray|app|prefs)'
 ```
+
+That prints a process ID and its command line for each match. Read the list, since anything else with that text in its command line shows up too, a shell running one of them for example. Then stop only the stuck one by its number:
+
+```bash
+kill 12345
+```
+
+If it's still there a few seconds later, `kill -9` with the same number ends it for sure.
 
 The single-instance lock is released when the process ends, so there's no lock file to delete.
 

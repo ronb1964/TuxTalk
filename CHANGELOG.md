@@ -19,7 +19,7 @@ before 0.15.0, so older entries use that name.
 - If your distro's package put TuxTalk under /usr, like the tuxtalk package
   on the AUR does, it knows. Check for Updates gives you the AUR helper
   command and tells you to quit TuxTalk first, and Uninstall removes it
-  with pacman.
+  with pacman, along with the packages it pulled in that nothing else uses.
 - CUDA is only offered where the speech library installed on your computer
   can use it. Before, a build without CUDA still listed it because the
   NVIDIA libraries were there. If you'd saved CUDA anyway, it shows as the
