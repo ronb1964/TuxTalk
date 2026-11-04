@@ -178,11 +178,12 @@ def _disk_space_problem(repo, files, force=False, cancel_event=None):
     measures the disk the files land on.
 
     A download picked up again isn't refused for what it has: files already
-    in the cache need no more room, and Hugging Face resumes a file's
-    ".incomplete" part, counted only when the rest wouldn't fit without it
-    (finding each part asks the Hub, file by file). *force* fetches every
-    file afresh, a whole new copy beside the old one, with no part resumed,
-    so then all of them count."""
+    in the cache need no more room, and huggingface_hub before 1.18 resumes
+    a file's ".incomplete" part, counted only when the rest wouldn't fit
+    without it (finding each part asks the Hub, file by file). From 1.18 a
+    cut-off file starts again and leaves no part, so none is found. *force*
+    fetches every file afresh, a whole new copy beside the old one, with no
+    part resumed, so then all of them count."""
     from huggingface_hub import try_to_load_from_cache
     from huggingface_hub.constants import HF_HUB_CACHE
     from .download_utils import free_space_bytes
@@ -204,8 +205,10 @@ def _disk_space_problem(repo, files, force=False, cancel_event=None):
 
 def _partial_bytes(cache, repo, missing, cancel_event=None):
     """What a cut-off download already holds of the *missing* files
-    ((name, size) pairs): each file's own ".incomplete" blob, which Hugging
-    Face goes on from, up to that file's size. A blob is named by the
+    ((name, size) pairs): each file's own ".incomplete" blob, which
+    huggingface_hub before 1.18 goes on from, up to that file's size. A
+    part an earlier version left is counted with 1.18 and later too, though
+    they start the file again (CODE_HEALTH.md, row 81). A blob is named by the
     file's current ETag, so a part left from another file, another model in
     the repo or an older version isn't counted; looked up only when there
     are parts at all, and no more once *cancel_event* is set."""
