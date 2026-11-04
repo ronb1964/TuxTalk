@@ -111,6 +111,11 @@ class _ComposePress:
     to the desktop (the hotkey test, a tap that only holds a send, the
     user's own shortcut, a tap already up when it was read) isn't.
 
+    *shown*: the hotkey helper refused to hide it for a reason it gives
+    only for a press on no remapper's keyboard (note_compose_shown): the
+    desktop saw it as it was, so once it's up there, Compose pressed again
+    ends the compose as for a hidden one.
+
     *where*: the focused window soon after the press (_look_later), None
     until *looked* is set, or when the look failed. *tries*: left for the
     press that ends the compose, when sending it fails."""
@@ -118,6 +123,7 @@ class _ComposePress:
     code: int
     shift: bool
     hidden: bool = False
+    shown: bool = False
     where: tuple | None = None
     looked: threading.Event = field(default_factory=threading.Event)
     tries: int = 2
@@ -140,6 +146,17 @@ def note_compose_hidden(codes, number) -> None:
     press = _compose
     if press is not None and press.number == number and press.code in codes:
         press.hidden = True
+
+
+def note_compose_shown(codes, number) -> None:
+    """The hotkey helper refused to hide press *number* (compose_press) of
+    *codes*, which it does only after finding the press on no remapper's
+    keyboard (a keyboard that's a mouse too held a modifier with it): that
+    press's compose is TuxTalk's to end too, once the key is up. Without
+    the lock, as note_compose_hidden."""
+    press = _compose
+    if press is not None and press.number == number and press.code in codes:
+        press.shown = True
 
 
 def _hidden_now():
@@ -372,21 +389,22 @@ def end_compose() -> None:
     a compose that nothing has ended yet (note_compose_key). Typing that
     finds the compose begun waits here until it's ended.
 
-    Only for a press whose hiding is known to have worked (_ComposePress
-    says why), in the window it went to. The hotkey helper's answer may
-    still be on its way when the key is found up (_await_answer), whether by
-    the hotkey loop or by typing. A key no longer hidden (a toggle's stop
-    tap lets go of the grab as it's pressed) gets a moment to be seen going
-    up first. A press that didn't go out is tried once more, before the next
-    key typed."""
+    Only for a press whose hiding is known to have worked, or was refused
+    on no remapper's keyboard (_ComposePress says why), in the window it
+    went to. The hotkey helper's answer may still be on its way when the
+    key is found up (_await_answer), whether by the hotkey loop or by
+    typing. A key no longer hidden (a toggle's stop tap lets go of the grab
+    as it's pressed, and a refused one never was) gets a moment to be seen
+    going up first. A press that didn't go out is tried once more, before
+    the next key typed."""
     global _compose
     with _compose_lock:
         press = _compose
         if press is None:
             return
-        if not press.hidden:
+        if not (press.hidden or press.shown):
             _await_answer(press)
-        if not press.hidden or _moved(press):
+        if not (press.hidden or press.shown) or _moved(press):
             _compose = None
             return
         if press.code not in _hidden_now():

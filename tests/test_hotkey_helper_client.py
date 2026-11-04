@@ -446,6 +446,28 @@ def test_a_hide_answered_after_its_release_was_read_still_ends_the_compose(compo
     assert pressed == [[(RCTRL, 1), (RCTRL, 0)]]
 
 
+@pytest.mark.parametrize("refusal, ended", [
+    (b"ERR couldn't hide the keys", True),      # a keyboard that's a mouse too held Shift
+    (b"ERR couldn't hold the keyboard", True),
+    (b"ERR listen-only keyboard", False),        # kanata's, maybe: it would come back
+])
+def test_a_compose_whose_hiding_was_refused_on_a_real_keyboard_still_ends(
+        compose_rig, monkeypatch, refusal, ended):
+    """Shift+Right Alt as Compose, Shift held on a Logitech keyboard that's
+    a mouse too: the helper refused to hide the press, and the compose it
+    began outlived it and swallowed what was typed next. Such a refusal
+    comes only for a press on no remapper's keyboard, so Compose pressed
+    again once the key is up ends it."""
+    from tuxtalk import modifier_hotkeys
+    client, helpers, key, pressed = compose_rig
+    monkeypatch.setattr(modifier_hotkeys, "_hidden", (frozenset(), ()))
+    key(1)
+    helpers.sendall(refusal + b"\n")
+    client.active_keys()                    # the hotkey loop takes the answer in
+    key(0)
+    assert pressed == ([[(RCTRL, 1), (RCTRL, 0)]] if ended else [])
+
+
 def test_a_late_ok_to_hiding_one_press_doesnt_confirm_the_next(compose_rig, monkeypatch):
     """The OK to hiding a quick tap came in only after the next press: that
     one was never hidden, and through kanata Compose pressed again for it

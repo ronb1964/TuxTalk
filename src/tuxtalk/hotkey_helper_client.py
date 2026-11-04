@@ -51,6 +51,12 @@ KeyEvent = namedtuple("KeyEvent", "type code value")
 # answer coming in after the next press must not confirm.
 Asked = namedtuple("Asked", "command codes press", defaults=((), None))
 
+# The helper's refusals of a HIDE that it gives only once it has found that
+# no listen-only keyboard (a remapper's, or one it may only read) holds any
+# of it: the press reached the desktop from a real keyboard as it was.
+REFUSED_ON_A_REAL_KEYBOARD = frozenset({"couldn't hide the keys",
+                                        "couldn't hold the keyboard"})
+
 # The protocol's modifier letters, by TuxTalk's modifier names.
 _MOD_LETTERS = {"CTRL": "C", "ALT": "A", "SHIFT": "S", "SUPER": "M"}
 
@@ -250,6 +256,8 @@ class HelperKeyboard:
                 # order asked, so this one is about the keys and the press
                 # its HIDE noted, however late it comes.
                 modifier_hotkeys.note_compose_hidden(asked.codes, asked.press)
+            elif not ok and " ".join(args) in REFUSED_ON_A_REAL_KEYBOARD:
+                modifier_hotkeys.note_compose_shown(asked.codes, asked.press)
             # An UNHIDE sent since has undone it already.
             self.hidden = ok and named and all(a.command != "UNHIDE" for a in self.asked)
         if not ok and args[:1] == ["listen-only"]:
