@@ -671,12 +671,15 @@ Preferences shows from 51 settings to about 26; keep it there:
   Hands-free, Mistakes, Problems): a new feature goes where people would
   use it, and Help names keys from the settings, never hard-coded F8.
 
-## SAYING HOW TUXTALK IS MADE — EVERY PUBLIC POST
+## SAYING HOW TUXTALK IS MADE — EVERY NEW PUBLIC POST
 
 Ron can't code; Claude writes TuxTalk and Ron designs, tests and uses it
-daily. **Every** post, pitch, forum thread or listing says so up front, in
-plain words, never buried and never left for someone to discover in the
-commit history (the Lemmy thread on 2026-10-16 went bad for exactly that).
+daily. **Every** new post, pitch, forum thread, announcement or listing says
+so up front, in plain words, never buried and never left for someone to
+discover in the commit history (the Lemmy thread on 2026-10-16 went bad for
+exactly that). A reply inside a conversation that already said it (an issue,
+a discussion, a Mastodon or forum thread) doesn't repeat it (Ron, 2026-11-04),
+and when it is said, the wording changes from post to post.
 Pair it with the proof that a person is responsible: thousands of automated
 tests and CI, testing on several distros in VMs, the hotkey helper's review by
 an outside developer (guelz), guelz's PR merged, Ron dictating nearly everything he writes with it.
