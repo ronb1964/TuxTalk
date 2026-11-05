@@ -85,9 +85,11 @@ _SEARCH = re.compile(r"^\s*web\s+search\s*[,:]?\s+(?P<words>.+?)[\s.!?]*$", re.I
 _GO_TO = re.compile(r"^\s*(?:go\s+to|open)\s+(?P<rest>.+)$", re.IGNORECASE)
 _LITERAL = re.compile(r"^\s*literal\s+(?P<rest>.+)$", re.IGNORECASE)
 
-ADDRESS_ENDINGS = frozenset(
-    "com org net io gov edu app dev co uk de ca au us fr nl it es eu info tv me ai ch "
-    "at be se no dk fi pl ie nz in jp br mx".split())
+ADDRESS_ENDINGS = frozenset({
+    "com", "org", "net", "io", "gov", "edu", "app", "dev", "co", "uk", "de", "ca", "au",
+    "us", "fr", "nl", "it", "es", "eu", "info", "tv", "me", "ai", "ch", "at", "be", "se",
+    "no", "dk", "fi", "pl", "ie", "nz", "in", "jp", "br", "mx",
+})
 _ADDRESS = re.compile(r"[a-z0-9-]+(\.[a-z0-9-]+)+(/\S*)?")
 _SCHEME = re.compile(r"^https?://")
 
