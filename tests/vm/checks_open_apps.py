@@ -1,7 +1,8 @@
 """Open apps by voice (TuxTalk Labs): "open the text editor" starts it, said
 again it brings the open window forward, a name that fits nothing is typed
-as words, and a GTK app starts as from the menu. CLAUDE.md Step 8: "Open apps
-by voice".
+as words, and a GTK app starts as from the menu. Ron's part is CLAUDE.md
+Step 8's "Open apps by voice (Labs, from the AppImage)": the dropdowns of
+that GTK app, and an app that uses the NVIDIA card.
 
 The apps are found by name in the VM's own menu, so the text editor is
 whatever that desktop has as its default. A window counts as new when its
@@ -17,8 +18,13 @@ from harness import Outcome, check
 SECTION = "Open apps by voice"
 NO_MATCH = "Open command: no app matched; typed as words"
 # What an AppImage or a venv leaves in TuxTalk's environment, and an app
-# started from the menu must not inherit (launch_env.py).
-LEAKS = "APPDIR|APPIMAGE|ARGV0|OWD|PYTHONPATH|PYTHONHOME|GI_TYPELIB_PATH"
+# started from the menu must not inherit (launch_env.py). The VMs have no
+# CUDA download, so TuxTalk hides the GPU there with CUDA_VISIBLE_DEVICES;
+# the dictation service runs with GDK_BACKEND=x11.
+LEAKS = ("APPDIR|APPIMAGE|ARGV0|OWD|PYTHONPATH|PYTHONHOME|GI_TYPELIB_PATH|CUDA_VISIBLE_DEVICES"
+         "|GDK_BACKEND|HF_HUB_DISABLE_XET|TUXTALK_[A-Z_]*")
+# A search path still holding the AppImage's mount.
+MOUNT_ON_A_PATH = r"(LD_LIBRARY_PATH|PATH)=.*/\.mount_"
 # Python or GTK apps to try, with the phrase that opens each.
 GTK_APPS = (("meld", "open_meld"), ("gnome-calculator", "open_calculator"))
 PHRASES = ("open_text_editor", "open_unknown_app", "open_meld", "open_calculator")
@@ -213,7 +219,8 @@ def open_gtk_app(run):
             shot = run.shot("open-gtk-app")
             return Outcome(
                 "pass", f"{program} opened with none of {LEAKS.replace('|', ', ')} in its "
-                "environment. Its dropdowns are not opened here: that is on Ron's list.",
+                "environment and no AppImage folder on LD_LIBRARY_PATH or PATH. Its dropdowns "
+                "are Ron's: Step 8's “Open apps by voice (Labs, from the AppImage)”.",
                 screenshot=shot)
         finally:
             _close(run, program)
@@ -226,7 +233,8 @@ def _inherited(run, program):
     answer = run.vm.ssh(
         f"pid=$(pgrep -nf {_running(program)}) && [ -r /proc/$pid/environ ] "
         f"|| {{ echo NOT_FOUND; exit 0; }}; "
-        f"tr '\\0' '\\n' < /proc/$pid/environ | grep -E '^({LEAKS})='; echo READ",
+        f"tr '\\0' '\\n' < /proc/$pid/environ | grep -E '^({LEAKS})=|^{MOUNT_ON_A_PATH}'; "
+        "echo READ",
         check=False).stdout
     if "NOT_FOUND" in answer or "READ" not in answer:
         return [f"couldn't find {program}'s process to read its environment"]
