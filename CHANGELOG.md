@@ -14,9 +14,10 @@ before 0.15.0, so older entries use that name.
   Ctrl+Space too, because a desktop can't tell the two Ctrl keys apart. Code
   completion on that shortcut waits until dictation is off. Preferences says
   so when you pick it, and warns you if IBus, Fcitx 5, GNOME or your keyboard
-  options already use Ctrl+Space. On a desktop where TuxTalk can't hold keys
-  back from apps (anything but KDE, GNOME with the TuxTalk extension, COSMIC
-  and X11) the app gets Ctrl+Space as well.
+  options already use Ctrl+Space, or if the keyboard options make Left Ctrl
+  something else (Caps Lock, Alt, Compose, a layout switch). On a desktop
+  where TuxTalk can't hold keys back from apps (anything but KDE, GNOME with
+  the TuxTalk extension, COSMIC and X11) the app gets Ctrl+Space as well.
 - It needs the newer hotkey helper (1.14). If yours is older, picking the key
   asks to update it, with one password prompt and no restart.
 - You can open an app by saying its name. Hold your dictation key, say "open

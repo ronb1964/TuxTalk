@@ -82,14 +82,51 @@ def test_gnome_counts_only_on_gnome_with_a_ctrl_space_binding(desktop):
     assert csc.clashes() == []
 
 
-@pytest.mark.parametrize("option", ["compose:lctrl", "grp:ctrl_select", "grp:lctrl_toggle"])
-def test_a_keyboard_option_giving_left_ctrl_another_job_is_a_clash(desktop, option):
+@pytest.mark.parametrize("option,title,does", [
+    ("grp:ctrl_space_toggle", "Your keyboard options use Ctrl+Space",
+     "make Ctrl+Space switch the layout"),
+    ("grp:lctrl_toggle", "Your keyboard options change Left Ctrl",
+     "make Left Ctrl switch the layout"),
+    ("grp:ctrl_select", "Your keyboard options change Left Ctrl",
+     "make Left Ctrl switch the layout"),
+    ("ctrl:grouptoggle_capscontrol", "Your keyboard options change Left Ctrl",
+     "make Left Ctrl switch the layout"),
+    ("compose:lctrl", "Your keyboard options change Left Ctrl",
+     "make Left Ctrl start a Compose sequence"),
+    ("ctrl:swapcaps", "Your keyboard options change Left Ctrl",
+     "make Left Ctrl act as Caps Lock"),
+    ("ctrl:swap_lalt_lctl", "Your keyboard options change Left Ctrl",
+     "make Left Ctrl act as Alt"),
+    ("ctrl:swap_lwin_lctl", "Your keyboard options change Left Ctrl",
+     "make Left Ctrl act as Super"),
+    ("ctrl:swap_lalt_lctl_lwin", "Your keyboard options change Left Ctrl",
+     "make Left Ctrl act as Super"),
+    ("ctrl:lctrl_meta", "Your keyboard options change Left Ctrl",
+     "make Left Ctrl act as Meta"),
+    ("ctrl:hyper_capscontrol", "Your keyboard options change Left Ctrl",
+     "make Left Ctrl act as Hyper"),
+])
+def test_a_keyboard_option_that_changes_the_pair_says_what_it_does(desktop, option, title,
+                                                                   does):
     desktop(xkb=f"caps:escape,{option}")
-    assert csc.clashes() == [csc.KEYBOARD_OPTIONS]
+    [clash] = csc.clashes()
+    assert clash.title() == title
+    assert clash.paragraph().startswith(
+        f"Your keyboard options {does}, so pressing Left Ctrl+Space may do that instead "
+        "of dictating. Pick another key, or change those keyboard options (Settings, "
+        "Keyboard, Keyboard options).")
 
 
-def test_other_keyboard_options_are_no_clash(desktop):
-    desktop(xkb="caps:escape,compose:rctrl")
+@pytest.mark.parametrize("options", [
+    "caps:escape,compose:rctrl",
+    "compose:lctrl-altgr",          # Compose only with AltGr: Left Ctrl alone is Ctrl
+    "grp:lctrl_lshift_toggle",      # a layout switch only with Left Shift too
+    "grp:lctrl_lalt_toggle",
+    "grp:lctrl_lwin_toggle",
+    "ctrl:nocaps",                  # Caps Lock becomes a Ctrl; Left Ctrl stays one
+])
+def test_keyboard_options_that_leave_left_ctrl_space_alone_are_no_clash(desktop, options):
+    desktop(xkb=options)
     assert csc.clashes() == []
 
 

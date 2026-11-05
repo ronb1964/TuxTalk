@@ -266,15 +266,15 @@ def test_picking_left_ctrl_space_where_ibus_uses_it_says_so():
 
 def test_the_keyboard_options_clash_says_what_they_do_to_left_ctrl():
     cfg = {**CFG, "hotkey": CTRL_SPACE}
-    title, text, _, _ = hotkey_change_message(cfg, {"hotkey"}, [],
-                                              ctrl_space=[KEYBOARD_OPTIONS])
+    swapcaps = KEYBOARD_OPTIONS["ctrl:swapcaps"]
+    title, text, _, _ = hotkey_change_message(cfg, {"hotkey"}, [], ctrl_space=[swapcaps])
     assert title == "Your keyboard options change Left Ctrl"
     assert text.startswith(
-        "Your keyboard options make Left Ctrl a Compose or layout-switch key, so pressing "
+        "Your keyboard options make Left Ctrl act as Caps Lock, so pressing "
         "Left Ctrl+Space may do that instead of dictating. Pick another key, or change "
         "those keyboard options (Settings, Keyboard, Keyboard options).")
-    assert KEYBOARD_OPTIONS.log_line() == (
-        "Your keyboard options make Left Ctrl a Compose or layout-switch key; "
+    assert swapcaps.log_line() == (
+        "Your keyboard options make Left Ctrl act as Caps Lock; "
         "Left Ctrl+Space may do that instead of dictating")
     assert IBUS.log_line() == ("IBus also uses Ctrl+Space to switch input methods; "
                                "Left Ctrl+Space may do that instead of dictating")

@@ -5,8 +5,9 @@ An input method (IBus, Fcitx 5) listens for it as its on/off or next-method
 key, and GNOME can bind it to switching the input source; each is looked for
 only while it's running (or, for GNOME, on GNOME), since a setting left
 behind by a program that isn't running is no clash. A keyboard option that
-makes Left Ctrl Compose or a layout switch is one too. KDE's own shortcuts
-aren't here: kwin_hotkeys' verdict on the key covers them.
+makes Ctrl+Space switch the layout, or gives Left Ctrl another job, is one
+too. KDE's own shortcuts aren't here: kwin_hotkeys' verdict on the key
+covers them.
 """
 import logging
 import os
@@ -23,8 +24,8 @@ logger = logging.getLogger(__name__)
 class Clash:
     """A program or setting that takes Ctrl+Space: *who* does *what*, and
     *where* it is changed. *sentence* replaces the stock wording, with
-    *headline* as the question's title, for a clash that isn't "uses
-    Ctrl+Space" (it gives Left Ctrl another job); *fix* is then the advice."""
+    *headline* as the question's title, for the keyboard options, whose
+    wording says what they do to the pair; *fix* is then the advice."""
     who: str
     what: str
     where: str
@@ -54,17 +55,36 @@ FCITX5 = Clash("Fcitx 5", "to turn the input method on and off",
                "Fcitx 5 Configuration, Global Options, Trigger Input Method")
 GNOME = Clash("GNOME", "to switch the input source",
               "Settings, Keyboard, View and Customize Shortcuts")
-KEYBOARD_OPTIONS = Clash("Your keyboard options", "", "Settings, Keyboard, Keyboard options",
-                         headline="Your keyboard options change Left Ctrl",
-                         sentence="Your keyboard options make Left Ctrl a Compose or "
-                                  "layout-switch key",
-                         fix="change those keyboard options")
 
-# The XKB options that give Left Ctrl a job of its own.
-_LEFT_CTRL_OPTIONS = frozenset({
-    "compose:lctrl", "compose:lctrl-altgr", "grp:lctrl_toggle", "grp:ctrl_select",
-    "grp:lctrl_lshift_toggle", "grp:lctrl_lalt_toggle", "grp:lctrl_lwin_toggle",
-})
+
+def _keyboard_options(does: str, headline: str = "Your keyboard options change Left Ctrl"
+                      ) -> Clash:
+    """A clash with the keyboard's XKB options, which *does* says."""
+    return Clash("Your keyboard options", "", "Settings, Keyboard, Keyboard options",
+                 headline=headline, sentence=f"Your keyboard options {does}",
+                 fix="change those keyboard options")
+
+
+_LEFT_CTRL_SWITCHES_LAYOUT = _keyboard_options("make Left Ctrl switch the layout")
+
+# The XKB options after which Left Ctrl+Space isn't a plain Ctrl+Space, as
+# xkeyboard-config's symbols define them. Those that need another key with
+# Left Ctrl (grp:lctrl_lshift_toggle and the like) or AltGr
+# (compose:lctrl-altgr) leave the pair alone, so they aren't here.
+KEYBOARD_OPTIONS = {
+    "grp:ctrl_space_toggle": _keyboard_options(
+        "make Ctrl+Space switch the layout", headline="Your keyboard options use Ctrl+Space"),
+    "grp:lctrl_toggle": _LEFT_CTRL_SWITCHES_LAYOUT,
+    "grp:ctrl_select": _LEFT_CTRL_SWITCHES_LAYOUT,
+    "ctrl:grouptoggle_capscontrol": _LEFT_CTRL_SWITCHES_LAYOUT,
+    "compose:lctrl": _keyboard_options("make Left Ctrl start a Compose sequence"),
+    "ctrl:swapcaps": _keyboard_options("make Left Ctrl act as Caps Lock"),
+    "ctrl:swap_lalt_lctl": _keyboard_options("make Left Ctrl act as Alt"),
+    "ctrl:swap_lwin_lctl": _keyboard_options("make Left Ctrl act as Super"),
+    "ctrl:swap_lalt_lctl_lwin": _keyboard_options("make Left Ctrl act as Super"),
+    "ctrl:lctrl_meta": _keyboard_options("make Left Ctrl act as Meta"),
+    "ctrl:hyper_capscontrol": _keyboard_options("make Left Ctrl act as Hyper"),
+}
 
 # GNOME's shortcut schemas that could hold Ctrl+Space.
 _GNOME_SCHEMAS = (
@@ -109,9 +129,10 @@ def gnome_bindings_ctrl_space(listing: str) -> bool:
     return bool(_CTRL_SPACE_ACCEL.search(listing))
 
 
-def xkb_options_use_left_ctrl(options: str | None) -> bool:
-    """Whether a comma-separated XKB options string gives Left Ctrl another job."""
-    return bool(options) and not _LEFT_CTRL_OPTIONS.isdisjoint(options.split(","))
+def keyboard_options_clash(options: str | None) -> Clash | None:
+    """What a comma-separated XKB options string does to Left Ctrl+Space, or None."""
+    return next((KEYBOARD_OPTIONS[o] for o in (options or "").split(",")
+                 if o in KEYBOARD_OPTIONS), None)
 
 
 def _running(name: str, proc: str = "/proc") -> bool:
@@ -179,8 +200,9 @@ def clashes() -> list[Clash]:
     if desktop_detect.get_desktop_environment() == "gnome" and gnome_bindings_ctrl_space(
             "\n".join(_gsettings("list-recursively", schema) for schema in _GNOME_SCHEMAS)):
         found.append(GNOME)
-    if xkb_options_use_left_ctrl(_xkb_options()):
-        found.append(KEYBOARD_OPTIONS)
+    options = keyboard_options_clash(_xkb_options())
+    if options:
+        found.append(options)
     return found
 
 
