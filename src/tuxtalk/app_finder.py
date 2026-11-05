@@ -93,6 +93,7 @@ def _sounds(letters):
     """*letters* folded so names that sound alike compare equal: Your Words'
     folds, the app ones above, and no silent final e ("kwrite" and "kright"
     both give "krit")."""
+    letters = "".join(c for c in letters if c.isalnum())
     for a, b in _APP_SOUND_FOLDS:
         letters = letters.replace(a, b)
     return sound_key(letters).removesuffix("e")
@@ -128,13 +129,15 @@ def _candidates(words, indexed):
     """The entries the first matching rule finds, rules in the spec's order."""
     said = " ".join(words)
     letters = said.replace(" ", "")
-    sounds = _sounds(letters) if len(letters) >= MIN_SOUND_LETTERS else None
+    sounds = _sounds(letters) if len(letters) >= MIN_SOUND_LETTERS else ""
+    # Sounding alike comes after every rule that matches what was said, so
+    # "open contact" stays Contacts and never becomes Kontact.
     rules = (
         lambda i: said in i.names,
         lambda i: letters in i.letters,
-        lambda i: sounds in i.sounds,
         lambda i: said in i.labels,
         lambda i: i.starts_name(words),
+        lambda i: bool(sounds) and sounds in i.sounds,
     )
     for rule in rules:
         hits = [i for i in indexed if rule(i)]

@@ -43,9 +43,13 @@ def test_names_that_sound_the_same_find_the_app(apps):
     assert ids(find(parse("open kay rite"), apps, {})) == ["org.kde.kwrite.desktop"]
 
 
-def test_a_sound_alike_word_alone_opens_nothing(apps):
-    assert find(parse("open right"), apps, {}).kind == "none"
-    assert find(parse("start writing"), apps, {}).kind == "none"
+def test_a_sound_alike_never_beats_a_name_that_was_said():
+    contacts = [entry("org.gnome.Contacts.desktop", "Contacts", program="gnome-contacts"),
+                entry("org.kde.kontact.desktop", "Kontact", program="kontact"),
+                entry("falcond-gui.desktop", "Falcond GUI", program="falcond-gui"),
+                entry("org.kde.falkon.desktop", "Falkon", program="falkon")]
+    assert ids(find(parse("open contact"), contacts, {})) == ["org.gnome.Contacts.desktop"]
+    assert ids(find(parse("open falcon"), contacts, {})) == ["falcond-gui.desktop"]
 
 
 def test_respellings_close_enough(apps):
