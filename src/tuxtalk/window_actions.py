@@ -29,6 +29,7 @@ logger = setup_logger(__name__)
 TIMEOUT_S = 1.0
 NOTHING_DONE = "Nothing was done."
 
+_NO_REPLY = "org.freedesktop.DBus.Error.NoReply"
 # A method, or the whole object, that the extension GNOME Shell runs lacks.
 _NOTHING_THERE = frozenset(f"org.freedesktop.DBus.Error.{name}"
                            for name in ("UnknownMethod", "UnknownObject", "UnknownInterface"))
@@ -157,12 +158,17 @@ def _ask_desktop(request: WindowRequest, entry, exact: bool):
 
 
 def refusal(cant: str, error: Exception) -> str:
-    """The note for a desktop that couldn't be asked: *cant*, the note that
-    this desktop can't do it, unless GNOME Shell still runs the TuxTalk
+    """The note for a desktop that couldn't be asked: "desktop_no_answer"
+    when it can do it but didn't answer in time (KWin's TimeoutError, or the
+    NoReply of a D-Bus call to KWin or GNOME Shell that timed out), else
+    *cant*, the note that this desktop can't do it, unless GNOME Shell still runs the TuxTalk
     extension from before an update, which has the method only after the
     user logs out and back in. No extension at all fails the same way, so
     GNOME Shell is asked whether TuxTalk's is enabled, never the error's
     wording, which is translated."""
-    if getattr(error, "get_dbus_name", lambda: None)() not in _NOTHING_THERE:
+    dbus_name = getattr(error, "get_dbus_name", lambda: None)()
+    if isinstance(error, TimeoutError) or dbus_name == _NO_REPLY:
+        return "desktop_no_answer"
+    if dbus_name not in _NOTHING_THERE:
         return cant
     return "gnome_relogin" if app_focus.extension_enabled() else cant

@@ -28,7 +28,6 @@ logger = setup_logger(__name__)
 
 TIMEOUT_S = window_actions.TIMEOUT_S
 # What dbus-python raises when a call isn't answered within its timeout.
-_NO_REPLY = "org.freedesktop.DBus.Error.NoReply"
 
 # A desktop's answer -> the note saying why nothing was done.
 _NOTES = {"no_window": "no_focused_window", "no_desktop": "no_such_desktop",
@@ -88,12 +87,10 @@ def _cant(action: str) -> str:
 
 
 def _refusal(action: str, error: Exception) -> str:
-    """The note for a desktop that failed to do *action*. KWin raises
-    TimeoutError when its screens script isn't answered and RuntimeError
-    when a script fails, and a D-Bus call to KWin or GNOME Shell that times
-    out raises NoReply: the desktop can do it, it just didn't answer, and a
-    user with two screens must never be told there is one."""
-    if (isinstance(error, (TimeoutError, RuntimeError))
-            or getattr(error, "get_dbus_name", lambda: None)() == _NO_REPLY):
+    """The note for a desktop that failed to do *action*. A script of KWin's
+    that fails raises RuntimeError, and a slow desktop is told as one by
+    window_actions.refusal: the desktop can do it, it just didn't answer,
+    and a user with two screens must never be told there is one."""
+    if isinstance(error, RuntimeError):
         return "desktop_no_answer"
     return window_actions.refusal(_cant(action), error)

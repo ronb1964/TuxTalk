@@ -9,6 +9,7 @@ here touches the real one, starts an app or closes a window.
 import logging
 import types
 
+import dbus
 import pytest
 
 from conftest import CHAT_WINDOW, esc
@@ -168,6 +169,30 @@ def test_a_kwin_error_says_it_cant_and_is_logged(kde, apps, actions_on, monkeypa
         assert window_actions.run(WindowRequest("maximize"), CHAT_WINDOW, False) is False
     assert actions_on == ["Can't minimize or maximize here"]
     assert "maximize" in caplog.text and "KWin refused the script" in caplog.text
+
+
+@pytest.mark.parametrize("error", [TimeoutError("KWin didn't answer in time"),
+                                   dbus.exceptions.DBusException(
+                                       "Did not receive a reply",
+                                       name="org.freedesktop.DBus.Error.NoReply")])
+def test_a_slow_kwin_is_told_as_one_and_is_logged(kde, apps, actions_on, monkeypatch, caplog,
+                                                  error):
+    def slow(*_args):
+        raise error
+    monkeypatch.setattr(kwin_windows, "act", slow)
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert window_actions.run(close(), CHAT_WINDOW, False) is False
+    assert actions_on == ["The desktop didn't answer"]
+    assert "Voice command close not done" in caplog.text
+
+
+def test_a_slow_gnome_shell_is_told_as_one(gnome, apps, actions_on, monkeypatch):
+    def slow(*_args):
+        raise dbus.exceptions.DBusException("Did not receive a reply",
+                                            name="org.freedesktop.DBus.Error.NoReply")
+    monkeypatch.setattr(app_focus, "call_extension", slow)
+    assert window_actions.run(switch("firefox"), CHAT_WINDOW, False) is False
+    assert actions_on == ["The desktop didn't answer"]
 
 
 def test_an_x11_error_says_it_cant_and_is_logged(x11_session, apps, actions_on, monkeypatch,
