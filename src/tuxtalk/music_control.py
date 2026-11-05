@@ -15,13 +15,9 @@ from dataclasses import dataclass
 from . import beeps, command_notices, recording
 from .command_phrases import MusicRequest
 from .logger import setup_logger
-from .media_pause import MPRIS_PREFIX, status_of
+from .media_pause import MPRIS_PREFIX, PROXIES, status_of
 
 logger = setup_logger(__name__)
-
-# playerctld stands in for whichever player was used last: counting it would
-# make one player look like two, and pausing it pauses that player anyway.
-PROXIES = frozenset({"org.mpris.MediaPlayer2.playerctld"})
 
 METHODS = {"pause": "Pause", "play": "Play", "next": "Next", "previous": "Previous"}
 
@@ -58,7 +54,8 @@ def choose(action: str, status: dict[str, str], paused_by_us: tuple[str, ...]) -
     pauses every player that plays, and keeps the ones TuxTalk paused
     paused; "play" starts what TuxTalk paused, else does nothing when
     something plays, else starts the one paused player. Never a guess
-    between several: that's the which_player note."""
+    between several: the which_playing note when they play (or did when it
+    was said), which_player when the user paused them."""
     by_us, playing, _ = _groups(status, paused_by_us)
     if action == "pause":
         if by_us or playing:
@@ -72,7 +69,9 @@ def choose(action: str, status: dict[str, str], paused_by_us: tuple[str, ...]) -
     group = _one_of(status, paused_by_us)
     if len(group) == 1:
         return Choice(group, frozenset(), None)
-    return Choice((), frozenset(), "which_player" if group else "no_player")
+    if not group:
+        return Choice((), frozenset(), "no_player")
+    return Choice((), frozenset(), "which_playing" if by_us or playing else "which_player")
 
 
 def _label(bus, name: str) -> str:
@@ -93,19 +92,23 @@ def _call_each(bus, names: tuple[str, ...], method: str) -> list[str]:
     return called
 
 
-def _on_worker(bus, paused_by_us: tuple[str, ...], action: str):
+def _on_worker(bus, paused_by_us: tuple[str, ...], go, action: str):
     """MediaPauser.run_command's act: read the players, choose, and call the
-    ones chosen. Returns ((note, names), forget): the note's kind, or None
-    when done, with the players to name in the note or the log."""
+    ones chosen if go() still says so. Returns ((note, names), forget): the
+    note's kind, or None when done, with the players to name in the note or
+    the log."""
     status = {}
     for name in bus.players():
         if (state := status_of(bus, name)) is not None:
             status[name] = state
     choice = choose(action, status, paused_by_us)
-    if choice.note == "which_player":
-        return (choice.note, [_label(bus, n) for n in _one_of(status, paused_by_us)]), frozenset()
+    if choice.note in ("which_player", "which_playing"):
+        names = [_label(bus, n) for n in _one_of(status, paused_by_us)]
+        return (choice.note, names), frozenset()
     if choice.note:
         return (choice.note, []), frozenset()
+    if not go():
+        return ("player_no_answer", []), frozenset()
     called = _call_each(bus, choice.targets, METHODS[action])
     if choice.targets and not called:
         return ("no_player", []), frozenset()
@@ -118,8 +121,8 @@ def run(request: MusicRequest, beeps_on: bool) -> bool:
     False: nothing picked, or no player answered in time, said with a note."""
     action = request.action
     answer = recording.media_pauser().run_command(
-        lambda bus, paused: _on_worker(bus, paused, action))
-    note, names = answer if answer is not None else ("no_player", [])
+        lambda bus, paused, go: _on_worker(bus, paused, go, action))
+    note, names = answer if answer is not None else ("player_no_answer", [])
     if note:
         command_notices.say(note, beeps_on, players=", ".join(names))
         return False

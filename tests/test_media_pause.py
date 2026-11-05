@@ -62,6 +62,14 @@ def test_pauses_only_what_is_playing():
     assert bus.calls == [("youtube", "Pause")]
 
 
+def test_playerctld_is_never_paused_itself():
+    """It passes the Pause on to the real player, which is listed too."""
+    bus = FakeBus(**{"org.mpris.MediaPlayer2.playerctld": "Playing", "youtube": "Playing"})
+    p = MediaPauser(bus)
+    run(p, p.pause)
+    assert bus.calls == [("youtube", "Pause")]
+
+
 def test_resumes_only_what_it_paused():
     bus = FakeBus(youtube="Playing", spotify="Paused")
     p = MediaPauser(bus)

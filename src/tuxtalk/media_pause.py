@@ -31,6 +31,12 @@ MPRIS_PATH = "/org/mpris/MediaPlayer2"
 PLAYER_IFACE = "org.mpris.MediaPlayer2.Player"
 CALL_TIMEOUT_MS = 500   # per D-Bus call; a healthy player answers in a few ms
 
+# playerctld stands in for whichever player was used last and passes each call
+# on to it. That player is listed too, so pausing playerctld would pause it
+# behind TuxTalk's back: noted as playerctld, the real player was then never
+# known to be paused for this recording.
+PROXIES = frozenset({"org.mpris.MediaPlayer2.playerctld"})
+
 
 class SessionBus:
     """The few MPRIS calls MediaPauser needs, over Gio (safe to use from a thread)."""
@@ -101,6 +107,10 @@ class MediaPauser:
         self._paused = []          # players we paused; touched only by the worker
         self._jobs = queue.Queue()
         self._worker = None
+        # A recording's start or end and a music command on the dictation
+        # worker can be the first to submit: without it each could start a
+        # worker, and two would no longer keep the jobs in order.
+        self._start_lock = threading.Lock()
         self._closing = False      # exiting: a pause not started yet does nothing
 
     # -- called from the dictation service; never block -------------------
@@ -133,26 +143,40 @@ class MediaPauser:
                            "it may stay paused")
 
     def run_command(self, act, timeout=COMMAND_WAIT_S):
-        """Run act(bus, paused) on the worker, after any pause or resume asked
-        for before it, and return its result. *paused* holds the players this
-        recording paused; act returns (result, forget), and the players in
-        *forget* aren't resumed (the user paused them by voice). None past
-        *timeout*: the command is then dropped if it hasn't started, so it
-        can't act long after it was said."""
-        answer, done, dropped = [], threading.Event(), threading.Event()
+        """Run act(bus, paused, go) on the worker, after any pause or resume
+        asked for before it, and return its result. *paused* holds the
+        players this recording paused; act returns (result, forget), and the
+        players in *forget* aren't resumed (the user paused them by voice).
+
+        act calls go() right before it calls the players, and calls none
+        when it says False: the caller gave up waiting and has told the user
+        so, and a command acting later ("next track" said twice skipping two
+        tracks) would be worse than none. None past *timeout*; once go() has
+        said True, the calls (each bounded by CALL_TIMEOUT_MS) are waited
+        for instead, since they are being done."""
+        lock = threading.Lock()
+        state = {"gave_up": False, "going": False}
+        answer, done = [], threading.Event()
+
+        def go():
+            with lock:
+                state["going"] = not state["gave_up"]
+                return state["going"]
 
         def job():
-            if dropped.is_set():
-                return
             try:
-                result, forget = act(self._bus, tuple(self._paused))
-                self._paused = [n for n in self._paused if n not in forget]
+                result, forget = act(self._bus, tuple(self._paused), go)
                 answer.append(result)
+                if state["going"]:
+                    self._paused = [n for n in self._paused if n not in forget]
             finally:
                 done.set()
         self._submit(job)
-        if not done.wait(timeout):
-            dropped.set()
+        if done.wait(timeout):
+            return answer[0] if answer else None
+        with lock:
+            state["gave_up"] = not state["going"]
+        if state["gave_up"] or not done.wait(timeout):
             logger.warning("Media command: the players didn't answer in time")
             return None
         return answer[0] if answer else None
@@ -167,9 +191,11 @@ class MediaPauser:
     # -- the worker -------------------------------------------------------
 
     def _submit(self, job):
-        if self._worker is None:
-            self._worker = threading.Thread(target=self._run, name="media-pause", daemon=True)
-            self._worker.start()
+        with self._start_lock:
+            if self._worker is None:
+                self._worker = threading.Thread(target=self._run, name="media-pause",
+                                                daemon=True)
+                self._worker.start()
         self._jobs.put(job)
 
     def _run(self):
@@ -185,7 +211,7 @@ class MediaPauser:
         if self._closing:
             return
         for name in self._bus.players():
-            if status_of(self._bus, name) != "Playing":
+            if name in PROXIES or status_of(self._bus, name) != "Playing":
                 continue
             try:
                 self._bus.call(name, "Pause")

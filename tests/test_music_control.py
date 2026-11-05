@@ -3,6 +3,7 @@ with a pretend session bus (test_media_pause.FakeBus): no test reaches a real
 media player. TuxTalk pauses music while you dictate; these commands share
 its worker, so a "pause music" said during a recording isn't undone when the
 recording ends."""
+import threading
 import time
 
 import pytest
@@ -124,6 +125,32 @@ def test_pause_with_nothing_playing_says_so(pauser, bus, actions_on):
     assert actions_on == ["No music is playing"] and bus.calls == []
 
 
+class WithPlayerctld(FakeBus):
+    """playerctld listed first, as ListNames may: it mirrors the last player's
+    status and passes each call on to it."""
+    PROXY = "org.mpris.MediaPlayer2.playerctld"
+
+    def players(self):
+        return [self.PROXY] + list(self.status)
+
+    def playback_status(self, name):
+        return super().playback_status("spotify" if name == self.PROXY else name)
+
+    def call(self, name, method):
+        super().call("spotify" if name == self.PROXY else name, method)
+
+
+def test_pause_music_mid_recording_stays_paused_with_playerctld_running(monkeypatch):
+    bus = WithPlayerctld(spotify="Playing")
+    p = MediaPauser(bus)
+    monkeypatch.setattr(recording, "_media_pauser", p)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
+    run(p, p.pause)                                          # the recording starts
+    assert music_control.run(MusicRequest("pause"), False) is True
+    run(p, p.resume)                                         # the recording ends
+    assert bus.status["spotify"] == "Paused" and ("spotify", "Play") not in bus.calls
+
+
 def test_playerctld_is_never_counted(pauser, bus):
     bus.status = {"org.mpris.MediaPlayer2.playerctld": "Paused", "spotify": "Paused"}
     assert music_control.run(MusicRequest("play"), False) is True
@@ -139,19 +166,41 @@ def test_playerctld_is_never_counted(pauser, bus):
     ("play", {"a": "Paused", "b": "Paused"}, (), (), set(), "which_player"),
     ("play", {"a": "Stopped"}, (), (), set(), "no_player"),
     ("next", {"a": "Playing", "b": "Paused"}, ("b",), ("b",), set(), None),
-    ("next", {"a": "Playing", "b": "Playing"}, (), (), set(), "which_player"),
+    ("next", {"a": "Playing", "b": "Playing"}, (), (), set(), "which_playing"),
+    ("next", {"a": "Paused", "b": "Paused"}, ("a", "b"), (), set(), "which_playing"),
+    ("previous", {"a": "Paused", "b": "Paused"}, (), (), set(), "which_player"),
     ("previous", {}, (), (), set(), "no_player")])
 def test_choose(action, status, by_us, targets, forget, note):
     assert music_control.choose(action, status, by_us) == Choice(targets, frozenset(forget),
                                                                  note)
 
 
-def test_a_hung_player_never_holds_the_dictation_past_the_wait(pauser, bus):
+def test_a_hung_player_never_holds_the_dictation_past_the_wait(pauser, bus, actions_on):
     bus.status = {"stuck": "Playing"}
     bus.hang.add("stuck")
     t0 = time.monotonic()
     assert music_control.run(MusicRequest("pause"), False) is False
     assert time.monotonic() - t0 < media_pause.COMMAND_WAIT_S + 1
+    assert actions_on == ["The music player didn't answer"]
+
+
+def test_next_track_said_twice_after_a_slow_answer_skips_one_track(pauser, bus, actions_on):
+    """The first "next track" was reported as not answered; it must not skip
+    a track later, on top of the second one."""
+    answer = threading.Event()
+
+    class Slow(FakeBus):
+        def playback_status(self, name):
+            answer.wait(10)                  # answers only after the wait gave up
+            return super().playback_status(name)
+    slow = Slow(spotify="Playing")
+    pauser._bus = slow
+    assert music_control.run(MusicRequest("next"), False) is False
+    answer.set()
+    assert music_control.run(MusicRequest("next"), False) is True
+    assert pauser.wait_idle(2)
+    assert slow.calls == [("spotify", "Next")]
+    assert actions_on == ["The music player didn't answer"]
 
 
 def test_a_command_the_worker_never_reached_is_dropped(pauser, bus):
@@ -160,8 +209,11 @@ def test_a_command_the_worker_never_reached_is_dropped(pauser, bus):
     bus.status = {"stuck": "Playing", "spotify": "Playing"}
     bus.hang.add("stuck")
     pauser.pause()                                           # holds the worker
-    assert pauser.run_command(lambda b, paused: (b.call("spotify", "Next"), frozenset()),
-                              timeout=0.05) is None
+    def act(b, paused, go):
+        if go():
+            b.call("spotify", "Next")
+        return None, frozenset()
+    assert pauser.run_command(act, timeout=0.05) is None
     bus.release.set()
     assert pauser.wait_idle(6)
     assert ("spotify", "Next") not in bus.calls

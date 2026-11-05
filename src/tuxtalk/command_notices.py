@@ -111,6 +111,13 @@ NOTES = {
         "Several players paused: {players}",
         "More than one player is paused, so TuxTalk didn't pick one. Start the one you "
         "want yourself."),
+    "which_playing": (
+        "Several players playing: {players}",
+        "More than one player is playing, so TuxTalk didn't pick one. Pause the others, "
+        "then try again."),
+    "player_no_answer": (
+        "The music player didn't answer",
+        "TuxTalk asked the player, but it didn't answer in time. Try again in a moment."),
     "lock_failed": (
         "Couldn't lock the screen",
         "The computer didn't take the request to lock. Lock it from your desktop's menu."),
