@@ -181,13 +181,16 @@ def test_x11_a_fullscreen_window_is_taken_out_of_fullscreen_first(desktops, one_
     assert any(data[:2] == (0, fullscreen) for _w, data in desktops.requests(b"_NET_WM_STATE"))
 
 
+@pytest.mark.parametrize("missing", [b"_NET_MOVERESIZE_WINDOW", b"_NET_WM_STATE_FULLSCREEN"])
 def test_x11_a_window_manager_without_move_requests_leaves_the_window_alone(
-        desktops, one_monitor, monkeypatch):
+        desktops, one_monitor, monkeypatch, missing):
+    """Nothing is sent unless everything can be: a window taken out of
+    maximized and then not moved would be left half changed."""
     _active_window(desktops)
     real = x11_activate.Display.atom
 
     def atom(self, name):
-        if name == b"_NET_MOVERESIZE_WINDOW":
+        if name == missing:
             raise OSError("no window manager here takes it")
         return real(self, name)
     monkeypatch.setattr(x11_activate.Display, "atom", atom)

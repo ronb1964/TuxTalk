@@ -89,8 +89,9 @@ NOTES = {
     "one_screen": (
         "There's only one screen",
         "TuxTalk sees one screen here, so the window stays where it is."),
-    # KWin was asked and gave no answer in time: it can do this, so "can't
-    # here" would be wrong, and so would any claim about the screens.
+    # The desktop was asked and didn't answer in time, or its script failed:
+    # it can do this, so "can't here" would be wrong, and so would any claim
+    # about the screens.
     "desktop_no_answer": (
         "The desktop didn't answer",
         "The desktop didn't answer in time, so nothing was done. Say it again in a "

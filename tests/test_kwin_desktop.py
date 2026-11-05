@@ -122,3 +122,18 @@ def test_a_desktop_above_nine_is_never_sent(fake_kde):
     fake_kde.desktops = 12
     assert kwin_desktop.act("to desktop", 10, 1.0) == "no_desktop"
     assert not _invoked(fake_kde)
+
+
+def test_a_window_move_no_longer_wanted_after_asking_kwin_is_never_sent(fake_kde):
+    """The desktop count is asked first; by then the user may have clicked
+    into another window, and the shortcut would move that one."""
+    asked = []
+    assert kwin_desktop.act("to next desktop", None, 1.0,
+                            still_wanted=lambda: asked.append(len(fake_kde.calls)) or False
+                            ) == "stopped"
+    assert asked == [0] and _invoked(fake_kde) == []
+
+
+def test_a_window_move_still_wanted_is_sent(fake_kde):
+    assert kwin_desktop.act("to desktop", 2, 1.0, still_wanted=lambda: True) == "done"
+    assert _invoked(fake_kde) == [("invokeShortcut", "Window to Desktop 2")]

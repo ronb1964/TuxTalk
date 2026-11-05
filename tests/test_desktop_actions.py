@@ -9,13 +9,14 @@ here touches the real one.
 """
 import logging
 
+import dbus
 import pytest
 
 from conftest import esc
 from desktop_fakes import FakeShell
 from type_at_pause_rig import service_tick_runs
-from tuxtalk import (command_notices, command_phrases, desktop_actions, kwin_desktop, notify,
-                     voice_actions)
+from tuxtalk import (app_focus, command_notices, command_phrases, desktop_actions, kwin_desktop,
+                     notify, voice_actions)
 from tuxtalk import recording_state as rs
 from tuxtalk.beeps import READY_BEEP
 from tuxtalk.command_phrases import DesktopRequest
@@ -82,8 +83,13 @@ def test_the_log_names_the_command_and_number(kde, fake_kde, actions_on, caplog)
     assert fake_kde.calls == [("setCurrentDesktop", 2)]
 
 
+NO_REPLY = dbus.exceptions.DBusException("Did not receive a reply",
+                                         name="org.freedesktop.DBus.Error.NoReply")
+
+
 @pytest.mark.parametrize("error", [TimeoutError("KWin didn't answer in time"),
-                                   RuntimeError("KWin's tuxtalk-screens script failed: x")])
+                                   RuntimeError("KWin's tuxtalk-screens script failed: x"),
+                                   NO_REPLY])
 def test_a_kwin_that_doesnt_answer_is_never_told_as_one_screen(kde, actions_on, focus_on,
                                                                monkeypatch, caplog, error):
     """A user with two screens must not hear there is one because KWin was slow."""
@@ -98,12 +104,42 @@ def test_a_kwin_that_doesnt_answer_is_never_told_as_one_screen(kde, actions_on, 
     assert "to next screen" in caplog.text and str(error) in caplog.text
 
 
+def test_a_move_after_the_focus_moved_while_kwin_was_asked_does_nothing(kde, fake_kde,
+                                                                         actions_on, focus_on,
+                                                                         monkeypatch):
+    """KWin is asked how many desktops there are before the window is sent
+    on, which can take a while: the window must still have the focus when
+    the shortcut is invoked, not only before KWin was asked."""
+    count = kwin_desktop._desktop_count
+
+    def count_then_click_elsewhere(timeout):
+        focus_on(KONSOLE_LOOK)
+        return count(timeout)
+    monkeypatch.setattr(kwin_desktop, "_desktop_count", count_then_click_elsewhere)
+    focus_on(KWRITE_LOOK)
+    assert desktop_actions.run(DesktopRequest("to next desktop"), KWRITE_LOOK, False) is False
+    assert [c for c in fake_kde.calls if c[0] == "invokeShortcut"] == []
+    assert actions_on == ["Window changed, nothing done"]
+
+
 # --- GNOME ----------------------------------------------------------------------------------
 
 
 def test_gnome_asks_the_extension(gnome, fake_extension, actions_on):
     assert desktop_actions.run(DesktopRequest("desktop", 2), KWRITE_LOOK, False) is True
     assert fake_extension.desktop_calls == [("desktop", 2)] and actions_on == []
+
+
+def test_a_gnome_shell_that_doesnt_answer_in_time_says_so(gnome, actions_on, focus_on,
+                                                          monkeypatch, caplog):
+    def slow(*_args):
+        raise NO_REPLY
+    monkeypatch.setattr(app_focus, "call_extension", slow)
+    focus_on(KWRITE_LOOK)
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert desktop_actions.run(DesktopRequest("snap left"), KWRITE_LOOK, False) is False
+    assert actions_on == ["The desktop didn't answer"]
+    assert "Voice command snap left not done" in caplog.text
 
 
 def test_gnome_sends_no_number_as_zero(gnome, fake_extension, actions_on, focus_on):
@@ -253,12 +289,13 @@ def test_voice_actions_hands_a_desktop_request_over(kde, fake_kde, actions_on):
 
 def test_a_done_note_floats_its_label_and_sends_no_notification(actions_on, monkeypatch,
                                                                 caplog):
-    floated, sent = [], []
+    floated, sent, played = [], [], []
     monkeypatch.setattr("tuxtalk.screen_message.show_over_active_window",
                         lambda text, *a, **k: floated.append((text, k.get("warning"))))
     monkeypatch.setattr(notify, "notify", lambda *a, **k: sent.append(a))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *tone, **k: on and played.append(tone))
     monkeypatch.setitem(command_notices.DONE, "volume_set", "Volume {level}%")
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
-        command_notices.tell("volume_set", False, level=45)
-    assert floated == [("Volume 45%", False)] and sent == []
+        command_notices.tell("volume_set", True, level=45)
+    assert floated == [("Volume 45%", False)] and sent == [] and played == [READY_BEEP]
     assert "Voice command done: volume_set" in caplog.text

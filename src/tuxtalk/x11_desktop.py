@@ -137,16 +137,16 @@ def _outer_rect(display, window):
 
 def _place(display, window, data: tuple):
     """Ask for *window*'s move (*data*) after taking it out of the states that
-    make a window manager ignore one: maximized and fullscreen. The move's
-    atom is looked up first, so a window manager without it leaves the window
-    as it was."""
+    make a window manager ignore one: maximized and fullscreen. Every atom
+    is looked up before anything is sent, so a window manager without one
+    leaves the window as it was, never half changed."""
     display.atom(b"_NET_MOVERESIZE_WINDOW")
+    display.atom(b"_NET_WM_STATE")
+    vert, horz, fullscreen = (display.atom(b"_NET_WM_STATE_" + state)
+                              for state in (b"MAXIMIZED_VERT", b"MAXIMIZED_HORZ", b"FULLSCREEN"))
     source = x11_activate.FROM_A_TASKBAR
-    display.ask_window_manager(window, b"_NET_WM_STATE", (
-        _UNMAXIMIZE, display.atom(b"_NET_WM_STATE_MAXIMIZED_VERT"),
-        display.atom(b"_NET_WM_STATE_MAXIMIZED_HORZ"), source))
-    display.ask_window_manager(window, b"_NET_WM_STATE", (
-        _UNMAXIMIZE, display.atom(b"_NET_WM_STATE_FULLSCREEN"), 0, source))
+    display.ask_window_manager(window, b"_NET_WM_STATE", (_UNMAXIMIZE, vert, horz, source))
+    display.ask_window_manager(window, b"_NET_WM_STATE", (_UNMAXIMIZE, fullscreen, 0, source))
     display.ask_window_manager(window, b"_NET_MOVERESIZE_WINDOW", data)
 
 

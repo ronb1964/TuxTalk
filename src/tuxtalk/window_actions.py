@@ -110,7 +110,7 @@ def _act(request: WindowRequest, entry, exact: bool, where, beeps_on: bool) -> b
         else:
             acted = _ask_desktop(request, entry, exact)
     except Exception as e:      # each desktop fails its own way
-        logger.info(f"Window command {request.action} not done: {e}")
+        logger.info(f"Voice command {request.action} not done: {e}")
         command_notices.say(refusal(_cant(request.action), e), beeps_on)
         return False
     if acted is None:

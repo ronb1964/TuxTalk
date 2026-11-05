@@ -1,10 +1,9 @@
 """The desktops the window tests stand in for, shared by test_app_focus.py,
 test_kwin_windows.py, test_x11_windows.py, test_window_actions.py and
-test_desktop_actions.py: KWin
-(a script run under Node, answering over the test's private session bus),
-GNOME Shell (an object on that bus) and X11 (a private Xvfb with a stand-in
-window manager). Nothing here touches the real desktop. Registered as a
-plugin in conftest.py.
+test_desktop_actions.py: KWin (a script run under Node, answering over the
+test's private session bus), GNOME Shell (an object on that bus) and X11 (a
+private Xvfb with a stand-in window manager). Nothing here touches the real
+desktop. Registered as a plugin in conftest.py.
 """
 import ctypes
 import json
@@ -274,9 +273,10 @@ class FakeShell:
     *answer*, keeping each app id it's asked about in *called*, and
     WindowAction with *window_answer*, keeping (action, app_id, every) in
     *window_calls*, and DesktopCommand with *desktop_answer*, keeping
-    (action, number) in *desktop_calls*. *extension* "old" is enabled but serves no object, as
-    the 0.21 extension GNOME Shell still runs until the user logs out after
-    an update; False: TuxTalk's extension isn't enabled at all."""
+    (action, number) in *desktop_calls*. *extension* "old" is enabled but
+    serves no object, as the 0.21 extension GNOME Shell still runs until the
+    user logs out after an update; False: TuxTalk's extension isn't enabled
+    at all."""
 
     def __init__(self, extension=True):
         self.answer = self.window_answer = True

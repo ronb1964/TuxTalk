@@ -13,10 +13,12 @@ to move a window to, and KWin has no D-Bus call that counts screens. A
 small look-only KWin script counts them (has_other_screen).
 
 Answers are the strings desktop_actions turns into a spoken-style note:
-"done", "no_desktop", "one_desktop", "one_screen", "edge" and "unknown".
+"done", "no_desktop", "one_desktop", "one_screen", "edge" and "unknown";
+"stopped" when act()'s *still_wanted* said no, and said why.
 """
 import json
 import logging
+from collections.abc import Callable
 
 from . import kwin_activate, kwin_focus
 
@@ -65,7 +67,12 @@ def _property(path: str, interface: str, name: str, timeout: float):
                  KWIN, timeout)
 
 
-def _invoke(shortcut: str, timeout: float) -> str:
+def _invoke(shortcut: str, timeout: float, still_wanted: Callable[[], bool] | None) -> str:
+    """Invoke *shortcut*, unless *still_wanted* says it no longer is: KWin
+    may have taken a while to answer the questions asked before it, and a
+    window shortcut acts on whichever window has the focus by now."""
+    if still_wanted is not None and not still_wanted():
+        return "stopped"
     _call("/component/kwin", "org.kde.kglobalaccel.Component", "invokeShortcut", "s",
           (shortcut,), KGLOBALACCEL, timeout)
     return "done"
@@ -132,36 +139,38 @@ def _step(method: str, timeout: float) -> str:
     return "done" if _kwin("currentDesktop", timeout=timeout) != before else "edge"
 
 
-def act(action: str, number: int | None, timeout: float) -> str:
+def act(action: str, number: int | None, timeout: float,
+        still_wanted: Callable[[], bool] | None = None) -> str:
     """Do *action* ("snap left", "center", "overview", "to next screen",
     "show desktop", "desktop" or "to desktop" with *number*, "next desktop",
     ...) and answer as the module's docstring says. *timeout* bounds each
-    D-Bus call, and a command makes up to three. Raises the D-Bus error
+    D-Bus call, and a command makes up to three. *still_wanted*, if given,
+    is asked right before a shortcut is invoked. Raises the D-Bus error
     when KWin or kglobalaccel can't be reached, TimeoutError when the
     screens script isn't answered."""
     if action in SHORTCUTS:
-        return _shortcut_action(action, timeout)
+        return _shortcut_action(action, timeout, still_wanted)
     if action == "show desktop":
         return _show_desktop(timeout)
     if action in ("desktop", "to desktop") and number is not None:
-        return _numbered_desktop(action, number, timeout)
+        return _numbered_desktop(action, number, timeout, still_wanted)
     if action in _STEP_METHODS:
         return "one_desktop" if _desktop_count(timeout) == 1 else _step(
             _STEP_METHODS[action], timeout)
     return "unknown"
 
 
-def _shortcut_action(action: str, timeout: float) -> str:
+def _shortcut_action(action: str, timeout: float, still_wanted) -> str:
     if action in _WINDOW_DESKTOP_MOVES and _desktop_count(timeout) == 1:
         return "one_desktop"
     if action == "to next screen" and not has_other_screen(timeout):
         return "one_screen"
-    return _invoke(SHORTCUTS[action], timeout)
+    return _invoke(SHORTCUTS[action], timeout, still_wanted)
 
 
-def _numbered_desktop(action: str, number: int, timeout: float) -> str:
+def _numbered_desktop(action: str, number: int, timeout: float, still_wanted) -> str:
     if action == "desktop":
         return _switch_to(number, timeout)
     if not 1 <= number <= min(9, _desktop_count(timeout)):
         return "no_desktop"
-    return _invoke(f"Window to Desktop {number}", timeout)
+    return _invoke(f"Window to Desktop {number}", timeout, still_wanted)

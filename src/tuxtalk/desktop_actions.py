@@ -27,6 +27,8 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 TIMEOUT_S = window_actions.TIMEOUT_S
+# What dbus-python raises when a call isn't answered within its timeout.
+_NO_REPLY = "org.freedesktop.DBus.Error.NoReply"
 
 # A desktop's answer -> the note saying why nothing was done.
 _NOTES = {"no_window": "no_focused_window", "no_desktop": "no_such_desktop",
@@ -39,13 +41,19 @@ def run(request: DesktopRequest, where, beeps_on: bool) -> bool:
     stopped by Esc. *where*: focused_window.look(), taken when the command
     was heard: a snap or a move is for that window only."""
     action, number = request.action, request.number
-    if not window_actions.still_wanted(action, where, action in FRONT_WINDOW_ACTIONS, beeps_on):
+    on_window = action in FRONT_WINDOW_ACTIONS
+
+    def still_wanted() -> bool:
+        return window_actions.still_wanted(action, where, on_window, beeps_on)
+    if not still_wanted():
         return False
     try:
-        answer = _ask_desktop(action, number)
+        answer = _ask_desktop(action, number, still_wanted if on_window else None)
     except Exception as e:      # each desktop fails its own way
-        logger.info(f"Desktop command {action} not done: {e}")
+        logger.info(f"Voice command {action} not done: {e}")
         command_notices.say(_refusal(action, e), beeps_on)
+        return False
+    if answer == "stopped":     # still_wanted said why
         return False
     if answer == "done":
         logger.info(f"Voice command: {action}" + (f" {number}" if number is not None else ""))
@@ -55,11 +63,14 @@ def run(request: DesktopRequest, where, beeps_on: bool) -> bool:
     return False
 
 
-def _ask_desktop(action: str, number: int | None):
-    """This desktop's answer, or None where nothing can be asked."""
+def _ask_desktop(action: str, number: int | None, still_wanted):
+    """This desktop's answer, or None where nothing can be asked. KWin is
+    asked questions before some shortcuts (how many desktops, whether
+    there is another screen), so it asks *still_wanted* again right before
+    acting; GNOME's extension and X11 act straight away."""
     desktop = desktop_detect.get_desktop_environment()
     if desktop == "kde":
-        return kwin_desktop.act(action, number, TIMEOUT_S)
+        return kwin_desktop.act(action, number, TIMEOUT_S, still_wanted)
     if desktop == "gnome":
         # D-Bus has no "none": 0 is no desktop's number.
         return str(app_focus.call_extension("DesktopCommand", "si", (action, number or 0),
@@ -79,8 +90,10 @@ def _cant(action: str) -> str:
 def _refusal(action: str, error: Exception) -> str:
     """The note for a desktop that failed to do *action*. KWin raises
     TimeoutError when its screens script isn't answered and RuntimeError
-    when a script fails: KWin can do it, it just didn't answer, and a user
-    with two screens must never be told there is one."""
-    if isinstance(error, (TimeoutError, RuntimeError)):
+    when a script fails, and a D-Bus call to KWin or GNOME Shell that times
+    out raises NoReply: the desktop can do it, it just didn't answer, and a
+    user with two screens must never be told there is one."""
+    if (isinstance(error, (TimeoutError, RuntimeError))
+            or getattr(error, "get_dbus_name", lambda: None)() == _NO_REPLY):
         return "desktop_no_answer"
     return window_actions.refusal(_cant(action), error)
