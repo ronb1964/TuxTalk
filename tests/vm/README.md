@@ -36,7 +36,8 @@ either (none are named `test_*.py`), because they need the VMs.
    TuxTalk which window has the focus or hold F8 back (by design, see
    `gnome_hotkeys.py`), so those checks are skipped at first. On GNOME the run
    then installs the extension from Preferences and reboots, which also checks
-   that TuxTalk and the hotkey helper start by themselves, and runs them again.
+   that TuxTalk and the hotkey helper start by themselves, and runs them again
+   (`checks_extension.py`'s `AGAIN` lists the voice-command ones).
 6. **Updating from 0.16.** Last, the run puts the VM in the state of someone
    who set Parakeet up with 0.16: the original v3 files (copied from this
    computer's Hugging Face cache, so it must hold them) and no Parakeet

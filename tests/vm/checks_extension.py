@@ -1,17 +1,20 @@
 """GNOME with the TuxTalk extension: installed from Preferences, then a
 reboot (an extension only loads at login). The reboot also checks that
 TuxTalk and the hotkey helper start by themselves. With the extension the
-checks that need to know the focused window run again.
+checks that need to know the focused window run again: those that skipped
+before it saying "Checked again with the extension".
 """
 import json
 import re
 import time
 from pathlib import Path
 
+import checks_open_apps  # noqa: F401  (registers the checks AGAIN repeats)
+import checks_voice_actions  # noqa: F401
 from checks_dictation import type_in_terminal
 from checks_prefs import open_fold
 from checks_send import switch_during_countdown
-from harness import Abort, Outcome, check
+from harness import CHECKS, Abort, Outcome, check
 from vmlib import REMOTE
 
 PREFS = "TuxTalk Preferences"
@@ -106,3 +109,12 @@ def ext_send_switch(run):
     with run.settings_put_back("press_enter_after", "press_enter_delay"):
         run.set_config(press_enter_after=True, press_enter_delay=2.0)
         return switch_during_countdown(run, "ext-send-switch")
+
+
+# Skipped on GNOME until the extension is there ("Checked again with the
+# extension"): each runs again here as ext_<id>.
+AGAIN = ("open_again_focuses", "close_asks_to_save", "close_this_window", "switch_to",
+         "minimize_maximize", "go_to_in_browser", "web_search")
+for _chk in [c for c in CHECKS if c.id in AGAIN]:
+    check(SECTION, f"ext_{_chk.id}", f"{_chk.name} (with the extension)",
+          desktops=("gnome",))(_chk.func)

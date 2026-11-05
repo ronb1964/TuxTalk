@@ -1,9 +1,11 @@
 """The VM checks for opening apps and acting on windows by voice find what
-they started, end only that, and type into the editor, not the test window.
+they started, end only that, type into the editor and not the test window,
+and run again on GNOME once the extension is there.
 
 Their first runs misread real desktops: KWrite and Firefox never showed in
-AT-SPI, so "no window appeared" while one had, and a click in the middle of
-the screen typed into the test window instead of an editor opened beside it.
+AT-SPI, so "no window appeared" while one had; a click in the middle of the
+screen typed into the test window instead of an editor opened beside it;
+and the checks skipped on GNOME "until the extension" never ran again.
 """
 import pytest
 from conftest import import_vm_tool
@@ -13,6 +15,7 @@ pytest.importorskip("tomllib", reason="the VM harness needs Python 3.11 or newer
 run = import_vm_tool("run")
 open_apps = import_vm_tool("checks_open_apps")
 actions = import_vm_tool("checks_voice_actions")
+extension = import_vm_tool("checks_extension")
 
 
 @pytest.mark.parametrize("exec_line, program", [
@@ -79,3 +82,12 @@ def test_an_editor_opened_beside_the_middle_is_clicked_in_its_own_middle(monkeyp
     desktop = _Desktop()
     assert actions._in_front(desktop, "xed")
     assert desktop.clicks == [(800, 400)]
+
+
+def test_the_window_checks_skipped_before_the_extension_run_again_with_it():
+    again = {"ext_open_again_focuses", "ext_close_asks_to_save", "ext_close_this_window",
+             "ext_switch_to", "ext_minimize_maximize", "ext_go_to_in_browser", "ext_web_search"}
+    ubuntu = [c.id for c in run.selected(run.VMS["ubuntu"])]
+    assert again <= set(ubuntu)
+    assert ubuntu.index("ext_after_reboot") < min(ubuntu.index(i) for i in again)
+    assert not again & {c.id for c in run.selected(run.VMS["kde"])}
