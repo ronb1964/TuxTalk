@@ -53,8 +53,9 @@ before 0.15.0, so older entries use that name.
   engine. In a terminal the keys are the terminal's own, and select all, save,
   find, reopen tab, go back, go forward and reload don't apply there.
   "literal" before any of them types the words. "close Firefox" closes the
-  Firefox window you used last; a sentence that only starts like an app's
-  name ("Close the file.") is typed.
+  Firefox window you used last, and one word of an open app's name is
+  enough ("close Chrome"); a sentence that only sounds like an app's name
+  ("Close the file.") is typed.
 - Closing a window asks to save unsaved work, like clicking its X. Closing,
   minimizing and switching work on KDE, on GNOME with the TuxTalk extension
   (log out and back in once after updating) and on X11 desktops. On COSMIC,
