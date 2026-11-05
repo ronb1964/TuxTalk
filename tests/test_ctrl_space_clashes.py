@@ -175,13 +175,17 @@ def looked_at(monkeypatch, found=()):
 
 
 def test_the_service_logs_who_also_uses_ctrl_space(watch, monkeypatch, caplog):
-    ran = looked_at(monkeypatch, [csc.IBUS])
+    looked_at(monkeypatch, [csc.IBUS])
+    logged = threading.Event()
+    log_clashes = csc.log_clashes
+
+    def log_and_say_so():
+        log_clashes()
+        logged.set()
+    monkeypatch.setattr(csc, "log_clashes", log_and_say_so)
     with caplog.at_level(logging.INFO):
         watch(ecodes.KEY_SPACE)
-        assert ran.wait(2)
-        for thread in threading.enumerate():
-            if thread is not threading.current_thread() and thread.daemon:
-                thread.join(2)
+        assert logged.wait(2)
     assert ("IBus also uses Ctrl+Space to switch input methods; "
             "Left Ctrl+Space may do that instead of dictating") in caplog.text
 
