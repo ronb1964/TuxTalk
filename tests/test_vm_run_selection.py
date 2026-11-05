@@ -69,7 +69,6 @@ def test_the_harness_modules_dont_stay_importable_by_their_plain_names(monkeypat
     assert "run" not in sys.modules and "harness" not in sys.modules
 
 
-
 def test_every_check_sits_in_a_section_the_run_orders():
     """A section missing from SECTION_ORDER makes the whole run fail on
     the first VM, once it reaches the sorting."""

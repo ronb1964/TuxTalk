@@ -164,9 +164,11 @@ def test_nothing_close_is_none(apps):
 
 
 def test_odd_entries_never_crash_or_win():
+    """A nameless entry never matches; one with punctuation in its name is
+    still found by its first word."""
     odd = [AppEntry("x.desktop", "", "", "", "", ""),
            AppEntry("y.desktop", "Tool 2.0 & Co", "", "", "tool", "")]
-    assert find(parse("open tool"), odd, {}).kind in ("one", "none")
+    assert ids(find(parse("open tool"), odd, {})) == ["y.desktop"]
     assert find(parse("open tool"), [], {}).kind == "none"
 
 
