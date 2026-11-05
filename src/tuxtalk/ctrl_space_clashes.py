@@ -82,6 +82,7 @@ KEYBOARD_OPTIONS = {
     "ctrl:swap_lalt_lctl": _keyboard_options("make Left Ctrl act as Alt"),
     "ctrl:swap_lwin_lctl": _keyboard_options("make Left Ctrl act as Super"),
     "ctrl:swap_lalt_lctl_lwin": _keyboard_options("make Left Ctrl act as Super"),
+    "altwin:ctrl_alt_win": _keyboard_options("make Left Ctrl act as Super"),
     "ctrl:lctrl_meta": _keyboard_options("make Left Ctrl act as Meta"),
     "ctrl:hyper_capscontrol": _keyboard_options("make Left Ctrl act as Hyper"),
 }

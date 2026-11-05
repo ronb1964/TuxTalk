@@ -101,6 +101,8 @@ def test_gnome_counts_only_on_gnome_with_a_ctrl_space_binding(desktop):
      "make Left Ctrl act as Super"),
     ("ctrl:swap_lalt_lctl_lwin", "Your keyboard options change Left Ctrl",
      "make Left Ctrl act as Super"),
+    ("altwin:ctrl_alt_win", "Your keyboard options change Left Ctrl",
+     "make Left Ctrl act as Super"),
     ("ctrl:lctrl_meta", "Your keyboard options change Left Ctrl",
      "make Left Ctrl act as Meta"),
     ("ctrl:hyper_capscontrol", "Your keyboard options change Left Ctrl",
