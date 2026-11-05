@@ -10,7 +10,7 @@ here; it's typed when app_finder finds no app it names. Spoken quotation
 ("open quote", "close quote") is never a request. "literal open Firefox" is
 left alone here: the caller strips "literal" and types the rest.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .voice_navigation import normalize
 
@@ -34,12 +34,22 @@ class OpenRequest:
 def parse(text: str) -> OpenRequest | None:
     """The OpenRequest *text* is, or None when it's dictation to type."""
     words = normalize(text).split()
-    if len(words) < 2 or words[0] not in VERBS or _QUOTATION.intersection(words):
+    if len(words) < 2 or words[0] not in VERBS:
         return None
     words = words[1:]
     new = words[0] in _NEW
-    if new:
-        words = words[1:]
+    request = app_name(words[1:] if new else words)
+    return replace(request, new=new) if request else None
+
+
+def app_name(words: list[str]) -> OpenRequest | None:
+    """The app *words* name (normalized words after the verb), or None.
+
+    Shared with the window commands ("close Firefox"), which name an app the
+    same way: an optional install word, then one to MAX_NAME_WORDS words.
+    """
+    if _QUOTATION.intersection(words):
+        return None
     install = ""
     # Speech models write the AppImage word as one or two.
     if words[-2:] == ["app", "image"]:
@@ -48,4 +58,4 @@ def parse(text: str) -> OpenRequest | None:
         install, words = words[-1], words[:-1]
     if not 1 <= len(words) <= MAX_NAME_WORDS:
         return None
-    return OpenRequest(" ".join(words), new=new, install=install)
+    return OpenRequest(" ".join(words), install=install)
