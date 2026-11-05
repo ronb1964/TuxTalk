@@ -100,9 +100,10 @@ atexit.register(shutil.rmtree, _LOG_DIR, ignore_errors=True)
 # rename migration, so the settings above must come first.
 from tuxtalk import engine, hotkeys, keyboard_output, recording  # noqa: E402
 from tuxtalk import live_settings as live  # noqa: E402
-# The fixtures the hotkey helper's tests, the hotkey loop's and the window
-# tests share.
-pytest_plugins = ["hotkey_helper_fakes", "hotkey_loop_fakes", "desktop_fakes"]
+# The fixtures the hotkey helper's tests, the hotkey loop's, the window and
+# the voice command tests share.
+pytest_plugins = ["hotkey_helper_fakes", "hotkey_loop_fakes", "desktop_fakes",
+                  "voice_command_rig"]
 from tuxtalk import recording_state as rs  # noqa: E402
 
 

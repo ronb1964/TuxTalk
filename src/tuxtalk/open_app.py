@@ -4,6 +4,8 @@ opens Firefox, or brings its window forward, instead of typing the words.
 The steps are other modules': app_commands reads the command, app_finder
 picks the app, app_focus brings a running one forward and app_launcher
 starts it. This decides between them and tells the user when nothing opened.
+Which app a command names is decided here for the window commands too
+(matched_app, used by window_actions).
 
 Run on the dictation worker, never GTK's thread: bringing a window forward
 and starting an app can each wait seconds for the desktop. Works in terminals
@@ -18,6 +20,7 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 NOTHING_OPENED = "Nothing was opened."
+NOTHING_DONE = "Nothing was done."
 
 
 def open_request(request: OpenRequest, beeps_on: bool, ongoing=None) -> bool | None:
@@ -28,22 +31,38 @@ def open_request(request: OpenRequest, beeps_on: bool, ongoing=None) -> bool | N
     *ongoing*: the recording_state.Message of the Type at pause recording
     the request is a phrase of, cut at a pause, else None. Opening the app
     ends that recording."""
+    matched = matched_app(request, "open", beeps_on)
+    if not matched:
+        return matched
+    entry, exact = matched
+    return _open(entry, request.new, beeps_on, ongoing, exact)
+
+
+def matched_app(request: OpenRequest, action: str, beeps_on: bool):
+    """The app *request* names, for the voice command *action* ("open",
+    "close", "switch"...), as (entry, exact): *exact* when other copies of
+    it are installed (or one was named), so only a window naming its menu
+    entry is its own (app_focus.window_names).
+
+    None when no app fits, so the words are typed; False when several fit
+    equally, said with a note."""
     entries = app_finder.installed_apps()
     found = app_finder.find(request, entries, app_finder.default_apps())
+    command, nothing_done = (("Open", NOTHING_OPENED) if action == "open"
+                             else ("Window", NOTHING_DONE))
     if found.kind == "none":
-        # A sentence lost is worse than a typed "Open fierfox.", which is
-        # easy to undo. The log keeps the user's words out.
-        logger.info("Open command: no app matched; typed as words")
+        # A sentence lost is worse than a typed "Open fierfox." or "Close
+        # the door.", which is easy to undo. The log keeps the user's words out.
+        logger.info(f"{command} command: no app matched; typed as words")
         return None
     if found.kind == "tie":
-        logger.info("Voice command: open, but these fit equally: "
+        logger.info(f"Voice command: {action}, but these fit equally: "
                     + ", ".join(e.app_id for e in found.entries))
         label = tie_label(found.entries) + " Say the full name."
-        notices.command_refused(label, f"{label} {NOTHING_OPENED}", beeps_on)
+        notices.command_refused(label, f"{label} {nothing_done}", beeps_on)
         return False
     entry = found.entries[0]
-    exact = bool(request.install) or len(app_finder.copies(entry, entries)) > 1
-    return _open(entry, request.new, beeps_on, ongoing, exact)
+    return entry, bool(request.install) or len(app_finder.copies(entry, entries)) > 1
 
 
 def _open(entry, new: bool, beeps_on: bool, ongoing, exact: bool) -> bool:

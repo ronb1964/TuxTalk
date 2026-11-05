@@ -5,10 +5,10 @@ command_phrases reads the words; this hands the request to the module that
 acts on it. Run on the dictation worker, after select and move has declined
 the dictation (voice_commands.handle_navigation)."""
 from . import (command_phrases, delivery, everyday_keys, focused_window, keyboard_output,
-               open_app)
+               open_app, window_actions)
 from . import live_settings as live
 from .app_commands import OpenRequest
-from .command_phrases import KeyRequest
+from .command_phrases import KeyRequest, WindowRequest
 
 
 def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
@@ -25,7 +25,9 @@ def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
         return open_app.open_request(request, beeps_on, ongoing)
     if isinstance(request, KeyRequest):
         return _press(request, beeps_on, ongoing)
-    # Windows, addresses and searches have no branch yet and are typed.
+    if isinstance(request, WindowRequest):
+        return _window(request, beeps_on, ongoing)
+    # Addresses and searches have no branch yet and are typed.
     return None
 
 
@@ -43,6 +45,18 @@ def _press(request: KeyRequest, beeps_on: bool, ongoing) -> bool:
     if ongoing is not None:
         ongoing.cancelled = True
     return True
+
+
+def _window(request: WindowRequest, beeps_on: bool, ongoing) -> bool | None:
+    """A window command. It sends no keys, so the recording can end after
+    it; only one that was done ends it, so a refused one ("Couldn't tell
+    which window") lets the user carry on talking."""
+    if keyboard_output.esc_stopped(f"done: {request.action}"):
+        return False
+    done = window_actions.run(request, beeps_on)
+    if done and ongoing is not None:
+        ongoing.cancelled = True
+    return done
 
 
 def typed_as_words(raw: str) -> str:

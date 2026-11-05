@@ -1,39 +1,19 @@
 """Voice commands (TuxTalk Labs) through the dispatcher: "new tab" said alone
 presses Ctrl+T and types nothing, while a sentence with the words in it is
-typed. The keyboard records, so no test presses a real key."""
+typed. The keyboard records, so no test presses a real key. The actions_on and
+say fixtures are voice_command_rig.py's."""
 import logging
 
 import pytest
 
 from conftest import esc
 from type_at_pause_rig import service_tick_runs
-from tuxtalk import everyday_keys, focused_window, keyboard_output, notify, screen_message, voice_actions
+from tuxtalk import everyday_keys, focused_window, keyboard_output, voice_actions
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 
 ENTER = 28      # the chat's own automatic send
 CTRL_T = [29, keyboard_output.nav_keycode("T")]
-
-
-@pytest.fixture
-def actions_on(chat, monkeypatch):
-    """Voice commands on, with notices kept off the real desktop. Returns
-    the labels floated over the window."""
-    floated = []
-    monkeypatch.setattr(live, "open_apps", True)
-    monkeypatch.setattr(screen_message, "show_over_active_window",
-                        lambda text, *a, **k: floated.append(text))
-    monkeypatch.setattr(notify, "notify", lambda *a, **k: None)
-    return floated
-
-
-@pytest.fixture
-def say(chat, let_go):
-    """say(words): a whole dictation of *words*, through the real pipeline."""
-    def said(words):
-        chat[1].append(words)
-        return let_go()
-    return said
 
 
 def typed(chat):

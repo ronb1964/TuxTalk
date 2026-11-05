@@ -5,7 +5,7 @@ starts the app.
 
 The desktops are stand-ins (desktop_fakes.py): nothing here touches the real one.
 """
-from desktop_fakes import FakeShell, _desktop
+from desktop_fakes import FakeShell, set_desktop
 from tuxtalk import app_focus
 from tuxtalk.app_finder import AppEntry
 
@@ -297,7 +297,7 @@ def test_x11_without_a_window_manager_list_says_launch(window_manager):
 
 
 def test_no_x_server_means_launch(monkeypatch):
-    _desktop(monkeypatch, "XFCE", "x11")
+    set_desktop(monkeypatch, "XFCE", "x11")
     monkeypatch.setenv("DISPLAY", ":9999")
     assert app_focus.focus_running(FIREFOX) is False
 
@@ -313,15 +313,15 @@ def test_other_desktops_say_launch(cosmic, nobody_is_asked):
 def test_wayland_on_another_desktop_never_asks_xwayland(monkeypatch, nobody_is_asked):
     """XWayland knows only the X11 apps, and can't move the focus to them
     under a Wayland compositor."""
-    _desktop(monkeypatch, "sway", "wayland")
+    set_desktop(monkeypatch, "sway", "wayland")
     monkeypatch.setenv("DISPLAY", ":0")
     assert app_focus.focus_running(FIREFOX) is False
 
 
 def test_an_error_means_launch_and_is_logged(gnome, monkeypatch, caplog):
-    def broken(*_args):
+    def broken(*_args, **_kwargs):
         raise RuntimeError("the bus went away")
-    monkeypatch.setattr(app_focus, "_ask_extension", broken)
+    monkeypatch.setattr(app_focus, "call_extension", broken)
     with caplog.at_level("INFO"):
         assert app_focus.focus_running(FIREFOX) is False
     assert "the bus went away" in caplog.text

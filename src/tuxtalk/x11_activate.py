@@ -10,7 +10,8 @@ To bring one forward a client
 asks the window manager with a _NET_ACTIVE_WINDOW message to the root
 window, as a taskbar does (EWMH); the window manager switches desktops and
 unminimizes as it would for a click there. Through XCB (xcb_ctypes), like
-compositor_focus's look at the focused window.
+compositor_focus's look at the focused window. x11_windows asks the window
+manager to close, minimize and maximize the same way.
 """
 import ctypes
 import logging
@@ -27,23 +28,30 @@ _CLIENT_MESSAGE = 33
 _TO_THE_WINDOW_MANAGER = (1 << 19) | (1 << 20)     # SubstructureNotify | Redirect
 # EWMH's source indication for a pager or taskbar: window managers that keep
 # apps from stealing the focus still obey it, as the user asked for it.
-_FROM_A_TASKBAR = 2
+FROM_A_TASKBAR = 2
 _ENTRY_ID_PROPERTIES = (b"_GTK_APPLICATION_ID", b"_KDE_NET_WM_DESKTOP_FILE")
 
 
-def active_window_request(window: int, atom: int) -> bytes:
-    """The 32-byte ClientMessage asking to activate *window* (EWMH's
-    _NET_ACTIVE_WINDOW, *atom*): from a taskbar, at no particular time
-    (CurrentTime), with no window of ours active."""
-    return struct.pack("=BBHII5I", _CLIENT_MESSAGE, 32, 0, window, atom,
-                       _FROM_A_TASKBAR, 0, 0, 0, 0)
+def _client_message(window: int, atom: int, data: tuple) -> bytes:
+    """The 32-byte ClientMessage *atom* about *window*, its *data* (up to
+    five 32-bit words) padded with 0."""
+    words = tuple(data) + (0,) * (5 - len(data))
+    return struct.pack("=BBHII5I", _CLIENT_MESSAGE, 32, 0, window, atom, *words)
 
 
-class _Display:
+class Display:
     """One XCB connection to $DISPLAY and its first screen's root window."""
 
     def __init__(self, lib, conn, root):
         self._lib, self._conn, self._root = lib, conn, root
+
+    def atom(self, name: bytes) -> int:
+        """*name*'s atom. Raises OSError when the X server has none: no
+        window manager here has said it supports *name*."""
+        atom = intern_atom(self._lib, self._conn, name)
+        if not atom:
+            raise OSError(f"no window manager here takes {name.decode()}")
+        return atom
 
     def windows(self) -> list:
         """The window manager's windows, the one used last at the end; []
@@ -54,6 +62,14 @@ class _Display:
             if raw:
                 return list(struct.unpack(f"={len(raw) // 4}I", raw[:len(raw) // 4 * 4]))
         return []
+
+    def active_window(self):
+        """The window that has the focus (_NET_ACTIVE_WINDOW on the root
+        window), or None when the window manager names none."""
+        atom = intern_atom(self._lib, self._conn, b"_NET_ACTIVE_WINDOW")
+        raw = get_property(self._lib, self._conn, self._root, atom) if atom else None
+        window = struct.unpack_from("=I", raw)[0] if raw and len(raw) >= 4 else 0
+        return window or None
 
     def wm_class(self, window) -> str:
         """The class part of *window*'s WM_CLASS ("firefox"), "" when unset."""
@@ -72,15 +88,23 @@ class _Display:
         raw = (get_property(self._lib, self._conn, window, atom) for atom in atoms)
         return {r.decode("utf-8", "replace").strip("\0").casefold() for r in raw if r}
 
-    def activate(self, window) -> None:
-        """Ask the window manager to bring *window* forward. Raises OSError
-        when there's no window manager to ask or the X server refuses."""
-        atom = intern_atom(self._lib, self._conn, b"_NET_ACTIVE_WINDOW")
-        if not atom:
-            raise OSError("no window manager here takes _NET_ACTIVE_WINDOW")
+    def matching(self, desktop_file: str, names) -> list:
+        """The windows that name the menu entry *desktop_file*
+        ("org.x.editor") or whose class, without case, is in *names*
+        (app_focus.window_names): the one used last first."""
+        wanted, atoms = desktop_file.casefold(), self.entry_atoms()
+        return [window for window in reversed(self.windows())
+                if wanted in self.entry_ids(window, atoms)
+                or self.wm_class(window).casefold() in names]
+
+    def ask_window_manager(self, window: int, message_type: bytes, data: tuple) -> None:
+        """Send the window manager the request *message_type* about
+        *window* (an EWMH or ICCCM ClientMessage to the root window, as a
+        taskbar sends), with *data*. Raises OSError when there's no window
+        manager to ask or the X server refuses."""
+        message = _client_message(window, self.atom(message_type), data)
         error = self._lib.xcb_request_check(self._conn, self._lib.xcb_send_event_checked(
-            self._conn, 0, self._root, _TO_THE_WINDOW_MANAGER,
-            active_window_request(window, atom)))
+            self._conn, 0, self._root, _TO_THE_WINDOW_MANAGER, message))
         if error:
             code = error.contents.error_code
             free(error)
@@ -90,8 +114,8 @@ class _Display:
         self._lib.xcb_disconnect(self._conn)
 
 
-def _open():
-    """A _Display on $DISPLAY, or None when there is no X server to reach."""
+def open_display():
+    """A Display on $DISPLAY, or None when there is no X server to reach."""
     lib = xcb_lib()
     screen_number = ctypes.c_int(0)
     conn = lib.xcb_connect(None, ctypes.byref(screen_number))
@@ -102,24 +126,23 @@ def _open():
     if not root:
         lib.xcb_disconnect(conn)
         return None
-    return _Display(lib, conn, root)
+    return Display(lib, conn, root)
 
 
 def activate(desktop_file: str, names) -> bool:
     """Bring forward the window used last that names the menu entry
     *desktop_file* ("org.x.editor") or whose class, without case, is in
     *names* (app_focus.window_names). True when one was asked for."""
-    display = _open()
+    display = open_display()
     if display is None:
         log.info("No X server to ask about the open windows")
         return False
     try:
-        wanted, atoms = desktop_file.casefold(), display.entry_atoms()
-        for window in reversed(display.windows()):
-            if (wanted in display.entry_ids(window, atoms)
-                    or display.wm_class(window).casefold() in names):
-                display.activate(window)
-                return True
-        return False
+        found = display.matching(desktop_file, names)
+        if found:
+            # From a taskbar, at no particular time (CurrentTime, 0), with no
+            # window of ours active.
+            display.ask_window_manager(found[0], b"_NET_ACTIVE_WINDOW", (FROM_A_TASKBAR,))
+        return bool(found)
     finally:
         display.close()

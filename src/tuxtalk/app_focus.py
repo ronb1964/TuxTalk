@@ -32,7 +32,7 @@ EXTENSION_PATH = "/io/github/ronb1964/TuxTalk/Extension"
 EXTENSION_INTERFACE = "io.github.ronb1964.TuxTalk.Extension"
 
 
-def _desktop_file(entry: AppEntry) -> str:
+def desktop_file(entry: AppEntry) -> str:
     """The menu entry's id without ".desktop": what KWin calls the window's
     desktop file ("org.kde.konsole")."""
     return entry.app_id.removesuffix(".desktop")
@@ -54,7 +54,7 @@ def window_names(entry: AppEntry, exact: bool = False) -> frozenset:
     """
     if exact:
         return frozenset()
-    stem = _desktop_file(entry).casefold()
+    stem = desktop_file(entry).casefold()
     program = entry.program.casefold()
     if entry.wm_class:
         names = {stem, entry.wm_class.casefold()}
@@ -65,14 +65,21 @@ def window_names(entry: AppEntry, exact: bool = False) -> frozenset:
     return frozenset(n for n in names if n)
 
 
-def _ask_extension(app_id: str, timeout: float) -> bool:
-    """Ask the GNOME extension to bring forward the app's window; its answer
-    says whether there was one. Raises a D-Bus error with no extension (or
-    one from before ActivateApp) to answer."""
+def call_extension(method: str, signature: str, args: tuple, timeout: float):
+    """Call *method* of TuxTalk's GNOME extension, inside GNOME Shell, and
+    return its answer. Raises a D-Bus error with no extension to answer, or
+    one from before *method* (UnknownMethod)."""
     import dbus
     bus = dbus.SessionBus()
-    return bool(bus.call_blocking(GNOME_SHELL, EXTENSION_PATH, EXTENSION_INTERFACE,
-                                  "ActivateApp", "s", (app_id,), timeout=timeout))
+    return bus.call_blocking(GNOME_SHELL, EXTENSION_PATH, EXTENSION_INTERFACE, method,
+                             signature, args, timeout=timeout)
+
+
+def can_bring_forward() -> bool:
+    """Whether this desktop lets TuxTalk bring a window forward or act on
+    one: KDE, GNOME (through the extension) and X11 sessions."""
+    return (desktop_detect.get_desktop_environment() in ("kde", "gnome")
+            or desktop_detect.is_x11_session(os.environ))
 
 
 def _bring_forward(entry: AppEntry, timeout: float, exact: bool):
@@ -82,11 +89,11 @@ def _bring_forward(entry: AppEntry, timeout: float, exact: bool):
     desktop = desktop_detect.get_desktop_environment()
     names = window_names(entry, exact)
     if desktop == "kde":
-        return kwin_activate.activate(_desktop_file(entry), names, timeout)
+        return kwin_activate.activate(desktop_file(entry), names, timeout)
     if desktop == "gnome":
-        return _ask_extension(entry.app_id, timeout)
+        return bool(call_extension("ActivateApp", "s", (entry.app_id,), timeout))
     if desktop_detect.is_x11_session(os.environ):
-        return x11_activate.activate(_desktop_file(entry), names)
+        return x11_activate.activate(desktop_file(entry), names)
     return None
 
 

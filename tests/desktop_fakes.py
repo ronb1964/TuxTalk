@@ -1,8 +1,9 @@
-"""The desktops the window tests stand in for, shared by test_app_focus.py
-and test_kwin_windows.py: KWin (a script run under Node, answering over the
-test's private session bus), GNOME Shell (an object on that bus) and X11 (a
-private Xvfb with a stand-in window manager). Nothing here touches the real
-desktop. Registered as a plugin in conftest.py.
+"""The desktops the window tests stand in for, shared by test_app_focus.py,
+test_kwin_windows.py, test_x11_windows.py and test_window_actions.py: KWin
+(a script run under Node, answering over the test's private session bus),
+GNOME Shell (an object on that bus) and X11 (a private Xvfb with a stand-in
+window manager). Nothing here touches the real desktop. Registered as a
+plugin in conftest.py.
 """
 import ctypes
 import json
@@ -16,10 +17,11 @@ import pytest
 from gi.repository import Gio, GLib
 
 from gnome_extension_js import run_kwin_script
-from tuxtalk import app_focus, kwin_activate, kwin_windows, xcb_ctypes
+from tuxtalk import app_focus, kwin_activate, kwin_windows, x11_windows, xcb_ctypes
 
 
-def _desktop(monkeypatch, desktop, session):
+def set_desktop(monkeypatch, desktop, session):
+    """The session the tests run in: *desktop* (XDG_CURRENT_DESKTOP) on *session*."""
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
     monkeypatch.setenv("XDG_SESSION_TYPE", session)
     monkeypatch.delenv("DESKTOP_SESSION", raising=False)
@@ -27,27 +29,29 @@ def _desktop(monkeypatch, desktop, session):
 
 @pytest.fixture
 def kde(monkeypatch):
-    _desktop(monkeypatch, "KDE", "wayland")
+    set_desktop(monkeypatch, "KDE", "wayland")
 
 
 @pytest.fixture
 def gnome(monkeypatch):
-    _desktop(monkeypatch, "GNOME", "wayland")
+    set_desktop(monkeypatch, "GNOME", "wayland")
 
 
 @pytest.fixture
 def cosmic(monkeypatch):
-    _desktop(monkeypatch, "COSMIC", "wayland")
+    set_desktop(monkeypatch, "COSMIC", "wayland")
 
 
 @pytest.fixture
 def nobody_is_asked(monkeypatch):
     """Fails the test if any desktop is asked about a window."""
     def asked(*_args, **_kwargs):
-        pytest.fail("a desktop was asked to bring a window forward")
-    monkeypatch.setattr(app_focus, "_ask_extension", asked)
-    monkeypatch.setattr(app_focus.kwin_activate, "activate", asked)
+        pytest.fail("a desktop was asked about a window")
+    monkeypatch.setattr(app_focus, "call_extension", asked)
+    monkeypatch.setattr(kwin_activate, "activate", asked)
+    monkeypatch.setattr(kwin_windows, "act", asked)
     monkeypatch.setattr(app_focus.x11_activate, "activate", asked)
+    monkeypatch.setattr(x11_windows, "act", asked)
 
 
 def _private_bus():
@@ -126,22 +130,37 @@ def fake_kwin(monkeypatch, tmp_path):
     kwin.close()
 
 
-_SHELL_XML = f"""<node><interface name="{app_focus.EXTENSION_INTERFACE}">
-  <method name="ActivateApp">
+_ACTIVATE_APP = """<method name="ActivateApp">
     <arg type="s" direction="in" name="app_id"/>
     <arg type="b" direction="out" name="had_window"/>
-  </method>
-</interface></node>"""
+  </method>"""
+_WINDOW_ACTION = """<method name="WindowAction">
+    <arg type="s" direction="in" name="action"/>
+    <arg type="s" direction="in" name="app_id"/>
+    <arg type="b" direction="in" name="every"/>
+    <arg type="b" direction="out" name="acted"/>
+  </method>"""
+
+
+def _shell_xml(extension):
+    """The extension's interface: an "old" one, from before the window
+    commands, serves ActivateApp alone."""
+    methods = _ACTIVATE_APP if extension == "old" else _ACTIVATE_APP + _WINDOW_ACTION
+    return (f'<node><interface name="{app_focus.EXTENSION_INTERFACE}">{methods}'
+            "</interface></node>")
 
 
 class FakeShell:
     """GNOME Shell on the test's session bus, served from a thread of its
-    own: with *extension*, TuxTalk's extension answers ActivateApp with
-    *answer*, keeping each app id it's asked about."""
+    own. With *extension*, TuxTalk's extension answers ActivateApp with
+    *answer*, keeping each app id it's asked about in *called*, and
+    WindowAction with *window_answer*, keeping (action, app_id, every) in
+    *window_calls*; *extension* "old" serves ActivateApp alone, as the
+    extension GNOME Shell still runs until the user logs out after an update."""
 
     def __init__(self, extension=True):
-        self.answer = True
-        self.called = []
+        self.answer = self.window_answer = True
+        self.called, self.window_calls = [], []
         self._context = GLib.MainContext()
         self._loop = GLib.MainLoop(self._context)
         ready = threading.Event()
@@ -154,7 +173,7 @@ class FakeShell:
         self._context.push_thread_default()
         bus = _private_bus()
         if extension:
-            interface = Gio.DBusNodeInfo.new_for_xml(_SHELL_XML).interfaces[0]
+            interface = Gio.DBusNodeInfo.new_for_xml(_shell_xml(extension)).interfaces[0]
             register = getattr(bus, "register_object_with_closures2", bus.register_object)
             register(app_focus.EXTENSION_PATH, interface, self._on_call, None, None)
         bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
@@ -164,7 +183,11 @@ class FakeShell:
         self._loop.run()
         bus.close_sync(None)
 
-    def _on_call(self, _bus, _sender, _path, _interface, _method, parameters, invocation):
+    def _on_call(self, _bus, _sender, _path, _interface, method, parameters, invocation):
+        if method == "WindowAction":
+            self.window_calls.append(parameters.unpack())
+            invocation.return_value(GLib.Variant("(b)", (self.window_answer,)))
+            return
         self.called.append(parameters.unpack()[0])
         invocation.return_value(GLib.Variant("(b)", (self.answer,)))
 
@@ -197,16 +220,23 @@ def x11(monkeypatch):
     os.close(write)
     with os.fdopen(read) as f:
         monkeypatch.setenv("DISPLAY", f":{f.readline().strip()}")
-    _desktop(monkeypatch, "XFCE", "x11")
+    set_desktop(monkeypatch, "XFCE", "x11")
     yield
     server.terminate()
     server.wait()
 
 
+# The requests a window manager says it supports (EWMH's _NET_SUPPORTED) have
+# atoms from its start; TuxTalk asks only for atoms the X server already has.
+_SUPPORTED = (b"_NET_ACTIVE_WINDOW", b"_NET_CLOSE_WINDOW", b"WM_CHANGE_STATE",
+              b"_NET_WM_STATE", b"_NET_WM_STATE_MAXIMIZED_VERT",
+              b"_NET_WM_STATE_MAXIMIZED_HORZ")
+
+
 class FakeWindowManager:
     """An X client in the window manager's place: its windows, the list of
-    them on the root window (_NET_CLIENT_LIST_STACKING), and the requests to
-    activate one that reach it."""
+    them on the root window (_NET_CLIENT_LIST_STACKING), the active one
+    (_NET_ACTIVE_WINDOW), and the requests that reach it."""
 
     def __init__(self):
         self.lib = lib = xcb_ctypes.xcb_lib()
@@ -229,7 +259,9 @@ class FakeWindowManager:
         mask = (ctypes.c_uint32 * 1)(_SUBSTRUCTURE_REDIRECT)
         assert not lib.xcb_request_check(self.conn, lib.xcb_change_window_attributes_checked(
             self.conn, self.root, _CW_EVENT_MASK, mask))
-        self.active_atom = self.atom(b"_NET_ACTIVE_WINDOW")
+        for name in _SUPPORTED:
+            self.atom(name)
+        self._received = []
 
     def atom(self, name):
         """*name*'s atom, made if the X server has none yet, as a window
@@ -267,17 +299,29 @@ class FakeWindowManager:
         """Wait until the X server has done everything asked of it so far."""
         self.atom(b"PRIMARY")
 
-    def activations(self):
-        """(window, source indication) of each _NET_ACTIVE_WINDOW request."""
+    def set_active(self, window):
+        """Say *window* has the focus, as the window manager does on the root."""
+        data = struct.pack("=I", window)
+        self.lib.xcb_change_property(self.conn, 0, self.root, self.atom(b"_NET_ACTIVE_WINDOW"),
+                                     _ATOM_WINDOW, 32, 1, data)
         self.round_trip()
-        got = []
+
+    def requests(self, name):
+        """(window, its five data words) of each request *name*
+        (b"_NET_CLOSE_WINDOW") that has reached the window manager so far."""
+        self.round_trip()
         while event := self.lib.xcb_poll_for_event(self.conn):
             raw = ctypes.string_at(event, 32)
             xcb_ctypes.free(event)
-            kind, form, _seq, window, atom, source = struct.unpack_from("=BBHIII", raw)
-            if kind & 0x7f == _CLIENT_MESSAGE and form == 32 and atom == self.active_atom:
-                got.append((window, source))
-        return got
+            kind, form, _seq, window, atom, *data = struct.unpack_from("=BBHII5I", raw)
+            if kind & 0x7f == _CLIENT_MESSAGE and form == 32:
+                self._received.append((atom, window, tuple(data)))
+        wanted = self.atom(name)
+        return [(window, data) for atom, window, data in self._received if atom == wanted]
+
+    def activations(self):
+        """(window, source indication) of each _NET_ACTIVE_WINDOW request."""
+        return [(window, data[0]) for window, data in self.requests(b"_NET_ACTIVE_WINDOW")]
 
     def close(self):
         self.lib.xcb_disconnect(self.conn)
