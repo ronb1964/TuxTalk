@@ -328,8 +328,8 @@ def _ran_as_command(raw: str, job: _Job) -> bool:
                 or voice_commands.handle_navigation(raw, job.beeps_on)
                 # "fix that word": Fix a Word on the dictation before this one.
                 or voice_commands.handle_fix_word(raw, job.beeps_on)
-                # "open Firefox" (TuxTalk Labs). A phrase cut at a pause ends
-                # its recording.
+                # "open Firefox", "new tab" (TuxTalk Labs). A phrase cut at a
+                # pause ends its recording when the command acted.
                 or voice_commands.handle_voice_action(
                     raw, job.beeps_on, job.message if job.chunk_role == "middle" else None)):
             return True

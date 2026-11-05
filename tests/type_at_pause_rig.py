@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from conftest import audio_rng, next_recording
-from tuxtalk import delivery, engine, resampling, tray_link
+from tuxtalk import delivery, engine, resampling, service_tick, tray_link
 from tuxtalk import live_settings as live
 from tuxtalk import pipeline as dictation_pipeline
 from tuxtalk import recording as capture
@@ -141,7 +141,6 @@ SERVICE_CFG = SimpleNamespace(beeps=True, notify=True)
 
 def service_tick_runs():
     """One pass of the dictation service's tick, as its loop runs it."""
-    from tuxtalk import service_tick
     service_tick.tick(SERVICE_CFG, service_tick.ServiceState(SERVICE_CFG))
 
 

@@ -1,21 +1,30 @@
 """Voice commands (TuxTalk Labs) through the dispatcher: "new tab" said alone
 presses Ctrl+T and types nothing, while a sentence with the words in it is
 typed. The keyboard records, so no test presses a real key."""
+import logging
+
 import pytest
 
 from conftest import esc
-from tuxtalk import focused_window, keyboard_output, notify, screen_message, voice_actions
+from type_at_pause_rig import service_tick_runs
+from tuxtalk import everyday_keys, focused_window, keyboard_output, notify, screen_message, voice_actions
 from tuxtalk import live_settings as live
+from tuxtalk import recording_state as rs
 
+ENTER = 28      # the chat's own automatic send
 CTRL_T = [29, keyboard_output.nav_keycode("T")]
 
 
 @pytest.fixture
 def actions_on(chat, monkeypatch):
-    """Voice commands on, with notices kept off the real desktop."""
+    """Voice commands on, with notices kept off the real desktop. Returns
+    the labels floated over the window."""
+    floated = []
     monkeypatch.setattr(live, "open_apps", True)
-    monkeypatch.setattr(screen_message, "show_over_active_window", lambda *a, **k: None)
+    monkeypatch.setattr(screen_message, "show_over_active_window",
+                        lambda text, *a, **k: floated.append(text))
     monkeypatch.setattr(notify, "notify", lambda *a, **k: None)
+    return floated
 
 
 @pytest.fixture
@@ -39,18 +48,18 @@ def test_new_tab_said_alone_presses_ctrl_t_and_types_nothing(actions_on, chat, s
 def test_a_sentence_with_new_tab_in_it_is_typed(actions_on, chat, say, keyboard):
     say("I opened a new tab yesterday.")
     assert typed(chat) == ["I opened a new tab yesterday."]
-    assert 29 not in keyboard.typed_keys()      # only the chat's own Enter
+    assert keyboard.typed_keys() == [ENTER]
 
 
 def test_off_new_tab_is_typed(chat, say, keyboard, monkeypatch):
     monkeypatch.setattr(live, "open_apps", False)
     say("New tab.")
-    assert typed(chat) == ["New tab."] and 29 not in keyboard.typed_keys()
+    assert typed(chat) == ["New tab."] and keyboard.typed_keys() == [ENTER]
 
 
 def test_literal_new_tab_types_the_words(actions_on, chat, say, keyboard):
     say("Literal new tab.")
-    assert typed(chat) == ["New tab."] and 29 not in keyboard.typed_keys()
+    assert typed(chat) == ["New tab."] and keyboard.typed_keys() == [ENTER]
 
 
 def test_close_quote_said_alone_is_still_punctuation(actions_on, monkeypatch):
@@ -73,27 +82,33 @@ def test_esc_after_letting_go_presses_nothing(actions_on, chat, say, keyboard, m
 
 def test_select_and_move_still_runs_before_new_commands(actions_on, chat, say, keyboard,
                                                         monkeypatch, caplog):
-    import logging
+    keys = []
+    monkeypatch.setattr(everyday_keys, "press", lambda *a: keys.append(a))
     monkeypatch.setattr(live, "voice_navigation", True)
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
         say("Go to the top.")
-    assert keyboard.typed_keys() == [29, 102]            # once, by select and move
+    assert keyboard.typed_keys() == [29, 102] and keys == []     # by select and move
     assert "Voice command: go to the top" in caplog.text
 
 
-def test_a_key_command_forgets_the_last_dictation_for_undo(actions_on, chat, say, keyboard):
+@pytest.mark.parametrize("command", ["Paste.", "Select all.", "Go back."])
+def test_a_key_command_forgets_the_last_dictation_for_undo(actions_on, chat, say, keyboard,
+                                                           monkeypatch, command):
+    """What the keys did leaves nothing of the dictation to erase."""
+    monkeypatch.setattr(live, "press_enter_after", False)
     say("Hello there.")
-    say("Paste.")
-    keyboard.events.clear()
-    say("Delete that.")
+    say(command)
+    say("Delete last sentence.")
     assert 14 not in keyboard.typed_keys()               # no Backspace
+    assert typed(chat) == ["Hello there. "]
 
 
 def test_a_key_command_mid_recording_ends_it(actions_on, recording_on, chat, keyboard):
     rec, phrase = recording_on
     phrase("new tab")
     assert keyboard.typed_keys() == CTRL_T
-    assert rec.message.cancelled
+    service_tick_runs()
+    assert rec.message.cancelled and rs.state.is_recording is False
 
 
 def test_a_refused_command_mid_recording_keeps_it_going(actions_on, recording_on, chat,
@@ -102,7 +117,9 @@ def test_a_refused_command_mid_recording_keeps_it_going(actions_on, recording_on
     rec, phrase = recording_on
     chat[0][0] = "org.kde.konsole"
     phrase("save")
-    assert keyboard.typed_keys() == [] and not rec.message.cancelled
+    service_tick_runs()
+    assert keyboard.typed_keys() == [] and chat[2] == []
+    assert actions_on and not rec.message.cancelled and rs.state.is_recording is True
 
 
 def test_a_command_that_names_nothing_is_typed(actions_on):

@@ -239,15 +239,15 @@ def _take_stop_request(cfg, svc: ServiceState, now: float) -> None:
 
 
 def _end_recording_a_command_cancelled() -> None:
-    """End the recording under way if a phrase of it opened an app: the
-    dictation worker cancelled its message (open_app.py), so nothing more of
-    it is typed, and this stops the microphone. Only that recording: one
-    started since has a message of its own. No cancel beep and no
-    notification: the ready beep said it worked."""
+    """End the recording under way if a phrase of it was a voice command that
+    acted: the dictation worker cancelled its message (voice_actions.py), so
+    nothing more of it is typed, and this stops the microphone. Only that
+    recording: one started since has a message of its own. No cancel beep and
+    no notification: the ready beep said it worked."""
     rec = rs.state.current
     if rs.state.is_recording and rec.message.cancelled:
         keyboard_grab.release_all()
-        recording.cancel_recording(rec, False, False, reason="Opened an app")
+        recording.cancel_recording(rec, False, False, reason="A voice command acted")
 
 
 def _log_auto_stop(rec) -> None:

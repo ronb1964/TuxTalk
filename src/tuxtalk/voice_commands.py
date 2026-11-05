@@ -1,7 +1,8 @@
 """Things said instead of text: undo ("delete that", "clear everything"),
 "fix that word", select and move by voice and voice commands such as opening
-apps (TuxTalk Labs), and working out what "edit that" should change. Each that sends keys acts
-only on the window the last dictation went to."""
+apps (TuxTalk Labs), and working out what "edit that" should change. Undo and
+select and move act only on the window the last dictation went to; everyday
+keys go to the window that had the focus when the command was heard."""
 import os
 import re
 import time
