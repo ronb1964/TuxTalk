@@ -128,13 +128,15 @@ def browser(monkeypatch, focus):
 def test_in_a_browser_go_to_types_the_address_in_its_bar(at_firefox, typed, keyboard):
     assert web_commands.go_to(AddressRequest("https://youtube.com"), FIREFOX, False) is True
     assert typed == ["https://youtube.com"]
-    assert keyboard.typed_keys() == CTRL_L + [ENTER]
+    assert keyboard.typed_keys() == CTRL_L + [DELETE, ENTER]
 
 
-def test_go_to_presses_no_delete_before_enter(at_firefox, typed, keyboard):
-    """Only a search presses Delete before Enter: an address is typed in full."""
+def test_go_to_presses_delete_before_enter(at_firefox, typed, keyboard):
+    """The browser's inline autofill can stretch a whole address to a longer
+    one it remembers: Delete takes that away, and does nothing after a
+    complete one."""
     web_commands.go_to(AddressRequest("https://youtube.com/watch"), FIREFOX, False)
-    assert DELETE not in keyboard.typed_keys() and keyboard.typed_keys()[-1] == ENTER
+    assert keyboard.typed_keys()[-2:] == [DELETE, ENTER]
 
 
 def test_outside_a_browser_go_to_opens_the_default_browser(at_kwrite, opened_uris, keyboard):

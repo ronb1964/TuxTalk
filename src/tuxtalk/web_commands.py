@@ -25,9 +25,10 @@ OPENER_SETTLE_S = 0.2
 
 _ADDRESS_BAR = [(("CTRL",), "L")]
 _NEW_TAB = [(("CTRL",), "T")]
-_ENTER = [((), "ENTER")]
 # Delete first takes away what the browser filled in after the words (its
-# inline autofill): "web search python" would otherwise open python.org.
+# inline autofill): "web search python" would otherwise open python.org, and
+# a whole address can be stretched to a longer one the browser remembers.
+# After a complete address it does nothing.
 _DELETE_ENTER = [((), "DELETE"), ((), "ENTER")]
 
 _GO_TO = "go to an address"
@@ -77,7 +78,7 @@ def go_to(request: AddressRequest, where, beeps_on: bool) -> bool:
     True when it went in or was handed over; False after a note, or after
     Esc (said already)."""
     if _in_a_browser(where[0]):
-        return _into_address_bar(where, _ADDRESS_BAR, request.url, _ENTER, _GO_TO, beeps_on)
+        return _into_address_bar(where, _ADDRESS_BAR, request.url, _GO_TO, beeps_on)
     if not app_launcher.open_uri(request.url):
         command_notices.say("address_not_opened", beeps_on)
         return False
@@ -98,17 +99,16 @@ def search(request: SearchRequest, where, beeps_on: bool) -> bool:
         return False
     default = _default_browser()
     if is_browser_class(where[0]) or _is_default(where[0], default):
-        return _into_address_bar(where, _ADDRESS_BAR, request.words, _DELETE_ENTER, _SEARCH,
-                                 beeps_on)
+        return _into_address_bar(where, _ADDRESS_BAR, request.words, _SEARCH, beeps_on)
     browser = _browser_in_front(default, beeps_on)
     if browser is None:
         return False
-    return _into_address_bar(browser, _NEW_TAB, request.words, _DELETE_ENTER, _SEARCH, beeps_on)
+    return _into_address_bar(browser, _NEW_TAB, request.words, _SEARCH, beeps_on)
 
 
-def _into_address_bar(where, opener, text: str, confirm, what: str, beeps_on: bool) -> bool:
+def _into_address_bar(where, opener, text: str, what: str, beeps_on: bool) -> bool:
     """*opener* (Ctrl+L or Ctrl+T, each leaving the cursor in the address
-    bar), *text* and the *confirm* keys ending in Enter, into the window
+    bar), *text*, Delete and Enter, into the window
     *where* only: if another window takes the focus partway, what's left
     goes nowhere, Enter above all."""
     press = keyboard_output.output_backend().press_keys
@@ -117,7 +117,7 @@ def _into_address_bar(where, opener, text: str, confirm, what: str, beeps_on: bo
         if not press(opener):
             return False
         time.sleep(OPENER_SETTLE_S)
-        return keyboard_output.type_text(text) and press(confirm)
+        return keyboard_output.type_text(text) and press(_DELETE_ENTER)
     try:
         sent = keyboard_output.send_only_into(where, send)
     except virtual_keyboard.StoppedPartway as stop:
