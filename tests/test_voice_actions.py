@@ -42,6 +42,14 @@ def test_literal_new_tab_types_the_words(actions_on, chat, say, keyboard):
     assert typed(chat) == ["New tab."] and keyboard.typed_keys() == [ENTER]
 
 
+def test_literal_before_a_select_and_move_phrase_types_the_words(actions_on, chat, say,
+                                                                  keyboard, monkeypatch):
+    """"literal go to the end" with select and move on: the words, no key."""
+    monkeypatch.setattr(live, "voice_navigation", True)
+    say("Literal go to the end.")
+    assert typed(chat) == ["Go to the end."] and keyboard.typed_keys() == [ENTER]
+
+
 def test_close_quote_said_alone_is_still_punctuation(actions_on, monkeypatch):
     monkeypatch.setattr(live, "voice_navigation", True)
     assert voice_actions.run("close quote", False) is None     # left to the typing path
