@@ -53,11 +53,15 @@ user_pref("datareporting.policy.firstRunURL", "");
 user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
 user_pref("browser.uitour.enabled", false);
 user_pref("browser.tabs.warnOnClose", false);
+user_pref("browser.navigation.requireUserInteraction", false);
 """
 # Firefox's address bar: a "combo box" in newer versions, an "entry" before.
 ADDRESS_BAR = "combo box|entry"
 # Page one sends the tab on to page two once, so that "go back" has somewhere
-# to go and does not bounce forward again.
+# to go and does not bounce forward again. Firefox leaves a page nobody
+# clicked or typed in out of the back button's history unless
+# browser.navigation.requireUserInteraction is off (FIREFOX_PREFS), and
+# nobody touches page one.
 PAGE_ONE = """<title>TT Page One</title><p>one</p>
 <script>if (!sessionStorage.seen) { sessionStorage.seen = 1;
 setTimeout(() => location.href = 'page2.html', 1000); }</script>"""
@@ -411,6 +415,12 @@ class _Firefox:
         found = self.run.vm.ui("dump", "~Firefox") or []
         return sum(1 for item in found if item["role"] == "page tab")
 
+    def can_go_back(self):
+        """Whether Firefox's Back button is enabled: there is a page to go
+        back to."""
+        back = self.run.vm.ui("find", "button", "Back", "~Firefox", timeout=3)
+        return bool(back) and "sensitive" in back["states"]
+
     def __exit__(self, *_):
         _end_new_browsers(self.run, self.before)
         self.run.vm.ssh("pkill -f ttff-profile", check=False)    # when ps failed first
@@ -432,6 +442,10 @@ def firefox_go_back(run):
     with _open_apps_on(run), _Firefox(run) as firefox:
         if firefox.title("TT Page Two", 45) is None:
             return Outcome("skip", "Firefox never got to the second test page")
+        if not _until(5, firefox.can_go_back):
+            return Outcome("fail", "the test made no history: Firefox's Back button is "
+                           "disabled on the second page, so “go back” can't be judged",
+                           screenshot=run.shot("go-back"))
         run.vm.click_centre()
         _typed, _heard, mark = run.say("go_back", wait=False)
         run.wait_log(mark, "Voice command: go back", "Voice command not done",
