@@ -50,6 +50,8 @@ def run(request: WindowRequest, where, beeps_on: bool) -> bool | None:
     # the fire.") would close the wrong window, or eat the sentence with a
     # note about another app.
     found = app_match.find(request.app, strict=True)
+    if found.partial:
+        found = _open_ones(found)
     if found.kind == "none":
         # As for "open": a sentence lost is worse than one typed. The log
         # keeps the user's words out.
@@ -60,6 +62,28 @@ def run(request: WindowRequest, where, beeps_on: bool) -> bool | None:
         return False
     logger.info(f"Voice command: {request.action} {found.entry.app_id}")
     return _act(request, found.entry, found.exact, where, beeps_on)
+
+
+def _open_ones(found: app_match.Match) -> app_match.Match:
+    """Of the apps that some words of their menu name fit ("close Chrome"),
+    the ones with a window open: "Close Writer." means the LibreOffice
+    Writer that's open, not Fedora Media Writer, and an app that isn't open
+    wasn't meant. Where the desktop can't tell, none are."""
+    open_ones = [(entry, exact) for entry, exact in found.partial
+                 if _has_window(entry, exact)]
+    if len(open_ones) == 1:
+        return app_match.Match("one", (open_ones[0][0],), open_ones[0][1])
+    kind = "tie" if open_ones else "none"
+    return app_match.Match(kind, tuple(entry for entry, _exact in open_ones))
+
+
+def _has_window(entry, exact: bool) -> bool:
+    """Whether the desktop says *entry*'s app has a window."""
+    try:
+        return bool(_ask_desktop(WindowRequest("find"), entry, exact))
+    except Exception as e:      # each desktop fails its own way: not known to be open
+        logger.info(f"Couldn't tell whether {entry.app_id} has a window: {e}")
+        return False
 
 
 def _still_wanted(request: WindowRequest, entry, where, beeps_on: bool) -> bool:

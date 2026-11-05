@@ -482,6 +482,8 @@ and the name is whatever the app is called in your menu: <b>open the calculator<
 Hold <b>{hold}</b>, say <b>close Firefox</b>, let go. Nothing is typed.
   • <b>close Firefox</b> closes its front window (the one you used last), <b>close all
     Firefox</b> closes every one, <b>close window</b> closes the one you're in.
+  • Say the app's name as your menu shows it. For an open app, one word of it is enough:
+    <b>close Chrome</b> for Google Chrome.
   • <b>switch to Firefox</b> brings it to the front. If Firefox isn't open, a note says
     so; say <b>open Firefox</b> to start it.
   • <b>minimize window</b>, <b>maximize window</b> and <b>restore window</b>.

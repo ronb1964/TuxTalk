@@ -101,6 +101,15 @@ def test_close_window_closes_a_focused_save_question():
     assert answer == [True, [[6, 1234]]]
 
 
+def test_find_says_whether_the_app_has_a_window_and_does_nothing():
+    answers, _logs = run(ENABLED + FIREFOX + """
+        t.report([served.object.WindowAction('find', 'firefox.desktop', false),
+                  served.object.WindowAction('find', 'gone.desktop', false),
+                  t.shell.closed, t.shell.minimized, t.shell.maximized]);
+    """)
+    assert answers == [True, False, [], [], []]
+
+
 def test_minimize_and_maximize_the_focused_window():
     """Each is recorded on the window with the focus and nothing else."""
     answers, _logs = run(ENABLED + FIREFOX + """

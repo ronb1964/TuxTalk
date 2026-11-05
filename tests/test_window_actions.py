@@ -7,6 +7,7 @@ The desktops are stand-ins (desktop_fakes.py, or a recording act()): nothing
 here touches the real one, starts an app or closes a window.
 """
 import logging
+import types
 
 import pytest
 
@@ -360,34 +361,111 @@ def test_close_or_switch_naming_no_app_is_typed(actions_on, chat, say, kde, apps
     assert [text for text, _ in chat[2]] == [said] and actions_on == []
 
 
+FILE_ROLLER = AppEntry("org.gnome.FileRoller.desktop", "File Roller", "File Roller",
+                        "Archive Manager", "file-roller", "")
+GIMP = AppEntry("gimp.desktop", "GNU Image Manipulation Program",
+                "GNU Image Manipulation Program", "Image Editor", "gimp-2.10", "")
+KEYS = AppEntry("org.gnome.seahorse.Application.desktop", "Passwords and Keys",
+                "Passwords and Keys", "", "seahorse", "")
+MEDIA_WRITER = AppEntry("org.fedoraproject.MediaWriter.desktop", "Fedora Media Writer",
+                        "Fedora Media Writer", "", "mediawriter", "")
+
+
+@pytest.fixture
+def open_windows(monkeypatch):
+    """kwin_windows.act's stand-in where only the apps whose desktop files are
+    in *open* have a window; *done* keeps (action, desktop file) of each
+    action asked for, the "find" that only looks left out."""
+    state = types.SimpleNamespace(open=set(), done=[])
+
+    def act(action, desktop_file, classes, every, timeout):
+        if action != "find":
+            state.done.append((action, desktop_file))
+        return desktop_file in state.open
+    monkeypatch.setattr(kwin_windows, "act", act)
+    return state
+
+
 @pytest.mark.parametrize("said", ["Close the fire.", "Close the file.", "Close all.",
                                   "Close every.", "Switch to fire.", "Close the door.",
-                                  "Switch to decaf.", "Close the web."])
+                                  "Switch to decaf.", "Close the program.", "Close the processor.",
+                                  "Switch to the chrome."])
 def test_a_sentence_that_only_starts_like_an_apps_name_is_typed(actions_on, chat, say, kde,
-                                                                apps, nobody_is_asked, said):
-    """A window command takes only whole words of an app's name: the start
-    of one ("fire", "file", "all") would close the wrong window or eat the
-    sentence, and so would a word of what the app is ("web")."""
-    apps[:] = WORD_NAMED
+                                                                apps, open_windows, said):
+    """With every app open, a sentence isn't a window command: the start of
+    a name ("fire") never counts, nor a word of a name after "the", nor a
+    word of what the app is ("processor")."""
+    apps[:] = WORD_NAMED + [FILE_ROLLER, GIMP, KEYS]
+    open_windows.open = {app_focus.desktop_file(e) for e in apps}
     say(said)
     assert [text for text, _ in chat[2]] == [said] and actions_on == []
+    assert open_windows.done == []
 
 
-@pytest.mark.parametrize("said, app_id", [("Close Chrome.", "google-chrome.desktop"),
-                                          ("Close Edge.", "microsoft-edge.desktop"),
-                                          ("Close Writer.", "libreoffice-writer.desktop")])
-def test_a_whole_word_of_the_menu_name_closes_that_app(actions_on, chat, say, kde, apps,
-                                                       kwin_calls, said, app_id):
-    """"Chrome" is a whole word of "Google Chrome", as people call it."""
-    apps[:] = WORD_NAMED
+def test_only_small_words_of_a_name_never_name_the_app(actions_on, chat, say, kde, apps,
+                                                       open_windows):
+    """"and" is a word of "Passwords and Keys", and of many sentences."""
+    apps[:] = [KEYS]
+    open_windows.open = {app_focus.desktop_file(KEYS)}
+    say("Close and.")
+    assert [text.strip() for text, _ in chat[2]] == ["Close and"]   # no period after "and"
+    assert actions_on == [] and open_windows.done == []
+
+
+@pytest.mark.parametrize("said, app", [("Close Chrome.", CHROME), ("Close Edge.", EDGE),
+                                       ("Close Writer.", WRITER)])
+def test_a_word_of_an_open_apps_menu_name_closes_it(actions_on, chat, say, kde, apps,
+                                                    open_windows, said, app):
+    """"Chrome" is a word of "Google Chrome", as people call it; Fedora Media
+    Writer, installed but not open, isn't the Writer meant."""
+    apps[:] = WORD_NAMED + [MEDIA_WRITER]
+    open_windows.open = {app_focus.desktop_file(app)}
     say(said)
-    assert chat[2] == [] and [call[1] for call in kwin_calls] == [app_id.removesuffix(".desktop")]
+    assert chat[2] == [] and open_windows.done == [("close", app_focus.desktop_file(app))]
 
 
-def test_switch_to_brave_by_a_word_of_its_menu_name(actions_on, chat, say, kde, apps, focused):
+def test_a_word_of_the_name_of_an_app_not_open_is_typed(actions_on, chat, say, kde, apps,
+                                                        open_windows):
     apps[:] = WORD_NAMED
+    say("Close Chrome.")
+    assert [text for text, _ in chat[2]] == ["Close Chrome."] and actions_on == []
+    assert open_windows.done == []
+
+
+def test_a_word_two_open_apps_share_names_both(actions_on, chat, say, kde, apps, open_windows):
+    apps[:] = [WRITER, MEDIA_WRITER]
+    open_windows.open = {app_focus.desktop_file(WRITER), app_focus.desktop_file(MEDIA_WRITER)}
+    say("Close Writer.")
+    assert chat[2] == [] and open_windows.done == []
+    assert actions_on == ["Two apps fit: LibreOffice Writer, Fedora Media Writer. "
+                          "Say the full name."]
+
+
+def test_a_word_of_a_name_counts_nowhere_open_windows_cant_be_told(actions_on, chat, say,
+                                                                   cosmic, apps,
+                                                                   nobody_is_asked):
+    apps[:] = WORD_NAMED
+    say("Close Chrome.")
+    assert [text for text, _ in chat[2]] == ["Close Chrome."] and actions_on == []
+
+
+def test_switch_to_brave_by_a_word_of_its_menu_name(actions_on, chat, say, kde, apps, focused,
+                                                    open_windows):
+    apps[:] = WORD_NAMED
+    open_windows.open = {"brave-browser"}
     say("Switch to Brave.")
     assert chat[2] == [] and focused == ["brave-browser.desktop"]
+
+
+def test_close_the_web_closes_the_default_browser(actions_on, chat, say, kde, apps,
+                                                  open_windows, monkeypatch):
+    """"web", "browser", "mail", "files" and "terminal" name the default app
+    (app_finder's default-app words), with or without "the"."""
+    apps[:] = WORD_NAMED
+    monkeypatch.setattr(app_finder, "default_apps", lambda: {"browser": "brave-browser.desktop"})
+    open_windows.open = {"brave-browser"}
+    say("Close the web.")
+    assert chat[2] == [] and open_windows.done == [("close", "brave-browser")]
 
 
 def test_open_chrome_is_unchanged(apps):

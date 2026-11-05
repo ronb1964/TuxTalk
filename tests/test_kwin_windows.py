@@ -114,3 +114,10 @@ def test_the_window_script_is_taken_out_of_kwin_afterwards(kde, fake_kwin):
     fake_kwin.windows = [FIREFOX]
     kwin_windows.act("close", "firefox", {"firefox"}, False, 1.0)
     assert fake_kwin.methods == ["unloadScript", "loadScript", "start", "unloadScript"]
+
+
+def test_kde_find_says_whether_the_app_has_a_window_and_does_nothing(kde, fake_kwin):
+    fake_kwin.windows = [KONSOLE, FIREFOX]
+    assert kwin_windows.act("find", "firefox", {"firefox"}, False, 1.0) is True
+    assert kwin_windows.act("find", "org.kde.kwrite", {"kwrite"}, False, 1.0) is False
+    assert fake_kwin.closed == [False, False] and fake_kwin.minimized == [False, False]

@@ -15,6 +15,8 @@ SCRIPT_PLUGIN_NAME = "tuxtalk-windows"
 
 # What each action does to a window w in the script.
 _ACTIONS = {
+    # Nothing done: only whether the app has a window (window_actions).
+    "find": "",
     "close": "w.closeWindow();",
     "minimize": "w.minimized = true;",
     "maximize": "w.setMaximize(true, true);",

@@ -43,7 +43,7 @@ def _targets(display, desktop_file: str, names, every: bool) -> list:
 
 def act(action: str, desktop_file: str, names, every: bool) -> bool:
     """Ask the window manager to do *action* ("close", "minimize",
-    "maximize" or "unmaximize") to the app's windows (*desktop_file* and
+    "maximize" or "unmaximize"; "find" asks nothing) to the app's windows (*desktop_file* and
     *names* as x11_activate.activate takes them) or, with neither, to the
     focused window. True when it was asked about a window; False with no
     X server or no such window. Raises OSError when the window manager
@@ -54,7 +54,7 @@ def act(action: str, desktop_file: str, names, every: bool) -> bool:
         return False
     try:
         targets = _targets(display, desktop_file, names, every)
-        if targets:
+        if targets and action != "find":
             message_type, data = _requests(display, action)
             for window in targets:
                 display.ask_window_manager(window, message_type, data)

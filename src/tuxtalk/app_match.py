@@ -18,6 +18,9 @@ class Match:
     # Other copies of the app are installed (or one was named): only a window
     # naming its menu entry is its own (app_focus.window_names).
     exact: bool = False
+    # Found by some words of each one's menu name only (app_finder.Found):
+    # (entry, exact) for each, which a window command takes only if open.
+    partial: tuple = ()
 
     @property
     def entry(self):
@@ -25,16 +28,19 @@ class Match:
 
 
 def find(request: OpenRequest, strict: bool = False) -> Match:
-    """The app *request* names among the menu's apps. *strict*: by whole
-    words only: its name or some of its words, its generic name or a
-    default-app word (app_finder.find)."""
+    """The app *request* names among the menu's apps. *strict*: by its name
+    as said, its generic name or a default-app word, else by some whole
+    words of its name, with *partial* set (app_finder.find)."""
     entries = app_finder.installed_apps()
     found = app_finder.find(request, entries, app_finder.default_apps(), strict)
+    def exact(entry):
+        return bool(request.install) or len(app_finder.copies(entry, entries)) > 1
+    if found.partial:
+        return Match(found.kind, found.entries, partial=tuple((e, exact(e))
+                                                              for e in found.entries))
     if found.kind != "one":
         return Match(found.kind, tuple(found.entries))
-    entry = found.entries[0]
-    exact = bool(request.install) or len(app_finder.copies(entry, entries)) > 1
-    return Match("one", (entry,), exact)
+    return Match("one", found.entries, exact(found.entries[0]))
 
 
 def say_tie(match: Match, action: str, nothing_done: str, beeps_on: bool) -> None:

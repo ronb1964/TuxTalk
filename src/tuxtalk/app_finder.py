@@ -28,6 +28,11 @@ CLOSE_ENOUGH = 0.8
 _MIN_SHORT_WORD = 3
 _MIN_FUZZY_LETTERS = 4
 _NOISE_WORDS = ("the", "app")
+# Said before a name ("Close the file."), they make the words a sentence's,
+# so a window command never takes them for some words of an app's name.
+_DETERMINERS = frozenset({"the", "a", "an", "my", "this", "that", "your"})
+# Words that are some of an app's name ("Passwords and Keys") but never name it.
+_FUNCTION_WORDS = frozenset({"and", "or", "to", "of", "for", "in", "on", "with", "your", "my"})
 
 # What people say for "the app I use for this", mapped to the kind
 # `default_apps` reports.
@@ -59,6 +64,9 @@ class AppEntry:
 class Found:
     kind: str            # "one", "tie" or "none"
     entries: tuple       # the app, or each app that fits equally well
+    # Found only by some words of the menu name ("close Chrome"), which a
+    # window command takes only for an app that's open (window_actions).
+    partial: bool = False
 
 
 _NONE = Found("none", ())
@@ -138,10 +146,10 @@ def _fuzzy(letters, indexed):
 
 def _candidates(words, indexed, strict=False):
     """The entries the first matching rule finds, rules in the spec's order.
-    *strict*: only the rules that take whole words as said, never the start
-    of a word, a sound or a close spelling, for a window command, where
-    "Close the fire." must not close Firefox: the whole name, its letters,
-    the generic name, or whole words of the name ("close Chrome")."""
+    *strict*: only the rules that take the name as said, never the start of
+    a word, a sound or a close spelling, for a window command, where "Close
+    the fire." must not close Firefox: the whole name, its letters (or its
+    program's) and the generic name."""
     said = " ".join(words)
     letters = said.replace(" ", "")
     sounds = _sounds(letters) if len(letters) >= MIN_SOUND_LETTERS else ""
@@ -154,12 +162,23 @@ def _candidates(words, indexed, strict=False):
         lambda i: i.starts_name(words),
         lambda i: bool(sounds) and sounds in i.sounds,
     )
-    strict_rules = (*rules[:3], lambda i: i.has_name_words(words))
-    for rule in strict_rules if strict else rules:
+    for rule in rules[:3] if strict else rules:
         hits = [i for i in indexed if rule(i)]
         if hits:
             return hits
     return [] if strict else _fuzzy(letters, indexed)
+
+
+def _some_name_words(request, words, indexed):
+    """The entries some whole words of whose name *words* are ("chrome" of
+    "Google Chrome"), for a window command, which then takes only the open
+    ones. None when the words were said as a sentence's: after "the" or
+    another determiner ("Close the file.", "Close the program."), or only
+    small words ("and")."""
+    said = normalize(request.name).split()
+    if said[0] in _DETERMINERS or _FUNCTION_WORDS.issuperset(words):
+        return []
+    return [i for i in indexed if i.has_name_words(words)]
 
 
 def _name_key(entry):
@@ -222,7 +241,8 @@ def find(request, entries, defaults, strict=False):
 
     *defaults* maps "browser", "email", "files", "text editor" and "terminal"
     to app ids; saying one of those words opens the default app. *strict*:
-    the whole name only (_candidates).
+    the name as said only (_candidates), else some whole words of it, then
+    Found.partial (_some_name_words).
     """
     words = _clean(request.name)
     if not words:
@@ -236,11 +256,15 @@ def find(request, entries, defaults, strict=False):
             chosen = next((c for c in copies(match[0], entries)
                            if request.install and c.install == request.install), match[0])
             return Found("one", (chosen,))
-    hits = _candidates(words, [_Indexed(e) for e in entries], strict)
+    indexed = [_Indexed(e) for e in entries]
+    hits = _candidates(words, indexed, strict)
+    partial = strict and not hits
+    if partial:
+        hits = _some_name_words(request, words, indexed)
     if not hits:
         return _NONE
     apps = _one_of_each_app(hits, entries, request.install)
-    return Found("one" if len(apps) == 1 else "tie", apps)
+    return Found("one" if len(apps) == 1 else "tie", apps, partial)
 
 
 def program_name(commandline):

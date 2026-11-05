@@ -117,6 +117,9 @@ const APP_FOCUS_PATH = '/io/github/ronb1964/TuxTalk/Extension';
 // What each WindowAction does to one window.
 const WINDOW_ACTIONS = {
     close: w => w.delete(global.get_current_time()),
+    // Nothing done: only whether the app has a window (a window command said
+    // with a word of the app's name acts only on an open app).
+    find: () => {},
     minimize: w => w.minimize(),
     // GNOME 49 dropped the flags argument; older Shells need it.
     maximize: w => (Meta.MaximizeFlags ? w.maximize(Meta.MaximizeFlags.BOTH) : w.maximize()),

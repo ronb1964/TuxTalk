@@ -109,3 +109,13 @@ def test_x11_close_all_skips_a_panel_of_the_app(window_manager):
     window_manager.stack([settings, panel])
     assert x11_windows.act("close", "xfce4-panel", names, True) is True
     assert [w for w, _ in window_manager.requests(b"_NET_CLOSE_WINDOW")] == [settings]
+
+
+def test_x11_find_says_whether_the_app_has_a_window_and_asks_nothing(window_manager):
+    """A window command said with a word of an app's name only acts on an
+    open app: looking must not close or size anything."""
+    window_manager.stack([window_manager.window("Navigator", "firefox")])
+    assert x11_windows.act("find", "firefox", FIREFOX, False) is True
+    assert x11_windows.act("find", "kwrite", frozenset({"kwrite"}), False) is False
+    # What "find" would be asked as if it slipped through (_requests' last case).
+    assert window_manager.requests(b"_NET_WM_STATE") == []
