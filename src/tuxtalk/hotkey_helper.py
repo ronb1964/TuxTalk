@@ -84,7 +84,9 @@ isn't held: that HIDE is refused. It ends by itself as soon as that key
 comes up there, when someone else's session comes to the front, when the
 program that asked goes away, or after 15 minutes at most. A press's release
 is reported from the keyboard it was pressed on, so holding the same key on
-another keyboard can't keep a recording or a grab going. A keyboard the
+another keyboard can't keep a recording or a grab going. Left Ctrl's own
+release waits for the last keyboard of its group holding it: the desktop
+sees Ctrl down until then, and TuxTalk mustn't type under it. A keyboard the
 helper may only read (its node isn't writable for the input group) is never
 held: its keys are reported, and a held hotkey reaches the desktop as it is.
 
@@ -813,7 +815,10 @@ class Helper:
             for mod, owed in list(client.mods_owed.items()):
                 if owed == old and not self.held(mod, old):
                     del client.mods_owed[mod]
-                    self.send(client, f"UP {mod}")
+                    # Reported on its own too: its release is the UP, as
+                    # in deliver_up (the desktop still sees it down).
+                    if mod not in client.origin:
+                        self.send(client, f"UP {mod}")
         self.end_combo_hold(old)
         self.end_combo_hold(group)
 
@@ -831,7 +836,12 @@ class Helper:
     def held(self, code, group):
         """Whether a keyboard of *group* already holds *code*. Per group, so a
         program's virtual keyboard holding F8 never swallows the real F8."""
-        return any(code in k.down for k in self.keyboards.values() if k.group == group)
+        return self.holder(code, group) is not None
+
+    def holder(self, code, group):
+        """A keyboard of *group* holding *code*, or None."""
+        return next((k for k in self.keyboards.values()
+                     if k.group == group and code in k.down), None)
 
     def group_mods(self, group):
         """The trusted modifiers held on the keyboards of *group*."""
@@ -917,6 +927,12 @@ class Helper:
         nothing new. A modifier is let go once no keyboard of its group holds it."""
         for client in list(self.clients.values()):
             if client.origin.get(code) == keyboard.path:
+                still = self.holder(code, keyboard.group) if code == KEY_LEFTCTRL else None
+                if still is not None:
+                    # The desktop sees Ctrl down while any keyboard of the
+                    # pool holds it: that one's release is the UP.
+                    client.origin[code] = still.path
+                    continue
                 del client.origin[code]
                 client.hideable.discard(code)
                 # A Right Ctrl reported on its own may be owed as another
@@ -957,7 +973,7 @@ class Helper:
             if client.uid == active and self.client_wants(client, keyboard, code, mods):
                 client.origin[code] = keyboard.path
                 if code != KEY_LEFTCTRL:
-                    # Hidden only as a held Space's modifier: alone, a
+                    # Hidden only as a held hotkey's modifier: alone, a
                     # client could take the keyboard from every Ctrl shortcut.
                     client.hideable.add(code)
                 for mod in mods:

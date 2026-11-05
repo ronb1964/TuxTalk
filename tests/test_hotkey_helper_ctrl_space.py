@@ -227,6 +227,63 @@ def test_a_programs_ctrl_let_go_doesnt_say_the_real_one_came_up(setup, specs, ct
     assert heard(sock) == [f"UP {ctrl}"]
 
 
+def _second_real_keyboard(helper, kb):
+    """Another real keyboard beside the setup's, both in the desktop's pool."""
+    kb.group = "real"
+    other = FakeKeyboard("/dev/input/event-second")
+    other.group = "real"
+    helper.keyboards[other.path] = other
+    return other
+
+
+def test_left_ctrl_held_on_two_keyboards_is_up_only_when_both_let_go(setup):
+    """The desktop sees Ctrl down while either keyboard holds it: an UP at the
+    first release would let TuxTalk type Ctrl shortcuts (Ctrl+W)."""
+    helper, kb, connect, say, heard, _seat = setup
+    other = _second_real_keyboard(helper, kb)
+    sock = _ready(connect, say, heard)
+    kb.press(LCTRL)
+    assert heard(sock) == ["DOWN 29 -"]
+    other.press(LCTRL)
+    assert heard(sock) == []
+    kb.press(LCTRL, 0)
+    assert heard(sock) == []
+    other.press(LCTRL, 0)
+    assert heard(sock) == ["UP 29"]
+
+
+def test_left_ctrl_kept_on_a_second_keyboard_still_unlocks_space_once_up(setup):
+    """After the first keyboard's Ctrl comes up, the pair's state follows the
+    second: one UP for the press, when the second lets go."""
+    helper, kb, connect, say, heard, _seat = setup
+    other = _second_real_keyboard(helper, kb)
+    sock = _ready(connect, say, heard)
+    said = []
+    # One event at a time: the helper reads each keyboard in turn.
+    for keyboard, code, value in ((kb, LCTRL, 1), (other, LCTRL, 1), (kb, LCTRL, 0),
+                                  (kb, SPACE, 1), (kb, SPACE, 0), (other, LCTRL, 0)):
+        keyboard.press(code, value)
+        said += heard(sock)
+    assert said == ["DOWN 29 -", "DOWN 57 29", "UP 57", "UP 29"]
+
+
+def test_a_keyboard_given_uaccess_mid_hold_doesnt_say_its_left_ctrl_came_up(setup):
+    """Its Ctrl, reported on its own and owed as Space's modifier, is still
+    down for the desktop: the UP waits for its release."""
+    helper, kb, connect, say, heard, _seat = setup
+    kb.group = "real"
+    sock = _ready(connect, say, heard)
+    kb.press(LCTRL)
+    kb.press(SPACE)
+    assert heard(sock) == ["DOWN 29 -", "DOWN 57 29"]
+    kb.udev_says = "own:/dev/input/event-fake"
+    helper.reclassify(kb)
+    assert heard(sock) == []
+    kb.press(SPACE, 0)
+    kb.press(LCTRL, 0)
+    assert heard(sock) == ["UP 57", "UP 29"]
+
+
 # --- hiding it while TuxTalk records --------------------------------------------------
 
 def test_a_held_left_ctrl_space_hides_both_keys(setup):

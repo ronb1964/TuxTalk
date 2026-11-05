@@ -12,6 +12,7 @@ import pytest
 from evdev import ecodes
 
 from conftest import KeyEvent
+from hotkey_helper_fakes import FakeKeyboard, ready_client
 from hotkey_loop_fakes import Cfg, Grabbable, Keyboard
 from tuxtalk import (cosmic_hotkeys, ctrl_space, ctrl_space_clashes, gnome_hotkeys,
                      hotkey_claims, hotkeys, keyboard_grab, keyboard_layout, keyboard_output,
@@ -275,6 +276,29 @@ def test_through_the_helper_a_left_ctrl_pressed_mid_text_holds_typing(tmp_path, 
     kb._handle(["DOWN", "29", "-"])
     assert modifier_hotkeys.wait_while_held()() is not None
     kb._handle(["UP", "29"])
+    assert modifier_hotkeys.wait_while_held()() is None
+
+
+def test_typing_waits_while_a_second_keyboard_still_holds_left_ctrl(setup, tmp_path, watched):
+    """Left Ctrl held on two keyboards and let go on one: the desktop still
+    sees Ctrl, so what TuxTalk types would be Ctrl shortcuts until the other
+    lets go too. The real helper's report, read by TuxTalk's client."""
+    hotkey_helper, first, connect, say, heard, _seat = setup
+    first.group = "real"
+    second = FakeKeyboard("/dev/input/event-second")
+    second.group = "real"
+    hotkey_helper.keyboards[second.path] = second
+    sock = ready_client(connect, say, heard, "L:57")
+    kb = helper(tmp_path)
+    watched([kb])
+    for keyboard, value in ((first, 1), (second, 1), (first, 0)):
+        keyboard.press(LCTRL, value)
+        for line in heard(sock):
+            kb._handle(line.split())
+    assert modifier_hotkeys.wait_while_held()() is not None
+    second.press(LCTRL, 0)
+    for line in heard(sock):
+        kb._handle(line.split())
     assert modifier_hotkeys.wait_while_held()() is None
 
 
