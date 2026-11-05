@@ -17,6 +17,11 @@ from tuxtalk.command_phrases import AddressRequest, SearchRequest
 FIREFOX = ("firefox", ("tray", "1"))
 KWRITE = ("org.kde.kwrite", ("tray", "2"))
 FIREFOX_ENTRY = AppEntry("firefox.desktop", "Firefox", "Firefox", "Web Browser", "firefox", "")
+BRAVE = ("brave-browser", ("tray", "3"))
+# A Flatpak browser on no list of TuxTalk's: known as the default browser only.
+VIVALDI = ("com.vivaldi.Vivaldi", ("tray", "4"))
+VIVALDI_ENTRY = AppEntry("com.vivaldi.Vivaldi.desktop", "Vivaldi", "Vivaldi", "Web Browser",
+                         "vivaldi", "flatpak")
 KWRITE_ENTRY = AppEntry("org.kde.kwrite.desktop", "KWrite", "KWrite", "Text Editor", "kwrite", "")
 
 CTRL, ENTER, DELETE = 29, 28, 111
@@ -40,6 +45,14 @@ def clock(monkeypatch):
     fake = BoundedClock()
     monkeypatch.setattr(web_commands, "time", fake)
     return fake
+
+
+@pytest.fixture(autouse=True)
+def menu(monkeypatch):
+    """Firefox and KWrite in the menu, Firefox the default browser: never the
+    computer's own, which would make a test depend on the user's browser."""
+    monkeypatch.setattr(app_finder, "installed_apps", lambda: [FIREFOX_ENTRY, KWRITE_ENTRY])
+    monkeypatch.setattr(app_finder, "default_apps", lambda: {"browser": "firefox.desktop"})
 
 
 @pytest.fixture
@@ -92,12 +105,10 @@ def floated(monkeypatch):
 
 @pytest.fixture
 def browser(monkeypatch, focus):
-    """Firefox as the default browser. *raised* (focus_running's answer) and
+    """Firefox, the default browser (menu). *raised* (focus_running's answer) and
     *started* (each launch) say what was done to it; *arrives* is the looks
     the focus goes through once it was raised or started, FIREFOX by default."""
     state = types.SimpleNamespace(running=True, starts=True, started=[], arrives=[FIREFOX])
-    monkeypatch.setattr(app_finder, "installed_apps", lambda: [FIREFOX_ENTRY, KWRITE_ENTRY])
-    monkeypatch.setattr(app_finder, "default_apps", lambda: {"browser": "firefox.desktop"})
 
     def focus_running(entry, *_args, **_kwargs):
         if state.running:
@@ -184,6 +195,49 @@ def test_a_browser_that_never_comes_forward_types_nothing(at_kwrite, browser, ty
     assert clock.now >= web_commands.BROWSER_WAIT_S
     assert typed == [] and keyboard.events == []
     assert floated == ["The browser didn't come forward"]
+
+
+def test_another_browser_taking_the_focus_gets_no_search(at_kwrite, browser, typed, keyboard,
+                                                         floated):
+    """Firefox is the default: Brave coming forward meanwhile isn't it, and
+    the words never go into Brave."""
+    browser.arrives = [BRAVE]
+    assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is False
+    assert typed == [] and keyboard.events == []
+    assert floated == ["The browser didn't come forward"]
+
+
+def test_a_browser_that_had_to_start_is_given_longer(at_kwrite, browser, typed, keyboard,
+                                                     floated, clock):
+    browser.running = False
+    browser.arrives = [KWRITE]
+    assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is False
+    assert clock.now >= web_commands.BROWSER_START_WAIT_S > web_commands.BROWSER_WAIT_S
+    assert typed == [] and floated == ["The browser didn't come forward"]
+
+
+@pytest.fixture
+def vivaldi_default(browser, monkeypatch):
+    """The Flatpak Vivaldi as the default browser."""
+    monkeypatch.setattr(app_finder, "installed_apps", lambda: [VIVALDI_ENTRY, KWRITE_ENTRY])
+    monkeypatch.setattr(app_finder, "default_apps",
+                        lambda: {"browser": "com.vivaldi.Vivaldi.desktop"})
+    browser.arrives = [VIVALDI]
+    return browser
+
+
+def test_a_default_browser_on_no_list_is_searched_in(at_kwrite, vivaldi_default, typed,
+                                                     keyboard):
+    assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is True
+    assert keyboard.typed_keys() == CTRL_T + [DELETE, ENTER] and typed == ["cheap tires"]
+
+
+def test_go_to_in_a_default_browser_on_no_list_uses_its_bar(focus, vivaldi_default, typed,
+                                                            opened_uris, keyboard):
+    focus[:] = [VIVALDI]
+    assert web_commands.go_to(AddressRequest("https://youtube.com"), VIVALDI, False) is True
+    assert opened_uris == [] and typed == ["https://youtube.com"]
+    assert keyboard.typed_keys()[:2] == CTRL_L
 
 
 def test_esc_while_waiting_for_the_browser_types_nothing(at_kwrite, browser, typed, keyboard,
