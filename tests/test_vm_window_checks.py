@@ -16,6 +16,7 @@ run = import_vm_tool("run")
 open_apps = import_vm_tool("checks_open_apps")
 actions = import_vm_tool("checks_voice_actions")
 extension = import_vm_tool("checks_extension")
+voices = import_vm_tool("voices")
 
 
 @pytest.mark.parametrize("exec_line, program", [
@@ -91,3 +92,16 @@ def test_the_window_checks_skipped_before_the_extension_run_again_with_it():
     assert again <= set(ubuntu)
     assert ubuntu.index("ext_after_reboot") < min(ubuntu.index(i) for i in again)
     assert not again & {c.id for c in run.selected(run.VMS["kde"])}
+
+
+@pytest.mark.parametrize("phrase, action", [
+    ("minimize_window", "minimize"),
+    ("maximize_window", "maximize"),
+    ("restore_window", "unmaximize"),
+])
+def test_the_window_phrases_are_window_commands(phrase, action):
+    from tuxtalk import command_phrases
+    said = voices.load_phrases()[phrase]["say"]
+    request = command_phrases.parse(said, navigation=True, actions=True)
+    assert isinstance(request, command_phrases.WindowRequest)
+    assert request.action == action

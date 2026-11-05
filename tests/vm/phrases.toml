@@ -131,14 +131,16 @@ say = "Close this window."
 [switch_text_editor]
 say = "Switch to the text editor."
 
+# With "the": Parakeet heard the computer voice's bare "Minimize window." as
+# "Memorize window." The longer phrase is still a window command.
 [minimize_window]
-say = "Minimize window."
+say = "Minimize the window."
 
 [maximize_window]
-say = "Maximize window."
+say = "Maximize the window."
 
 [restore_window]
-say = "Restore window."
+say = "Restore the window."
 
 [new_tab]
 say = "New tab."
