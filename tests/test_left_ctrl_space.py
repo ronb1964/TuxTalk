@@ -13,7 +13,8 @@ from evdev import ecodes
 
 from conftest import KeyEvent
 from hotkey_loop_fakes import Cfg, Grabbable, Keyboard
-from tuxtalk import (ctrl_space, hotkeys, keyboard_grab, keyboard_layout, keyboard_output,
+from tuxtalk import (cosmic_hotkeys, ctrl_space, gnome_hotkeys, hotkey_claims, hotkeys,
+                     x11_hotkeys, keyboard_grab, keyboard_layout, keyboard_output,
                      modifier_hotkeys, pipeline, recording)
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
@@ -334,3 +335,26 @@ def test_a_space_after_the_pair_was_lost_is_typing(service, svc):
     for value in (2, 0):
         ev(SPACE, value, held, svc)
     assert svc.last_activity == 0.0
+
+
+def test_left_ctrl_space_is_claimed_as_ctrl_space_on_every_desktop():
+    assert hotkey_claims.qt_key_sequence("Left Ctrl+Space") == "Ctrl+Space"
+    assert hotkey_claims.qt_key_sequence("Shift+Left Ctrl+Space") == "Shift+Ctrl+Space"
+    assert hotkey_claims.qt_key_code("Ctrl+Space") == 0x04000000 | 0x20
+    assert gnome_hotkeys.accelerator("Ctrl+Space") == "<Control>space"
+    assert gnome_hotkeys.accelerator("Shift+Ctrl+Space") == "<Shift><Control>space"
+    assert cosmic_hotkeys.binding("Ctrl+Space") == (("Ctrl",), "space")
+    assert x11_hotkeys.x_grab("Ctrl+Space") == (ecodes.KEY_SPACE + 8, 4)
+
+
+@pytest.mark.parametrize("name", ["Space", "Alt+Space", "Super+Space", "Right Ctrl+Space",
+                                  "Left Ctrl+A", "Left Ctrl"])
+def test_space_is_claimed_only_with_ctrl(name):
+    assert hotkey_claims.qt_key_sequence(name) is None
+
+
+def test_voice_editing_claims_shift_with_the_pair():
+    cfg = SimpleNamespace(hotkey="Left Ctrl+Space", toggle_hotkey="F9",
+                          voice_commands_hotkey="", paste_last_hotkey="", voice_editing=True)
+    keys = [key for _role, _what, key in hotkey_claims.keys_to_claim(cfg)]
+    assert keys == ["Ctrl+Space", "F9", "Shift+Ctrl+Space", "Shift+F9"]

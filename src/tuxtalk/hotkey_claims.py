@@ -6,8 +6,10 @@ hotkey on to the focused app too, and a terminal prints a "~". Each desktop
 has its own way to hold a key back: a KWin script on KDE (kwin_hotkeys), the
 GNOME extension (gnome_hotkeys), COSMIC's custom shortcuts (cosmic_hotkeys)
 and an X grab elsewhere on X11 (x11_hotkeys). Which keys are claimed is
-decided once, here, so the desktops can't drift apart: F-keys, Scroll Lock
-and modifier combos, never a bare letter. Keys are named the way Qt names
+decided once, here, so the desktops can't drift apart: F-keys, Scroll Lock,
+modifier combos and Left Ctrl+Space, never a bare letter or a bare Space.
+A desktop shortcut can't tell the two Ctrl keys apart, so Right Ctrl+Space
+is held back from the app as well while dictation is on. Keys are named the way Qt names
 them ("Shift+F8", "ScrollLock", "Meta+F9"), which KDE reads as they are and
 the others turn into their own syntax; qt_key_code gives the number KDE
 reports a key in, for kwin_hotkeys alone.
@@ -22,7 +24,8 @@ _FKEYS = {f"F{i}" for i in range(1, 13)}
 _QT_KEYS = {"SCROLL LOCK": ("ScrollLock", 0x01000026)}
 _QT_KEY_CODES = dict(_QT_KEYS.values())
 # Qt's names for those keys where the X keysym (GNOME, COSMIC) differs.
-QT_KEYSYMS = {"ScrollLock": "Scroll_Lock"}
+QT_KEYSYMS = {"ScrollLock": "Scroll_Lock", "Space": "space"}
+_SPACE_CODE = 0x20
 
 
 def qt_key_sequence(name):
@@ -30,11 +33,14 @@ def qt_key_sequence(name):
 
     A bare key is only claimed if it's an F-key or Scroll Lock. Claiming a bare
     letter would stop the user typing that letter anywhere while the service runs.
+    Space is claimed only as Left Ctrl+Space (Shift may join), as "Ctrl+Space".
     """
     if not name or not name.strip():
         return None
     parts = [p.strip().upper() for p in name.split("+")]
     key = parts[-1]
+    if key == "SPACE":
+        return _space_sequence(parts)
     bare = key in _FKEYS or key in _QT_KEYS
     if not (bare or (len(key) == 1 and "A" <= key <= "Z")):
         return None
@@ -46,6 +52,16 @@ def qt_key_sequence(name):
     if not mods and not bare:
         return None
     return "+".join(mods + [_QT_KEYS[key][0] if key in _QT_KEYS else key])
+
+
+def _space_sequence(parts):
+    """"Ctrl+Space" (or "Shift+Ctrl+Space") for the name parts of Left
+    Ctrl+Space, or None for any other use of Space: the other desktops' Ctrl
+    is Qt's "Ctrl", which names no side."""
+    *mods, _space = parts
+    if "LEFT CTRL" not in mods or not set(mods) <= {"LEFT CTRL", "SHIFT"}:
+        return None
+    return "+".join(["Ctrl" if m == "LEFT CTRL" else "Shift" for m in mods] + ["Space"])
 
 
 # Qt's codes for a modifier and a key, as kglobalaccel reports shortcuts.
@@ -64,6 +80,8 @@ def qt_key_code(sequence):
     *mods, key = sequence.split("+")
     if key in _FKEYS:
         code = _QT_F1 + int(key[1:]) - 1
+    elif key == "Space" and mods:
+        code = _SPACE_CODE
     elif key in _QT_KEY_CODES or len(key) == 1:
         code = _QT_KEY_CODES.get(key) or ord(key)
     else:
