@@ -77,10 +77,10 @@ def _clear_text_box(beeps_on, notify_on):
     backend = keyboard_output.output_backend()
     where = focused_window.look()
     if is_terminal_class(where[0]):
-        cleared = _sent_into(where, lambda: backend.press_keys([(("CTRL",), "E"),
-                                                                (("CTRL",), "U")]))
+        cleared = keyboard_output.send_only_into(
+            where, lambda: backend.press_keys([(("CTRL",), "E"), (("CTRL",), "U")]))
     else:
-        cleared = _sent_into(where, backend.select_all_delete)
+        cleared = keyboard_output.send_only_into(where, backend.select_all_delete)
     if cleared == "cancelled":
         delivery.forget_typed()
         return
@@ -98,33 +98,14 @@ def _clear_text_box(beeps_on, notify_on):
             notify_module.notify("Couldn't clear the text box", "")
 
 
-def _sent_into(where, send):
-    """*send*(), a call of the output backend, with its keys going only into
-    *where*, the look the command was checked against (keyboard_output.only_into):
-    True when they went in, "moved" when another window had the focus by
-    the time they would have, "cancelled" when Esc stopped them (said
-    already: the caller says nothing more), else False."""
-    try:
-        with keyboard_output.only_into(where):
-            if send():
-                return True
-    except virtual_keyboard.GaveUp as stop:
-        # The portal's way of saying it (output_backends._with_session).
-        return stop.reason if stop.reason in ("moved", "cancelled") else False
-    # The virtual keyboard's: it doesn't say why nothing was sent.
-    if keyboard_output.esc_cancelled():
-        return "cancelled"
-    return "moved" if focused_window.changed(where, focused_window.look()) else False
-
-
 def _backspace_last(delete_count, label, beeps_on, notify_on, where):
     """Delete the last *delete_count* characters of the last dictation in
     *where*, the window undo was checked in, and shrink the undo buffer only
     once the deletion is confirmed; otherwise it falls out of step with the
     document and the next undo backspaces over the user's own text."""
     try:
-        deleted = _sent_into(where, lambda: keyboard_output.output_backend()
-                             .backspaces(delete_count))
+        deleted = keyboard_output.send_only_into(
+            where, lambda: keyboard_output.output_backend().backspaces(delete_count))
     except virtual_keyboard.StoppedPartway:
         # Some of the text is gone and some isn't, by an unknown amount, so
         # the buffer no longer matches the document. Forgetting it is the
@@ -307,8 +288,8 @@ def navigate(raw: str, beeps_on: bool, where=None):
         notices.edit_problem("nothing_said", beeps_on)
         return False
     try:
-        pressed = _sent_into(where, lambda: keyboard_output.output_backend()
-                             .press_keys(plan.chords))
+        pressed = keyboard_output.send_only_into(
+            where, lambda: keyboard_output.output_backend().press_keys(plan.chords))
     except Exception as e:
         logger.error(f"Voice command: pressing the keys failed: {e}")
         pressed = False

@@ -62,7 +62,7 @@ def _open(entry, new: bool, beeps_on: bool, ongoing, exact: bool) -> bool:
     *exact*: other copies are installed, so a window counts only by its
     menu entry (app_focus.window_names)."""
     logger.info(f"Voice command: open {entry.app_id}")
-    if _esc_pressed():
+    if keyboard_output.esc_stopped("opened"):
         return False
     if ongoing is not None:
         # Before the app starts, which takes a moment: nothing more of the
@@ -77,7 +77,7 @@ def _open(entry, new: bool, beeps_on: bool, ongoing, exact: bool) -> bool:
         return True
     # Esc while it looked for a window still stops it. Mid-recording the
     # message was just cancelled here, which looks the same as Esc.
-    if ongoing is None and _esc_pressed():
+    if ongoing is None and keyboard_output.esc_stopped("opened"):
         return False
     if not app_launcher.launch(entry):
         notices.app_not_opened(f"Couldn't open {entry.name}",
@@ -86,15 +86,6 @@ def _open(entry, new: bool, beeps_on: bool, ongoing, exact: bool) -> bool:
         return False
     beeps.beep(beeps_on, *READY_BEEP)
     return True
-
-
-def _esc_pressed() -> bool:
-    """Whether Esc cancelled this dictation after its key came up (the Esc
-    said so itself)."""
-    if keyboard_output.esc_cancelled():
-        logger.info("Not opened: Esc cancelled the dictation")
-        return True
-    return False
 
 
 def _tie_label(entries) -> str:

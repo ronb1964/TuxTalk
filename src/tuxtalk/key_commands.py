@@ -30,8 +30,9 @@ logger = setup_logger(__name__)
 # press, by name, as Linux key codes: one table for both ways of typing
 # (keyboard_output.send_chords, libei_ctypes.press_chords). Letters aren't in it: their
 # keys depend on the keyboard layout.
-KEY_CODES = {"CTRL": 29, "SHIFT": 42, "LEFT": 105, "RIGHT": 106, "UP": 103,
-             "DOWN": 108, "HOME": 102, "END": 107, "ENTER": 28, "TAB": 15}
+KEY_CODES = {"CTRL": 29, "SHIFT": 42, "ALT": 56, "LEFT": 105, "RIGHT": 106, "UP": 103,
+             "DOWN": 108, "HOME": 102, "END": 107, "PAGEUP": 104, "PAGEDOWN": 109,
+             "ENTER": 28, "TAB": 15, "ESC": 1, "F5": 63}
 
 # Where the letters sit on a US keyboard: the Flatpak's keyboard types them
 # there (libei_ctypes), and a shortcut's letter goes there on a layout without

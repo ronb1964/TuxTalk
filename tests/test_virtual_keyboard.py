@@ -7,6 +7,7 @@ import itertools
 
 import pytest
 
+from tuxtalk import focused_window
 from tuxtalk import virtual_keyboard
 from tuxtalk import delivery
 from tuxtalk import voice_commands
@@ -237,3 +238,28 @@ def test_a_paste_shortcut_cut_off_is_partial_and_not_typed_after(breaks_once, mo
     keys = {code for code, _value in breaks_once.events[4:]}
     assert keys == {29, 47}, "typed the text after a paste that may have landed"
     assert breaks_once.events[-2:] == [(47, 0), (29, 0)], "Ctrl and V left down"
+
+
+def test_scrolling_down_turns_the_wheel_toward_the_user(keyboard):
+    assert keyboard_output.send_scroll(-3) is True
+    assert keyboard.wheel == [-1, -1, -1] and keyboard.events == []
+
+
+def test_a_scroll_goes_only_into_the_window_it_was_meant_for(keyboard, monkeypatch):
+    monkeypatch.setattr(focused_window, "look", lambda *a: ("kwrite", ("tray", "2")))
+    got = keyboard_output.send_only_into(("firefox", ("tray", "1")),
+                                         lambda: keyboard_output.send_scroll(5))
+    assert got == "moved" and keyboard.wheel == []
+
+
+def test_esc_stops_a_scroll(keyboard):
+    message = rs.Message(serial=1)
+    message.cancelled = True
+    with keyboard_output.until_cancelled(message):
+        assert keyboard_output.send_scroll(5) is False
+    assert keyboard.wheel == []
+
+
+def test_the_new_key_names_press_their_keys(keyboard):
+    keyboard_output.send_chords([(("ALT",), "LEFT"), ((), "PAGEDOWN"), ((), "F5"), ((), "ESC")])
+    assert keyboard.typed_keys() == [56, 105, 109, 63, 1]

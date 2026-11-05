@@ -271,6 +271,15 @@ def esc_cancelled() -> bool:
     return message is not None and message.cancelled
 
 
+def esc_stopped(what: str) -> bool:
+    """esc_cancelled(), logging "Not *what*: Esc cancelled the dictation" when
+    it is: for a command that checks right before it acts."""
+    if esc_cancelled():
+        logger.info(f"Not {what}: Esc cancelled the dictation")
+        return True
+    return False
+
+
 def not_where_typed(focused, now=None) -> bool:
     """Whether the focused window, of class *focused*, is known to be another
     one than the last dictation or phrase went to, for undo, select and move,
@@ -743,6 +752,36 @@ def send_chords(chords, claim=None) -> bool:
             events += [(code, 1), (code, 0)]
     return send_keys(events, what=f"{len(chords)} navigation keys", delay_ms=key_delay(),
                      claim=claim)
+
+
+def send_scroll(clicks: int) -> bool:
+    """Turn the wheel *clicks* notches, up when positive, with the checks of
+    the delivery on this thread (only_into, Esc). True when it was sent. Only
+    the virtual keyboard turns a wheel: the Flatpak's voice commands are off,
+    so the libei backend never gets here."""
+    try:
+        return virtual_keyboard.scroll(clicks, key_delay(), _delivery_claim(None))
+    except virtual_keyboard.GaveUp:
+        return False
+
+
+def send_only_into(where, send):
+    """*send*(), a call of the output backend, with its keys going only into
+    *where*, the look the command was checked against (only_into): True when
+    they went in, "moved" when another window had the focus by the time they
+    would have, "cancelled" when Esc stopped them (said already: the caller
+    says nothing more), else False."""
+    try:
+        with only_into(where):
+            if send():
+                return True
+    except virtual_keyboard.GaveUp as stop:
+        # The portal's way of saying it (output_backends._with_session).
+        return stop.reason if stop.reason in ("moved", "cancelled") else False
+    # The virtual keyboard's: it doesn't say why nothing was sent.
+    if esc_cancelled():
+        return "cancelled"
+    return "moved" if focused_window.changed(where, focused_window.look()) else False
 
 
 def send_copy_keystroke(claim=None) -> bool:

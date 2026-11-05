@@ -227,6 +227,32 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
         return True
 
 
+def scroll(clicks: int, delay_ms: float = KEY_DELAY_MS, claim=None) -> bool:
+    """Turn the mouse wheel *clicks* notches, up (toward the top of the
+    screen) when positive, down when negative. *claim* is send's: made before
+    the first notch, so a scroll can be refused like a key. True when every
+    notch was sent, False when the keyboard isn't there or failed (a wheel
+    turn is not text: partway is not worth telling apart)."""
+    from evdev import ecodes
+    step = 1 if clicks > 0 else -1
+    with _lock:
+        device = _open()
+        if device is None:
+            return False
+        time.sleep(max(0.0, _ready_at - time.monotonic()))
+        try:
+            _ready_for_key(device, {}, None, claim)
+            for _ in range(abs(clicks)):
+                device.write(ecodes.EV_REL, ecodes.REL_WHEEL, step)
+                device.syn()
+                time.sleep(delay_ms / 1000)
+        except OSError as e:
+            logger.error(f"TuxTalk's virtual keyboard failed turning the wheel: {e}")
+            _close_broken(device, {})
+            return False
+    return True
+
+
 def _ready_for_key(device, down, before_press, claim) -> None:
     """Before a key goes down: wait while *before_press* asks to, then make
     *claim* (see send), if any, and take it."""
