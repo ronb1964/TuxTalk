@@ -17,6 +17,29 @@ def test_appimage_python_and_libraries_are_gone():
     assert env["LD_LIBRARY_PATH"] == "/opt/mine/lib" and env["PATH"] == "/usr/bin"
 
 
+def _package_tree(root):
+    """A stand-in for /opt/talktype, where the .deb and .rpm run AppRun
+    straight, without the AppImage runtime that sets APPDIR."""
+    (root / "usr").mkdir(parents=True)
+    (root / "AppRun").write_text("#!/bin/sh\n")
+    return str(root)
+
+
+def test_the_packages_python_and_libraries_are_gone(tmp_path):
+    tree = _package_tree(tmp_path / "opt" / "talktype")
+    env = clean({"PYTHONHOME": f"{tree}/usr", "LD_LIBRARY_PATH": f"{tree}/usr/lib:/opt/mine/lib",
+                 "PATH": f"{tree}/usr/bin:/usr/bin"}, venv="")
+    assert "PYTHONHOME" not in env
+    assert env["LD_LIBRARY_PATH"] == "/opt/mine/lib" and env["PATH"] == "/usr/bin"
+
+
+def test_a_pythonhome_of_the_users_own_keeps_their_path(tmp_path):
+    """Only AppRun's folder is TuxTalk's: a PYTHONHOME of /usr/local must
+    not take /usr/bin off PATH."""
+    env = clean({"PYTHONHOME": "/usr/local", "PATH": "/usr/local/bin:/usr/bin"}, venv="")
+    assert env["PATH"] == "/usr/local/bin:/usr/bin"
+
+
 def test_the_users_own_path_entries_keep_their_order():
     env = clean({"APPDIR": "/mnt/x", "PATH": "/b:/mnt/x/usr/bin:/a:/mnt/x/usr/sbin:/c"})
     assert env["PATH"] == "/b:/a:/c"

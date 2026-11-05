@@ -6,6 +6,7 @@ them), the service's GDK_BACKEND and a hidden GPU when it has no CUDA. A
 program started with those inherited breaks or runs wrongly, so it gets the
 environment the user's desktop would have given it.
 """
+import os
 import sys
 from collections.abc import Mapping
 
@@ -28,6 +29,16 @@ def _running_venv() -> str:
     return sys.prefix if sys.prefix != sys.base_prefix else ""
 
 
+def _apprun_folder(environ: Mapping[str, str]) -> str:
+    """The folder AppRun runs TuxTalk from, or "". AppRun sets PYTHONHOME to
+    its usr folder, in the AppImage's mount and in /opt/talktype alike; the
+    .deb and .rpm run it without the AppImage runtime, so APPDIR is unset
+    there. A PYTHONHOME of the user's own has no AppRun beside it."""
+    home = environ.get("PYTHONHOME", "").rstrip("/")
+    folder = os.path.dirname(home)
+    return folder if home and os.path.isfile(os.path.join(folder, "AppRun")) else ""
+
+
 def _without_under(paths: str, root: str) -> str:
     """The entries of a colon-separated list that are not inside the folder `root`."""
     return ":".join(p for p in paths.split(":")
@@ -37,16 +48,18 @@ def _without_under(paths: str, root: str) -> str:
 def clean(environ: Mapping[str, str], venv: str | None = None) -> dict[str, str]:
     """A copy of `environ` for a program started on the user's behalf.
 
-    Entries of LD_LIBRARY_PATH and PATH inside the AppImage's mount (APPDIR)
-    and inside the virtual environment TuxTalk runs from are dropped, the
-    user's others kept in order. `venv` is that environment's folder; by
+    Entries of LD_LIBRARY_PATH and PATH inside the AppImage's mount (APPDIR),
+    AppRun's folder (the mount again, or the packages' /opt/talktype) and
+    the virtual environment TuxTalk runs from are dropped, the user's others
+    kept in order. `venv` is that environment's folder; by
     default the one this process runs in, "" for none. run-dev.sh puts the
     venv's ctranslate2 libraries on LD_LIBRARY_PATH without setting VIRTUAL_ENV.
     """
     venv = _running_venv() if venv is None else venv
     env = {k: v for k, v in environ.items()
            if k not in _TUXTALK_VARIABLES and not k.startswith("TUXTALK_")}
-    ours = [root.rstrip("/") for root in (environ.get("APPDIR", ""), venv) if root]
+    ours = [root.rstrip("/") for root in (environ.get("APPDIR", ""), _apprun_folder(environ),
+                                          venv) if root]
     for name in ("LD_LIBRARY_PATH", "PATH"):
         for root in ours:
             if name in env:
