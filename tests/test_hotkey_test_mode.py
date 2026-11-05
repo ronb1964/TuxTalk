@@ -123,3 +123,31 @@ def test_signal_handlers_are_installed_before_anything_slow(monkeypatch):
         for s, handler in saved.items():
             signal.signal(s, handler)
         signal.pthread_sigmask(signal.SIG_SETMASK, mask)
+
+
+def test_left_ctrl_space_in_the_test_lights_the_hold_row(keys, monkeypatch):
+    """Test Hotkeys hears a Left Ctrl+Space hold key as hold, and a space
+    typed alone as nothing."""
+    from types import SimpleNamespace
+    from tuxtalk import ctrl_space, ctrl_space_clashes
+    from tuxtalk.hotkey_keys import Hotkeys
+    monkeypatch.setattr(hotkeys, "_ctrl_space", ctrl_space.Presses())
+    monkeypatch.setattr(ctrl_space_clashes, "clashes", lambda: [])
+    reported, started = keys
+    open(flag_path(), "w").close()
+    held, svc = set(), SimpleNamespace(last_activity=0.0, input_device_idx=0)
+    pair_as_hold = Hotkeys(ecodes.KEY_SPACE, TOGGLE, "", None, None)
+
+    def key(code, value):
+        hotkeys._on_key_event(KeyEvent(code, value), pair_as_hold, held, [], FakeConfig(),
+                              svc, 1.0)
+
+    key(ecodes.KEY_SPACE, 1)
+    key(ecodes.KEY_SPACE, 0)
+    assert reported == []
+    key(ecodes.KEY_LEFTCTRL, 1)
+    key(ecodes.KEY_SPACE, 1)
+    key(ecodes.KEY_SPACE, 0)
+    key(ecodes.KEY_LEFTCTRL, 0)
+    assert reported == ["hold"]
+    assert started == []

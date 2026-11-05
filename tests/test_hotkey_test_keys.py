@@ -3,7 +3,8 @@
 - Change Key refuses keys the service can't use as a hotkey (Pause, space,
   a letter): they would leave the app with no hotkey, and a letter would
   start dictation while typing. It takes what Preferences offers: F1 to F12,
-  Right Ctrl, Right Alt and Scroll Lock.
+  Right Ctrl, Right Alt, Scroll Lock and Left Ctrl+Space (Space only with
+  Left Ctrl held: a space typed alone is typing).
 - Closing the test with the window's X on first run saves the keys shown,
   since the settings start with no hotkey and the service would watch no key.
 - The evdev reader passes on releases too, since only a release marks a key
@@ -180,3 +181,98 @@ def test_a_stopped_hotkey_helper_doesnt_let_the_test_say_working(tmp_path):
         assert htk.service_hears([stopped], "F8") is False
     finally:
         stopped.close()
+
+
+# --- Left Ctrl+Space -------------------------------------------------------------
+
+LCTRL, RCTRL, LALT, SPACE = 29, 97, 56, 57
+MODS_CTRL = {29, 97, 56, 100, 125, 126}     # the dialog's modifier_codes
+
+
+def _pair_keys():
+    """evdev_key_action as the dialog's reader calls it, with one Presses."""
+    from tuxtalk import ctrl_space
+    pair, held = ctrl_space.Presses(), set()
+
+    def act(code, value):
+        return htk.evdev_key_action(_event(code, value), held, MODS_CTRL,
+                                    htk.evdev_key_name, pair)
+    return act
+
+
+def test_left_ctrl_space_tests_as_a_key():
+    act = _pair_keys()
+    assert act(LCTRL, 1) is None
+    assert act(SPACE, 1) == ("Left Ctrl+Space", "press")
+    assert act(SPACE, 0) == ("Left Ctrl+Space", "release")
+    assert act(LCTRL, 0) is None
+
+
+def test_letting_go_of_left_ctrl_first_is_the_pairs_release():
+    act = _pair_keys()
+    assert act(LCTRL, 1) is None
+    assert act(SPACE, 1) == ("Left Ctrl+Space", "press")
+    assert act(LCTRL, 0) == ("Left Ctrl+Space", "release")
+    assert act(SPACE, 0) is None
+
+
+def test_space_alone_and_right_ctrl_space_are_not_the_key():
+    """A space typed in any window while the test is open, or Right
+    Ctrl+Space, must not show Left Ctrl+Space as working."""
+    act = _pair_keys()
+    assert act(SPACE, 1) is None
+    assert act(SPACE, 0) is None
+    act(RCTRL, 1)
+    assert act(SPACE, 1) is None
+    assert act(SPACE, 0) is None
+
+
+def test_ctrl_alt_space_is_not_the_key_even_once_alt_is_up():
+    act = _pair_keys()
+    act(LCTRL, 1)
+    act(LALT, 1)
+    assert act(SPACE, 1) is None
+    act(LALT, 0)
+    assert act(SPACE, 0) is None
+
+
+def test_a_bare_space_reads_as_space_never_as_the_pair():
+    ecodes = pytest.importorskip("evdev").ecodes
+    assert htk.evdev_key_name(ecodes.KEY_SPACE) == "space"
+
+
+def test_gtk_names_ctrl_space_as_the_pair():
+    assert htk.gtk_key_name("space", ctrl=True) == "Left Ctrl+Space"
+    assert htk.gtk_key_name("space") == "space"
+    assert htk.gtk_key_name("F8", ctrl=True) == "F8"
+
+
+def test_the_capture_takes_left_ctrl_space():
+    assert htk.captured_key_problem("Left Ctrl+Space", "F9") is None
+    assert "Left Ctrl+Space" in htk.captured_key_problem("a", "F9")
+
+
+@pytest.mark.parametrize("version,works", [("1.13", False), ("1.14", True)])
+def test_left_ctrl_space_works_only_through_a_helper_that_reports_it(version, works):
+    assert htk.service_hears([_Helper(version)], "Left Ctrl+Space") is works
+
+
+class _WatchedHelper:
+    def __init__(self, version):
+        self.helper_version = version
+        self.specs = None
+
+    def watch(self, specs):
+        self.specs = list(specs)
+
+
+@pytest.mark.parametrize("version,asked", [(None, False), ("1.13", False), ("1.14", True)])
+def test_the_helper_is_asked_for_the_pair_only_when_it_can_report_it(version, asked):
+    """An older helper refuses the WATCH line with "L:57" in it, and would
+    then report not even F8 to the test."""
+    ecodes = pytest.importorskip("evdev").ecodes
+    from tuxtalk.hotkey_test_devices import hotkey_test_helper
+    helper = _WatchedHelper(version)
+    assert hotkey_test_helper(ecodes, connect=lambda: helper) is helper
+    assert str(ecodes.KEY_F8) in helper.specs
+    assert ("L:57" in helper.specs) is asked

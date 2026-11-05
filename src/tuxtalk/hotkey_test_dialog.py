@@ -17,7 +17,7 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gdk, GLib, Gtk
 
-from .config import HOTKEY_CHOICES
+from .config import CTRL_SPACE, HOTKEY_CHOICES
 from .hotkey_labels import layout_label
 from .hotkey_test_devices import flush_pending_events, hotkey_test_helper, read_ready
 from .hotkey_test_keys import (captured_key_problem, evdev_key_action, evdev_key_name,
@@ -30,8 +30,10 @@ logger = setup_logger(__name__)
 
 _TITLES = {"hold": "Push-to-talk", "toggle": "Toggle mode"}
 _CAPTURE_PROMPT = ('<span background="#FFA500" color="white"> Press F1 to F12, Right Ctrl, '
-                   'Right Alt or Scroll Lock to set the hotkey... (ESC to cancel) </span>')
-_CAPTURE_WORDS = "Press F1 to F12, Right Ctrl, Right Alt or Scroll Lock, or Esc to cancel."
+                   'Right Alt, Scroll Lock or Left Ctrl+Space to set the hotkey... '
+                   '(ESC to cancel) </span>')
+_CAPTURE_WORDS = ("Press F1 to F12, Right Ctrl, Right Alt, Scroll Lock or Left Ctrl+Space, "
+                  "or Esc to cancel.")
 
 # A GTK key event with Alt (MOD1), Ctrl or Super held is not a dictation key:
 # GNOME delivers Alt+F8 (begin-resize binding) to focused windows, and
@@ -40,9 +42,17 @@ _NO_MODIFIER_MASK = (Gdk.ModifierType.MOD1_MASK |
                      Gdk.ModifierType.CONTROL_MASK |
                      Gdk.ModifierType.SUPER_MASK)
 # The modifier Right Ctrl and Right Alt each set themselves, which their
-# own release carries.
+# own release carries, and the Ctrl Left Ctrl+Space is held with, which its
+# press carries too (_on_gtk_press).
 _OWN_MODIFIER = {"Right Ctrl": Gdk.ModifierType.CONTROL_MASK,
-                 "Right Alt": Gdk.ModifierType.MOD1_MASK}
+                 "Right Alt": Gdk.ModifierType.MOD1_MASK,
+                 CTRL_SPACE: Gdk.ModifierType.CONTROL_MASK}
+
+
+def _gtk_key(event):
+    """hotkey_test_keys.gtk_key_name for a GTK key *event*, Ctrl held or not."""
+    return gtk_key_name(Gtk.accelerator_name(event.keyval, 0), event.hardware_keycode,
+                        bool(event.state & Gdk.ModifierType.CONTROL_MASK))
 
 
 def _hotkey_test_row(title, key):
@@ -329,6 +339,8 @@ class HotkeyTestDialog:
         if keyname == "Escape":
             self._end_capture()
             return
+        if keyname == "Control_L":
+            return      # it may begin Left Ctrl+Space: the key pressed with it decides
         other = self.keys["toggle" if self.capturing == "hold" else "hold"]
         problem = captured_key_problem(keyname, other)
         if problem:
@@ -354,14 +366,18 @@ class HotkeyTestDialog:
     def _on_gtk_press(self, _widget, event):
         """A dictation key for the test, or any key while Change Key waits
         for one. Other keys are the dialog's own, for using it without a
-        mouse: Tab moves the focus, Space and Enter press the button."""
+        mouse: Tab moves the focus, Space and Enter press the button; Space
+        with Ctrl held is Left Ctrl+Space, which presses nothing."""
         if not self.ready or event.type != Gdk.EventType.KEY_PRESS:
             return True
-        keyname = gtk_key_name(Gtk.accelerator_name(event.keyval, 0), event.hardware_keycode)
+        keyname = _gtk_key(event)
         is_capture = self.capturing is not None
         if not is_capture and keyname not in HOTKEY_CHOICES:
             return False
-        if event.state & _NO_MODIFIER_MASK:
+        # A press carries no modifier of its own key: Right Ctrl's mask here
+        # would let Left Ctrl+Right Ctrl through as Right Ctrl.
+        held_with = _OWN_MODIFIER[CTRL_SPACE] if keyname == CTRL_SPACE else 0
+        if event.state & _NO_MODIFIER_MASK & ~held_with:
             return True
         if event.hardware_keycode in self._held_keycodes:
             return True
@@ -374,7 +390,7 @@ class HotkeyTestDialog:
         self._held_keycodes.discard(event.hardware_keycode)   # the next press is a fresh one
         if not self.ready:
             return False
-        keyname = gtk_key_name(Gtk.accelerator_name(event.keyval, 0), event.hardware_keycode)
+        keyname = _gtk_key(event)
         if event.state & _NO_MODIFIER_MASK & ~_OWN_MODIFIER.get(keyname, 0):
             return False
         self._on_key(keyname, action="release")
@@ -445,10 +461,11 @@ class HotkeyTestDialog:
         if changed:
             GLib.idle_add(self._show_reading, list(reading))
 
-    def _keyboard_gone(self, reading, held_modifiers):
+    def _keyboard_gone(self, reading, held_modifiers, pair):
         """A keyboard went mid-test: the keys it held will never come up, and
         GTK's thread hears what's left."""
         held_modifiers.clear()
+        pair.forget()
         GLib.idle_add(self._show_reading, list(reading))
 
     def _reader_loop(self):
@@ -456,6 +473,7 @@ class HotkeyTestDialog:
         key to _on_key on GTK's thread; this hears keys the desktop grabs
         before GTK sees them. A keyboard plugged in meanwhile is read too,
         as the service would. Closes the keyboards when done."""
+        from tuxtalk import ctrl_space
         ecodes = self._evdev[1]
         reading = list(self.keyboards)  # its own; GTK's thread hears of it (_show_reading)
         logger.info(f"Hotkey test: reading {len(reading)} keyboard(s)")
@@ -466,7 +484,8 @@ class HotkeyTestDialog:
                           ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL,
                           ecodes.KEY_LEFTMETA, ecodes.KEY_RIGHTMETA}
         held_modifiers = set()
-        on_gone = functools.partial(self._keyboard_gone, reading, held_modifiers)
+        pair = ctrl_space.Presses()     # whether Left Ctrl+Space is down, across events
+        on_gone = functools.partial(self._keyboard_gone, reading, held_modifiers, pair)
         last_error = None
         next_scan = time.monotonic() + RESCAN_SECONDS
         while not self._stop.is_set():
@@ -485,7 +504,7 @@ class HotkeyTestDialog:
                     # Releases count too: they are what marks a key as
                     # working, and GTK never sees a grabbed key.
                     found = evdev_key_action(event, held_modifiers,
-                                             modifier_codes, evdev_key_name)
+                                             modifier_codes, evdev_key_name, pair)
                     if found:
                         keyname, action = found
                         GLib.idle_add(self._on_key, keyname, action, True)

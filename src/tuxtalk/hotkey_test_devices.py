@@ -3,6 +3,8 @@ keyboard_devices, as the dictation service's are): drained of old presses
 and read, with the hotkey helper standing in for them when it runs. Nothing
 here opens a window.
 """
+from . import secure_input
+from .config import CTRL_SPACE
 from .keyboard_devices import close_devices
 from .logger import setup_logger
 
@@ -38,8 +40,11 @@ def hotkey_test_helper(ecodes, connect=None):
     until it answers no key counts as working (service_hears). It reports
     only the keys it's asked to watch, so ask for
     every key the test accepts on its own: F1 to F24, Esc, Pause, Scroll Lock,
-    Right Ctrl and Right Alt (helper 1.5 and newer)."""
+    Right Ctrl and Right Alt (helper 1.5 and newer), and Left Ctrl+Space from
+    a helper that says it's 1.14 or newer: an older one refuses the whole
+    request, and then reports not even F8."""
     try:
+        from .hotkey_helper_client import watch_specs
         if connect is None:
             from .hotkey_helper_client import connect_helper as connect
         helper = connect()
@@ -48,7 +53,10 @@ def hotkey_test_helper(ecodes, connect=None):
         codes = [getattr(ecodes, f"KEY_F{n}") for n in range(1, 25)]
         codes += [ecodes.KEY_ESC, ecodes.KEY_PAUSE, ecodes.KEY_SCROLLLOCK,
                   ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT]
-        helper.watch([str(code) for code in codes])
+        specs = [str(code) for code in codes]
+        if helper.helper_version and secure_input.hears_key(helper.helper_version, CTRL_SPACE):
+            specs += watch_specs(ecodes.KEY_SPACE, None, None, ())
+        helper.watch(specs)
         logger.info("Hotkey test: reading the keys through the hotkey helper")
         return helper
     except Exception as e:

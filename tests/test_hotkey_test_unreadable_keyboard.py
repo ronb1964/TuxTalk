@@ -301,12 +301,14 @@ def _run_dialog(monkeypatch, evdev_paths, during, denied=(), hotkeys=("F8", "F9"
     hkd.show_hotkey_test_dialog()
 
 
-def _key(dialog, keyval, signal="key-press-event"):
-    """A key press (or release) as GTK delivers it to the dialog."""
+def _key(dialog, keyval, signal="key-press-event", state=0):
+    """A key press (or release) as GTK delivers it to the dialog, with the
+    modifiers in *state* held."""
     from gi.repository import Gdk
     event = Gdk.Event.new(Gdk.EventType.KEY_PRESS if signal == "key-press-event"
                           else Gdk.EventType.KEY_RELEASE)
     event.key.keyval = keyval
+    event.key.state = Gdk.ModifierType(state)
     # GTK finds key bindings (Tab, Space) by the key's code, not its name.
     found, keys = Gdk.Keymap.get_for_display(dialog.get_display()).get_entries_for_keyval(keyval)
     if found:
@@ -530,3 +532,82 @@ def test_keys_still_queued_when_the_test_closes_change_nothing(monkeypatch):
     release.key.keyval = Gdk.KEY_F8
     made[0]._on_gtk_release(None, release.key)
     assert made[0].rows["hold"][2].get_text() == "Not tested"
+
+
+# --- Left Ctrl+Space ---------------------------------------------------------------
+
+def _pair_dialog(monkeypatch, during, paths=None, queued=None, hotkeys=("Left Ctrl+Space", "F9")):
+    """The real dialog, by default with Left Ctrl+Space as the hold key, and
+    no hotkey helper asked about it."""
+    from tuxtalk import secure_input
+    monkeypatch.setattr(secure_input, "running_version", lambda: None)
+    _run_dialog(monkeypatch, paths or ["/dev/input/event3"], during, hotkeys=hotkeys,
+                queued=queued)
+
+
+def _reader_hears(monkeypatch, steps):
+    """The visible texts once the reader heard *steps* ((code, value), on a
+    keyboard plugged in after it flushed the old keys) and marked a key."""
+    monkeypatch.setattr(hkd, "RESCAN_SECONDS", 0)
+    paths, seen = ["/dev/input/event3"], {}
+
+    def during(dialog):
+        paths.append("/dev/input/event5")
+        _until(lambda: "✓ Working!" in _visible_texts(dialog))
+        seen["texts"] = _visible_texts(dialog)
+    events = [SimpleNamespace(type=EV_KEY, code=code, value=value) for code, value in steps]
+    _pair_dialog(monkeypatch, during, paths, queued={"/dev/input/event5": events})
+    return seen["texts"]
+
+
+def test_left_ctrl_space_from_the_keyboard_reader_shows_working(monkeypatch):
+    """Letting go of Left Ctrl before Space, as people do, still counts."""
+    texts = _reader_hears(monkeypatch, [(29, 1), (57, 1), (29, 0), (57, 0)])
+    assert texts.count("✓ Working!") == 1
+
+
+def test_a_space_typed_alone_isnt_left_ctrl_space(monkeypatch):
+    """Without the hotkey helper the test hears spaces typed in any window."""
+    texts = _reader_hears(monkeypatch, [(57, 1), (57, 0), (67, 1), (67, 0)])   # then F9
+    assert texts.count("✓ Working!") == 1       # F9's
+    assert "Not tested" in texts
+
+
+def test_ctrl_space_on_a_focused_button_tests_the_key_and_presses_nothing(monkeypatch):
+    """Space presses the focused button, so the test can be used without a
+    mouse; with Ctrl held it's the dictation key, and Change Key must not
+    open under it."""
+    from gi.repository import Gdk, Gtk
+    seen = {}
+
+    def during(dialog):
+        buttons = [w for w in widgets(dialog)
+                   if isinstance(w, Gtk.Button) and w.get_label() == "Change Key"]
+        buttons[0].grab_focus()
+        ctrl = Gdk.ModifierType.CONTROL_MASK
+        _key(dialog, Gdk.KEY_space, state=ctrl)
+        _key(dialog, Gdk.KEY_space, "key-release-event", state=ctrl)
+        seen["capturing"] = not buttons[0].get_sensitive()
+        seen["texts"] = _visible_texts(dialog)
+    _pair_dialog(monkeypatch, during)
+    assert not seen["capturing"]
+    assert "✓ Seen, not active yet" in seen["texts"]
+
+
+def test_change_key_takes_left_ctrl_space_without_refusing_its_ctrl(monkeypatch):
+    """Left Ctrl goes down first: it must not be turned away as a key that
+    can't dictate before the Space arrives."""
+    from gi.repository import Gdk, Gtk
+    seen = {}
+
+    def during(dialog):
+        buttons = [w for w in widgets(dialog)
+                   if isinstance(w, Gtk.Button) and w.get_label() == "Change Key"]
+        buttons[1].clicked()
+        _key(dialog, Gdk.KEY_Control_L)
+        seen["after ctrl"] = _visible_texts(dialog)
+        _key(dialog, Gdk.KEY_space, state=Gdk.ModifierType.CONTROL_MASK)
+        seen["after space"] = _visible_texts(dialog)
+    _pair_dialog(monkeypatch, during, hotkeys=("F8", "F9"))
+    assert not any("can't be used" in t for t in seen["after ctrl"])
+    assert any(t.startswith("Toggle mode: Left Ctrl+Space") for t in seen["after space"])

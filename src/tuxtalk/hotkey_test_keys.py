@@ -6,7 +6,7 @@ the names the settings use ("F8", "Right Ctrl"). Nothing here opens a
 window, so all of it can be tested without one.
 """
 from . import secure_input
-from .config import HOTKEY_CHOICES
+from .config import CTRL_SPACE, HOTKEY_CHOICES
 
 # The keys the test may write to the log. Without the hotkey helper it reads
 # every keyboard, so a password typed in another window must not get there.
@@ -29,7 +29,7 @@ def captured_key_problem(keyname, other_key):
     test takes the keys Preferences offers."""
     if keyname not in HOTKEY_CHOICES:
         return ("That key can't be used for dictation. Pick F1 to F12, Right Ctrl, "
-                "Right Alt or Scroll Lock.")
+                "Right Alt, Scroll Lock or Left Ctrl+Space.")
     if keyname == other_key:
         return f"{keyname} is already your other hotkey. Pick a different key."
     return None
@@ -55,10 +55,11 @@ def hotkeys_to_save(config, hold, toggle, confirmed):
 def evdev_key_name(code):
     """The test's name for evdev key *code*: a dictation key as the settings
     name it, a letter, or GTK's name for Esc, space, Tab, Enter and
-    Backspace; None for any other key."""
+    Backspace; None for any other key. Space alone is "space": only with
+    Left Ctrl held is it Left Ctrl+Space (evdev_key_action)."""
     from evdev import ecodes
     for name, key in HOTKEY_CHOICES.items():
-        if code == ecodes.ecodes[key]:
+        if name != CTRL_SPACE and code == ecodes.ecodes[key]:
             return name
     for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
         if code == getattr(ecodes, f"KEY_{c}", None):
@@ -73,29 +74,60 @@ def evdev_key_name(code):
     return special.get(code)
 
 
-def gtk_key_name(accelerator_name, hardware_keycode=None):
+def gtk_key_name(accelerator_name, hardware_keycode=None, ctrl=False):
     """The test's name for a key GTK names *accelerator_name*
     (Gtk.accelerator_name): "Control_R" is "Right Ctrl". A layout that makes
     Right Alt its AltGr calls it ISO_Level3_Shift, but so do the options
     that put AltGr on Caps Lock or the Menu key: those aren't Right Alt, so
-    the key's *hardware_keycode* decides."""
+    the key's *hardware_keycode* decides. Space with *ctrl* held is Left
+    Ctrl+Space: GTK can't tell which Ctrl, so this fallback reader takes
+    either, and only the keyboard reader can call the key working."""
     if accelerator_name == "ISO_Level3_Shift" and hardware_keycode == _RIGHT_ALT_KEYCODE:
         return "Right Alt"
+    if accelerator_name == "space" and ctrl:
+        return CTRL_SPACE
     return _GTK_KEY_NAMES.get(accelerator_name, accelerator_name)
 
 
-def evdev_key_action(event, held_modifiers, modifier_codes, code_to_name):
+def evdev_key_action(event, held_modifiers, modifier_codes, code_to_name, pair=None):
     """(keyname, "press" or "release") for one evdev event, or None to ignore it.
 
     Tracks Alt, Ctrl and Super in *held_modifiers*, so Alt+F8 doesn't count as
     F8, as on the GTK side. Auto-repeat (value 2) is ignored. Right Ctrl and
     Right Alt are keys of their own too (HOTKEY_CHOICES), when pressed alone.
+    With *pair* (a ctrl_space.Presses kept across events), Space counts only
+    under Left Ctrl, as Left Ctrl+Space, and letting go of Left Ctrl first is
+    its release, as the dictation service reads them.
     """
     if event.code in modifier_codes:
         if event.value == 1:
             held_modifiers.add(event.code)
         elif event.value == 0:
             held_modifiers.discard(event.code)
+    if pair is None:
+        return _key_action(event, held_modifiers, code_to_name)
+    from . import ctrl_space
+    actions = [_pair_action(each, held_modifiers, pair) if each.code == ctrl_space.KEY
+               else _key_action(each, held_modifiers, code_to_name)
+               for each in pair.events(event, held_modifiers, (ctrl_space.KEY,))]
+    return next((action for action in actions if action), None)
+
+
+def _pair_action(event, held_modifiers, pair):
+    """Left Ctrl+Space's press or release, from a Space *pair* passed on:
+    not with another modifier held too (Ctrl+Alt+Space), which the service
+    wouldn't take either, nor that press's release."""
+    from . import ctrl_space
+    if event.value not in (0, 1):
+        return None
+    if held_modifiers - {ctrl_space.MODIFIER}:
+        pair.forget()
+        return None
+    return CTRL_SPACE, ("press" if event.value == 1 else "release")
+
+
+def _key_action(event, held_modifiers, code_to_name):
+    """evdev_key_action for any key but the pair's Space."""
     if event.value not in (0, 1) or held_modifiers - {event.code}:
         return None
     keyname = code_to_name(event.code)
