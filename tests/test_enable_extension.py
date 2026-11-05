@@ -113,7 +113,7 @@ def test_is_enabled_falls_back_to_dbus_when_cli_absent(monkeypatch):
     def no_cli(argv, **k):
         raise FileNotFoundError("gnome-extensions")
     monkeypatch.setattr(ge.subprocess, "run", no_cli)
-    monkeypatch.setattr(ge, "_is_extension_enabled_via_dbus", lambda uuid: True)
+    monkeypatch.setattr(ge, "is_enabled_in_shell", lambda uuid: True)
     assert ge.is_extension_enabled(UUID) is True
 
 
@@ -123,7 +123,7 @@ def test_is_enabled_uses_cli_result_without_dbus_on_host(monkeypatch):
     def cli_enabled(argv, **k):
         return types.SimpleNamespace(returncode=0, stdout="State: ENABLED\n", stderr="")
     monkeypatch.setattr(ge.subprocess, "run", cli_enabled)
-    monkeypatch.setattr(ge, "_is_extension_enabled_via_dbus",
+    monkeypatch.setattr(ge, "is_enabled_in_shell",
                         lambda uuid: (_ for _ in ()).throw(AssertionError("D-Bus must not be used when the CLI answers")))
     assert ge.is_extension_enabled(UUID) is True
 

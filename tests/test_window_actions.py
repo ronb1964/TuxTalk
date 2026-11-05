@@ -248,12 +248,13 @@ def test_gnome_shell_not_on_the_bus_says_it_cant(gnome, actions_on):
     assert actions_on == ["Can't close windows on this desktop"]
 
 
-def test_gnome_extension_before_logout_says_to_log_out(gnome, actions_on):
+@pytest.mark.parametrize("request_", [WindowRequest("minimize"), switch("firefox")])
+def test_gnome_extension_before_logout_says_to_log_out(gnome, apps, actions_on, request_):
     """GNOME Shell runs the extension it loaded at login until the user logs
-    out: one from before the update has no WindowAction."""
+    out: 0.21's serves no object at all, but GNOME Shell says it's enabled."""
     shell = FakeShell(extension="old")
     try:
-        assert window_actions.run(WindowRequest("minimize"), CHAT_WINDOW, False) is False
+        assert window_actions.run(request_, CHAT_WINDOW, False) is False
         assert actions_on == ["Log out and back in for this"]
     finally:
         shell.stop()

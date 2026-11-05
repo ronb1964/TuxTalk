@@ -17,7 +17,8 @@ import pytest
 from gi.repository import Gio, GLib
 
 from gnome_extension_js import run_kwin_script
-from tuxtalk import app_focus, kwin_activate, kwin_windows, x11_windows, xcb_ctypes
+from tuxtalk import (app_focus, extension_helper, kwin_activate, kwin_windows, x11_windows,
+                     xcb_ctypes)
 
 
 def set_desktop(monkeypatch, desktop, session):
@@ -142,12 +143,15 @@ _WINDOW_ACTION = """<method name="WindowAction">
   </method>"""
 
 
-def _shell_xml(extension):
-    """The extension's interface: an "old" one, from before the window
-    commands, serves ActivateApp alone."""
-    methods = _ACTIVATE_APP if extension == "old" else _ACTIVATE_APP + _WINDOW_ACTION
-    return (f'<node><interface name="{app_focus.EXTENSION_INTERFACE}">{methods}'
-            "</interface></node>")
+_EXTENSION_XML = (f'<node><interface name="{app_focus.EXTENSION_INTERFACE}">'
+                  f"{_ACTIVATE_APP}{_WINDOW_ACTION}</interface></node>")
+# GNOME Shell's own: what it says about an installed extension.
+_SHELL_EXTENSIONS_XML = """<node><interface name="org.gnome.Shell.Extensions">
+  <method name="GetExtensionInfo">
+    <arg type="s" direction="in" name="uuid"/>
+    <arg type="a{sv}" direction="out" name="info"/>
+  </method>
+</interface></node>"""
 
 
 class FakeShell:
@@ -155,8 +159,9 @@ class FakeShell:
     own. With *extension*, TuxTalk's extension answers ActivateApp with
     *answer*, keeping each app id it's asked about in *called*, and
     WindowAction with *window_answer*, keeping (action, app_id, every) in
-    *window_calls*; *extension* "old" serves ActivateApp alone, as the
-    extension GNOME Shell still runs until the user logs out after an update."""
+    *window_calls*. *extension* "old" is enabled but serves no object, as
+    the 0.21 extension GNOME Shell still runs until the user logs out after
+    an update; False: TuxTalk's extension isn't enabled at all."""
 
     def __init__(self, extension=True):
         self.answer = self.window_answer = True
@@ -172,10 +177,12 @@ class FakeShell:
     def _serve(self, extension, ready):
         self._context.push_thread_default()
         bus = _private_bus()
-        if extension:
-            interface = Gio.DBusNodeInfo.new_for_xml(_shell_xml(extension)).interfaces[0]
-            register = getattr(bus, "register_object_with_closures2", bus.register_object)
+        register = getattr(bus, "register_object_with_closures2", bus.register_object)
+        if extension is True:
+            interface = Gio.DBusNodeInfo.new_for_xml(_EXTENSION_XML).interfaces[0]
             register(app_focus.EXTENSION_PATH, interface, self._on_call, None, None)
+        shell = Gio.DBusNodeInfo.new_for_xml(_SHELL_EXTENSIONS_XML).interfaces[0]
+        register("/org/gnome/Shell", shell, self._extension_info(bool(extension)), None, None)
         bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
                       "RequestName", GLib.Variant("(su)", (app_focus.GNOME_SHELL, 4)), None,
                       Gio.DBusCallFlags.NONE, 5000, None)
@@ -190,6 +197,17 @@ class FakeShell:
             return
         self.called.append(parameters.unpack()[0])
         invocation.return_value(GLib.Variant("(b)", (self.answer,)))
+
+    @staticmethod
+    def _extension_info(enabled):
+        """GetExtensionInfo's answer: TuxTalk's extension enabled and running,
+        or, as for an extension GNOME Shell doesn't know, nothing."""
+        info = {"state": GLib.Variant("d", 1.0), "enabled": GLib.Variant("b", True)}
+
+        def on_call(_bus, _sender, _path, _interface, _method, parameters, invocation):
+            known = enabled and parameters.unpack()[0] == extension_helper.EXTENSION_UUID
+            invocation.return_value(GLib.Variant("(a{sv})", (info if known else {},)))
+        return on_call
 
     def stop(self):
         self._loop.quit()

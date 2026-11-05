@@ -27,7 +27,9 @@ logger = setup_logger(__name__)
 TIMEOUT_S = 1.0
 NOTHING_DONE = "Nothing was done."
 
-_UNKNOWN_METHOD = "org.freedesktop.DBus.Error.UnknownMethod"
+# A method, or the whole object, that the extension GNOME Shell runs lacks.
+_NOTHING_THERE = frozenset(f"org.freedesktop.DBus.Error.{name}"
+                           for name in ("UnknownMethod", "UnknownObject", "UnknownInterface"))
 # The note for an action this desktop can't do; the others change a window's size.
 _CANT = {"close": "cant_close_here", "switch": "cant_switch_here"}
 
@@ -133,15 +135,10 @@ def _refusal(action: str, error: Exception) -> str:
     """The note for a desktop that couldn't be asked to do *action*: this
     desktop can't do it, unless GNOME Shell still runs the TuxTalk extension
     from before an update, which has the method only after the user logs
-    out and back in. No extension at all fails the same way (UnknownMethod),
-    so the extension's object is looked for, never the error's wording,
-    which is translated."""
+    out and back in. No extension at all fails the same way, so GNOME Shell
+    is asked whether TuxTalk's is enabled, never the error's wording, which
+    is translated."""
     cant = _cant(action)
-    if getattr(error, "get_dbus_name", lambda: None)() != _UNKNOWN_METHOD:
+    if getattr(error, "get_dbus_name", lambda: None)() not in _NOTHING_THERE:
         return cant
-    try:
-        old = app_focus.extension_running(TIMEOUT_S)
-    except Exception as e:      # GNOME Shell gone meanwhile: no extension to log out for
-        logger.info(f"Couldn't look for the GNOME extension: {e}")
-        return cant
-    return "gnome_relogin" if old else cant
+    return "gnome_relogin" if app_focus.extension_enabled() else cant

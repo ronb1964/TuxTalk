@@ -22,8 +22,9 @@ dictation worker, never GTK's thread.
 import logging
 import os
 
-from . import desktop_detect, kwin_activate, x11_activate
+from . import desktop_detect, gnome_extensions, kwin_activate, x11_activate
 from .app_finder import AppEntry
+from .extension_helper import EXTENSION_UUID
 
 log = logging.getLogger(__name__)
 
@@ -75,17 +76,12 @@ def call_extension(method: str, signature: str, args: tuple, timeout: float):
                              signature, args, timeout=timeout)
 
 
-def extension_running(timeout: float) -> bool:
-    """Whether GNOME Shell serves TuxTalk's extension, of any version. A
-    call to a method the extension lacks fails the same way with an
-    extension from before that method as with none at all (UnknownMethod);
-    the object's own description tells them apart. Raises a D-Bus error
-    when GNOME Shell can't be asked."""
-    import dbus
-    bus = dbus.SessionBus()
-    xml = bus.call_blocking(GNOME_SHELL, EXTENSION_PATH, "org.freedesktop.DBus.Introspectable",
-                            "Introspect", "", (), timeout=timeout)
-    return f'"{EXTENSION_INTERFACE}"' in str(xml)
+def extension_enabled() -> bool:
+    """Whether GNOME Shell has TuxTalk's extension enabled. One that is but
+    lacks a method is from before that method, still loaded until the user
+    logs out and back in (0.21's serves no object at all). False when GNOME
+    Shell can't be asked."""
+    return gnome_extensions.is_enabled_in_shell(EXTENSION_UUID)
 
 
 def bring_forward(entry: AppEntry, timeout: float, exact: bool):

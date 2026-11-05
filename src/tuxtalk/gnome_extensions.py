@@ -50,10 +50,10 @@ def is_extension_enabled(uuid: str) -> bool:
     # a gsettings read fail. Ask GNOME Shell directly over D-Bus instead —
     # without this the tray can't tell the extension is active and shows the GTK
     # icon alongside it (a duplicate tray menu).
-    return _is_extension_enabled_via_dbus(uuid)
+    return is_enabled_in_shell(uuid)
 
 
-def _is_extension_enabled_via_dbus(uuid: str) -> bool:
+def is_enabled_in_shell(uuid: str) -> bool:
     """Ask GNOME Shell whether an extension is enabled via its D-Bus interface.
 
     org.gnome.Shell.Extensions.GetExtensionInfo returns a dict whose 'state' is
