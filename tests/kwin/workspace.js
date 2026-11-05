@@ -65,7 +65,8 @@ function makeWindow(resourceClass, internalId, x, y, width, height) {
 }
 
 // stackingOrder: every window, the bottom one first.
-const workspace = {activeWindow: null, windowActivated: new Signal(), stackingOrder: []};
+const workspace = {activeWindow: null, windowActivated: new Signal(), stackingOrder: [],
+                   screens: [{name: 'DP-1'}]};
 
 /** The user clicks into *window*. */
 function activate(window) {

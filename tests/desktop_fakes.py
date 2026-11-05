@@ -80,6 +80,7 @@ class FakeKWin:
         self.scripts = []
         self.methods = []
         self.active = None
+        self.screens = 1
         self.activated = None
         self.closed = self.minimized = self.maximized = None
         self._bus = _private_bus()
@@ -97,6 +98,7 @@ class FakeKWin:
     def _run(self, script):
         result = run_kwin_script(script, f"""
             workspace.stackingOrder = [{", ".join(self.windows)}];
+            workspace.screens = Array.from({{length: {self.screens}}}, (_, i) => ({{name: "DP-" + i}}));
             const active = {json.dumps(self.active)};
             if (active !== null) {{
                 workspace.activeWindow = workspace.stackingOrder[active];
@@ -129,6 +131,105 @@ def fake_kwin(monkeypatch, tmp_path):
     monkeypatch.setattr(kwin_activate.kwin_focus, "session_bus", lambda: kwin)
     yield kwin
     kwin.close()
+
+
+_KDE_XML = """<node>
+  <interface name="org.kde.kglobalaccel.Component">
+    <method name="invokeShortcut"><arg type="s" direction="in" name="name"/></method>
+  </interface>
+  <interface name="org.kde.KWin">
+    <method name="showDesktop"><arg type="b" direction="in" name="showing"/></method>
+    <method name="nextDesktop"/>
+    <method name="previousDesktop"/>
+    <method name="setCurrentDesktop">
+      <arg type="i" direction="in" name="desktop"/>
+      <arg type="b" direction="out" name="ok"/>
+    </method>
+    <method name="currentDesktop"><arg type="i" direction="out" name="desktop"/></method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Properties">
+    <method name="Get">
+      <arg type="s" direction="in" name="interface_name"/>
+      <arg type="s" direction="in" name="property_name"/>
+      <arg type="v" direction="out" name="value"/>
+    </method>
+  </interface>
+</node>"""
+
+
+class FakeKDE:
+    """KDE Plasma 6's kglobalaccel and KWin on the test's session bus,
+    served from a thread of its own: the shortcut, desktop and show-desktop
+    calls kwin_desktop makes. *desktops* exist, the user is on *current*
+    (1-based), *showing* the desktop; with *wraps* the last desktop's next
+    is the first. Every call is kept in *calls* as (method, *args)."""
+
+    def __init__(self):
+        self.desktops, self.current, self.showing, self.wraps = 2, 1, False, False
+        self.calls = []
+        self._context = GLib.MainContext()
+        self._loop = GLib.MainLoop(self._context)
+        ready = threading.Event()
+        self._thread = threading.Thread(target=self._serve, args=(ready,), daemon=True)
+        self._thread.start()
+        assert ready.wait(10)
+
+    def _serve(self, ready):
+        self._context.push_thread_default()
+        bus = _private_bus()
+        register = getattr(bus, "register_object_with_closures2", bus.register_object)
+        interfaces = Gio.DBusNodeInfo.new_for_xml(_KDE_XML).interfaces
+        register("/component/kwin", interfaces[0], self._on_call, None, None)
+        for path in ("/KWin", "/VirtualDesktopManager"):
+            register(path, interfaces[1], self._on_call, None, None)
+            register(path, interfaces[2], self._on_call, None, None)
+        for name in ("org.kde.kglobalaccel", "org.kde.KWin"):
+            bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                          "org.freedesktop.DBus", "RequestName", GLib.Variant("(su)", (name, 4)),
+                          None, Gio.DBusCallFlags.NONE, 5000, None)
+        ready.set()
+        self._loop.run()
+        bus.close_sync(None)
+
+    def _on_call(self, _bus, _sender, _path, _interface, method, parameters, invocation):
+        args = parameters.unpack()
+        if method == "Get":
+            value = {"showingDesktop": GLib.Variant("b", self.showing),
+                     "count": GLib.Variant("u", self.desktops)}[args[1]]
+            invocation.return_value(GLib.Variant("(v)", (value,)))
+            return
+        self.calls.append((method, *args))
+        answer = {"currentDesktop": lambda: (self.current,),
+                  "setCurrentDesktop": lambda: (self._switch(args[0]),)}.get(method)
+        if method in ("nextDesktop", "previousDesktop"):
+            self._step(1 if method == "nextDesktop" else -1)
+        invocation.return_value(
+            GLib.Variant({"currentDesktop": "(i)", "setCurrentDesktop": "(b)"}[method],
+                         answer()) if answer else None)
+
+    def _switch(self, number):
+        if not 1 <= number <= self.desktops:
+            return False
+        self.current = number
+        return True
+
+    def _step(self, direction):
+        wanted = self.current + direction
+        if 1 <= wanted <= self.desktops:
+            self.current = wanted
+        elif self.wraps:
+            self.current = 1 if direction > 0 else self.desktops
+
+    def stop(self):
+        self._loop.quit()
+        self._thread.join(10)
+
+
+@pytest.fixture
+def fake_kde():
+    kde_session = FakeKDE()
+    yield kde_session
+    kde_session.stop()
 
 
 _ACTIVATE_APP = """<method name="ActivateApp">
