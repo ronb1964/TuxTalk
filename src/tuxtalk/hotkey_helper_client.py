@@ -34,7 +34,7 @@ import time
 from collections import deque, namedtuple
 
 from . import modifier_hotkeys
-from .hotkey_helper import PROTOCOL, SOCKET_PATH
+from .hotkey_helper import KEY_SPACE, LEFT_CTRL, PROTOCOL, SOCKET_PATH
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -71,8 +71,10 @@ def socket_path():
 
 def watch_specs(hold_key, toggle_key, esc_key, combos):
     """The WATCH line's specs: the dictation keys and Esc on their own, and
-    each (modifier names, key) combo as "CA:25"."""
-    specs = [str(code) for code in (hold_key, toggle_key, esc_key) if code]
+    each (modifier names, key) combo as "CA:25". Space is Left Ctrl+Space,
+    asked for as "L:57" so the helper reports it only under Left Ctrl."""
+    specs = [f"{LEFT_CTRL}:{code}" if code == KEY_SPACE else str(code)
+             for code in (hold_key, toggle_key, esc_key) if code]
     for combo in combos:
         if combo:
             mods, key = combo

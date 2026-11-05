@@ -3,6 +3,7 @@ KDE already uses the key, as first run does, instead of leaving KDE's refusal
 in the log only."""
 import pytest
 
+from tuxtalk.config import CTRL_SPACE
 from tuxtalk.hotkey_labels import hands_free_label, hotkey_label
 from tuxtalk.prefs_general import hotkey_change_message
 
@@ -214,3 +215,19 @@ def test_the_log_says_where_a_helper_update_was_asked_for(monkeypatch, caplog):
     assert [r.getMessage() for r in caplog.records if "Updated" in r.getMessage()] == [
         "Updated the hotkey helper from the hotkey question",
         "Updated the hotkey helper from the offer at start"]
+
+
+def test_left_ctrl_space_needs_helper_1_14(monkeypatch):
+    from tuxtalk import secure_input
+    assert not secure_input.hears_key("1.13", CTRL_SPACE)
+    assert secure_input.hears_key("1.14", CTRL_SPACE) and secure_input.hears_key(None, CTRL_SPACE)
+    monkeypatch.setattr(secure_input, "running_version", lambda: "1.13")
+    assert secure_input.unheard_keys([CTRL_SPACE, "F9"]) == [CTRL_SPACE]
+
+
+def test_picking_left_ctrl_space_with_helper_1_13_offers_the_update():
+    cfg = {**CFG, "hotkey": CTRL_SPACE}
+    title, text, offer_test, clash = hotkey_change_message(cfg, {"hotkey"}, [],
+                                                           unheard=[CTRL_SPACE])
+    assert title == "Left Ctrl+Space needs a newer hotkey helper"
+    assert "Left Ctrl+Space" in text and not offer_test and not clash

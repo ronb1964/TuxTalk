@@ -1280,7 +1280,9 @@ def test_right_ctrl_and_alt_are_left_to_the_desktop(name):
 # --- Preferences says what each key gives up ----------------------------------------
 
 def test_preferences_offers_the_keys_after_f1_to_f12():
-    assert list(HOTKEY_CHOICES)[11:] == ["F12", "Right Ctrl", "Right Alt", "Scroll Lock"]
+    assert list(HOTKEY_CHOICES)[11:] == ["F12", "Right Ctrl", "Right Alt", "Scroll Lock",
+                                         "Left Ctrl+Space"]
+    assert keycode_from_name("Left Ctrl+Space") == ecodes.KEY_SPACE
 
 
 def test_the_dropdowns_say_what_right_ctrl_and_right_alt_give_up():

@@ -81,8 +81,9 @@ def helper_update_text(running) -> str:
     if missed := secure_input.missed_keyboard_reason(running):
         why = f". {missed}, so your dictation keys may not work until it's updated."
     elif keys:
-        why = (f": until it's updated, {' and '.join(keys)} can't be dictation keys, and it "
-               "misses this version's fixes.")
+        names = keys[0] if len(keys) == 1 else f"{', '.join(keys[:-1])} and {keys[-1]}"
+        can_t = "can't be a dictation key" if len(keys) == 1 else "can't be dictation keys"
+        why = f": until it's updated, {names} {can_t}, and it misses this version's fixes."
     else:
         why = ", with fixes the one you have doesn't get."
     return ("The hotkey helper is the small background service that reads your dictation "

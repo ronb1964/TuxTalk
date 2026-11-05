@@ -95,8 +95,9 @@ def test_no_offer_without_an_older_helper_to_update(helper, monkeypatch, running
 def test_the_offer_says_what_the_helper_does_and_what_doesn_t_work_yet():
     text = offers.helper_update_text("1.4")
     assert "reads your dictation keys" in text and "1.4" in text
-    assert "Right Ctrl and Right Alt can't be dictation keys" in text
+    assert "Right Ctrl, Right Alt and Left Ctrl+Space can't be dictation keys" in text
     assert "Right Ctrl" not in offers.helper_update_text("1.5")
+    assert "Left Ctrl+Space can't be a dictation key" in offers.helper_update_text("1.10")
 
 
 def test_not_now_is_the_default_button(monkeypatch):

@@ -27,6 +27,7 @@ import os
 import subprocess
 
 from . import pkexec_runner
+from .config import CTRL_SPACE
 from .hotkey_helper import DEFAULT_SOCKET_DIR, SOCKET_PATH
 from .logger import setup_logger
 
@@ -376,7 +377,7 @@ def needs_update(running):
 # The dictation keys the first helpers didn't report, and the version that
 # does. Here, not in hotkey_helper.py: the helper speaks key codes, and
 # nothing in it would use this.
-KEYS_SINCE = {"Right Ctrl": "1.5", "Right Alt": "1.5"}
+KEYS_SINCE = {"Right Ctrl": "1.5", "Right Alt": "1.5", CTRL_SPACE: "1.14"}
 
 
 def hears_key(running, key):

@@ -102,11 +102,17 @@ VALID_MODES = {"hold", "toggle"}
 # send its release the moment it's pressed, so it can't be held. Nor are
 # Insert (a press that reached an editor would turn on overwrite) or Menu
 # (the Compose key on many setups).
+#
+# Left Ctrl+Space is Ctrl+Space as Handy and other dictation apps use it
+# (Discussion #28). The service listens for Space, the key named here, and
+# only counts it while Left Ctrl is held (see ctrl_space).
+CTRL_SPACE = "Left Ctrl+Space"
 HOTKEY_CHOICES = {
     **{f"F{i}": f"KEY_F{i}" for i in range(1, 13)},
     "Right Ctrl": "KEY_RIGHTCTRL",
     "Right Alt": "KEY_RIGHTALT",
     "Scroll Lock": "KEY_SCROLLLOCK",
+    CTRL_SPACE: "KEY_SPACE",
 }
 VALID_INJECTION_MODES = {"type", "paste", "auto"}
 

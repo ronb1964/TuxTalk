@@ -212,6 +212,12 @@ def test_a_helper_only_older_than_the_one_shipped_is_offered_without_a_warning(m
     assert P._typing_state([])[3] is True
 
 
+def test_a_helper_before_1_14_is_offered_the_update_quietly(monkeypatch):
+    _P, prefs = _typing_prefs(monkeypatch, running="1.13")
+    assert "(1.13 → 1.14)" in prefs.typing_status_label.markup
+    assert "✓ Ready" in prefs.typing_status_label.markup
+
+
 @pytest.mark.parametrize("running, kind", [("1.11", "read_only"), ("1.12", "also_mice")])
 def test_a_helper_too_old_for_a_keyboard_here_is_a_warning(monkeypatch, running, kind):
     P, prefs = _typing_prefs(monkeypatch, running=running, **{kind: ["/dev/input/event3"]})

@@ -37,6 +37,13 @@ def test_watch_specs():
         hh.parse_spec(spec)                 # TuxTalk's defaults are all allowed
 
 
+def test_left_ctrl_space_is_watched_as_space_under_left_ctrl():
+    assert watch_specs(57, 67, 1, ()) == ["L:57", "67", "1"]
+    assert watch_specs(66, 57, 1, ()) == ["66", "L:57", "1"]
+    for spec in watch_specs(57, 67, 1, ()):
+        hh.parse_spec(spec)
+
+
 def test_a_combo_the_helper_wont_report_is_named():
     from tuxtalk.hotkey_helper_client import refused_combo
     assert refused_combo({"CTRL", "ALT"}, 25) is None
