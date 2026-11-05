@@ -60,20 +60,32 @@ def test_an_empty_app_id_acts_on_the_focused_window():
     assert closed == [[5, 1234]]
 
 
-def test_close_window_never_closes_the_desktop_icons():
-    """Ubuntu's desktop icons (DING): a desktop window on X11, one hidden
-    from the window list on Wayland. Neither is the window the user means."""
+def test_close_window_never_closes_the_desktop_or_a_panel():
+    """Ubuntu's desktop icons (DING) are a desktop window, a dock is a panel:
+    neither is the window the user means."""
     answers, _logs = run(ENABLED + FIREFOX + """
-        const hidden = new t.Window('ding', 3);
-        hidden.skip_taskbar = true;
-        const desktop = new t.Window('ding', 4);
+        const desktop = new t.Window('ding', 3);
         desktop.type = t.Meta.WindowType.DESKTOP;
-        t.focus(hidden);
-        const onWayland = served.object.WindowAction('close', '', false);
+        const dock = new t.Window('plank', 4);
+        dock.type = t.Meta.WindowType.DOCK;
         t.focus(desktop);
-        t.report([onWayland, served.object.WindowAction('close', '', false), t.shell.closed]);
+        const onDesktop = served.object.WindowAction('close', '', false);
+        t.focus(dock);
+        t.report([onDesktop, served.object.WindowAction('close', '', false), t.shell.closed]);
     """)
     assert answers == [False, False, []]
+
+
+def test_close_window_closes_a_focused_child_window():
+    """A Preferences window with a parent is out of the taskbar, but it's the
+    window the user is in."""
+    answer, _logs = run(ENABLED + FIREFOX + """
+        const preferences = new t.Window('org.gnome.TextEditor', 6);
+        preferences.skip_taskbar = true;
+        t.focus(preferences);
+        t.report([served.object.WindowAction('close', '', false), t.shell.closed]);
+    """)
+    assert answer == [True, [[6, 1234]]]
 
 
 def test_close_window_closes_a_focused_save_question():
@@ -82,7 +94,7 @@ def test_close_window_closes_a_focused_save_question():
     answer, _logs = run(ENABLED + FIREFOX + """
         const question = new t.Window('org.gnome.TextEditor', 6);
         question.skip_taskbar = true;
-        question.type = t.Meta.WindowType.MODAL_DIALOG;
+        question.type = t.Meta.WindowType.DIALOG;
         t.focus(question);
         t.report([served.object.WindowAction('close', '', false), t.shell.closed]);
     """)

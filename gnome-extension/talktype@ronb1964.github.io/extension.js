@@ -123,14 +123,13 @@ const WINDOW_ACTIONS = {
     unmaximize: w => (Meta.MaximizeFlags ? w.unmaximize(Meta.MaximizeFlags.BOTH) : w.unmaximize()),
 };
 
-// Whether *w* is a window of an app's own, or its dialog, that "close
-// window" may act on: never the desktop's icons (DING: a desktop window on
-// X11, one hidden from the window list on Wayland) or a panel. A dialog
-// with a parent is left out of the taskbar too, but is still the app's.
+// Whether the focused window *w* is one "close window" may act on: an app's
+// window or its dialog, never the desktop's icons (DING's desktop window) or
+// a panel. By its type, not skip_taskbar: a dialog or a Preferences window
+// with a parent is left out of the taskbar, but is the window the user is in.
 function isAppWindow(w) {
-    const type = w.get_window_type();
-    return type === Meta.WindowType.DIALOG || type === Meta.WindowType.MODAL_DIALOG
-        || (type === Meta.WindowType.NORMAL && !w.skip_taskbar);
+    return [Meta.WindowType.NORMAL, Meta.WindowType.DIALOG, Meta.WindowType.MODAL_DIALOG]
+        .includes(w.get_window_type());
 }
 
 const AppFocus = {
