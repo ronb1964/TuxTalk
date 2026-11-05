@@ -143,3 +143,50 @@ def test_on_kde_wayland_kwin_says_whether_the_window_was_minimized(monkeypatch, 
     monkeypatch.setattr(actions, "_until", lambda _seconds, test: test())
     outcome = actions._minimized(_KdeAfterMinimize(kwin), 0, ["restore", "maximize"])
     assert outcome.status == status
+
+
+class _Editor:
+    """A stand-in VM with a focused editor window that takes typing only
+    into a document: on its start page (*start_page*) until Ctrl+N, or never
+    (*takes_typing* False)."""
+
+    def __init__(self, start_page=False, takes_typing=True):
+        self.vm = self
+        self.document = not start_page
+        self.takes_typing = takes_typing
+        self.typed = ""
+        self.taps = []
+
+    def ui(self, command, *_args, **_options):
+        if command == "texts":
+            return [self.typed] if self.typed else []
+        title = "Untitled — KWrite" if self.document else "Welcome — KWrite"
+        return [{"app": "kwrite", "title": title, "states": ["active"]}]
+
+    def tap(self, *keys):
+        self.taps.append(keys)
+        if keys == ("ctrl", "n"):
+            self.document = True
+        elif self.document and self.takes_typing:
+            self.typed += keys[0]
+
+    def sink_text(self):
+        return ""
+
+
+def test_an_editor_on_its_start_page_gets_a_new_document_for_the_change(monkeypatch):
+    """KWrite opened on its Welcome page, the line typed there went nowhere,
+    and KWrite rightly closed without asking: the check failed TuxTalk."""
+    monkeypatch.setattr(actions, "_until", lambda _seconds, test: test())
+    monkeypatch.setattr(actions.time, "sleep", lambda _seconds: None)
+    editor = _Editor(start_page=True)
+    assert actions._unsaved_change(editor, "kwrite") is None
+    assert ("ctrl", "n") in editor.taps
+    assert editor.typed == actions.UNSAVED
+
+
+def test_no_change_in_the_editor_is_said_before_any_close(monkeypatch):
+    monkeypatch.setattr(actions, "_until", lambda _seconds, test: test())
+    monkeypatch.setattr(actions.time, "sleep", lambda _seconds: None)
+    problem = actions._unsaved_change(_Editor(takes_typing=False), "kwrite")
+    assert problem.startswith("couldn't make an unsaved change in kwrite")

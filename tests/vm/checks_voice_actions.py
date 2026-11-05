@@ -195,18 +195,45 @@ def _discard(run, app, question):
         time.sleep(1.5)
 
 
-def _unsaved_line(run, app):
-    """Type a line into *app*'s window, which must have the focus; a
-    problem (str) when it can't be given the focus or the keys went to the
-    test window instead, else None."""
+# Typed into the editor as its unsaved change: letters no label or menu of
+# an editor holds, so finding them in its text means they arrived.
+UNSAVED = "zqxj"
+
+
+def _focused_title(run, app):
+    """The title of *app*'s window with the focus, "" when none has it."""
+    return next((title for name, title, focused in _windows(run) if name == app and focused), "")
+
+
+def _shows_change(run, app, title):
+    """Whether *app* shows the typed change: UNSAVED in its text, or its
+    focused window's title no longer *title* (a "*" or "[modified]" added)."""
+    texts = run.vm.ui("texts", "~", timeout=2, app=app) or []
+    return any(UNSAVED in text for text in texts) or _focused_title(run, app) not in ("", title)
+
+
+def _unsaved_change(run, app):
+    """Type UNSAVED into *app*, which gets the focus first, until it shows
+    it as a change; a problem (str) when it can't be focused, the keys reach
+    the test window or no change shows, else None. An editor that opens on
+    a start page with no document (KWrite's Welcome) gets one with Ctrl+N
+    when the first typing showed no change."""
     if not _in_front(run, app):
         return f"{app}'s window couldn't be given the focus to type a line into it"
-    for key in ("h", "i"):
-        run.vm.tap(key)
-    time.sleep(0.5)
-    if run.sink_text().strip():
-        return f"the line meant for {app} was typed into the test window"
-    return None
+    for new_document in (False, True):
+        if new_document:
+            run.vm.tap("ctrl", "n")
+            time.sleep(1.5)
+        title = _focused_title(run, app)
+        for key in UNSAVED:
+            run.vm.tap(key)
+        time.sleep(0.5)
+        if run.sink_text().strip():
+            return f"the line meant for {app} was typed into the test window"
+        if _until(3, lambda title=title: _shows_change(run, app, title)):
+            return None
+    return (f"couldn't make an unsaved change in {app}: “{UNSAVED}” is in none of its text "
+            "and its title didn't change, even in a new document (Ctrl+N)")
 
 
 @check(SECTION, "close_asks_to_save", "“close the text editor” asks to save, closing nothing")
@@ -218,7 +245,7 @@ def close_asks_to_save(run):
             return Outcome("skip", why)
         app, question = opened.app, None
         try:
-            if problem := _unsaved_line(run, app):
+            if problem := _unsaved_change(run, app):
                 return Outcome("fail", problem, screenshot=run.shot("close-asks"))
             mine = [(title, focused) for name, title, focused in _windows(run) if name == app]
             titles = {title for title, _focused in mine}
