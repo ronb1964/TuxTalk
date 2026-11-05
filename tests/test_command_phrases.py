@@ -30,10 +30,22 @@ def test_actions_off_only_select_and_move_is_read():
                       voice_navigation.Command)
 
 @pytest.mark.parametrize("said, name", [("New tab.", "new tab"), ("open a new tab", "new tab"),
-    ("reopen closed tab", "reopen tab"), ("Refresh.", "reload"), ("please copy", "copy"),
+    ("reopen closed tab", "reopen tab"), ("Refresh the page.", "reload"),
+    ("please copy the selection", "copy"),
     ("press escape", "escape"), ("find on page", "find")])
 def test_key_phrases(said, name):
     assert P(said) == KeyRequest(name)
+
+@pytest.mark.parametrize("said, name", [("Copy selection.", "copy"), ("paste it", "paste"),
+    ("Paste that.", "paste"), ("paste the clipboard", "paste"), ("Save the file.", "save"),
+    ("save file", "save"), ("reload page", "reload")])
+def test_key_phrases_with_a_noun(said, name):
+    assert P(said) == KeyRequest(name)
+
+@pytest.mark.parametrize("said", ["Copy.", "Paste.", "Save.", "Find.", "Reload.", "Refresh.",
+                                  "Escape.", "copy that", "Copy that."])
+def test_bare_key_words_are_dictation(said):
+    assert P(said) is None
 
 def test_scroll_counts():
     assert P("scroll down") == KeyRequest("scroll down")
@@ -91,8 +103,8 @@ def test_open_still_opens():
     assert P("open youtube.com") == AddressRequest("https://youtube.com")
 
 EVERY_COMMAND = ["new tab", "close tab", "next tab", "previous tab", "reopen tab", "go back",
-    "go forward", "reload", "refresh", "scroll down", "page up", "page down", "find", "save",
-    "copy", "paste", "escape", "close Firefox", "close all Firefox", "close window",
+    "go forward", "reload the page", "refresh page", "scroll down", "page up", "page down",
+    "find on page", "save the file", "copy the selection", "paste it", "press escape", "close Firefox", "close all Firefox", "close window",
     "switch to Firefox", "minimize window", "maximize window", "restore window",
     "go to youtube dot com", "web search cheap tires", "open Firefox"]
 

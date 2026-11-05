@@ -186,8 +186,10 @@ def test_help_spells_out_windows_keys_and_addresses_with_your_own_hold_key(monke
     section = writing.split("Apps, Windows and Keys by Voice", 1)[1].split(
         "Indicator Follows", 1)[0]
     assert "Hold <b>F6</b>, say <b>new tab</b>, let go" in section
-    for said in ("close Firefox", "go to youtube.com", "web search", "terminal", "log out"):
+    for said in ("close Firefox", "go to youtube.com", "web search", "terminal", "log out",
+                 "copy the selection", "paste it", "save the file", "press escape"):
         assert said in section, said
+    assert "<b>copy</b>," not in section
     assert "F8" not in section
 
 

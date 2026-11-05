@@ -492,12 +492,12 @@ Hold <b>{hold}</b>, say <b>close Firefox</b>, let go. Nothing is typed.
 Hold <b>{hold}</b>, say <b>new tab</b>, let go. The key is pressed in the window you're in.
   • Tabs: <b>new tab</b>, <b>close tab</b>, <b>next tab</b>, <b>previous tab</b>,
     <b>reopen tab</b>
-  • Pages: <b>go back</b>, <b>go forward</b>, <b>reload</b> (or <b>refresh</b>),
+  • Pages: <b>go back</b>, <b>go forward</b>, <b>reload the page</b> (or <b>refresh the page</b>),
     <b>page down</b>, <b>page up</b>, <b>go to the top</b>, <b>go to the bottom</b>
   • Scrolling: <b>scroll down</b>, <b>scroll up</b>; add a number to scroll more:
     <b>scroll down 5</b>. It scrolls what's under the mouse pointer, like your own wheel.
-  • Editing: <b>find</b>, <b>save</b>, <b>select all</b>, <b>copy</b>, <b>paste</b>,
-    <b>escape</b>
+  • Editing: <b>find on page</b>, <b>save the file</b>, <b>select all</b>,
+    <b>copy the selection</b>, <b>paste it</b> (or <b>paste that</b>), <b>press escape</b>
 
 <b>Addresses and web search</b>
 Hold <b>{hold}</b>, say <b>go to youtube.com</b> (or <b>open youtube dot com</b>), let go.
@@ -519,14 +519,17 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
     on X11 desktops like Cinnamon and Xfce. Elsewhere (COSMIC, Sway, Hyprland) the app is
     started again, and most then show the window they already have.
   • In a hands-free or Type at pause recording, a command ends the recording.
+  • One word alone (copy, paste, save, pause, next...) is typed as a word: people say those
+    as answers in chats.
   • Closing asks to save unsaved work, just like clicking the X.
   • Closing, minimizing and switching work on KDE, on GNOME with the TuxTalk extension
     (log out and back in once after updating) and on X11 desktops. On COSMIC, Sway and
     similar, TuxTalk tells you it can't do that here; use the window's own buttons.
   • Apps open in a terminal too. The keys are the terminal's own there, so <b>select all</b>,
-    <b>save</b>, <b>find</b>, <b>reopen tab</b>, <b>go back</b>, <b>go forward</b> and
-    <b>reload</b> don't apply in a terminal. On GNOME without the TuxTalk extension, TuxTalk
-    can't tell a terminal, so those and copy, paste and the tab keys aren't pressed.
+    <b>save the file</b>, <b>find on page</b>, <b>reopen tab</b>, <b>go back</b>,
+    <b>go forward</b> and <b>reload the page</b> don't apply in a terminal. On GNOME
+    without the TuxTalk extension, TuxTalk can't tell a terminal, so those and copy, paste
+    and the tab keys aren't pressed.
   • <b>go to</b> needs a real web address, like youtube.com. Only <b>web search</b> searches.
   • An AppImage can be opened only if it has a menu entry (a tool like Gear Lever
     or AppImageLauncher makes one).

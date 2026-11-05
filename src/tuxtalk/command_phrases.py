@@ -53,19 +53,21 @@ KEY_PHRASES = {
                      "reopen the closed tab"), "reopen tab"),
     "go back": "go back",
     "go forward": "go forward",
-    **dict.fromkeys(("reload", "refresh", "reload the page", "refresh the page",
-                     "reload page", "refresh page"), "reload"),
+    **dict.fromkeys(("reload the page", "refresh the page", "reload page",
+                     "refresh page"), "reload"),
     "page up": "page up",
     "page down": "page down",
     **dict.fromkeys(("go to the top", "go to top"), "go to the top"),
     **dict.fromkeys(("go to the bottom", "go to bottom"), "go to the bottom"),
-    **dict.fromkeys(("find", "find on page"), "find"),
-    "save": "save",
+    "find on page": "find",
+    **dict.fromkeys(("save the file", "save file"), "save"),
     "select all": "select all",
-    "copy": "copy",
-    "paste": "paste",
-    **dict.fromkeys(("escape", "press escape"), "escape"),
+    **dict.fromkeys(("copy the selection", "copy selection"), "copy"),
+    **dict.fromkeys(("paste it", "paste that", "paste the clipboard"), "paste"),
+    "press escape": "escape",
 }
+# A word like "copy", "paste" or "save" alone is an answer in a chat, so each key
+# phrase needs a noun and the bare word is typed ("copy that" means "understood").
 
 _SCROLL = re.compile(r"scroll (up|down)(?: (\d+|" + "|".join(NUMBER_WORDS) + "))?")
 

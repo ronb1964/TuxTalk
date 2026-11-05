@@ -422,8 +422,11 @@ def test_the_tooltip_names_the_users_own_key(prefs_window):
 def test_the_tooltip_lists_every_kind_of_command_with_your_own_key(prefs_window):
     tip = _labs_boxes(prefs_window(hotkey="F6"))[OPEN_APPS_LABEL].get_tooltip_text()
     for said in ("open Firefox", "close Firefox", "switch to Firefox", "minimize window",
-                 "new tab", "scroll down", "go to youtube.com", "web search", "literal"):
+                 "new tab", "scroll down", "go to youtube.com", "web search", "literal",
+                 "copy the selection", "paste it", "save the file", "reload the page",
+                 "press escape"):
         assert said in tip, said
+    assert "\u201ccopy\u201d" not in tip and "\u201cpaste\u201d" not in tip
     assert "F6" in tip and "F8" not in tip
 
 

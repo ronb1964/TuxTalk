@@ -79,7 +79,7 @@ def test_select_and_move_still_runs_before_new_commands(actions_on, chat, say, k
     assert "Voice command: go to the top" in caplog.text
 
 
-@pytest.mark.parametrize("command", ["Paste.", "Select all.", "Go back."])
+@pytest.mark.parametrize("command", ["Paste it.", "Select all.", "Go back."])
 def test_a_key_command_forgets_the_last_dictation_for_undo(actions_on, chat, say, keyboard,
                                                            monkeypatch, command):
     """What the keys did leaves nothing of the dictation to erase."""
@@ -99,12 +99,18 @@ def test_a_key_command_mid_recording_ends_it(actions_on, recording_on, chat, key
     assert rec.message.cancelled and rs.state.is_recording is False
 
 
+@pytest.mark.parametrize("said", ["Paste.", "Copy.", "Save."])
+def test_a_bare_key_word_is_typed(actions_on, chat, say, keyboard, said):
+    say(said)
+    assert typed(chat) == [said] and 29 not in keyboard.typed_keys()
+
+
 def test_a_refused_command_mid_recording_keeps_it_going(actions_on, recording_on, chat,
                                                         keyboard):
     """"save" in a terminal has no key: the note is shown, the recording goes on."""
     rec, phrase = recording_on
     chat[0][0] = "org.kde.konsole"
-    phrase("save")
+    phrase("save the file")
     service_tick_runs()
     assert keyboard.typed_keys() == [] and chat[2] == []
     assert actions_on and not rec.message.cancelled and rs.state.is_recording is True
