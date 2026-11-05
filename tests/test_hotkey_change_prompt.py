@@ -4,6 +4,7 @@ in the log only."""
 import pytest
 
 from tuxtalk.config import CTRL_SPACE
+from tuxtalk.ctrl_space_clashes import GNOME, IBUS, KEYBOARD_OPTIONS
 from tuxtalk.hotkey_labels import hands_free_label, hotkey_label
 from tuxtalk.prefs_general import hotkey_change_message
 
@@ -231,3 +232,78 @@ def test_picking_left_ctrl_space_with_helper_1_13_offers_the_update():
                                                            unheard=[CTRL_SPACE])
     assert title == "Left Ctrl+Space needs a newer hotkey helper"
     assert "Left Ctrl+Space" in text and not offer_test and not clash
+
+
+# --- Left Ctrl+Space: what it costs, and who else uses Ctrl+Space ------------------
+
+def test_the_dropdown_says_what_left_ctrl_space_gives_up():
+    assert hotkey_label(CTRL_SPACE) == ("Left Ctrl+Space (Ctrl+Space stops working in apps "
+                                        "while dictation is on)")
+    assert hotkey_label(CTRL_SPACE, password=True).endswith(
+        "while dictation is on; asks for your password once)")
+
+
+@pytest.mark.parametrize("unheard,asks", [([CTRL_SPACE], True), ([], False)])
+def test_the_dropdown_mentions_the_password_only_with_an_older_helper(
+        monkeypatch, unheard, asks):
+    from tuxtalk import hotkey_labels, secure_input
+    monkeypatch.setattr(secure_input, "unheard_keys", lambda keys: unheard)
+    labels = dict(hotkey_labels.dropdown_entries())
+    assert ("asks for your password once" in labels[CTRL_SPACE]) is asks
+    assert labels["F8"] == "F8"
+    assert ("asks for your password once" in hotkey_labels.layout_label(CTRL_SPACE)) is asks
+
+
+def test_picking_left_ctrl_space_where_ibus_uses_it_says_so():
+    cfg = {**CFG, "hotkey": CTRL_SPACE}
+    title, text, _offer_test, clash = hotkey_change_message(cfg, {"hotkey"}, [],
+                                                            ctrl_space=[IBUS])
+    assert title == "IBus already uses Ctrl+Space" and clash
+    assert text.startswith("IBus already uses Ctrl+Space to switch input methods, so pressing "
+                           "Left Ctrl+Space may do that instead of dictating. Pick another key, "
+                           "or give IBus another shortcut (IBus Preferences, Next input method).")
+
+
+def test_the_keyboard_options_clash_reads_as_plain_english():
+    cfg = {**CFG, "hotkey": CTRL_SPACE}
+    _title, text, _, _ = hotkey_change_message(cfg, {"hotkey"}, [],
+                                               ctrl_space=[KEYBOARD_OPTIONS])
+    assert text.startswith(
+        "Your keyboard setup already uses Ctrl+Space (it makes Left Ctrl a Compose or "
+        "layout-switch key), so pressing Left Ctrl+Space may do that instead of dictating. "
+        "Pick another key, or change those keyboard options "
+        "(Settings, Keyboard, Keyboard options).")
+
+
+def test_kde_clash_comes_first_and_the_update_after_it():
+    cfg = {**CFG, "hotkey": CTRL_SPACE}
+    title, text, _, clash = hotkey_change_message(
+        cfg, {"hotkey"}, ["Ctrl+Space"], unheard=[CTRL_SPACE], ctrl_space=[IBUS])
+    assert title == "KDE already uses Left Ctrl+Space" and clash
+    kde, ibus, update = (text.index(s) for s in (
+        "KDE already uses", "IBus already uses", "older than this TuxTalk"))
+    assert kde < ibus < update
+
+
+def test_two_input_methods_are_both_named():
+    cfg = {**CFG, "hotkey": CTRL_SPACE}
+    title, text, _, _ = hotkey_change_message(cfg, {"hotkey"}, [], ctrl_space=[IBUS, GNOME])
+    assert title == "IBus already uses Ctrl+Space"
+    assert "IBus already uses" in text and "GNOME already uses" in text
+
+
+def test_after_apply_the_clashes_are_looked_for_only_when_left_ctrl_space_was_picked(
+        prefs_window, monkeypatch):
+    from gi.repository import Gtk
+    from tuxtalk import ctrl_space_clashes, secure_input
+    asked, looked = [], []
+    monkeypatch.setattr(ctrl_space_clashes, "clashes", lambda: looked.append(1) or [IBUS])
+    monkeypatch.setattr(secure_input, "unheard_keys", lambda keys: [])
+    for hotkey in ("F7", CTRL_SPACE):
+        tab = prefs_window(hotkey=hotkey).general_tab
+        monkeypatch.setattr(tab, "_kde_refused", lambda since: None)
+        monkeypatch.setattr(tab, "_ask_hotkey_question", lambda *question, update=False:
+                            asked.append(question[0]) or Gtk.ResponseType.CANCEL)
+        assert tab.after_hotkey_change({"hotkey"}, 0)
+    assert looked == [1]
+    assert asked == ["Try your new hotkey?", "IBus already uses Ctrl+Space"]

@@ -2,7 +2,8 @@
 the hotkey dropdowns' entries, each saying what else its key does, and the
 hands-free tickbox's words."""
 
-from .config import HOTKEY_CHOICES
+from . import secure_input
+from .config import CTRL_SPACE, HOTKEY_CHOICES
 
 # What else a key does, named in the hotkey dropdowns so nobody picks one
 # blind: dictating with F5 also reloads the page in a browser. Right Ctrl or
@@ -15,6 +16,7 @@ HOTKEY_CLASHES = {
     "F12": "developer tools in browsers",
     "Right Ctrl": "stops working as Ctrl",
     "Right Alt": "stops working as Alt",
+    CTRL_SPACE: "Ctrl+Space stops working in apps while dictation is on",
 }
 
 
@@ -26,11 +28,13 @@ def hands_free_label(toggle_key):
     return f"Double-tap {key} for hands-free: stop after"
 
 
-def hotkey_label(key, altgr_types=None, compose=False):
+def hotkey_label(key, altgr_types=None, compose=False, password=False):
     """'F5 (reloads the page in browsers)', or just the key. *altgr_types*:
     when the keyboard layout's Right Alt is AltGr, the characters it types
     that picking it takes away ("@", "€"; keyboard_layout.altgr_characters).
-    *compose*: the keyboard options make *key* the Compose key."""
+    *compose*: the keyboard options make *key* the Compose key. *password*:
+    the running hotkey helper is too old for *key*, so picking it asks for
+    the password once, to update the helper."""
     clash = HOTKEY_CLASHES.get(key)
     if key == "Right Alt" and altgr_types is not None:
         clash = "your AltGr key"
@@ -38,7 +42,15 @@ def hotkey_label(key, altgr_types=None, compose=False):
             clash += f": stops typing {' and '.join(altgr_types)}"
     elif compose:
         clash = "your Compose key: stops working as Compose"
+    if clash and password:
+        clash += "; asks for your password once"
     return f"{key} ({clash})" if clash else key
+
+
+def _needs_password(key):
+    """Whether picking *key* asks for the password: only Left Ctrl+Space, and
+    only with a hotkey helper too old for it (one helper hello)."""
+    return key == CTRL_SPACE and bool(secure_input.unheard_keys([CTRL_SPACE]))
 
 
 def _compose_names():
@@ -57,7 +69,7 @@ def layout_label(key):
     and a Compose key stops composing."""
     from .keyboard_layout import altgr_characters
     return hotkey_label(key, altgr_characters() if key == "Right Alt" else None,
-                        key in _compose_names())
+                        key in _compose_names(), _needs_password(key))
 
 
 def dropdown_entries():
@@ -67,4 +79,7 @@ def dropdown_entries():
     from .keyboard_layout import altgr_characters
     altgr_types = altgr_characters()
     compose = _compose_names()
-    return [(key, hotkey_label(key, altgr_types, key in compose)) for key in HOTKEY_CHOICES]
+    password = _needs_password(CTRL_SPACE)
+    return [(key, hotkey_label(key, altgr_types, key in compose,
+                               password and key == CTRL_SPACE))
+            for key in HOTKEY_CHOICES]

@@ -2,6 +2,7 @@
 (prefs_speech.py), start at login and Power Saving, and the question after
 OK or Apply when a hotkey changed."""
 import os
+import threading
 import time
 
 import gi
@@ -43,50 +44,71 @@ def _needs(keys):
     return f"{' and '.join(keys)} need{'s' if len(keys) == 1 else ''}"
 
 
-def hotkey_change_message(cfg, changed, refused, apps=None, unheard=()):
+def hotkey_change_message(cfg, changed, refused, apps=None, unheard=(), ctrl_space=()):
     """(title, text, offer the test, a key clashes) for the question after OK or
     Apply, or None.
 
     *changed*: the settings keys changed; *refused*: keys KDE already uses
     (kwin_hotkeys.refused_since), None when unknown; *apps*: {key: app} for
     those that open an app (kwin_hotkeys.app_shortcuts_since); *unheard*: new
-    keys the running hotkey helper is too old to report. A changed key is
+    keys the running hotkey helper is too old to report; *ctrl_space*: the
+    ctrl_space_clashes.Clash list for a Left Ctrl+Space just picked. A changed key is
     offered the same test first run gives it; a key the helper won't report
     is offered the update first (Update Helper), and the test after it.
 
     A key KDE also uses comes first, in the title as well: someone who reads
     only the top of the window must still learn that the key does two things.
+    Whoever else uses Ctrl+Space follows KDE's paragraph and, as a title,
+    comes after KDE's.
     """
-    # KDE reports keys in Qt's spelling (Super is "Meta"): map back to ours.
-    from .hotkey_claims import qt_key_sequence
-    all_keys = ("hotkey", "toggle_hotkey", "voice_commands_hotkey", "paste_last_hotkey")
-    ours = {qt_key_sequence(cfg.get(k)): cfg.get(k) for k in all_keys if cfg.get(k)}
-    clashes = []        # (our name for the key, the app or None)
-    if changed & set(all_keys):
-        clashes = [(ours[key], (apps or {}).get(key)) for key in refused or [] if key in ours]
+    clashes = _kde_clashes(cfg, changed, refused, apps)
     lines = [_clash_line(name, app) for name, app in clashes]
+    lines += [clash.paragraph() for clash in ctrl_space]
 
     roles = (("hotkey", "hold-to-talk key"), ("toggle_hotkey", "tap-to-start key"))
     new_keys = [f"Your {what} is now {cfg.get(key)}." for key, what in roles
                 if key in changed and cfg.get(key)]
     lines += new_keys
     if unheard:
-        does = "it does" if len(unheard) == 1 else "they do"
-        lines.append(f"The hotkey helper on this computer is older than this TuxTalk and "
-                     f"doesn't report {' or '.join(unheard)}, so {does} nothing yet. Update "
-                     f"Helper updates it now: one password prompt, no restart. Then try "
-                     f"the key in the test.")
+        lines.append(_helper_update_line(unheard))
     offer_test = bool(new_keys) and not unheard
     if offer_test:
-        lines.append("Try it once in the test to make sure it reaches TuxTalk. On some "
-                     "laptops the F-keys change the brightness or volume unless you hold Fn; "
-                     "Right Ctrl, Right Alt and Scroll Lock never need it.")
-        # So Not Now isn't a dead end: the Test Hotkeys button can be below the fold.
-        lines.append("You can also test it later with Test Hotkeys, under the hotkeys on "
-                     "the General tab.")
+        lines += _test_offer_lines()
     if not lines:
         return None
-    return _question_title(clashes, unheard), "\n\n".join(lines), offer_test, bool(clashes)
+    return (_question_title(clashes, unheard, ctrl_space), "\n\n".join(lines), offer_test,
+            bool(clashes or ctrl_space))
+
+
+def _kde_clashes(cfg, changed, refused, apps):
+    """[(our name for the key, the app or None)] for the changed dictation keys
+    KDE already uses."""
+    # KDE reports keys in Qt's spelling (Super is "Meta"): map back to ours.
+    from .hotkey_claims import qt_key_sequence
+    all_keys = ("hotkey", "toggle_hotkey", "voice_commands_hotkey", "paste_last_hotkey")
+    if not changed & set(all_keys):
+        return []
+    ours = {qt_key_sequence(cfg.get(k)): cfg.get(k) for k in all_keys if cfg.get(k)}
+    return [(ours[key], (apps or {}).get(key)) for key in refused or [] if key in ours]
+
+
+def _helper_update_line(unheard):
+    """hotkey_change_message's paragraph on keys the hotkey helper is too old for."""
+    does = "it does" if len(unheard) == 1 else "they do"
+    return (f"The hotkey helper on this computer is older than this TuxTalk and "
+            f"doesn't report {' or '.join(unheard)}, so {does} nothing yet. Update "
+            f"Helper updates it now: one password prompt, no restart. Then try "
+            f"the key in the test.")
+
+
+def _test_offer_lines():
+    """hotkey_change_message's paragraphs offering the hotkey test."""
+    return ["Try it once in the test to make sure it reaches TuxTalk. On some "
+            "laptops the F-keys change the brightness or volume unless you hold Fn; "
+            "Right Ctrl, Right Alt and Scroll Lock never need it.",
+            # So Not Now isn't a dead end: the Test Hotkeys button can be below the fold.
+            "You can also test it later with Test Hotkeys, under the hotkeys on "
+            "the General tab."]
 
 
 def _clash_line(name, app):
@@ -100,15 +122,18 @@ def _clash_line(name, app):
             f"pressing it does that too. Pick another key if that gets in the way.")
 
 
-def _question_title(clashes, unheard):
-    """hotkey_change_message's title: a key KDE uses first, then keys the
-    hotkey helper is too old for, else the offer of the test."""
+def _question_title(clashes, unheard, ctrl_space=()):
+    """hotkey_change_message's title: a key KDE uses first, then who else
+    uses Ctrl+Space, then keys the hotkey helper is too old for, else the
+    offer of the test."""
     if len(clashes) > 1:
         return "KDE already uses some of these keys"
     if clashes and clashes[0][1]:
         return f"{clashes[0][0]} also opens {clashes[0][1]}"
     if clashes:
         return f"KDE already uses {clashes[0][0]}"
+    if ctrl_space:
+        return f"{ctrl_space[0].who} already uses Ctrl+Space"
     if unheard:
         return f"{_needs(unheard)} a newer hotkey helper"
     return "Try your new hotkey?"
@@ -150,7 +175,8 @@ class GeneralTab(Tab):
             "Hold this key while speaking — release to stop and transcribe.\n"
             "Both hotkeys are always active simultaneously.\n"
             "Recommended: F8 (default). Avoid: F1, F5, F11, F12.\n"
-            "F-keys that need Fn held? Right Ctrl, Right Alt and Scroll Lock don't.")
+            "F-keys that need Fn held? Right Ctrl, Right Alt, Scroll Lock and\n"
+            "Left Ctrl+Space don't.")
         hotkeys = dropdown_entries()
         self.hotkey_combo = self._hotkey_combo(self.hotkey_label, hotkeys)
         grid.attach(self.hotkey_label, 0, row, 1, 1)
@@ -458,10 +484,11 @@ class GeneralTab(Tab):
         from .kwin_hotkeys import app_shortcuts_since
         from .secure_input import unheard_keys
         refused = self._kde_refused(since)
-        unheard = unheard_keys([self.config.get(k) for k in HOTKEY_KEYS if k in changed])
+        keys = [self.config.get(k) for k in HOTKEY_KEYS if k in changed]
+        unheard = unheard_keys(keys)
         message = hotkey_change_message(self.config, set(changed), refused,
                                         app_shortcuts_since(since) if refused else None,
-                                        unheard)
+                                        unheard, self._ctrl_space_clashes(keys))
         if message is None:
             return False
         if self._ask_hotkey_question(*message, update=bool(unheard)) != Gtk.ResponseType.OK:
@@ -469,6 +496,21 @@ class GeneralTab(Tab):
         if not unheard or self._update_helper(unheard):
             run_hotkey_test(self.window, self.config)
         return True
+
+    def _ctrl_space_clashes(self, keys):
+        """Who else uses Ctrl+Space, when Left Ctrl+Space was just picked.
+        The lookup runs gsettings (2 s each, up to 5 of them), so it runs off
+        the main loop with the window drawn and locked; no answer in 12 s
+        counts as no clash."""
+        from . import ctrl_space_clashes
+        from .config import CTRL_SPACE
+        if CTRL_SPACE not in keys:
+            return []
+        found = []
+        threading.Thread(target=lambda: found.append(ctrl_space_clashes.clashes()),
+                         daemon=True).start()
+        self._while_drawn(lambda: bool(found), 12)
+        return found[0] if found else []
 
     def _update_helper(self, unheard) -> bool:
         """Update Helper in the hotkey question (update_offers.update_helper),

@@ -29,9 +29,6 @@
   "output_backends.py::LibeiOutputBackend._run_handshake": {
    "lines": 106
   },
-  "prefs_general.py::hotkey_change_message": {
-   "decisions": 17
-  },
   "rename_migration.py::adopt_old_install": {
    "decisions": 17
   },

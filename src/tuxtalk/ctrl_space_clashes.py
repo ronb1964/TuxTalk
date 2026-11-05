@@ -22,10 +22,19 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class Clash:
     """A program or setting that takes Ctrl+Space: *who* does *what*, and
-    *where* its shortcut is changed."""
+    *where* it is changed. *change* is what to do there when "give *who*
+    another shortcut" doesn't read right for *who*."""
     who: str
     what: str
     where: str
+    change: str = ""
+
+    def paragraph(self) -> str:
+        """What Preferences tells someone who picks Left Ctrl+Space."""
+        fix = self.change or f"give {self.who} another shortcut"
+        return (f"{self.who} already uses Ctrl+Space {self.what}, so pressing Left "
+                f"Ctrl+Space may do that instead of dictating. Pick another key, "
+                f"or {fix} ({self.where}).")
 
 
 IBUS = Clash("IBus", "to switch input methods", "IBus Preferences, Next input method")
@@ -33,9 +42,10 @@ FCITX5 = Clash("Fcitx 5", "to turn the input method on and off",
                "Fcitx 5 Configuration, Global Options, Trigger Input Method")
 GNOME = Clash("GNOME", "to switch the input source",
               "Settings, Keyboard, View and Customize Shortcuts")
-KEYBOARD_OPTIONS = Clash("Your keyboard settings",
-                         "to make Left Ctrl a Compose or layout-switch key",
-                         "Settings, Keyboard, Keyboard options")
+KEYBOARD_OPTIONS = Clash("Your keyboard setup",
+                         "(it makes Left Ctrl a Compose or layout-switch key)",
+                         "Settings, Keyboard, Keyboard options",
+                         change="change those keyboard options")
 
 # The XKB options that give Left Ctrl a job of its own.
 _LEFT_CTRL_OPTIONS = frozenset({
