@@ -424,6 +424,19 @@ def test_a_word_of_an_open_apps_menu_name_closes_it(actions_on, chat, say, kde, 
     assert chat[2] == [] and open_windows.done == [("close", app_focus.desktop_file(app))]
 
 
+@pytest.mark.parametrize("said, done", [("Close all the chrome.", []),
+                                        ("Close all Chrome.", [("close", "google-chrome")])])
+def test_close_all_keeps_the_article_rule(actions_on, chat, say, kde, apps, open_windows, said,
+                                          done):
+    """"the" after "close all" is a sentence's too: only "close all Chrome"
+    closes every Chrome window."""
+    apps[:] = WORD_NAMED
+    open_windows.open = {app_focus.desktop_file(CHROME)}
+    say(said)
+    assert open_windows.done == done
+    assert [text for text, _ in chat[2]] == ([] if done else [said])
+
+
 def test_a_word_of_the_name_of_an_app_not_open_is_typed(actions_on, chat, say, kde, apps,
                                                         open_windows):
     apps[:] = WORD_NAMED

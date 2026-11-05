@@ -44,6 +44,8 @@ def test_scroll_counts():
 def test_window_requests():
     assert P("Close Firefox.") == WindowRequest("close", OpenRequest("firefox"))
     assert P("close all Firefox") == WindowRequest("close", OpenRequest("firefox"), every=True)
+    assert P("close all the Firefox") == WindowRequest("close", OpenRequest("the firefox"),
+                                                       every=True)
     assert P("close Firefox Flatpak") == WindowRequest(
         "close", OpenRequest("firefox", install="flatpak"))
     assert P("close this window") == P("close window") == WindowRequest("close")

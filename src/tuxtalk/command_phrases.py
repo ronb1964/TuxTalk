@@ -134,9 +134,12 @@ def _window(said: str) -> WindowRequest | None:
     if len(words) < 2 or _PUNCTUATION.intersection(words):
         return None
     if words[0] == "close" and words[1] in ("all", "every"):
-        # "Close all." names no app, never one whose name is "all".
-        rest = words[3:] if words[2:3] == ["the"] else words[2:]
-        app = app_name(rest) if rest else None
+        # "Close all." names no app, never one whose name is "all". A "the"
+        # stays in the name: app_finder takes a word of a name after it for
+        # a sentence's ("Close all the chrome.").
+        rest = words[2:]
+        named = rest[1:] if rest[:1] == ["the"] else rest
+        app = app_name(rest) if named else None
         return WindowRequest("close", app, every=True) if app else None
     if words[0] == "close":
         app = app_name(words[1:])
