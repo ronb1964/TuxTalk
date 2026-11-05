@@ -37,6 +37,17 @@ def test_exact_and_split_names(apps):
     assert ids(find(parse("open k write"), apps, {})) == ["org.kde.kwrite.desktop"]
 
 
+def test_names_that_sound_the_same_find_the_app(apps):
+    # Parakeet writes what it hears: "K right" for KWrite.
+    assert ids(find(parse("open k right"), apps, {})) == ["org.kde.kwrite.desktop"]
+    assert ids(find(parse("open kay rite"), apps, {})) == ["org.kde.kwrite.desktop"]
+
+
+def test_a_sound_alike_word_alone_opens_nothing(apps):
+    assert find(parse("open right"), apps, {}).kind == "none"
+    assert find(parse("start writing"), apps, {}).kind == "none"
+
+
 def test_respellings_close_enough(apps):
     assert ids(find(parse("open console"), apps, {})) == ["org.kde.konsole.desktop"]
     assert ids(find(parse("open better bird"), apps, {})) == [

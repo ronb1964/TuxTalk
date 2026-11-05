@@ -157,7 +157,7 @@ def _letters(text):
 _SOUND_FOLDS = (("ph", "f"), ("cks", "x"), ("ks", "x"), ("cs", "x"), ("ck", "k"), ("c", "k"))
 
 
-def _sound(letters):
+def sound_key(letters):
     """*letters* (from _letters) folded so that sound-alike spellings match:
     x/ks/cks/cs, ck/c/k, ph/f, and doubled letters counted once."""
     for a, b in _SOUND_FOLDS:
@@ -199,7 +199,7 @@ def fix_spelling(text, words, hyphens=True):
         if len(key) >= MIN_LETTERS:
             targets.setdefault(key, word)
         if len(key) >= MIN_SOUND_LETTERS:
-            sounds.setdefault(_sound(key), word)
+            sounds.setdefault(sound_key(key), word)
     if not targets or not text:
         return text
 
@@ -226,7 +226,7 @@ def fix_spelling(text, words, hyphens=True):
             else:
                 # Same sound, other letters. The apostrophe of "Tuck's" belongs
                 # to the mishearing, so it may sit inside the match.
-                word = sounds.get(_sound(joined)) if len(joined) >= MIN_SOUND_LETTERS else None
+                word = sounds.get(sound_key(joined)) if len(joined) >= MIN_SOUND_LETTERS else None
                 if word is None or not all(
                         _joinable(t[3].replace("'", "").replace("\u2019", ""), word, hyphens)
                         for t in group):

@@ -14,6 +14,7 @@ import os
 import shlex
 from dataclasses import dataclass
 
+from .custom_words import MIN_SOUND_LETTERS, sound_key
 from .voice_navigation import normalize
 
 log = logging.getLogger(__name__)
@@ -38,6 +39,9 @@ _DEFAULT_WORDS = {
     "terminal": "terminal",
 }
 _KDEGLOBALS = os.path.join("~", ".config", "kdeglobals")
+# Beyond Your Words' sound folds: the silent letters a speech engine writes
+# differently in an app's name ("K right" for KWrite).
+_APP_SOUND_FOLDS = (("wr", "r"), ("igh", "i"), ("kay", "k"))
 
 
 @dataclass(frozen=True)
@@ -78,10 +82,20 @@ class _Indexed:
         self.labels = {" ".join(_clean(entry.generic))} - {""}
         # Names and program with the spaces taken out ("fire fox" -> "firefox").
         self.letters = {s.replace(" ", "") for s in (*self.names, self.program) if s}
+        self.sounds = {_sounds(s) for s in self.letters}
 
     def starts_name(self, words):
         """Whether *words* start the words of a name, in order ("libre writer")."""
         return any(_words_start(words, name.split()) for name in self.names)
+
+
+def _sounds(letters):
+    """*letters* folded so names that sound alike compare equal: Your Words'
+    folds, the app ones above, and no silent final e ("kwrite" and "kright"
+    both give "krit")."""
+    for a, b in _APP_SOUND_FOLDS:
+        letters = letters.replace(a, b)
+    return sound_key(letters).removesuffix("e")
 
 
 def _words_start(said, name_words):
@@ -114,9 +128,11 @@ def _candidates(words, indexed):
     """The entries the first matching rule finds, rules in the spec's order."""
     said = " ".join(words)
     letters = said.replace(" ", "")
+    sounds = _sounds(letters) if len(letters) >= MIN_SOUND_LETTERS else None
     rules = (
         lambda i: said in i.names,
         lambda i: letters in i.letters,
+        lambda i: sounds in i.sounds,
         lambda i: said in i.labels,
         lambda i: i.starts_name(words),
     )
