@@ -325,7 +325,8 @@ def fake_extension():
 _CLIENT_MESSAGE = 33
 _SUBSTRUCTURE_REDIRECT = 1 << 20
 _CW_EVENT_MASK = 1 << 11
-_ATOM_ATOM, _ATOM_WINDOW, _ATOM_STRING, _ATOM_WM_CLASS = 4, 33, 31, 67
+_ATOM_ATOM, _ATOM_CARDINAL, _ATOM_WINDOW, _ATOM_STRING, _ATOM_WM_CLASS = 4, 6, 33, 31, 67
+_CONFIG_X, _CONFIG_Y = 1, 2
 
 
 @pytest.fixture
@@ -350,7 +351,10 @@ def x11(monkeypatch):
 _SUPPORTED = (b"_NET_ACTIVE_WINDOW", b"_NET_CLOSE_WINDOW", b"WM_CHANGE_STATE",
               b"_NET_WM_STATE", b"_NET_WM_STATE_MAXIMIZED_VERT",
               b"_NET_WM_STATE_MAXIMIZED_HORZ", b"_NET_WM_WINDOW_TYPE",
-              b"_NET_WM_WINDOW_TYPE_DESKTOP", b"_NET_WM_WINDOW_TYPE_DOCK")
+              b"_NET_WM_WINDOW_TYPE_DESKTOP", b"_NET_WM_WINDOW_TYPE_DOCK",
+              b"_NET_MOVERESIZE_WINDOW", b"_NET_WORKAREA", b"_NET_FRAME_EXTENTS",
+              b"_NET_CURRENT_DESKTOP", b"_NET_NUMBER_OF_DESKTOPS", b"_NET_WM_DESKTOP",
+              b"_NET_SHOWING_DESKTOP")
 
 
 class FakeWindowManager:
@@ -371,6 +375,8 @@ class FakeWindowManager:
         lib.xcb_change_window_attributes_checked.restype = xcb_ctypes.Cookie
         lib.xcb_change_window_attributes_checked.argtypes = [P, U32, U32,
                                                              ctypes.POINTER(U32)]
+        lib.xcb_configure_window.restype = xcb_ctypes.Cookie
+        lib.xcb_configure_window.argtypes = [P, U32, U16, ctypes.POINTER(ctypes.c_int32)]
         lib.xcb_poll_for_event.restype = P
         lib.xcb_poll_for_event.argtypes = [P]
         screen = ctypes.c_int(0)
@@ -417,6 +423,20 @@ class FakeWindowManager:
         data = struct.pack(f"={len(windows)}I", *windows)
         self.lib.xcb_change_property(self.conn, 0, self.root, atom, _ATOM_WINDOW, 32,
                                      len(windows), data)
+        self.round_trip()
+
+    def set_cardinals(self, window, name, values):
+        """Set the CARDINAL list property *name* (b"_NET_WORKAREA") of
+        *window*, the root window included, as the window manager does."""
+        data = struct.pack(f"={len(values)}I", *values)
+        self.lib.xcb_change_property(self.conn, 0, window, self.atom(name), _ATOM_CARDINAL, 32,
+                                     len(values), data)
+        self.round_trip()
+
+    def move(self, window, x, y):
+        """Put *window* at (*x*, *y*) on the screen, as a user dragging it would."""
+        values = (ctypes.c_int32 * 2)(x, y)
+        self.lib.xcb_configure_window(self.conn, window, _CONFIG_X | _CONFIG_Y, values)
         self.round_trip()
 
     def round_trip(self):

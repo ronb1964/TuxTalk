@@ -18,7 +18,8 @@ import logging
 import struct
 
 from .compositor_focus import XCB_ATOM_WM_CLASS, parse_wm_class
-from .xcb_ctypes import free, get_property, intern_atom, x11_root, xcb_lib
+from .xcb_ctypes import (free, geometry, get_property, intern_atom, randr_monitors, x11_root,
+                         xcb_lib)
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +48,25 @@ class Display:
 
     def __init__(self, lib, conn, root):
         self._lib, self._conn, self._root = lib, conn, root
+
+    @property
+    def root(self) -> int:
+        """The root window."""
+        return self._root
+
+    def cardinals(self, window, name: bytes) -> list:
+        """The CARDINAL list property *name* of *window* ([] when unset)."""
+        atom = intern_atom(self._lib, self._conn, name)
+        raw = get_property(self._lib, self._conn, window, atom) if atom else None
+        return list(struct.unpack(f"={len(raw) // 4}I", raw[:len(raw) // 4 * 4])) if raw else []
+
+    def geometry(self, window):
+        """(x, y, width, height) of *window* in root coordinates, or None."""
+        return geometry(self._lib, self._conn, window, self._root)
+
+    def randr_monitors(self) -> list:
+        """(x, y, width, height) of each monitor RandR lists; [] without it."""
+        return randr_monitors(self._conn, self._root)
 
     def atom(self, name: bytes) -> int:
         """*name*'s atom. Raises OSError when the X server has none: no

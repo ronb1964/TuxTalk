@@ -29,6 +29,35 @@ class _Error(ctypes.Structure):
     _fields_ = [("response_type", ctypes.c_uint8), ("error_code", ctypes.c_uint8)]
 
 
+class _GeometryReply(ctypes.Structure):
+    _fields_ = [("response_type", ctypes.c_uint8), ("depth", ctypes.c_uint8),
+                ("sequence", ctypes.c_uint16), ("length", ctypes.c_uint32),
+                ("root", ctypes.c_uint32), ("x", ctypes.c_int16), ("y", ctypes.c_int16),
+                ("width", ctypes.c_uint16), ("height", ctypes.c_uint16),
+                ("border_width", ctypes.c_uint16)]
+
+
+class _TranslateReply(ctypes.Structure):
+    _fields_ = [("response_type", ctypes.c_uint8), ("same_screen", ctypes.c_uint8),
+                ("sequence", ctypes.c_uint16), ("length", ctypes.c_uint32),
+                ("child", ctypes.c_uint32), ("dst_x", ctypes.c_int16),
+                ("dst_y", ctypes.c_int16)]
+
+
+class _MonitorInfo(ctypes.Structure):
+    """xcb_randr_monitor_info_t, without the outputs that follow it."""
+    _fields_ = [("name", ctypes.c_uint32), ("primary", ctypes.c_uint8),
+                ("automatic", ctypes.c_uint8), ("n_output", ctypes.c_uint16),
+                ("x", ctypes.c_int16), ("y", ctypes.c_int16),
+                ("width", ctypes.c_uint16), ("height", ctypes.c_uint16),
+                ("width_mm", ctypes.c_uint32), ("height_mm", ctypes.c_uint32)]
+
+
+class _MonitorIterator(ctypes.Structure):
+    _fields_ = [("data", ctypes.POINTER(_MonitorInfo)), ("rem", ctypes.c_int),
+                ("index", ctypes.c_int)]
+
+
 _xcb = None
 
 
@@ -71,6 +100,14 @@ def xcb_lib():
         lib.xcb_flush.argtypes = [P]
         lib.xcb_send_event_checked.restype = Cookie
         lib.xcb_send_event_checked.argtypes = [P, U8, U32, U32, ctypes.c_char_p]
+        lib.xcb_get_geometry.restype = Cookie
+        lib.xcb_get_geometry.argtypes = [P, U32]
+        lib.xcb_get_geometry_reply.restype = ctypes.POINTER(_GeometryReply)
+        lib.xcb_get_geometry_reply.argtypes = [P, Cookie, ctypes.POINTER(P)]
+        lib.xcb_translate_coordinates.restype = Cookie
+        lib.xcb_translate_coordinates.argtypes = [P, U32, U32, ctypes.c_int16, ctypes.c_int16]
+        lib.xcb_translate_coordinates_reply.restype = ctypes.POINTER(_TranslateReply)
+        lib.xcb_translate_coordinates_reply.argtypes = [P, Cookie, ctypes.POINTER(P)]
         _xcb = lib
     return _xcb
 
@@ -119,5 +156,68 @@ def get_property(lib, conn, window, atom):
     try:
         length = lib.xcb_get_property_value_length(reply)
         return ctypes.string_at(lib.xcb_get_property_value(reply), length) if length > 0 else None
+    finally:
+        free(reply)
+
+
+def geometry(lib, conn, window, root):
+    """(x, y, width, height) of *window*, its position in root-window
+    coordinates, or None when the X server has no such window."""
+    error = ctypes.c_void_p()
+    size = lib.xcb_get_geometry_reply(conn, lib.xcb_get_geometry(conn, window),
+                                      ctypes.byref(error))
+    origin = lib.xcb_translate_coordinates_reply(
+        conn, lib.xcb_translate_coordinates(conn, window, root, 0, 0), ctypes.byref(error))
+    try:
+        if not size or not origin:
+            return None
+        return (origin.contents.dst_x, origin.contents.dst_y,
+                size.contents.width, size.contents.height)
+    finally:
+        for reply in (size, origin):
+            if reply:
+                free(reply)
+        if error.value:
+            free(error)
+
+
+def _randr_lib():
+    """libxcb-randr with the monitor calls' signatures, None when it isn't installed."""
+    try:
+        lib = ctypes.CDLL("libxcb-randr.so.0")
+    except OSError:
+        return None
+    P, U32 = ctypes.c_void_p, ctypes.c_uint32
+    lib.xcb_randr_get_monitors.restype = Cookie
+    lib.xcb_randr_get_monitors.argtypes = [P, U32, ctypes.c_uint8]
+    lib.xcb_randr_get_monitors_reply.restype = P
+    lib.xcb_randr_get_monitors_reply.argtypes = [P, Cookie, ctypes.POINTER(P)]
+    lib.xcb_randr_get_monitors_monitors_iterator.restype = _MonitorIterator
+    lib.xcb_randr_get_monitors_monitors_iterator.argtypes = [P]
+    lib.xcb_randr_monitor_info_next.argtypes = [ctypes.POINTER(_MonitorIterator)]
+    return lib
+
+
+def randr_monitors(conn, root):
+    """(x, y, width, height) of each active monitor, as RandR 1.5 lists
+    them; [] when libxcb-randr or the extension isn't there."""
+    randr = _randr_lib()
+    if randr is None:
+        return []
+    error = ctypes.c_void_p()
+    reply = randr.xcb_randr_get_monitors_reply(
+        conn, randr.xcb_randr_get_monitors(conn, root, 1), ctypes.byref(error))
+    if error.value:
+        free(error)
+    if not reply:
+        return []
+    try:
+        found = []
+        monitors = randr.xcb_randr_get_monitors_monitors_iterator(reply)
+        while monitors.rem:
+            info = monitors.data.contents
+            found.append((info.x, info.y, info.width, info.height))
+            randr.xcb_randr_monitor_info_next(ctypes.byref(monitors))
+        return found
     finally:
         free(reply)
