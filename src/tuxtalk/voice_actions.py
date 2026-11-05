@@ -4,11 +4,14 @@ is only a command into its action, instead of typing the words.
 command_phrases reads the words; this hands the request to the module that
 acts on it. Run on the dictation worker, after select and move has declined
 the dictation (voice_commands.handle_navigation)."""
-from . import (command_phrases, delivery, everyday_keys, focused_window, keyboard_output,
-               open_app, web_commands, window_actions)
+from collections.abc import Callable
+
+from . import (command_phrases, delivery, desktop_actions, everyday_keys, focused_window,
+               keyboard_output, open_app, web_commands, window_actions)
 from . import live_settings as live
 from .app_commands import OpenRequest
-from .command_phrases import AddressRequest, KeyRequest, SearchRequest, WindowRequest
+from .command_phrases import (AddressRequest, DesktopRequest, KeyRequest, SearchRequest,
+                              WindowRequest)
 
 
 def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
@@ -30,8 +33,12 @@ def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
     if isinstance(request, SearchRequest):
         return _send(web_commands.search, request, web_commands.SEARCH_DONE, beeps_on,
                      ongoing)
-    if isinstance(request, WindowRequest):
-        return _window(request, beeps_on, ongoing)
+    if isinstance(request, (WindowRequest, DesktopRequest)):
+        # Taken now: a window command or a snap is for the window it was said in.
+        where = focused_window.look()
+        acts = window_actions if isinstance(request, WindowRequest) else desktop_actions
+        return _act(f"done ({request.action})", lambda: acts.run(request, where, beeps_on),
+                    ongoing)
     return None
 
 
@@ -54,16 +61,16 @@ def _send(act, request, what: str, beeps_on: bool, ongoing) -> bool:
     return True
 
 
-def _window(request: WindowRequest, beeps_on: bool, ongoing) -> bool | None:
-    """A window command. It sends no keys, so the recording can end after
-    it; only one that was done ends it, so a refused one ("Couldn't tell
-    which window") lets the user carry on talking. Esc is looked at again
-    in window_actions, after the app was found."""
-    where = focused_window.look()
-    if keyboard_output.esc_stopped(f"done ({request.action})"):
+def _act(what: str, do: Callable[[], bool | None], ongoing) -> bool | None:
+    """A command that sends no keys (a window or desktop command), done by
+    do(), so the recording can end after it; only one that was done ends
+    it, so a refused one ("Couldn't tell which window") lets the user carry
+    on talking. *what* is for the log when Esc came first; do() looks at
+    Esc again right before the desktop is asked."""
+    if keyboard_output.esc_stopped(what):
         return False
-    done = window_actions.run(request, where, beeps_on)
-    if done and ongoing is not None:
+    done = do()
+    if done is True and ongoing is not None:
         ongoing.cancelled = True
     return done
 

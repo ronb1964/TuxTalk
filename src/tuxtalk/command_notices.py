@@ -1,13 +1,15 @@
 """The notes for a voice command that wasn't done (everyday keys, window
-commands, addresses and searches): a short label floated over the window and
-a sentence in a notification, each saying what happened and what to do; and
-for one that was, the log line and the ready beep."""
-from . import app_focus, beeps, desktop_detect, notices
+and desktop commands, addresses and searches): a short label floated over the
+window and a sentence in a notification, each saying what happened and what
+to do; and for one that was, the log line and the ready beep, with a short
+label where the result isn't seen on the screen."""
+from . import app_focus, beeps, desktop_detect, notices, screen_message
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# kind -> (label, sentence). {app} is filled from say()'s keyword names.
+# kind -> (label, sentence). {app} and {number} are filled from say()'s keyword
+# names.
 NOTES = {
     "terminal": (
         "Doesn't apply in a terminal",
@@ -61,16 +63,61 @@ NOTES = {
     "address_not_opened": (
         "Couldn't open that address",
         "TuxTalk couldn't hand the address to your browser. Try typing it there."),
+    "cant_place_here": (
+        "Can't move windows on this desktop",
+        "This desktop doesn't let TuxTalk snap or move a window. Drag it, or use the "
+        "desktop's own keys."),
+    "cant_desktops_here": (
+        "Can't switch desktops here",
+        "This desktop doesn't let TuxTalk show the desktop or switch desktops. Use the "
+        "desktop's own keys."),
+    "no_overview_here": (
+        "No window overview here",
+        "This desktop has no overview of all windows that TuxTalk can open. Try Alt+Tab."),
+    "no_such_desktop": (
+        "There's no desktop {number}",
+        "This computer has fewer desktops than that. Say a smaller number, or add "
+        "desktops in your desktop's settings."),
+    "one_desktop": (
+        "There's only one desktop",
+        "This computer has one desktop, so there's nowhere to go. Add desktops in your "
+        "desktop's settings."),
+    "no_desktop_that_way": (
+        "No desktop that way",
+        "You're on the last desktop that way. Say \"next desktop\" or \"previous "
+        "desktop\" for the other way."),
+    "one_screen": (
+        "There's only one screen",
+        "TuxTalk sees one screen here, so the window stays where it is."),
+    # KWin was asked and gave no answer in time: it can do this, so "can't
+    # here" would be wrong, and so would any claim about the screens.
+    "desktop_no_answer": (
+        "The desktop didn't answer",
+        "The desktop didn't answer in time, so nothing was done. Say it again in a "
+        "moment."),
 }
+
+# kind -> label, for a command that was done but whose result the user may
+# not see (the volume level, the player paused), filled as say()'s are.
+DONE: dict[str, str] = {}
 
 
 def say(kind: str, beeps_on: bool, **names) -> None:
     """Tell the user the command of *kind* (a NOTES key) wasn't done: the
     cancel beep, the label over the window and the sentence in a
-    notification. *names* fill the {app} in the texts."""
+    notification. *names* fill the {app} or {number} in the texts."""
     label, sentence = NOTES[kind]
     logger.info(f"Voice command not done: {kind}")
     notices.command_refused(label.format(**names), sentence.format(**names), beeps_on)
+
+
+def tell(kind: str, beeps_on: bool, **names) -> None:
+    """Tell the user the command of *kind* (a DONE key) was done: the ready
+    beep and the label over the window, as news rather than a warning. No
+    notification: there is nothing to do about it."""
+    logger.info(f"Voice command done: {kind}")
+    beeps.beep(beeps_on, *beeps.READY_BEEP)
+    screen_message.show_over_active_window(DONE[kind].format(**names), warning=False)
 
 
 def say_focus_unknown(beeps_on: bool) -> None:

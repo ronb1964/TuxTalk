@@ -83,15 +83,16 @@ def _open_ones(found: app_match.Match) -> app_match.Match:
     return app_match.Match(kind, tuple(entry for entry, _exact in open_ones))
 
 
-def _still_wanted(request: WindowRequest, entry, where, beeps_on: bool) -> bool:
-    """Whether *request* may still be done, right before the desktop is
+def still_wanted(action: str, where, check_focus: bool, beeps_on: bool) -> bool:
+    """Whether *action* may still be done, right before the desktop is
     asked: Esc may have come while the app was being found, and a desktop
     acts on whichever window has the focus when the request gets there, so
-    with no *entry* that must still be *where*. Says why not."""
-    if keyboard_output.esc_stopped(f"done ({request.action})"):
+    with *check_focus* that must still be *where*, the look taken when the
+    command was heard. Says why not."""
+    if keyboard_output.esc_stopped(f"done ({action})"):
         return False
-    if entry is None and focused_window.changed(where, focused_window.look()):
-        logger.info(f"Window command {request.action} not done: another window has the focus")
+    if check_focus and focused_window.changed(where, focused_window.look()):
+        logger.info(f"Voice command {action} not done: another window has the focus")
         notices.edit_problem("focus_moved", beeps_on)
         return False
     return True
@@ -100,7 +101,7 @@ def _still_wanted(request: WindowRequest, entry, where, beeps_on: bool) -> bool:
 def _act(request: WindowRequest, entry, exact: bool, where, beeps_on: bool) -> bool:
     """Do *request* to *entry*'s windows, or the focused window *where* with
     no *entry*, and say what came of it."""
-    if not _still_wanted(request, entry, where, beeps_on):
+    if not still_wanted(request.action, where, entry is None, beeps_on):
         return False
     try:
         if request.action == "switch":
@@ -110,7 +111,7 @@ def _act(request: WindowRequest, entry, exact: bool, where, beeps_on: bool) -> b
             acted = _ask_desktop(request, entry, exact)
     except Exception as e:      # each desktop fails its own way
         logger.info(f"Window command {request.action} not done: {e}")
-        command_notices.say(_refusal(request.action, e), beeps_on)
+        command_notices.say(refusal(_cant(request.action), e), beeps_on)
         return False
     if acted is None:
         command_notices.say(_cant(request.action), beeps_on)
@@ -153,14 +154,13 @@ def _ask_desktop(request: WindowRequest, entry, exact: bool):
     return None
 
 
-def _refusal(action: str, error: Exception) -> str:
-    """The note for a desktop that couldn't be asked to do *action*: this
-    desktop can't do it, unless GNOME Shell still runs the TuxTalk extension
-    from before an update, which has the method only after the user logs
-    out and back in. No extension at all fails the same way, so GNOME Shell
-    is asked whether TuxTalk's is enabled, never the error's wording, which
-    is translated."""
-    cant = _cant(action)
+def refusal(cant: str, error: Exception) -> str:
+    """The note for a desktop that couldn't be asked: *cant*, the note that
+    this desktop can't do it, unless GNOME Shell still runs the TuxTalk
+    extension from before an update, which has the method only after the
+    user logs out and back in. No extension at all fails the same way, so
+    GNOME Shell is asked whether TuxTalk's is enabled, never the error's
+    wording, which is translated."""
     if getattr(error, "get_dbus_name", lambda: None)() not in _NOTHING_THERE:
         return cant
     return "gnome_relogin" if app_focus.extension_enabled() else cant

@@ -1,5 +1,6 @@
 """The desktops the window tests stand in for, shared by test_app_focus.py,
-test_kwin_windows.py, test_x11_windows.py and test_window_actions.py: KWin
+test_kwin_windows.py, test_x11_windows.py, test_window_actions.py and
+test_desktop_actions.py: KWin
 (a script run under Node, answering over the test's private session bus),
 GNOME Shell (an object on that bus) and X11 (a private Xvfb with a stand-in
 window manager). Nothing here touches the real desktop. Registered as a
@@ -17,8 +18,8 @@ import pytest
 from gi.repository import Gio, GLib
 
 from gnome_extension_js import run_kwin_script
-from tuxtalk import (app_focus, extension_helper, kwin_activate, kwin_windows, x11_windows,
-                     xcb_ctypes)
+from tuxtalk import (app_focus, extension_helper, kwin_activate, kwin_desktop, kwin_windows,
+                     x11_desktop, x11_windows, xcb_ctypes)
 
 
 def set_desktop(monkeypatch, desktop, session):
@@ -44,8 +45,13 @@ def cosmic(monkeypatch):
 
 
 @pytest.fixture
+def x11_session(monkeypatch):
+    set_desktop(monkeypatch, "XFCE", "x11")
+
+
+@pytest.fixture
 def nobody_is_asked(monkeypatch):
-    """Fails the test if any desktop is asked about a window."""
+    """Fails the test if any desktop is asked about a window or desktops."""
     def asked(*_args, **_kwargs):
         pytest.fail("a desktop was asked about a window")
     monkeypatch.setattr(app_focus, "call_extension", asked)
@@ -53,6 +59,8 @@ def nobody_is_asked(monkeypatch):
     monkeypatch.setattr(kwin_windows, "act", asked)
     monkeypatch.setattr(app_focus.x11_activate, "activate", asked)
     monkeypatch.setattr(x11_windows, "act", asked)
+    monkeypatch.setattr(kwin_desktop, "act", asked)
+    monkeypatch.setattr(x11_desktop, "act", asked)
 
 
 def _private_bus():
@@ -242,10 +250,15 @@ _WINDOW_ACTION = """<method name="WindowAction">
     <arg type="b" direction="in" name="every"/>
     <arg type="b" direction="out" name="acted"/>
   </method>"""
+_DESKTOP_COMMAND = """<method name="DesktopCommand">
+    <arg type="s" direction="in" name="action"/>
+    <arg type="i" direction="in" name="number"/>
+    <arg type="s" direction="out" name="answer"/>
+  </method>"""
 
 
 _EXTENSION_XML = (f'<node><interface name="{app_focus.EXTENSION_INTERFACE}">'
-                  f"{_ACTIVATE_APP}{_WINDOW_ACTION}</interface></node>")
+                  f"{_ACTIVATE_APP}{_WINDOW_ACTION}{_DESKTOP_COMMAND}</interface></node>")
 # GNOME Shell's own: what it says about an installed extension.
 _SHELL_EXTENSIONS_XML = """<node><interface name="org.gnome.Shell.Extensions">
   <method name="GetExtensionInfo">
@@ -260,13 +273,15 @@ class FakeShell:
     own. With *extension*, TuxTalk's extension answers ActivateApp with
     *answer*, keeping each app id it's asked about in *called*, and
     WindowAction with *window_answer*, keeping (action, app_id, every) in
-    *window_calls*. *extension* "old" is enabled but serves no object, as
+    *window_calls*, and DesktopCommand with *desktop_answer*, keeping
+    (action, number) in *desktop_calls*. *extension* "old" is enabled but serves no object, as
     the 0.21 extension GNOME Shell still runs until the user logs out after
     an update; False: TuxTalk's extension isn't enabled at all."""
 
     def __init__(self, extension=True):
         self.answer = self.window_answer = True
-        self.called, self.window_calls = [], []
+        self.desktop_answer = "done"
+        self.called, self.window_calls, self.desktop_calls = [], [], []
         self._context = GLib.MainContext()
         self._loop = GLib.MainLoop(self._context)
         ready = threading.Event()
@@ -295,6 +310,10 @@ class FakeShell:
         if method == "WindowAction":
             self.window_calls.append(parameters.unpack())
             invocation.return_value(GLib.Variant("(b)", (self.window_answer,)))
+            return
+        if method == "DesktopCommand":
+            self.desktop_calls.append(parameters.unpack())
+            invocation.return_value(GLib.Variant("(s)", (self.desktop_answer,)))
             return
         self.called.append(parameters.unpack()[0])
         invocation.return_value(GLib.Variant("(b)", (self.answer,)))

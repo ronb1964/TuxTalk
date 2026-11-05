@@ -73,11 +73,6 @@ def kwin_calls(monkeypatch):
 
 
 @pytest.fixture
-def x11_session(monkeypatch):
-    set_desktop(monkeypatch, "XFCE", "x11")
-
-
-@pytest.fixture
 def x11_calls(monkeypatch):
     """x11_windows.act's stand-in: (action, desktop file, names, every)."""
     calls = Asked()
