@@ -693,6 +693,22 @@ def test_no_automatic_send_in_a_text_editor(monkeypatch):
     assert events == [("typed", "Hello there. ")]     # its space kept, no Enter
 
 
+def test_no_automatic_send_in_a_terminal(monkeypatch):
+    """In a terminal the Enter ran whatever was dictated as a command:
+    "testing 1, 2, 3" gave "command not found"."""
+    monkeypatch.setattr(live, "press_enter_after", True)
+    events = _dictate(monkeypatch, "testing 1 2 3", prepared=lambda r: r,
+                      window="org.kde.konsole")
+    assert events == [("typed", "testing 1 2 3")]
+
+
+def test_saying_press_enter_still_runs_a_command_in_a_terminal(monkeypatch):
+    monkeypatch.setattr(live, "press_enter_after", True)
+    events = _dictate(monkeypatch, "git status press enter", prepared=lambda r: r,
+                      window="org.kde.konsole")
+    assert events[-1] == ("enter", 'said "press enter"')
+
+
 def test_saying_press_enter_still_works_in_a_text_editor(monkeypatch):
     monkeypatch.setattr(live, "press_enter_after", True)
     events = _dictate(monkeypatch, "See you at noon, press enter",

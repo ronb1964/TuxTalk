@@ -177,10 +177,12 @@ def _values():
     esc_tip = "" if is_flatpak else (
         "<b>Changed your mind as you let go</b>\n"
         f"Press <b>Esc</b> right after you let go of <b>{hold}</b>: nothing more is typed,\n"
-        "and nothing is sent after it. A line already going in finishes, and with Type at\n"
-        "pause the phrases typed before stay where they are. To take back the last one,\n"
-        f"hold <b>{hold}</b>, say <b>delete last sentence</b>, let go (after a line cut\n"
-        "short, your app's own Ctrl+Z).\n\n")
+        "and nothing is sent after it. Esc can only stop what hasn't happened yet: on a\n"
+        "fast graphics card a short dictation is usually in before you can reach it.\n"
+        "A line already going in finishes, and with Type at pause the phrases typed\n"
+        f"before stay where they are. To take back the last one, hold <b>{hold}</b>, say\n"
+        "<b>delete last sentence</b>, let go (after a line cut short, your app's own\n"
+        "Ctrl+Z).\n\n")
 
     return {"hold": hold, "toggle": toggle, "paste_tip": paste_tip, "esc_tip": esc_tip,
             "paste_line": paste_line, "key_choice_tip": key_choice_tip,
@@ -245,6 +247,8 @@ presses Enter.
   • Switch windows during the wait, and nothing is sent.
   • In text editors, word processors and code editors it never presses Enter:
     there, Enter only starts a new line.
+  • In a terminal it never presses Enter either, so nothing runs before you've
+    read it. End with <b>press enter</b> to run what you said.
   • If what you said ends on a word like "and" or "the", it was probably cut
     off, so it isn't sent.
 

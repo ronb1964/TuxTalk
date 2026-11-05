@@ -26,6 +26,13 @@ before 0.15.0, so older entries use that name.
   recording, opening an app ends the recording. An AppImage with no menu
   entry can't be found. The words open, launch and start are English.
 - Help, on the Writing page, has the steps.
+- With "Send each dictation automatically" on, TuxTalk doesn't press Enter
+  in a terminal any more. It ran whatever you said as a command, so
+  "testing 1, 2, 3" came back "command not found". Say "press enter" at the
+  end when you do want it to run.
+- Help says what Esc can and can't do. It only stops what hasn't gone in
+  yet, so on a fast graphics card a short dictation is usually typed before
+  you get to it. Saying "delete last sentence" takes it back.
 
 ## [0.21.0] - 2026-11-04
 

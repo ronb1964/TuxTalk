@@ -138,6 +138,23 @@ def test_help_tells_what_esc_does_only_where_esc_is_heard(monkeypatch, flatpak, 
     assert "delete everything" not in mistakes
 
 
+def test_help_says_a_fast_computer_can_beat_esc(monkeypatch):
+    """On a fast graphics card a short dictation is in before Esc can be
+    reached; without saying so, Esc looked broken."""
+    from tuxtalk import help_text
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    mistakes = " ".join(dict(help_text.tabs())["Mistakes"].split())
+    assert "Esc can only stop what hasn't happened yet" in mistakes
+    assert "delete last sentence" in mistakes
+
+
+def test_help_says_auto_send_leaves_terminals_alone(monkeypatch):
+    from tuxtalk import help_text
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    chatting = " ".join(dict(help_text.tabs())["Chatting"].split())
+    assert "In a terminal it never presses Enter either" in chatting
+
+
 def _writing(monkeypatch, **settings):
     """The Writing section's text, as Help shows it with *settings*."""
     from tuxtalk import config, help_text

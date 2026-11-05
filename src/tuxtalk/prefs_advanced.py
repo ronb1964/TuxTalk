@@ -524,9 +524,10 @@ class AdvancedTab(Tab):
         check.set_active(bool(self.config.get("press_enter_after", False)))
         key = self.config.get("hotkey") or "the hotkey"
         check.set_tooltip_text(
-            "After each dictation TuxTalk presses Enter for you: a chat message is sent,\n"
-            "a terminal command runs. Not in text editors and word processors, where\n"
-            "Enter would only start a new line.\n\n"
+            "After each dictation TuxTalk presses Enter for you, so a chat message is sent.\n"
+            "Not in terminals, where it would run the words as a command (say “press\n"
+            "enter” to run one), nor in text editors and word processors, where Enter\n"
+            "would only start a new line.\n\n"
             f"During the wait, tap {key} to hold the send: the text stays in the box, so you\n"
             f"can fix it or add a screenshot, then press Enter yourself. Hold {key} instead\n"
             "to keep talking; that message is sent when you're done. A sent dictation\n"
