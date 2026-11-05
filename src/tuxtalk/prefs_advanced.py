@@ -415,7 +415,7 @@ class AdvancedTab(Tab):
         return row
 
     def _labs_open_apps(self, grid, row):
-        """Voice commands for apps, windows and keys (open_app.py); returns the next row.
+        """Voice commands for apps, windows and keys (voice_actions.py); returns the next row.
 
         The setting keeps its old name, `open_apps`, so saved configs and
         backups keep their meaning.
@@ -446,7 +446,8 @@ class AdvancedTab(Tab):
             "\u201cgo to the bottom\u201d,\n"
             "  \u201cfind\u201d, \u201csave\u201d, \u201cselect all\u201d, \u201ccopy\u201d, "
             "\u201cpaste\u201d, \u201cescape\u201d\n"
-            "\u2022 \u201cgo to youtube.com\u201d: opens the address (replaces the page)\n"
+            "\u2022 \u201cgo to youtube.com\u201d: opens the address\n"
+            "  (in a browser, replaces the page)\n"
             "\u2022 \u201cweb search cheap tires\u201d: your browser\u2019s own search\n"
             "\u2022 \u201cliteral open Firefox\u201d: \u201cliteral\u201d before\n"
             "  any of these types the words instead\n\n"
