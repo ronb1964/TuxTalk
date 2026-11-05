@@ -10,6 +10,8 @@
 - The evdev reader passes on releases too, since only a release marks a key
   as working; otherwise a key the compositor grabbed never tests as working.
 """
+import os
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -266,13 +268,55 @@ class _WatchedHelper:
         self.specs = list(specs)
 
 
-@pytest.mark.parametrize("version,asked", [(None, False), ("1.13", False), ("1.14", True)])
-def test_the_helper_is_asked_for_the_pair_only_when_it_can_report_it(version, asked):
-    """An older helper refuses the WATCH line with "L:57" in it, and would
-    then report not even F8 to the test."""
+@pytest.mark.parametrize("version", [None, "1.13", "1.14"])
+def test_the_helper_is_asked_for_the_pair_whatever_its_version(version):
+    """A helper that's stopped now may come back as 1.14, and is then sent
+    the same list again; an older one refuses only "L:57" and reports the
+    rest, F8 included. Working still needs 1.14 (service_hears)."""
     ecodes = pytest.importorskip("evdev").ecodes
     from tuxtalk.hotkey_test_devices import hotkey_test_helper
     helper = _WatchedHelper(version)
     assert hotkey_test_helper(ecodes, connect=lambda: helper) is helper
-    assert str(ecodes.KEY_F8) in helper.specs
-    assert ("L:57" in helper.specs) is asked
+    assert str(ecodes.KEY_F8) in helper.specs and "L:57" in helper.specs
+
+
+def test_a_helper_that_comes_back_as_1_14_reports_the_pair_to_the_test(setup):
+    """The test opened while the helper was stopped; it starts again, and
+    Left Ctrl+Space held then reaches the test and counts as working."""
+    ecodes = pytest.importorskip("evdev").ecodes
+    from tuxtalk.hotkey_helper_client import HelperKeyboard
+    from tuxtalk.hotkey_test_devices import hotkey_test_helper
+    helper, kb, _connect, _say, _heard, _seat = setup
+    helper.listener.close()
+    os.unlink(helper.socket_path)                   # stopped
+    client = HelperKeyboard(helper.socket_path, connect_timeout=0.2)
+
+    def connect():
+        assert not client.connect()
+        return client
+    try:
+        assert hotkey_test_helper(ecodes, connect=connect) is client
+        assert not htk.service_hears([client], "Left Ctrl+Space")
+        helper.listen()                             # started again
+        answered = threading.Event()
+
+        def serve():
+            while not answered.is_set():
+                helper.run_once(timeout=0.01)
+        server = threading.Thread(target=serve)
+        server.start()
+        try:
+            client.reconnect_at = 0
+            client._pump()
+        finally:
+            answered.set()
+            server.join(5)
+        kb.press(ecodes.KEY_LEFTCTRL)
+        kb.press(ecodes.KEY_SPACE)
+        for _ in range(4):
+            helper.run_once(timeout=0)
+            client._pump()
+        assert (ecodes.EV_KEY, ecodes.KEY_SPACE, 1) in [tuple(e) for e in client.queue]
+        assert htk.service_hears([client], "Left Ctrl+Space")
+    finally:
+        client.close()

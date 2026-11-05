@@ -3,8 +3,6 @@ keyboard_devices, as the dictation service's are): drained of old presses
 and read, with the hotkey helper standing in for them when it runs. Nothing
 here opens a window.
 """
-from . import secure_input
-from .config import CTRL_SPACE
 from .keyboard_devices import close_devices
 from .logger import setup_logger
 
@@ -38,11 +36,12 @@ def hotkey_test_helper(ecodes, connect=None):
     service won't read the keys through it (hotkey_helper_client.connect_helper).
     One installed but not answering is returned too: it keeps trying, and
     until it answers no key counts as working (service_hears). It reports
-    only the keys it's asked to watch, so ask for
-    every key the test accepts on its own: F1 to F24, Esc, Pause, Scroll Lock,
-    Right Ctrl and Right Alt (helper 1.5 and newer), and Left Ctrl+Space from
-    a helper that says it's 1.14 or newer: an older one refuses the whole
-    request, and then reports not even F8."""
+    only the keys it's asked to watch, so ask for every key the test
+    accepts: F1 to F24, Esc, Pause, Scroll Lock, Right Ctrl and Right Alt
+    (helper 1.5 and newer), and Left Ctrl+Space (1.14 and newer), whatever
+    its version: an older helper refuses only the keys it doesn't know and
+    reports the rest, and one that's stopped now is sent the same list when
+    it comes back, perhaps updated."""
     try:
         from .hotkey_helper_client import watch_specs
         if connect is None:
@@ -53,10 +52,8 @@ def hotkey_test_helper(ecodes, connect=None):
         codes = [getattr(ecodes, f"KEY_F{n}") for n in range(1, 25)]
         codes += [ecodes.KEY_ESC, ecodes.KEY_PAUSE, ecodes.KEY_SCROLLLOCK,
                   ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT]
-        specs = [str(code) for code in codes]
-        if helper.helper_version and secure_input.hears_key(helper.helper_version, CTRL_SPACE):
-            specs += watch_specs(ecodes.KEY_SPACE, None, None, ())
-        helper.watch(specs)
+        helper.watch([str(code) for code in codes]
+                     + watch_specs(ecodes.KEY_SPACE, None, None, ()))
         logger.info("Hotkey test: reading the keys through the hotkey helper")
         return helper
     except Exception as e:
