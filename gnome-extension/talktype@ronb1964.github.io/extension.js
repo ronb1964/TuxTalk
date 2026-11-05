@@ -104,9 +104,24 @@ const AppFocusIface = `
       <arg type="s" direction="in" name="app_id"/>
       <arg type="b" direction="out" name="had_window"/>
     </method>
+    <method name="WindowAction">
+      <arg type="s" direction="in" name="action"/>
+      <arg type="s" direction="in" name="app_id"/>
+      <arg type="b" direction="in" name="every"/>
+      <arg type="b" direction="out" name="acted"/>
+    </method>
   </interface>
 </node>`;
 const APP_FOCUS_PATH = '/io/github/ronb1964/TuxTalk/Extension';
+
+// What each WindowAction does to one window.
+const WINDOW_ACTIONS = {
+    close: w => w.delete(global.get_current_time()),
+    minimize: w => w.minimize(),
+    // GNOME 49 dropped the flags argument; older Shells need it.
+    maximize: w => (Meta.MaximizeFlags ? w.maximize(Meta.MaximizeFlags.BOTH) : w.maximize()),
+    unmaximize: w => (Meta.MaximizeFlags ? w.unmaximize(Meta.MaximizeFlags.BOTH) : w.unmaximize()),
+};
 
 const AppFocus = {
     // Bring forward the window of the menu entry *appId* ("firefox.desktop")
@@ -120,6 +135,30 @@ const AppFocus = {
             return false;
         Main.activateWindow(windows[0]);
         return true;
+    },
+
+    // Voice commands "close this", "minimize", "maximize": *action* is close,
+    // minimize, maximize or unmaximize. *appId* "" means the focused window;
+    // else the app's most recently used window, or with *every* all of them.
+    // False when there is no such window or action.
+    //
+    // close is delete(), the same as clicking the X: an app with unsaved work
+    // still asks "Save changes?". Never kill(), which would lose that work.
+    WindowAction(action, appId, every) {
+        const act = WINDOW_ACTIONS[action];
+        if (!act)
+            return false;
+        let windows;
+        if (appId === '') {
+            windows = global.display.focus_window ? [global.display.focus_window] : [];
+        } else {
+            const app = Shell.AppSystem.get_default().lookup_app(appId);
+            windows = app ? app.get_windows().filter(w => !w.skip_taskbar) : [];
+            if (!every)
+                windows = windows.slice(0, 1);
+        }
+        windows.forEach(act);
+        return windows.length > 0;
     },
 };
 
