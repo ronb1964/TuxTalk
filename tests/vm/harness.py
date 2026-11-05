@@ -242,11 +242,13 @@ class Run:
         return last
 
     def say(self, phrase_id, key="f8", sink="sink", wait=True):
-        """Hold *key*, speak the phrase, let go. Returns (typed, heard, log),
+        """Hold *key* (a QEMU key name, or a tuple of them held together, as
+        ("ctrl", "spc")), speak the phrase, let go. Returns (typed, heard, log),
         or with wait=False at once (None, None, log mark), for checks that act
         while TuxTalk is still busy."""
         mark = self.log_mark()
-        self.vm.key_down(key)
+        keys = (key,) if isinstance(key, str) else tuple(key)
+        self.vm.key_down(*keys)
         try:
             time.sleep(0.4)
             self.play(phrase_id)
@@ -254,7 +256,7 @@ class Run:
         finally:
             # A phrase that failed to play must not leave the key held down
             # for every check after it.
-            self.vm.key_up(key)
+            self.vm.key_up(*keys)
         if not wait:
             return None, None, mark
         typed = self.wait_dictation(mark, sink)
