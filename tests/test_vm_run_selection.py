@@ -68,3 +68,27 @@ def test_the_harness_modules_dont_stay_importable_by_their_plain_names(monkeypat
     assert sys.modules["report"] is earlier
     assert "run" not in sys.modules and "harness" not in sys.modules
 
+
+
+def test_every_check_sits_in_a_section_the_run_orders():
+    """A section missing from SECTION_ORDER makes the whole run fail on
+    the first VM, once it reaches the sorting."""
+    unordered = {c.section for c in run.CHECKS} - set(run.SECTION_ORDER)
+    assert not unordered, unordered
+
+
+def test_the_open_apps_checks_run_on_every_desktop_after_type_at_pause():
+    ids = ["open_text_editor", "open_again_focuses", "open_unknown_app", "open_gtk_app"]
+    for key in ("kde", "ubuntu", "mint", "pop"):
+        chosen = [c.id for c in run.selected(run.VMS[key], set(ids))]
+        assert chosen == ids, key
+    order = [c.id for c in run.selected(run.VMS["kde"], None)]
+    assert order.index("pause_statement") < order.index("open_text_editor") < order.index(
+        "ai_self_correct")
+
+
+def test_the_phrases_the_open_apps_checks_say_exist():
+    checks = import_vm_tool("checks_open_apps")
+    voices = import_vm_tool("voices")
+    assert set(checks.PHRASES) <= set(voices.load_phrases())
+    assert {phrase for _program, phrase in checks.GTK_APPS} <= set(checks.PHRASES)

@@ -320,8 +320,8 @@ One box at a time, each box a dictation of its own:
 <b>TuxTalk Labs</b>
 Labs features are experimental: they work, but they're still being refined, may
 change, and won't always get it right. Turn them on in <b>Preferences → Advanced →
-TuxTalk Labs</b>. Voice editing, select and move, and the indicator that follows your
-window are below; Type at pause is in the Hands-free section. Your
+TuxTalk Labs</b>. Voice editing, select and move, opening apps, and the indicator that
+follows your window are below; Type at pause is in the Hands-free section. Your
 feedback decides what gets finished: <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>.
 
 <span size="large">🧪 <b>Voice Editing</b></span>
@@ -438,6 +438,39 @@ Counts go up to 10 ("three" or "3").
   • It doesn't work in a terminal, where those keys mean other things.
   • After a select or move, <b>delete last word</b> won't run, since the cursor is
     somewhere else now. Use Ctrl+Z in the app instead.
+
+<span size="large">🧪 <b>Open Apps by Voice</b></span>
+Open an app, or bring it to the front, by saying its name. Turn it on in
+<b>Preferences → Advanced → TuxTalk Labs → Open apps</b>.
+
+<b>How to use it</b>
+Hold <b>{hold}</b>, say <b>open Firefox</b>, let go. Firefox opens, or comes to the front
+if it's already open. Nothing is typed. <b>launch</b> and <b>start</b> work like <b>open</b>,
+and the name is whatever the app is called in your menu: <b>open the calculator</b>,
+<b>open Konsole</b>.
+  • <b>open new Firefox</b> (or <b>open another Firefox</b>) always starts a second one.
+  • <b>open the browser</b>, <b>open email</b>, <b>open files</b>, <b>open the text editor</b>
+    and <b>open the terminal</b> open the app your desktop uses for that.
+  • Two copies of one app, say a Flatpak and a package from your distro: you get the
+    distro's. Say <b>open Firefox Flatpak</b> (or <b>Snap</b>, or <b>AppImage</b>) for the
+    other.
+  • <b>literal open Firefox</b> types the words "open Firefox".
+
+<b>Good to know</b>
+  • Only a dictation that is just the command counts. "I opened Firefox yesterday" and
+    "open the door and come in" are typed as usual.
+  • No app fits, or two fit equally well: the cancel beep sounds, a note floats over your
+    window saying what it heard or which apps fit, and nothing opens.
+  • Bringing an open app forward works on KDE, on GNOME with the TuxTalk extension, and
+    on X11 desktops like Cinnamon and Xfce. Elsewhere (COSMIC, Sway, Hyprland) the app is
+    started again, and most then show the window they already have.
+  • In a hands-free or Type at pause recording, opening an app ends the recording.
+  • It works in a terminal too.
+  • An AppImage can be opened only if it has a menu entry (a tool like Gear Lever
+    or AppImageLauncher makes one).
+  • The words open, launch, start, new, another and literal are English, like every
+    voice command here, whatever language you dictate in. App names can be said as the
+    menu shows them.
 
 <span size="large">🧪 <b>Indicator Follows Your Window</b></span>
 The recording indicator shows up in the window you're dictating into, wherever

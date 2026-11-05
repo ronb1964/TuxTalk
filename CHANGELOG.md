@@ -3,6 +3,29 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [Unreleased]
+
+- You can open an app by saying its name. Hold your dictation key, say "open
+  Firefox", let go. Firefox opens, or comes to the front if it's already
+  open, and nothing is typed. "launch" and "start" work too. It's in
+  Preferences, Advanced, TuxTalk Labs, Open apps, and it's off until you
+  turn it on.
+- "open new Firefox" or "open another Firefox" starts a second one. "open the
+  browser", "open email", "open files", "open the text editor" and "open the
+  terminal" open the app your desktop uses for that. "open Firefox Flatpak"
+  (or Snap, or AppImage) picks that copy when you have two. "literal open
+  Firefox" types the words.
+- Only a dictation that is just the command opens something. "I opened
+  Firefox yesterday" is typed as usual. If no app fits, or two fit equally
+  well, a note floats over your window, the cancel beep sounds and nothing
+  opens.
+- Bringing an open app to the front works on KDE, on GNOME with the TuxTalk
+  extension and on X11 desktops like Cinnamon and Xfce. On COSMIC, Sway and
+  Hyprland the app is started again. In a hands-free or Type at pause
+  recording, opening an app ends the recording. An AppImage with no menu
+  entry can't be found. The words open, launch and start are English.
+- Help, on the Writing page, has the steps.
+
 ## [0.21.0] - 2026-11-04
 
 - TuxTalk can be installed from its source code on any distro now. The

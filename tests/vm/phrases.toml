@@ -106,3 +106,17 @@ say = "hey can you send me that file when you get a chance"
 
 [ai_edit_formal]
 say = "make this more formal"
+
+# Open apps by voice (checks_open_apps.py).
+[open_text_editor]
+say = "Open the text editor."
+
+[open_unknown_app]
+say = "Open zorblefnatt."
+tts = "Open zorble fnat."
+
+[open_meld]
+say = "Open Meld."
+
+[open_calculator]
+say = "Open the calculator."

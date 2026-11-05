@@ -136,3 +136,28 @@ def test_help_tells_what_esc_does_only_where_esc_is_heard(monkeypatch, flatpak, 
     mistakes = dict(help_text.tabs())["Mistakes"]
     assert ("Changed your mind as you let go" in mistakes) is says
     assert "delete everything" not in mistakes
+
+
+def _writing(monkeypatch, **settings):
+    """The Writing section's text, as Help shows it with *settings*."""
+    from tuxtalk import config, help_text
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(**settings))
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    return next(text for title, text in help_text.tabs() if title == "Writing")
+
+
+def test_help_spells_out_opening_apps_with_your_own_hold_key(monkeypatch):
+    """Opening apps is a Labs feature: Help says where to turn it on, the
+    steps with the key from the settings, and what it can't do."""
+    writing = _writing(monkeypatch, hotkey="F6")
+    opening = writing.split("Open Apps by Voice", 1)[1].split("Indicator Follows", 1)[0]
+    assert "Preferences → Advanced → TuxTalk Labs" in opening
+    assert "Hold <b>F6</b>, say <b>open Firefox</b>, let go" in opening
+    assert "F8" not in opening
+    for said in ("open new Firefox", "open the browser", "literal open Firefox"):
+        assert said in opening, said
+    assert "menu entry" in opening and "English" in opening
+
+
+def test_labs_intro_lists_opening_apps(monkeypatch):
+    assert "opening apps" in _writing(monkeypatch).split("<b>TuxTalk Labs</b>", 1)[1][:500]
