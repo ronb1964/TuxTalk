@@ -155,7 +155,7 @@ say = "Go to example dot com."
 say = "Web search cheap tires."
 
 [scroll_down]
-say = "Scroll down."
+say = "Please scroll down."
 
 # Sentences that start like a command and must be typed as words.
 [sentence_new_tab]
