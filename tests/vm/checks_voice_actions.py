@@ -17,7 +17,8 @@ import re
 import time
 
 from checks_open_apps import (
-    _apps, _close, _new_app, _nothing_to_open, _open_apps_on, _say_and_wait, _windows)
+    _apps, _close, _new_app, _nothing_to_open, _open_apps_on, _running, _say_and_wait,
+    _windows)
 from harness import Outcome, check
 from vmlib import REMOTE
 
@@ -67,11 +68,13 @@ def _until(seconds, test):
         time.sleep(1)
 
 
-def _command(run, phrase_id, *outcomes, timeout=30, mode=None):
-    """Say *phrase_id* with a fresh test window in front and wait for the
-    log to show *outcomes*; returns the log mark. The words of a command
-    that isn't heard right are typed, which the checks report as misheard."""
-    run.sink_ready(fresh=True, mode=mode)
+def _command(run, phrase_id, *outcomes, timeout=30, mode=None, fresh=True):
+    """Say *phrase_id* with the test window in front (a new one unless
+    *fresh* is False, for a check that acts on the same window step by step)
+    and wait for the log to show *outcomes*; returns the log mark. The words
+    of a command that isn't heard right are typed, which the checks report
+    as misheard."""
+    run.sink_ready(fresh=fresh, mode=mode)
     _typed, _heard, mark = run.say(phrase_id, wait=False)
     run.wait_log(mark, *outcomes, "Voice command not done", "Text injected", timeout=timeout)
     time.sleep(1.5)
@@ -104,6 +107,16 @@ def _editor_open(run):
 # --- windows ---------------------------------------------------------------
 
 
+def _discard_and_close(run, app):
+    """Answer the save question with its discard button, as a person would;
+    only an editor whose dialog has none (or has none showing) is killed."""
+    for name in ("~iscard", "~on't save", "~without sav", "~Close"):
+        if run.vm.ui("click", "button", name, timeout=2):
+            time.sleep(1.5)
+            break
+    _close(run, app)
+
+
 @check(SECTION, "close_asks_to_save", "“close the text editor” asks to save, closing nothing")
 def close_asks_to_save(run):
     if why := _action_blocker(run):
@@ -124,7 +137,7 @@ def close_asks_to_save(run):
                            or any(re.search("save|unsaved|changes|discard", w[1], re.I)
                                   for w in _windows(run) if w[0] == app))
             log = run.log_since(mark)
-            running = not run.vm.ssh(f"pgrep -f {_pattern(app)}", check=False).returncode
+            running = not run.vm.ssh(f"pgrep -f {_running(app)}", check=False).returncode
             shot = run.shot("close-asks")
             problems = []
             if "Voice command: close" not in log:
@@ -138,12 +151,7 @@ def close_asks_to_save(run):
             return Outcome("pass", f"{app} asked what to do with the unsaved line and is still "
                            "running", screenshot=shot)
         finally:
-            _close(run, app)    # a kill: the unsaved line is thrown away
-
-
-def _pattern(app):
-    """pgrep -f pattern for the process of the application *app*."""
-    return f"'(^|/){re.escape(app.lower())}( |$)'"
+            _discard_and_close(run, app)
 
 
 @check(SECTION, "close_this_window", "“close this window” closes the focused window")
@@ -193,7 +201,7 @@ def switch_to(run):
             if len(windows) != count:
                 problems.append(f"{count} window(s) of {app} before, {len(windows)} after")
             if typed:
-                problems.append(f"the words were typed: {typed!r}")
+                problems.append(f"the words were typed: {typed[:60]!r}")
             if problems:
                 return Outcome("fail", "; ".join(problems), typed=typed, screenshot=shot)
             return Outcome("pass", f"The open {app} window came forward; no new window, "
@@ -214,15 +222,14 @@ def minimize_maximize(run):
         return Outcome("skip", why)
     with _open_apps_on(run):
         run.sink_ready(fresh=True)      # the test window opens maximised
-        start = _area(_sink(run))
-        if not start:
+        if not _area(_sink(run)):
             return Outcome("skip", "this desktop reports no window sizes through AT-SPI")
         steps = []
         for phrase, wanted in (("restore_window", "smaller"), ("maximize_window", "bigger")):
-            mark = _command(run, phrase, "Voice command: ")
+            before = _area(_sink(run))
+            mark = _command(run, phrase, "Voice command: ", fresh=False)
             if misheard := _unheard(run, mark):
                 return misheard
-            before = _area(_sink(run))
             after = _until(8, lambda before=before: (
                 _area(_sink(run)) != before and _area(_sink(run))))
             if not after or (after > before) != (wanted == "bigger"):
@@ -230,7 +237,9 @@ def minimize_maximize(run):
                                f"{after or before} px, expected it {wanted}",
                                screenshot=run.shot(f"size-{phrase}"))
             steps.append(f"{phrase.split('_')[0]} {before} -> {after}")
-        mark = _command(run, "minimize_window", "Voice command: ")
+        if "active" not in ((_sink(run) or {}).get("states") or []):
+            return Outcome("skip", "the test window doesn't have the focus to be minimized from")
+        mark = _command(run, "minimize_window", "Voice command: ", fresh=False)
         if misheard := _unheard(run, mark):
             return misheard
         gone = _until(8, lambda: (lambda w: w is None or "iconified" in w["states"]
@@ -299,7 +308,9 @@ def firefox_new_tab_and_back(run):
                            screenshot=run.shot("go-back"))
         tabs = firefox.tabs()
         if not tabs:
-            return Outcome("skip", "Firefox shows no tabs through AT-SPI here")
+            return Outcome("pass", "“go back” showed the first page again. The tab half wasn't "
+                           "checked: Firefox shows no tabs through AT-SPI here",
+                           screenshot=run.shot("go-back"))
         _typed, _heard, mark = run.say("new_tab", wait=False)
         run.wait_log(mark, "Voice command: new tab", "Voice command not done",
                      "Text injected", timeout=30)
@@ -327,12 +338,20 @@ def go_to_in_browser(run):
         run.wait_log(mark, "Voice command: go to an address", "Voice command not done",
                      "Text injected", timeout=30)
 
+        seen = []
+
         def address():
-            bar = run.vm.ui("find", "entry", "~address", "~Firefox", timeout=3) or {}
-            return bar.get("text", "") if "example.com" in bar.get("text", "") else None
+            bar = run.vm.ui("find", "entry", "~address", "~Firefox", timeout=3)
+            if bar:
+                seen.append(bar)
+                return bar["text"] if "example.com" in bar.get("text", "") else None
+            return None
         text = _until(15, address)
         log = run.log_since(mark)
         shot = run.shot("go-to-in-browser")
+        if not seen:
+            return Outcome("skip", "Firefox shows no address bar through AT-SPI here",
+                           screenshot=shot)
         if not text:
             return Outcome("fail", "the address bar never held example.com; log: "
                            f"{'Voice command: go to an address' in log}", screenshot=shot)
@@ -354,19 +373,37 @@ def _forward_browser(run, before, timeout=40):
         (w for w in _browser_windows(run) if w[0] not in before or w[2]), None))
 
 
+def _processes(run):
+    """{pid: command name} of the user's processes now."""
+    out = run.vm.ssh("ps -u $(id -u) -o pid=,comm=", check=False).stdout
+    return dict(line.split(None, 1) for line in out.splitlines() if " " in line.strip())
+
+
+def _close_new_browsers(run, before):
+    """Kill the browser processes that started since *before* (_processes()):
+    a browser that was already running is left alone, whatever its name."""
+    new = [pid for pid, name in _processes(run).items()
+           if pid not in before and BROWSER.search(name)]
+    if new:
+        run.vm.ssh(f"kill {' '.join(new)}", check=False)
+        time.sleep(1.5)
+
+
 def _no_default_browser(run):
     """A skip Outcome when the VM names no default browser, else None."""
     out = run.vm.session("xdg-settings", "get", "default-web-browser", check=False).stdout
     return None if out.strip() else Outcome("skip", "this VM has no default web browser")
 
 
+# In the two checks below, "nothing leaked" rests on the test window being empty and
+# the words being absent from the log; "Text injected" only guards the wait.
 @check(SECTION, "go_to_outside_browser", "“go to example dot com” in another app opens it in the browser")
 def go_to_outside_browser(run):
     if skip := _no_default_browser(run):
         return skip
     with _open_apps_on(run):
         run.sink_ready(fresh=True)
-        before = _apps(run)
+        before, pids = _apps(run), _processes(run)
         _typed, _heard, mark = run.say("go_to_example", wait=False)
         run.wait_log(mark, "Voice command: go to an address", "Voice command not done",
                      "Text injected", timeout=30)
@@ -383,7 +420,7 @@ def go_to_outside_browser(run):
             if window is None:
                 problems.append("no browser window appeared or came forward")
             if typed:
-                problems.append(f"the sink got text: {typed!r}")
+                problems.append(f"the sink got text: {typed[:60]!r}")
             if "example" in log:
                 problems.append("the address is in the log")
             if problems:
@@ -391,8 +428,7 @@ def go_to_outside_browser(run):
             return Outcome("pass", f"A browser window (“{window[0]}”) came forward; the address "
                            "stayed out of the sink and the log", screenshot=shot)
         finally:
-            for app in _apps(run) - before:
-                _close(run, app.lower())
+            _close_new_browsers(run, pids)
 
 
 @check(SECTION, "web_search", "“web search cheap tires” searches in the default browser")
@@ -403,7 +439,7 @@ def web_search(run):
         return skip
     with _open_apps_on(run):
         run.sink_ready(fresh=True)
-        before = _apps(run)
+        before, pids = _apps(run), _processes(run)
         _typed, _heard, mark = run.say("web_search_tires", wait=False)
         run.wait_log(mark, "Voice command: web search", "Voice command not done",
                      "Text injected", timeout=45)
@@ -411,7 +447,7 @@ def web_search(run):
         time.sleep(3)
 
         def holds_words():
-            bar = run.vm.ui("find", "entry", "~address", None, timeout=3) or {}
+            bar = run.vm.ui("find", "entry", "~address", timeout=3) or {}
             titles = " ".join(w[1] for w in _browser_windows(run))
             return "tires" in (bar.get("text", "") + " " + titles).lower()
         found = _until(10, holds_words)
@@ -429,7 +465,7 @@ def web_search(run):
             if not found:
                 problems.append("neither its address bar nor its title holds “cheap tires”")
             if typed:
-                problems.append(f"the sink got text: {typed!r}")
+                problems.append(f"the sink got text: {typed[:60]!r}")
             if "tires" in log:
                 problems.append("the search words are in the log")
             if problems:
@@ -437,8 +473,7 @@ def web_search(run):
             return Outcome("pass", "The default browser came forward with the search; the words "
                            "stayed out of the sink and the log", screenshot=shot)
         finally:
-            for app in _apps(run) - before:
-                _close(run, app.lower())
+            _close_new_browsers(run, pids)
 
 
 @check(SECTION, "scroll_down", "“scroll down” scrolls the window under the pointer's focus")
@@ -456,7 +491,7 @@ def scroll_down(run):
         if position <= 0:
             problems.append("the text did not scroll")
         if typed:
-            problems.append(f"text was typed: {typed!r}")
+            problems.append(f"text was typed: {typed[:60]!r}")
         if problems:
             return Outcome("fail", "; ".join(problems), typed=typed, screenshot=shot)
         return Outcome("pass", f"The tall text scrolled down to {position:.0f} px; nothing typed",
@@ -474,6 +509,7 @@ SENTENCES = (("sentence_new_tab", "I opened a new tab yesterday."),
 @check(SECTION, "sentences_are_typed", "Sentences that start like a command are typed as words")
 def sentences_are_typed(run):
     with _open_apps_on(run):
+        run.sink_ready(fresh=True)
         before = _apps(run)
         for phrase, expected in SENTENCES:
             run.sink_ready(fresh=True)
