@@ -57,6 +57,14 @@ def test_window_requests():
 def test_close_all_naming_no_app_is_dictation(said):
     assert P(said) is None
 
+def test_an_address_keeps_the_case_of_its_path():
+    """A path or query may be case-sensitive (a reset link's token): only
+    the scheme and the host are lowercased."""
+    assert P("go to https://example.com/ResetTokenABC") == AddressRequest(
+        "https://example.com/ResetTokenABC")
+    assert P("Go to HTTPS://Example.COM/a?Key=XY") == AddressRequest(
+        "https://example.com/a?Key=XY")
+
 @pytest.mark.parametrize("said, url", [("go to youtube dot com", "https://youtube.com"),
     ("Go to YouTube.com.", "https://youtube.com"),
     ("go to www youtube dot com", "https://www.youtube.com"),

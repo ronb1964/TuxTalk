@@ -91,22 +91,26 @@ ADDRESS_ENDINGS = frozenset({
     "no", "dk", "fi", "pl", "ie", "nz", "in", "jp", "br", "mx",
 })
 _ADDRESS = re.compile(r"[a-z0-9-]+(\.[a-z0-9-]+)+(/\S*)?")
-_SCHEME = re.compile(r"^https?://")
+_SCHEME = re.compile(r"^https?://", re.IGNORECASE)
 
 
 def address(said: str) -> str | None:
-    """The web address *said* is ("youtube dot com" -> https://youtube.com), or None."""
-    text = said.lower().strip().rstrip(".!?,")
+    """The web address *said* is ("youtube dot com" -> https://youtube.com),
+    or None. Only the scheme and the host are lowercased: a path or a query
+    may be case-sensitive (a reset link's token)."""
+    text = said.strip().rstrip(".!?,")
     scheme = _SCHEME.match(text)
     text = text[scheme.end():] if scheme else text
-    text = re.sub(r"\s+dot\s+", ".", text)
+    text = re.sub(r"(?i)\s+dot\s+", ".", text)
     text = re.sub(r"\s*\.\s*", ".", text)
-    text = re.sub(r"^www ", "www.", text)
+    text = re.sub(r"(?i)^www ", "www.", text)
+    host, slash, path = text.partition("/")
+    text = host.lower() + slash + path
     if not _ADDRESS.fullmatch(text):
         return None
-    if text.split("/")[0].split(".")[-1] not in ADDRESS_ENDINGS:
+    if host.lower().split(".")[-1] not in ADDRESS_ENDINGS:
         return None
-    return (scheme.group() if scheme else "https://") + text
+    return (scheme.group().lower() if scheme else "https://") + text
 
 
 def _key(said: str) -> KeyRequest | None:
