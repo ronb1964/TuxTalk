@@ -340,9 +340,10 @@ One box at a time, each box a dictation of its own:
 <b>TuxTalk Labs</b>
 Labs features are experimental: they work, but they're still being refined, may
 change, and won't always get it right. Turn them on in <b>Preferences → Advanced →
-TuxTalk Labs</b>. Voice editing, select and move, opening apps, and the indicator that
-follows your window are below; Type at pause is in the Hands-free section. Your
-feedback decides what gets finished: <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>.
+TuxTalk Labs</b>. Voice editing, select and move, opening apps (and windows and keys),
+and the indicator that follows your window are below; Type at pause is in the
+Hands-free section. Your feedback decides what gets finished:
+<a href="{FEEDBACK_URL}">TuxTalk Discussions</a>.
 
 <span size="large">🧪 <b>Voice Editing</b></span>
 Change text by saying how you want it changed.
@@ -459,9 +460,10 @@ Counts go up to 10 ("three" or "3").
   • After a select or move, <b>delete last word</b> won't run, since the cursor is
     somewhere else now. Use Ctrl+Z in the app instead.
 
-<span size="large">🧪 <b>Open Apps by Voice</b></span>
-Open an app, or bring it to the front, by saying its name. Turn it on in
-<b>Preferences → Advanced → TuxTalk Labs → Open apps</b>.
+<span size="large">🧪 <b>Apps, Windows and Keys by Voice</b></span>
+Open apps, close or switch windows, press everyday keys, go to an address or search
+the web, all by saying it. Turn it on in
+<b>Preferences → Advanced → TuxTalk Labs → Apps, windows and keys by voice</b>.
 
 <b>How to use it</b>
 Hold <b>{hold}</b>, say <b>open Firefox</b>, let go. Firefox opens, or comes to the front
@@ -476,6 +478,31 @@ and the name is whatever the app is called in your menu: <b>open the calculator<
     other.
   • <b>literal open Firefox</b> types the words "open Firefox".
 
+<b>Windows</b>
+Hold <b>{hold}</b>, say <b>close Firefox</b>, let go. Nothing is typed.
+  • <b>close Firefox</b> closes its windows, <b>close all Firefox</b> closes every one,
+    <b>close window</b> closes the one you're in.
+  • <b>switch to Firefox</b> brings it to the front.
+  • <b>minimize window</b>, <b>maximize window</b> and <b>restore window</b>.
+
+<b>Keys</b>
+Hold <b>{hold}</b>, say <b>new tab</b>, let go. The key is pressed in the window you're in.
+  • <b>new tab</b>  •  <b>close tab</b>  •  <b>next tab</b>  •  <b>previous tab</b>
+    •  <b>reopen tab</b>
+  • <b>go back</b>  •  <b>go forward</b>  •  <b>reload</b> (or <b>refresh</b>)
+  • <b>scroll down</b>  •  <b>scroll up 5</b> (a number scrolls more)
+  • <b>page down</b>  •  <b>page up</b>  •  <b>go to the top</b>  •  <b>go to the bottom</b>
+  • <b>find</b>  •  <b>save</b>  •  <b>select all</b>  •  <b>copy</b>  •  <b>paste</b>
+    •  <b>escape</b>
+
+<b>Addresses and web search</b>
+Hold <b>{hold}</b>, say <b>go to youtube.com</b> (or <b>open youtube dot com</b>), let go.
+In a browser it uses the address bar; anywhere else your default browser opens it.
+Hold <b>{hold}</b>, say <b>web search cheap tires</b>, let go: your browser's own search
+engine shows the results.
+
+Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>.
+
 <b>Good to know</b>
   • Only a dictation that is just the command counts. "I opened Firefox yesterday" and
     "open the door and come in" are typed as usual.
@@ -485,11 +512,17 @@ and the name is whatever the app is called in your menu: <b>open the calculator<
   • Bringing an open app forward works on KDE, on GNOME with the TuxTalk extension, and
     on X11 desktops like Cinnamon and Xfce. Elsewhere (COSMIC, Sway, Hyprland) the app is
     started again, and most then show the window they already have.
-  • In a hands-free or Type at pause recording, opening an app ends the recording.
-  • It works in a terminal too.
+  • In a hands-free or Type at pause recording, a command ends the recording.
+  • Closing asks to save unsaved work, just like clicking the X.
+  • Closing, minimizing and switching work on KDE, on GNOME with the TuxTalk extension
+    (log out and back in once after updating) and on X11 desktops. On COSMIC, Sway and
+    similar, TuxTalk says "Can't … on this desktop".
+  • Apps open in a terminal too. The keys are the terminal's own there, so <b>select all</b>,
+    <b>save</b>, <b>find</b> and <b>reopen tab</b> don't apply in a terminal.
+  • <b>go to</b> needs a real web address, like youtube.com. Only <b>web search</b> searches.
   • An AppImage can be opened only if it has a menu entry (a tool like Gear Lever
     or AppImageLauncher makes one).
-  • The words open, launch, start, new, another and literal are English, like every
+  • The command words (open, close, new tab, web search, literal…) are English, like every
     voice command here, whatever language you dictate in. App names can be said as the
     menu shows them.
 

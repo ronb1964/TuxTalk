@@ -41,6 +41,22 @@ before 0.15.0, so older entries use that name.
   recording, opening an app ends the recording. An AppImage with no menu
   entry can't be found. The words open, launch and start are English.
 - Help, on the Writing page, has the steps.
+- The same Labs tickbox now does more, and is called "Apps, windows and keys
+  by voice". Hold your dictation key, say it, let go, and nothing is typed:
+  "close Firefox", "close all Firefox", "close window", "switch to Firefox",
+  "minimize window", "maximize window" and "restore window"; "new tab", "close
+  tab", "next tab", "previous tab", "reopen tab", "go back", "go forward",
+  "reload", "scroll down" (or "scroll down 5"), "page up", "go to the top",
+  "find", "save", "select all", "copy", "paste" and "escape"; "go to
+  youtube.com", which uses your browser's address bar or opens your default
+  browser; and "web search cheap tires", which uses your browser's own search
+  engine. In a terminal the keys are the terminal's own, and select all, save,
+  find and reopen tab don't apply there. "literal" before any of them types
+  the words.
+- Closing a window asks to save unsaved work, like clicking its X. Closing,
+  minimizing and switching work on KDE, on GNOME with the TuxTalk extension
+  (log out and back in once after updating) and on X11 desktops. On COSMIC,
+  Sway and similar, TuxTalk says it can't do that on this desktop.
 - With "Send each dictation automatically" on, TuxTalk doesn't press Enter
   in a terminal any more. It ran whatever you said as a command, so
   "testing 1, 2, 3" came back "command not found". Say "press enter" at the

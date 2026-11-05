@@ -415,25 +415,44 @@ class AdvancedTab(Tab):
         return row
 
     def _labs_open_apps(self, grid, row):
-        """Opening apps by voice (open_app.py); returns the next row."""
-        grid.attach(subheading("Opening apps"), 0, row, 2, 1)
+        """Voice commands for apps, windows and keys (open_app.py); returns the next row.
+
+        The setting keeps its old name, `open_apps`, so saved configs and
+        backups keep their meaning.
+        """
+        grid.attach(subheading("Apps, windows and keys"), 0, row, 2, 1)
         row += 1
         hold = self.config.get("hotkey") or "F8"      # the key Help names too
-        check = Gtk.CheckButton(label="Open apps: say \u201copen Firefox\u201d")
+        check = Gtk.CheckButton(
+            label="Apps, windows and keys by voice: \u201copen Firefox\u201d, "
+                  "\u201cnew tab\u201d, \u201cgo to youtube.com\u201d")
         check.set_active(bool(self.config.get("open_apps", False)))
         check.set_tooltip_text(
-            f"Hold {hold}, say \u201copen\u201d and an app\u2019s name, let go: the app opens,\n"
-            "or comes to the front if it\u2019s already open. Nothing is typed.\n\n"
+            f"Hold {hold}, say a command, let go: it happens and nothing is typed.\n\n"
             "\u2022 \u201copen\u201d, \u201claunch\u201d or \u201cstart\u201d: "
-            "\u201copen Firefox\u201d, \u201claunch the calculator\u201d\n"
-            "\u2022 \u201copen new Firefox\u201d always opens another one\n"
-            "\u2022 \u201copen the browser\u201d, \u201copen email\u201d, "
-            "\u201copen files\u201d: your usual apps\n"
-            "\u2022 \u201cliteral open Firefox\u201d types the words\n\n"
-            "Inside a longer sentence, or naming no app, the words are typed as usual.\n"
-            "Said in a hands-free or Type at pause recording, opening the app ends\n"
-            "the recording.\n"
-            "Works in terminals too. More in Help, on the Writing page.")
+            "\u201copen Firefox\u201d, \u201copen new Firefox\u201d,\n"
+            "  \u201copen the browser\u201d, \u201copen email\u201d\n"
+            "\u2022 \u201cclose Firefox\u201d, \u201cclose all Firefox\u201d, "
+            "\u201cclose window\u201d,\n"
+            "  \u201cswitch to Firefox\u201d, \u201cminimize window\u201d, "
+            "\u201cmaximize window\u201d,\n"
+            "  \u201crestore window\u201d\n"
+            "\u2022 \u201cnew tab\u201d, \u201cclose tab\u201d, \u201cnext tab\u201d, "
+            "\u201cprevious tab\u201d,\n"
+            "  \u201creopen tab\u201d, \u201cgo back\u201d, \u201cgo forward\u201d, "
+            "\u201creload\u201d,\n"
+            "  \u201cscroll up\u201d, \u201cscroll down\u201d (add a number for more),\n"
+            "  \u201cpage up\u201d, \u201cpage down\u201d, \u201cgo to the top\u201d, "
+            "\u201cgo to the bottom\u201d,\n"
+            "  \u201cfind\u201d, \u201csave\u201d, \u201cselect all\u201d, \u201ccopy\u201d, "
+            "\u201cpaste\u201d, \u201cescape\u201d\n"
+            "\u2022 \u201cgo to youtube.com\u201d: opens the address in your browser\n"
+            "\u2022 \u201cweb search cheap tires\u201d: your browser\u2019s own search\n"
+            "\u2022 \u201cliteral open Firefox\u201d: \u201cliteral\u201d before\n"
+            "  any of these types the words instead\n\n"
+            "Inside a longer sentence the words are typed as usual.\n"
+            "Said in a hands-free or Type at pause recording, it ends the recording.\n"
+            "More in Help, on the Writing page.")
         check.connect("toggled", lambda c: self.update_config("open_apps", c.get_active()))
         check.set_margin_start(LABS_INDENT)
         grid.attach(check, 0, row, 2, 1)

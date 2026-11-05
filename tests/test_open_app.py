@@ -382,7 +382,8 @@ def test_a_recording_started_in_the_same_tick_keeps_going(desktop, recording_on,
 
 # --- Preferences ---------------------------------------------------------------------------
 
-OPEN_APPS_LABEL = "Open apps: say “open Firefox”"
+OPEN_APPS_LABEL = ("Apps, windows and keys by voice: “open Firefox”, “new tab”, "
+                   "“go to youtube.com”")
 
 
 def _labs_boxes(window):
@@ -407,7 +408,7 @@ def test_it_is_a_labs_tickbox_after_select_and_move(prefs_window):
     assert not box.get_active()
     tip = box.get_tooltip_text()
     for said in ("“launch”", "“open new Firefox”", "“open the browser”",
-                 "“literal open Firefox”", "hands-free", "naming no app"):
+                 "“literal open Firefox”", "hands-free", "typed as usual"):
         assert said in tip
     box.set_active(True)
     assert window.config["open_apps"] is True
@@ -416,6 +417,14 @@ def test_it_is_a_labs_tickbox_after_select_and_move(prefs_window):
 def test_the_tooltip_names_the_users_own_key(prefs_window):
     tip = _labs_boxes(prefs_window(hotkey="F6"))[OPEN_APPS_LABEL].get_tooltip_text()
     assert tip.startswith("Hold F6,")
+
+
+def test_the_tooltip_lists_every_kind_of_command_with_your_own_key(prefs_window):
+    tip = _labs_boxes(prefs_window(hotkey="F6"))[OPEN_APPS_LABEL].get_tooltip_text()
+    for said in ("open Firefox", "close Firefox", "switch to Firefox", "minimize window",
+                 "new tab", "scroll down", "go to youtube.com", "web search", "literal"):
+        assert said in tip, said
+    assert "F6" in tip and "F8" not in tip
 
 
 def test_the_flatpak_has_no_tickbox(prefs_window, monkeypatch):

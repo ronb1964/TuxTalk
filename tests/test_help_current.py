@@ -171,7 +171,7 @@ def test_help_spells_out_opening_apps_with_your_own_hold_key(monkeypatch):
     """Opening apps is a Labs feature: Help says where to turn it on, the
     steps with the key from the settings, and what it can't do."""
     writing = _writing(monkeypatch, hotkey="F6")
-    opening = writing.split("Open Apps by Voice", 1)[1].split("Indicator Follows", 1)[0]
+    opening = writing.split("Apps, Windows and Keys by Voice", 1)[1].split("Indicator Follows", 1)[0]
     assert "Preferences → Advanced → TuxTalk Labs" in opening
     assert "Hold <b>F6</b>, say <b>open Firefox</b>, let go" in opening
     assert "F8" not in opening
@@ -179,6 +179,16 @@ def test_help_spells_out_opening_apps_with_your_own_hold_key(monkeypatch):
         assert said in opening, said
     assert "menu entry" in opening and "English" in opening
     assert "fits no app is typed as usual" in opening
+
+
+def test_help_spells_out_windows_keys_and_addresses_with_your_own_hold_key(monkeypatch):
+    writing = _writing(monkeypatch, hotkey="F6")
+    section = writing.split("Apps, Windows and Keys by Voice", 1)[1].split(
+        "Indicator Follows", 1)[0]
+    assert "Hold <b>F6</b>, say <b>new tab</b>, let go" in section
+    for said in ("close Firefox", "go to youtube.com", "web search", "terminal", "log out"):
+        assert said in section, said
+    assert "F8" not in section
 
 
 def test_labs_intro_lists_opening_apps(monkeypatch):
