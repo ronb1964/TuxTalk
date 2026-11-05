@@ -127,20 +127,58 @@ def _candidates(words, indexed):
     return _fuzzy(letters, indexed)
 
 
-def _one_of_each_app(items, install):
-    """One entry per app: the same app installed twice is one app, not a tie.
+def _name_key(entry):
+    return " ".join(_clean(entry.english_name or entry.name)) or entry.app_id
 
-    The copy the request names, else the distro's own, else the first listed.
+
+def _packaged_as(entry, program):
+    """Whether *entry* is a Flatpak or Snap of *program*: its id ends with it
+    ("org.mozilla.firefox" for firefox)."""
+    stem = entry.app_id.removesuffix(".desktop").casefold()
+    return entry.install in ("flatpak", "snap") and bool(program) and stem.endswith(
+        "." + program)
+
+
+def _same_program(a, b):
+    pa, pb = a.program.casefold(), b.program.casefold()
+    return (bool(pa) and pa == pb) or _packaged_as(a, pb) or _packaged_as(b, pa)
+
+
+def copies(entry, entries):
+    """Every copy of *entry*'s app among *entries*, *entry* first: the
+    entries that run the same program, as the distro's Firefox, Flathub's
+    and the Snap do, whatever each is named ("Firefox Web Browser" on Mint).
+
+    A program behind two entries of one install starts different apps
+    (LibreOffice's Writer and Calc, Steam's games): then a copy must have
+    *entry*'s name too. Different programs with one name ("Calculator") are
+    never copies.
     """
-    groups = {}
-    for item in items:
-        e = item.entry
-        key = " ".join(_clean(e.english_name or e.name)) or e.app_id
-        groups.setdefault(key, []).append(e)
-    chosen = []
-    for copies in groups.values():
-        by_install = {c.install: c for c in reversed(copies)}
-        chosen.append(by_install.get(install) or by_install.get("") or copies[0])
+    same = [entry] + [e for e in entries if e != entry and _same_program(entry, e)]
+    installs = [e.install for e in same]
+    if len(set(installs)) < len(installs):
+        name = _name_key(entry)
+        same = [e for e in same if _name_key(e) == name]
+    return same
+
+
+def _pick(group, install):
+    """The copy *install* names, else the distro's own, else the first."""
+    by_install = {c.install: c for c in reversed(group)}
+    return by_install.get(install) or by_install.get("") or group[0]
+
+
+def _one_of_each_app(hits, entries, install):
+    """One entry per app among *hits*: the same app installed twice is one
+    app, not a tie, and the copy opened is _pick's from all its copies, not
+    only the ones that matched."""
+    chosen, seen = [], set()
+    for item in hits:
+        if item.entry.app_id in seen:
+            continue
+        group = copies(item.entry, entries)
+        seen.update(e.app_id for e in group)
+        chosen.append(_pick(group, install))
     return tuple(chosen)
 
 
@@ -158,11 +196,14 @@ def find(request, entries, defaults):
     if default_id:
         match = [e for e in entries if e.app_id == default_id]
         if match:
-            return Found("one", (match[0],))
+            # The user's own choice, unless the request names another copy.
+            chosen = next((c for c in copies(match[0], entries)
+                           if request.install and c.install == request.install), match[0])
+            return Found("one", (chosen,))
     hits = _candidates(words, [_Indexed(e) for e in entries])
     if not hits:
         return _NONE
-    apps = _one_of_each_app(hits, request.install)
+    apps = _one_of_each_app(hits, entries, request.install)
     return Found("one" if len(apps) == 1 else "tie", apps)
 
 

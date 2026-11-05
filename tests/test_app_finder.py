@@ -69,6 +69,61 @@ def test_a_missing_copy_falls_back_to_the_app_that_is_there(apps):
     assert ids(find(parse("open firefox snap"), apps, {})) == ["firefox.desktop"]
 
 
+# Mint's and Ubuntu's own entries are named differently from Flathub's.
+MINT_AND_FLATHUB = [
+    entry("org.mozilla.firefox.desktop", "Firefox", "Web Browser", "firefox", "flatpak"),
+    entry("firefox.desktop", "Firefox Web Browser", "Web Browser", "firefox"),
+    entry("org.mozilla.Thunderbird.desktop", "Thunderbird", "Email Client", "thunderbird",
+          "flatpak"),
+    entry("thunderbird.desktop", "Thunderbird Mail", "Email Client", "thunderbird"),
+]
+
+
+def test_copies_named_differently_still_open_the_distros(apps):
+    """Help promises the distro's copy, where the user's profile is."""
+    assert ids(find(parse("open firefox"), MINT_AND_FLATHUB, {})) == ["firefox.desktop"]
+    assert ids(find(parse("open thunderbird"), MINT_AND_FLATHUB, {})) == ["thunderbird.desktop"]
+    assert ids(find(parse("open firefox flatpak"), MINT_AND_FLATHUB, {})) == [
+        "org.mozilla.firefox.desktop"]
+
+
+def test_different_apps_with_one_name_are_a_tie():
+    """GNOME's and elementary's calculators are both called Calculator: no
+    guessing which."""
+    calculators = [entry("org.gnome.Calculator.desktop", "Calculator", "", "gnome-calculator"),
+                   entry("io.elementary.calculator.desktop", "Calculator", "",
+                         "io.elementary.calculator")]
+    assert find(parse("open calculator"), calculators, {}).kind == "tie"
+
+
+def test_a_programs_several_apps_are_not_copies_of_each_other(apps):
+    """LibreOffice's apps all run libreoffice: its Writer from Flathub is a
+    copy of Writer, not of Calc."""
+    flathub = [entry(f"org.libreoffice.LibreOffice.{n.lower()}.desktop", f"LibreOffice {n}", "",
+                     "libreoffice", "flatpak") for n in ("Writer", "Calc")]
+    both = apps + flathub
+    assert ids(find(parse("open libre writer"), both, {})) == ["libreoffice-writer.desktop"]
+    assert ids(find(parse("open libre writer flatpak"), both, {})) == [
+        "org.libreoffice.LibreOffice.writer.desktop"]
+    assert sorted(ids(find(parse("open libreoffice"), both, {}))) == [
+        "libreoffice-calc.desktop", "libreoffice-writer.desktop"]
+
+
+def test_the_default_app_in_the_copy_asked_for(apps):
+    defaults = {"browser": "firefox.desktop"}
+    assert ids(find(parse("open the browser flatpak"), apps, defaults)) == [
+        "org.mozilla.firefox.desktop"]
+    assert ids(find(parse("open the browser"), apps, defaults)) == ["firefox.desktop"]
+
+
+def test_a_default_flatpak_stays_the_default(apps):
+    """The user chose it: without an install word it isn't swapped for the
+    distro's copy."""
+    defaults = {"browser": "org.mozilla.firefox.desktop"}
+    assert ids(find(parse("open the browser"), apps, defaults)) == [
+        "org.mozilla.firefox.desktop"]
+
+
 def test_default_words_go_to_the_default(apps):
     assert ids(find(parse("open the browser"), apps, {"browser": "firefox.desktop"})) == [
         "firefox.desktop"]
