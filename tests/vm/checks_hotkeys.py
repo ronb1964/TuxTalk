@@ -244,8 +244,10 @@ def _heard(run, name):
 
 
 def _stop_listening(run):
-    # -f: the process is python3, so its name is no use (and over 15 letters).
-    run.vm.ssh("pkill -f helper_listen.py", check=False)
+    # -f: the process is python3, so its name is no use. The brackets keep the
+    # pattern from matching the shell ssh runs pkill in, whose command line
+    # holds the pattern too.
+    run.vm.ssh("pkill -f '[h]elper_listen.py'", check=False)
 
 
 def _helper_missing(run):
@@ -351,12 +353,10 @@ def ctrl_space_input_method_log(run):
     with run.settings_put_back("hotkey"):
         mark = run.log_mark()
         run.set_config(hotkey=CTRL_SPACE)
-        log = run.wait_log(mark, "also uses Ctrl+Space", timeout=30)
+        log = run.wait_log(mark, f"{who} also uses Ctrl+Space", timeout=30)
     if log is None:
         return Outcome("fail", f"{who} is running but the log never said it also uses "
                        "Ctrl+Space")
-    if f"{who} also uses Ctrl+Space" not in log:
-        return Outcome("fail", f"the log named another program, not {who}")
     return Outcome("pass", f"The log says {who} also uses Ctrl+Space")
 
 
@@ -377,7 +377,12 @@ def ctrl_space_quiet_helper_update(run):
     _reboot(run)
     time.sleep(30)      # the helper offer comes about 20 seconds after the start
     question = run.vm.ui("find", "label", "TuxTalk's hotkey helper needs an update", timeout=3)
-    asked_in_log = "Hotkey helper update offer" in run.log_since(mark)
+    if question is not None:
+        # Left open, it would stand in front of every later check here.
+        run.vm.ui("click", "button", "Not Now", timeout=5)
+    # Only an answered question is logged; "offer skipped" is an error, not one.
+    asked_in_log = any(line in run.log_since(mark) for line in (
+        "Hotkey helper update offer: not now", "Updated the hotkey helper from the offer"))
     run.dbus("OpenPreferences")
     if run.vm.ui("tab", "Advanced", PREFS, timeout=30) is None:
         raise Abort("Preferences didn't open")
