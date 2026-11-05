@@ -119,8 +119,12 @@ NOTES = {
         "TuxTalk asked the computer to lock but couldn't confirm it did. Check the screen "
         "before you walk away."),
     "no_screenshot_tool": (
-        "Can't take a screenshot",
-        "TuxTalk found no way to take a screenshot here. Use your desktop's own keys."),
+        "Couldn't take a screenshot",
+        "TuxTalk found no way to take a screenshot on this desktop. Use your desktop's "
+        "screenshot tool, often the Print Screen key."),
+    "screenshot_cancelled": (
+        "Screenshot cancelled",
+        "The screenshot was cancelled, so nothing was saved."),
 }
 
 # kind -> label, for a command that was done but whose result the user may
@@ -129,6 +133,7 @@ DONE: dict[str, str] = {
     "volume": "Volume {percent}%",
     "muted": "Sound muted",
     "unmuted": "Sound on",
+    "screenshot_saved": "Screenshot saved in {folder}",
 }
 
 

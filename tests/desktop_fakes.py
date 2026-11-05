@@ -502,3 +502,70 @@ def window_manager(x11):
     wm = FakeWindowManager()
     yield wm
     wm.close()
+
+
+_PORTAL_XML = """<node><interface name="org.freedesktop.portal.Screenshot">
+  <method name="Screenshot">
+    <arg type="s" direction="in" name="parent_window"/>
+    <arg type="a{sv}" direction="in" name="options"/>
+    <arg type="o" direction="out" name="handle"/>
+  </method>
+</interface></node>"""
+
+
+class FakePortal:
+    """The screenshot portal on the test's session bus, served from a thread
+    of its own. Screenshot answers with the Response signal on the request
+    path it was given: *code* (0 done, 1 cancelled, 2 failed), and for 0 a
+    file it writes in *folder*. *calls* keeps each call's options."""
+
+    def __init__(self, folder):
+        self.code = 0
+        self.calls = []
+        self._folder = folder
+        self._context = GLib.MainContext()
+        self._loop = GLib.MainLoop(self._context)
+        ready = threading.Event()
+        self._thread = threading.Thread(target=self._serve, args=(ready,), daemon=True)
+        self._thread.start()
+        assert ready.wait(10)
+
+    def _serve(self, ready):
+        self._context.push_thread_default()
+        bus = _private_bus()
+        register = getattr(bus, "register_object_with_closures2", bus.register_object)
+        interface = Gio.DBusNodeInfo.new_for_xml(_PORTAL_XML).interfaces[0]
+        register("/org/freedesktop/portal/desktop", interface, self._on_call, None, None)
+        bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+                      "RequestName", GLib.Variant("(su)", ("org.freedesktop.portal.Desktop", 4)),
+                      None, Gio.DBusCallFlags.NONE, 5000, None)
+        ready.set()
+        self._loop.run()
+        bus.close_sync(None)
+
+    def _on_call(self, bus, sender, _path, _interface, _method, parameters, invocation):
+        options = parameters.unpack()[1]
+        self.calls.append(options)
+        request = ("/org/freedesktop/portal/desktop/request/"
+                   f"{sender.lstrip(':').replace('.', '_')}/{options['handle_token']}")
+        invocation.return_value(GLib.Variant("(o)", (request,)))
+        results = {}
+        if self.code == 0:
+            os.makedirs(self._folder, exist_ok=True)
+            shot = os.path.join(self._folder, "Screenshot from the portal.png")
+            with open(shot, "wb") as f:
+                f.write(b"png")
+            results = {"uri": GLib.Variant("s", GLib.filename_to_uri(shot))}
+        bus.emit_signal(sender, request, "org.freedesktop.portal.Request", "Response",
+                        GLib.Variant("(ua{sv})", (self.code, results)))
+
+    def stop(self):
+        self._loop.quit()
+        self._thread.join(10)
+
+
+@pytest.fixture
+def fake_portal(tmp_path):
+    portal = FakePortal(tmp_path / "Pictures")
+    yield portal
+    portal.stop()
