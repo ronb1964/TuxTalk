@@ -4,6 +4,7 @@ a real key; the terminal's own keys are pinned because Ctrl+C there kills the
 running program."""
 import pytest
 
+from desktop_fakes import FakeShell
 from tuxtalk import everyday_keys, focused_window, keyboard_output, screen_message
 from tuxtalk.command_phrases import KEY_PHRASES, KeyRequest
 
@@ -103,6 +104,22 @@ def test_the_note_says_what_would_tell_the_window(desktop, advice, keyboard, at_
                         sentences.append(text))
     everyday_keys.press(KeyRequest("copy"), UNKNOWN, False)
     assert len(sentences) == 1 and advice in sentences[0]
+
+
+def test_on_gnome_with_the_extension_on_the_note_doesnt_ask_for_it(keyboard, at_unknown,
+                                                                   floated, monkeypatch):
+    """The extension is running, so turning it on wouldn't help."""
+    sentences = []
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "GNOME")
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, text, *a, **k:
+                        sentences.append(text))
+    shell = FakeShell()
+    try:
+        everyday_keys.press(KeyRequest("copy"), UNKNOWN, False)
+    finally:
+        shell.stop()
+    assert len(sentences) == 1 and "extension" not in sentences[0]
+    assert "Click the window and try again" in sentences[0]
 
 
 @pytest.mark.parametrize("name", ["page down", "go to the top", "escape"])
