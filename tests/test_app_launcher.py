@@ -1,7 +1,9 @@
 """Starting an app by voice: the menu's way, with no trace of TuxTalk's own
-environment, and the app in a systemd scope of its own. No app is ever
-started and the real systemd is never asked: both are stand-ins."""
+environment, and the app in a systemd scope of its own; and an address
+handed to the default browser the same way. No app is ever started, no
+address opened and the real systemd is never asked: all are stand-ins."""
 import logging
+import types
 
 import pytest
 from gi.repository import GLib
@@ -151,3 +153,34 @@ def test_the_scope_is_asked_for_in_the_app_slice(monkeypatch):
     name, mode, properties, aux = args
     assert name == "app-tuxtalk-firefox.desktop-99.scope" and mode == "fail" and aux == []
     assert dict(properties) == {"PIDs": [99], "Slice": "app.slice"}
+
+
+@pytest.fixture
+def handed_over(monkeypatch):
+    """The addresses Gio would have given the default browser, each with the
+    environment it would have started with; *fail* makes Gio refuse."""
+    from gi.repository import Gio
+    calls = types.SimpleNamespace(uris=[], fail=False)
+
+    def launch_default_for_uri(uri, context):
+        if calls.fail:
+            raise GLib.Error(f"Operation not supported for {uri}")
+        calls.uris.append((uri, dict(e.split("=", 1) for e in context.get_environment())))
+        return True
+    monkeypatch.setattr(Gio.AppInfo, "launch_default_for_uri", launch_default_for_uri)
+    return calls
+
+
+def test_an_address_opens_in_the_default_browser_with_the_clean_environment(handed_over,
+                                                                            monkeypatch):
+    monkeypatch.setenv("PYTHONHOME", "/tmp/.mount_X/usr")
+    assert app_launcher.open_uri("https://youtube.com") is True
+    uri, env = handed_over.uris[0]
+    assert uri == "https://youtube.com" and "PYTHONHOME" not in env
+
+
+def test_an_address_gio_refused_is_false_and_kept_out_of_the_log(handed_over, caplog):
+    handed_over.fail = True
+    with caplog.at_level(logging.DEBUG):
+        assert app_launcher.open_uri("https://youtube.com") is False
+    assert "Couldn't open the address" in caplog.text and "youtube" not in caplog.text

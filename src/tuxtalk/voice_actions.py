@@ -5,10 +5,10 @@ command_phrases reads the words; this hands the request to the module that
 acts on it. Run on the dictation worker, after select and move has declined
 the dictation (voice_commands.handle_navigation)."""
 from . import (command_phrases, delivery, everyday_keys, focused_window, keyboard_output,
-               open_app, window_actions)
+               open_app, web_commands, window_actions)
 from . import live_settings as live
 from .app_commands import OpenRequest
-from .command_phrases import KeyRequest, WindowRequest
+from .command_phrases import AddressRequest, KeyRequest, SearchRequest, WindowRequest
 
 
 def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
@@ -24,20 +24,26 @@ def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
     if isinstance(request, OpenRequest):
         return open_app.open_request(request, beeps_on, ongoing)
     if isinstance(request, KeyRequest):
-        return _press(request, beeps_on, ongoing)
+        return _send(everyday_keys.press, request, f"pressed {request.name}", beeps_on, ongoing)
+    if isinstance(request, AddressRequest):
+        return _send(web_commands.go_to, request, "opened: an address", beeps_on, ongoing)
+    if isinstance(request, SearchRequest):
+        return _send(web_commands.search, request, "done: a web search", beeps_on, ongoing)
     if isinstance(request, WindowRequest):
         return _window(request, beeps_on, ongoing)
-    # Addresses and searches have no branch yet and are typed.
     return None
 
 
-def _press(request: KeyRequest, beeps_on: bool, ongoing) -> bool:
-    """An everyday key. The recording ends only after the keys went in, since
-    the worker's until_cancelled would refuse them once it is cancelled."""
+def _send(act, request, what: str, beeps_on: bool, ongoing) -> bool:
+    """A command that sends keys to the focused window: an everyday key, an
+    address or a web search, done by act(request, where, beeps_on). The
+    recording ends only after the keys went in, since the worker's
+    until_cancelled would refuse them once it is cancelled; *what* is for
+    the log when Esc came first."""
     where = focused_window.look()
-    if keyboard_output.esc_stopped(f"pressed {request.name}"):
+    if keyboard_output.esc_stopped(what):
         return False
-    if not everyday_keys.press(request, where, beeps_on):
+    if not act(request, where, beeps_on):
         return False
     # What was typed is no longer what's under the cursor, so "delete the last
     # sentence" must not erase from it.

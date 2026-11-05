@@ -1,7 +1,8 @@
 """The notes for a voice command that wasn't done (everyday keys, window
 commands, addresses and searches): a short label floated over the window and
-a sentence in a notification, each saying what happened and what to do."""
-from . import notices
+a sentence in a notification, each saying what happened and what to do; and
+for one that was, the log line and the ready beep."""
+from . import beeps, notices
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -58,3 +59,16 @@ def say(kind: str, beeps_on: bool, **names) -> None:
     label, sentence = NOTES[kind]
     logger.info(f"Voice command not done: {kind}")
     notices.command_refused(label.format(**names), sentence.format(**names), beeps_on)
+
+
+def outcome(sent, what: str, beeps_on: bool) -> bool:
+    """After the voice command *what* sent its keys (keyboard_output.
+    send_only_into's *sent*): "Voice command: *what*" and the ready beep
+    when they went in, else the note for why not, where Esc ("cancelled")
+    has said so already. True when they went in."""
+    if sent is True:
+        logger.info(f"Voice command: {what}")
+        beeps.beep(beeps_on, *beeps.READY_BEEP)
+    elif sent != "cancelled":
+        notices.edit_problem("focus_moved" if sent == "moved" else "shortcut_failed", beeps_on)
+    return sent is True

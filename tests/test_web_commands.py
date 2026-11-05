@@ -1,0 +1,241 @@
+"""Addresses and web searches by voice (TuxTalk Labs): "go to youtube.com"
+and "web search cheap tires" go into the browser's address bar, or to the
+user's default browser. The window, the browser and the clock are stand-ins
+and the keyboard records: no test opens an address, starts a browser or
+presses a real key."""
+import logging
+import types
+
+import pytest
+
+from conftest import FakeClock
+from tuxtalk import (app_finder, app_focus, app_launcher, focused_window, keyboard_output,
+                     screen_message, voice_actions, web_commands, window_classes)
+from tuxtalk.app_finder import AppEntry
+from tuxtalk.command_phrases import AddressRequest, SearchRequest
+
+FIREFOX = ("firefox", ("tray", "1"))
+KWRITE = ("org.kde.kwrite", ("tray", "2"))
+FIREFOX_ENTRY = AppEntry("firefox.desktop", "Firefox", "Firefox", "Web Browser", "firefox", "")
+KWRITE_ENTRY = AppEntry("org.kde.kwrite.desktop", "KWrite", "KWrite", "Text Editor", "kwrite", "")
+
+CTRL, ENTER = 29, 28
+CTRL_L = [CTRL, keyboard_output.nav_keycode("L")]
+CTRL_T = [CTRL, keyboard_output.nav_keycode("T")]
+
+
+@pytest.fixture(autouse=True)
+def clock(monkeypatch):
+    """web_commands' time: its waits pass at once."""
+    fake = FakeClock()
+    monkeypatch.setattr(web_commands, "time", fake)
+    return fake
+
+
+@pytest.fixture
+def focus(monkeypatch):
+    """The looks the focused window gives, in turn: the last one stays."""
+    looks = []
+
+    def look(*_args, **_kwargs):
+        return looks.pop(0) if len(looks) > 1 else looks[0]
+    monkeypatch.setattr(focused_window, "look", look)
+    return looks
+
+
+@pytest.fixture
+def at_firefox(focus):
+    focus[:] = [FIREFOX]
+
+
+@pytest.fixture
+def at_kwrite(focus):
+    focus[:] = [KWRITE]
+
+
+@pytest.fixture
+def typed(monkeypatch):
+    """The texts typed, in order."""
+    texts = []
+    monkeypatch.setattr(keyboard_output, "type_text", lambda text: texts.append(text) or True)
+    return texts
+
+
+@pytest.fixture
+def opened_uris(monkeypatch):
+    """The addresses handed to the default browser."""
+    uris = []
+    monkeypatch.setattr(app_launcher, "open_uri", lambda url: uris.append(url) or True)
+    return uris
+
+
+@pytest.fixture
+def floated(monkeypatch):
+    """The labels floated over the active window, in order."""
+    labels = []
+    monkeypatch.setattr(screen_message, "show_over_active_window",
+                        lambda text, *a, **k: labels.append(text))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
+    return labels
+
+
+@pytest.fixture
+def browser(monkeypatch, focus):
+    """Firefox as the default browser. *raised* (focus_running's answer) and
+    *started* (each launch) say what was done to it; *arrives* is the looks
+    the focus goes through once it was raised or started, FIREFOX by default."""
+    state = types.SimpleNamespace(running=True, started=[], arrives=[FIREFOX])
+    monkeypatch.setattr(app_finder, "installed_apps", lambda: [FIREFOX_ENTRY, KWRITE_ENTRY])
+    monkeypatch.setattr(app_finder, "default_apps", lambda: {"browser": "firefox.desktop"})
+
+    def focus_running(entry, *_args, **_kwargs):
+        if state.running:
+            focus[:] = state.arrives
+        return state.running
+
+    def launch(entry):
+        state.started.append(entry.app_id)
+        focus[:] = state.arrives
+        return True
+    monkeypatch.setattr(app_focus, "focus_running", focus_running)
+    monkeypatch.setattr(app_launcher, "launch", launch)
+    return state
+
+
+def test_in_a_browser_go_to_types_the_address_in_its_bar(at_firefox, typed, keyboard):
+    assert web_commands.go_to(AddressRequest("https://youtube.com"), FIREFOX, False) is True
+    assert typed == ["https://youtube.com"]
+    assert keyboard.typed_keys() == CTRL_L + [ENTER]
+
+
+def test_outside_a_browser_go_to_opens_the_default_browser(at_kwrite, opened_uris, keyboard):
+    assert web_commands.go_to(AddressRequest("https://youtube.com"), KWRITE, False) is True
+    assert opened_uris == ["https://youtube.com"] and keyboard.events == []
+
+
+def test_an_address_the_desktop_couldnt_open_says_so(at_kwrite, floated, keyboard,
+                                                    monkeypatch):
+    monkeypatch.setattr(app_launcher, "open_uri", lambda url: False)
+    assert web_commands.go_to(AddressRequest("https://youtube.com"), KWRITE, False) is False
+    assert floated == ["Couldn't open that address"] and keyboard.events == []
+
+
+def test_the_address_and_the_words_never_reach_the_log(focus, typed, opened_uris, browser,
+                                                      floated, caplog):
+    with caplog.at_level(logging.DEBUG):
+        focus[:] = [FIREFOX]
+        web_commands.go_to(AddressRequest("https://youtube.com"), FIREFOX, False)
+        web_commands.search(SearchRequest("cheap tires"), FIREFOX, False)
+        focus[:] = [KWRITE]
+        web_commands.go_to(AddressRequest("https://youtube.com"), KWRITE, False)
+        web_commands.search(SearchRequest("cheap tires"), KWRITE, False)
+    assert "Voice command: go to an address" in caplog.text
+    assert "Voice command: web search" in caplog.text
+    assert "youtube" not in caplog.text.lower() and "tires" not in caplog.text.lower()
+
+
+def test_web_search_in_a_browser_types_the_words_in_its_bar(at_firefox, typed, keyboard):
+    assert web_commands.search(SearchRequest("cheap tires"), FIREFOX, False) is True
+    assert typed == ["cheap tires"]
+    assert keyboard.typed_keys() == CTRL_L + [ENTER]
+
+
+def test_web_search_elsewhere_brings_the_browser_forward_then_opens_a_tab(
+        at_kwrite, browser, typed, keyboard):
+    assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is True
+    assert browser.started == []
+    assert keyboard.typed_keys() == CTRL_T + [ENTER]
+    assert typed == ["cheap tires"]
+
+
+def test_web_search_starts_the_browser_when_it_isnt_running(at_kwrite, browser, typed,
+                                                           keyboard, clock):
+    browser.running = False
+    browser.arrives = [KWRITE, KWRITE, FIREFOX]    # the focus arrives on the 3rd poll
+    assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is True
+    assert browser.started == ["firefox.desktop"]
+    assert clock.now == pytest.approx(2 * web_commands.POLL_S, abs=0.5)
+    assert keyboard.typed_keys() == CTRL_T + [ENTER] and typed == ["cheap tires"]
+
+
+def test_a_browser_that_never_comes_forward_types_nothing(at_kwrite, browser, typed, keyboard,
+                                                         floated, clock):
+    browser.arrives = [KWRITE]
+    assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is False
+    assert clock.now >= web_commands.BROWSER_WAIT_S
+    assert typed == [] and keyboard.events == []
+    assert floated == ["The browser didn't come forward"]
+
+
+def test_esc_while_waiting_for_the_browser_types_nothing(at_kwrite, browser, typed, keyboard,
+                                                        floated, monkeypatch, focus):
+    browser.arrives = [KWRITE]
+    message = types.SimpleNamespace(cancelled=False)
+    polls = []
+
+    def look(*_args, **_kwargs):
+        polls.append(1)
+        if len(polls) == 2:
+            message.cancelled = True        # Esc on the 2nd poll
+        return KWRITE
+    monkeypatch.setattr(focused_window, "look", look)
+    with keyboard_output.until_cancelled(message):
+        assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is False
+    assert len(polls) == 2
+    assert typed == [] and keyboard.events == [] and floated == []
+
+
+def test_with_no_default_browser_says_so(at_kwrite, browser, typed, keyboard, floated,
+                                         monkeypatch):
+    monkeypatch.setattr(app_finder, "default_apps", lambda: {})
+    assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is False
+    assert floated == ["No web browser is set up"]
+    assert typed == [] and keyboard.events == [] and browser.started == []
+
+
+def test_focus_moving_away_during_the_address_stops_the_typing(focus, at_firefox, keyboard,
+                                                              floated, monkeypatch):
+    def type_then_focus_moves(text):
+        focus[:] = [KWRITE]
+        return True
+    monkeypatch.setattr(keyboard_output, "type_text", type_then_focus_moves)
+    assert web_commands.go_to(AddressRequest("https://youtube.com"), FIREFOX, False) is False
+    assert keyboard.typed_keys() == CTRL_L          # no Enter into KWrite
+    assert floated == ["Window changed, nothing done"]
+
+
+def test_a_partial_address_typed_before_the_focus_moved_says_so(at_firefox, keyboard, floated,
+                                                                monkeypatch):
+    """The keyboard stopped partway through the address: no Enter after it."""
+    from tuxtalk import virtual_keyboard
+
+    def stopped_partway(text):
+        raise virtual_keyboard.StoppedPartway("5 chars", "moved")
+    monkeypatch.setattr(keyboard_output, "type_text", stopped_partway)
+    assert web_commands.go_to(AddressRequest("https://youtube.com"), FIREFOX, False) is False
+    assert keyboard.typed_keys() == CTRL_L
+    assert floated == ["Window changed, nothing done"]
+
+
+@pytest.mark.parametrize("cls, browser", [("firefox", True), ("Firefox", True),
+                                          ("brave-browser", True), ("org.mozilla.firefox", True),
+                                          ("org.kde.kwrite", False), (None, False)])
+def test_browsers_are_known_by_their_class(cls, browser):
+    assert window_classes.is_browser_class(cls) is browser
+
+
+def test_go_to_an_address_said_alone_types_nothing_else(actions_on, chat, say, keyboard):
+    say("Go to youtube dot com.")
+    keys = keyboard.typed_keys()
+    assert chat[2] == []                        # nothing typed as dictation
+    assert keys[:2] == CTRL_L and keys[-1] == ENTER and keys.count(ENTER) == 1
+
+
+@pytest.mark.parametrize("done", [True, False])
+def test_only_a_search_that_was_done_ends_the_type_at_pause_recording(actions_on, monkeypatch,
+                                                                       done):
+    monkeypatch.setattr(web_commands, "search", lambda *a: done)
+    ongoing = types.SimpleNamespace(cancelled=False)
+    assert voice_actions.run("web search cheap tires", False, ongoing) is done
+    assert ongoing.cancelled is done

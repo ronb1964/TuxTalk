@@ -2,12 +2,9 @@
 "scroll down 3", "copy". The keys differ in a terminal, where Ctrl+C stops the
 running program and Ctrl+Shift+C copies, so the focused window's class picks
 the set, and the keys go only into the window the command was checked against."""
-from . import beeps, command_notices, keyboard_output, notices
+from . import command_notices, keyboard_output
 from .command_phrases import KeyRequest
-from .logger import setup_logger
 from .window_classes import is_terminal_class
-
-logger = setup_logger(__name__)
 
 SCROLL_CLICKS = 5        # wheel notches per "scroll"; "scroll down 3" turns 15
 
@@ -61,10 +58,4 @@ def press(request: KeyRequest, where, beeps_on: bool) -> bool:
     else:
         sent = keyboard_output.send_only_into(
             where, lambda: keyboard_output.output_backend().press_keys(chords))
-    if sent is True:
-        logger.info(f"Voice command: {request.name}")
-        beeps.beep(beeps_on, *beeps.READY_BEEP)
-    elif sent != "cancelled":
-        notices.edit_problem("focus_moved" if sent == "moved" else "shortcut_failed",
-                             beeps_on)
-    return sent is True
+    return command_notices.outcome(sent, request.name, beeps_on)

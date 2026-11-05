@@ -1,5 +1,6 @@
 """What kind of app a window is, from its class (or Wayland app_id): a
-terminal, a code editor, a document, or an app with a typing quirk.
+terminal, a code editor, a document, a web browser, or an app with a
+typing quirk.
 
 The class arrives from several sources (the GNOME Shell extension, the KWin
 script, the compositors) that don't agree on capitalisation, so the lists
@@ -125,6 +126,23 @@ def is_terminal_class(wm_class: str | None) -> bool:
     if not wm_class:
         return False
     return wm_class.lower() in _TERMINAL_WM_CLASSES_LOWER
+
+
+# Web browsers, whose address bar Ctrl+L reaches and where Ctrl+T opens a tab
+# with the cursor in it: "go to youtube.com" and "web search ..." type there.
+# The classes and Wayland app ids of the distro, Flatpak and vendor builds.
+_BROWSER_CLASSES_LOWER = frozenset({
+    "firefox", "org.mozilla.firefox", "firefox-esr", "librewolf",
+    "io.gitlab.librewolf-community", "zen", "app.zen_browser.zen", "floorp", "waterfox",
+    "chromium", "chromium-browser", "org.chromium.chromium", "google-chrome",
+    "com.google.chrome", "brave-browser", "com.brave.browser", "microsoft-edge",
+    "vivaldi-stable", "opera", "org.gnome.epiphany", "epiphany", "falkon", "org.kde.falkon",
+})
+
+
+def is_browser_class(wm_class: str | None) -> bool:
+    """Whether the focused window is a web browser's."""
+    return bool(wm_class) and wm_class.lower() in _BROWSER_CLASSES_LOWER
 
 
 # Electron/Chromium apps where synthetic paste (Ctrl+V from /dev/uinput) is

@@ -79,7 +79,7 @@ def own_scope(pid: int, app_id: str) -> None:
         log.info("Couldn't give %s its own scope: %s", app_id, exc)
 
 
-def _launch_context() -> Gio.AppLaunchContext:
+def launch_context() -> Gio.AppLaunchContext:
     """A launch context whose environment is launch_env.clean of this process's."""
     context = Gio.AppLaunchContext()
     current = dict(os.environ)
@@ -103,10 +103,23 @@ def launch(entry: AppEntry) -> bool:
         own_scope(pid, entry.app_id)
 
     try:
-        info.launch_uris_as_manager([], _launch_context(), GLib.SpawnFlags.SEARCH_PATH,
+        info.launch_uris_as_manager([], launch_context(), GLib.SpawnFlags.SEARCH_PATH,
                                     None, None, got_pid, None)
     except GLib.Error as exc:
         log.info("Couldn't open %s: %s", entry.app_id, exc.message)
         return False
     log.info("Opened %s", entry.app_id)
+    return True
+
+
+def open_uri(url: str) -> bool:
+    """Hand *url* to the default app for it (the user's browser, for a web
+    address), started with the desktop's environment if it isn't running.
+    True when Gio handed it over. Neither the address nor Gio's message,
+    which can quote it, is logged: it is what the user said."""
+    try:
+        Gio.AppInfo.launch_default_for_uri(url, launch_context())
+    except GLib.Error as exc:
+        log.info("Couldn't open the address: %s error %d", exc.domain, exc.code)
+        return False
     return True
