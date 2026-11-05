@@ -161,3 +161,19 @@ def test_terminal_is_kdes_choice_else_the_only_emulator():
     assert app_finder._terminal_id([konsole, kitty, other], "kitty") == "kitty.desktop"
     assert app_finder._terminal_id([konsole, other], "") == "konsole.desktop"
     assert app_finder._terminal_id([konsole, kitty], "") is None
+
+
+def test_the_class_an_entry_names_for_its_windows_is_read(tmp_path, monkeypatch):
+    """StartupWMClass tells a Chrome web app's windows from Chrome's own
+    (app_focus.window_names). Exec runs `true`: GLib turns away an entry
+    whose program isn't installed."""
+    from gi.repository import Gio
+    path = tmp_path / "chrome-abc-Default.desktop"
+    path.write_text("[Desktop Entry]\nType=Application\nName=YouTube Music\n"
+                    "Exec=true --app-id=abc\nStartupWMClass=crx_abc\n")
+    plain = tmp_path / "plain.desktop"
+    plain.write_text("[Desktop Entry]\nType=Application\nName=Plain\nExec=true\n")
+    monkeypatch.setattr(app_finder, "_desktop_apps", lambda: [
+        Gio.DesktopAppInfo.new_from_filename(str(path)),
+        Gio.DesktopAppInfo.new_from_filename(str(plain))])
+    assert [e.wm_class for e in app_finder.installed_apps()] == ["crx_abc", ""]

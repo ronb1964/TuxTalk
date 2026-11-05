@@ -23,13 +23,19 @@ from tuxtalk import app_focus, kwin_activate, xcb_ctypes
 from tuxtalk.app_finder import AppEntry
 
 
-def _entry(app_id, name, program):
-    return AppEntry(app_id, name, name, "", (), program, "")
+def _entry(app_id, name, program, wm_class=""):
+    return AppEntry(app_id, name, name, "", (), program, "", wm_class)
 
 
 FIREFOX = _entry("firefox.desktop", "Firefox", "firefox")
 KONSOLE = _entry("org.kde.konsole.desktop", "Konsole", "konsole")
 IDLE = _entry("idle3.desktop", "IDLE", "python3")
+# Entries whose program is a launcher with windows of its own.
+PORTAL = _entry("Portal 2.desktop", "Portal 2", "steam")
+YOUTUBE_MUSIC = _entry("chrome-cinhimbnkkaeohfgghhklpknlkffjgod-Default.desktop",
+                       "YouTube Music", "google-chrome")
+YOUTUBE_MUSIC_NAMED = _entry(YOUTUBE_MUSIC.app_id, "YouTube Music", "google-chrome",
+                             "crx_cinhimbnkkaeohfgghhklpknlkffjgod")
 
 
 def _desktop(monkeypatch, desktop, session):
@@ -84,6 +90,19 @@ def test_an_interpreter_never_names_the_window():
     """Every Python app's window could be called "python3": opening IDLE
     must not bring some other Python program forward."""
     assert app_focus.window_names(IDLE) == {"idle3"}
+
+
+def test_a_launcher_never_names_the_window():
+    """A Steam game's entry runs steam, a Chrome web app's runs
+    google-chrome: their windows are the launcher's, not the game's."""
+    assert app_focus.window_names(PORTAL) == {"portal 2"}
+    assert "google-chrome" not in app_focus.window_names(YOUTUBE_MUSIC)
+
+
+def test_the_class_the_entry_names_counts():
+    """StartupWMClass: what the app's windows are really called."""
+    assert "crx_cinhimbnkkaeohfgghhklpknlkffjgod" in app_focus.window_names(
+        YOUTUBE_MUSIC_NAMED)
 
 
 # --- KDE ------------------------------------------------------------------------------
@@ -185,6 +204,28 @@ def test_kde_never_brings_forward_a_popup_of_the_app(kde, fake_kwin):
                          ' {normalWindow: false})']
     assert app_focus.focus_running(FIREFOX) is False
     assert fake_kwin.activated is None
+
+
+def test_kde_never_takes_the_launchers_window_for_the_app(kde, fake_kwin):
+    """Steam's library or Chrome's own window open: "open Portal 2" and
+    "open YouTube Music" start the game and the web app, not show Steam and
+    Chrome."""
+    fake_kwin.windows = ['makeWindow("steam", "{s}", 0, 0, 800, 600)',
+                         'makeWindow("google-chrome", "{c}", 0, 0, 800, 600)']
+    assert app_focus.focus_running(PORTAL) is False
+    assert app_focus.focus_running(YOUTUBE_MUSIC) is False
+    assert app_focus.focus_running(YOUTUBE_MUSIC_NAMED) is False
+    assert fake_kwin.activated is None
+
+
+def test_kde_finds_a_web_app_by_the_class_its_entry_names(kde, fake_kwin):
+    """An X11 window of a Chrome web app has the class StartupWMClass says,
+    above Chrome's own window."""
+    fake_kwin.windows = ['makeWindow("google-chrome", "{c}", 0, 0, 800, 600)',
+                         'makeWindow("crx_cinhimbnkkaeohfgghhklpknlkffjgod", "{w}", 0, 0, 9, 9)',
+                         'makeWindow("google-chrome", "{c2}", 0, 0, 800, 600)']
+    assert app_focus.focus_running(YOUTUBE_MUSIC_NAMED) is True
+    assert fake_kwin.activated == "{w}"
 
 
 def test_kde_without_the_apps_window_says_launch(kde, fake_kwin):
@@ -435,6 +476,25 @@ def test_x11_matches_the_class_whatever_its_case(window_manager):
     window_manager.stack([firefox])
     assert app_focus.focus_running(FIREFOX) is True
     assert window_manager.activations() == [(firefox, 2)]
+
+
+def test_x11_never_takes_the_launchers_window_for_the_app(window_manager):
+    window_manager.stack([window_manager.window("Steam", "steam"),
+                          window_manager.window("google-chrome", "Google-chrome")])
+    assert app_focus.focus_running(PORTAL) is False
+    assert app_focus.focus_running(YOUTUBE_MUSIC) is False
+    assert app_focus.focus_running(YOUTUBE_MUSIC_NAMED) is False
+    assert window_manager.activations() == []
+
+
+def test_x11_finds_a_web_app_by_the_class_its_entry_names(window_manager):
+    web_app = window_manager.window("crx_cinhimbnkkaeohfgghhklpknlkffjgod",
+                                    "Google-chrome")
+    web_app_class = window_manager.window("google-chrome",
+                                          "crx_cinhimbnkkaeohfgghhklpknlkffjgod")
+    window_manager.stack([web_app_class, web_app])
+    assert app_focus.focus_running(YOUTUBE_MUSIC_NAMED) is True
+    assert window_manager.activations() == [(web_app_class, 2)]
 
 
 def test_x11_without_the_apps_window_says_launch(window_manager):

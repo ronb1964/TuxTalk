@@ -31,11 +31,6 @@ GNOME_SHELL = "org.gnome.Shell"
 EXTENSION_PATH = "/io/github/ronb1964/TuxTalk/Extension"
 EXTENSION_INTERFACE = "io.github.ronb1964.TuxTalk.Extension"
 
-# Programs a menu entry can start that run some other app: a window of class
-# "python3" could be any Python program, so these never name a window.
-_NOT_AN_APP = frozenset({"python", "python3", "perl", "ruby", "node", "java",
-                         "sh", "bash", "env", "flatpak", "snap", "wine"})
-
 
 def _desktop_file(entry: AppEntry) -> str:
     """The menu entry's id without ".desktop": what KWin calls the window's
@@ -44,10 +39,24 @@ def _desktop_file(entry: AppEntry) -> str:
 
 
 def window_names(entry: AppEntry) -> frozenset:
-    """The window classes the app's windows may have, without case: its menu
-    entry's id (a Wayland app's id is that) and its program (X11's class)."""
-    names = {_desktop_file(entry), entry.program}
-    return frozenset(n.casefold() for n in names if n and n not in _NOT_AN_APP)
+    """The window classes the app's windows may have, without case.
+
+    Its menu entry's id ("org.kde.konsole": a Wayland app's id is that), and
+    the class the entry names (StartupWMClass: "crx_..." for a Chrome web
+    app). Without one, its program's name, X11's usual class ("konsole"), but
+    only when the id agrees with it: a Steam game's entry runs "steam" and a
+    web app's runs "google-chrome", and their windows are the launcher's own,
+    not the game or web app. Interpreters ("python3") never agree either.
+    """
+    stem = _desktop_file(entry).casefold()
+    program = entry.program.casefold()
+    if entry.wm_class:
+        names = {stem, entry.wm_class.casefold()}
+    elif program and (stem == program or stem.endswith("." + program)):
+        names = {stem, program}
+    else:
+        names = {stem}
+    return frozenset(n for n in names if n)
 
 
 def _ask_extension(app_id: str, timeout: float) -> bool:

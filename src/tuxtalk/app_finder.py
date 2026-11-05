@@ -49,6 +49,7 @@ class AppEntry:
     keywords: tuple
     program: str         # the command it runs: "firefox"
     install: str         # "", "flatpak", "snap" or "appimage"
+    wm_class: str = ""   # StartupWMClass: its windows' class, when the entry says
 
 
 @dataclass(frozen=True)
@@ -216,7 +217,8 @@ def installed_apps():
             generic=app.get_generic_name() or "",
             keywords=tuple(app.get_keywords() or ()),
             program=program_name(command),
-            install=install_kind(command)))
+            install=install_kind(command),
+            wm_class=app.get_startup_wm_class() or ""))
     return entries
 
 
