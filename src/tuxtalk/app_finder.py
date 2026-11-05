@@ -80,9 +80,20 @@ class _Indexed:
         # GenericName, not Keywords: Konsole's "script" made "start the script"
         # open a terminal.
         self.labels = {" ".join(_clean(entry.generic))} - {""}
+        self.generic_words = set(_clean(entry.generic))
         # Names and program with the spaces taken out ("fire fox" -> "firefox").
         self.letters = {s.replace(" ", "") for s in (*self.names, self.program) if s}
         self.sounds = {_sounds(s) for s in self.letters}
+
+    def has_name_words(self, words):
+        """Whether *words* are whole, consecutive words of a name ("chrome"
+        of "google chrome"), none of them a word of what the app is ("web"
+        of "brave web browser", its generic name "web browser")."""
+        if self.generic_words.intersection(words):
+            return False
+        n = len(words)
+        return any(parts[k:k + n] == words for parts in (name.split() for name in self.names)
+                   for k in range(len(parts) - n + 1))
 
     def starts_name(self, words):
         """Whether *words* start the words of a name, in order ("libre writer")."""
@@ -127,9 +138,10 @@ def _fuzzy(letters, indexed):
 
 def _candidates(words, indexed, strict=False):
     """The entries the first matching rule finds, rules in the spec's order.
-    *strict*: only the rules that take the whole name as said, never the
-    start of a name, a sound or a close spelling, for a window command,
-    where "Close the fire." must not close Firefox."""
+    *strict*: only the rules that take whole words as said, never the start
+    of a word, a sound or a close spelling, for a window command, where
+    "Close the fire." must not close Firefox: the whole name, its letters,
+    the generic name, or whole words of the name ("close Chrome")."""
     said = " ".join(words)
     letters = said.replace(" ", "")
     sounds = _sounds(letters) if len(letters) >= MIN_SOUND_LETTERS else ""
@@ -142,7 +154,8 @@ def _candidates(words, indexed, strict=False):
         lambda i: i.starts_name(words),
         lambda i: bool(sounds) and sounds in i.sounds,
     )
-    for rule in rules[:3] if strict else rules:
+    strict_rules = (*rules[:3], lambda i: i.has_name_words(words))
+    for rule in strict_rules if strict else rules:
         hits = [i for i in indexed if rule(i)]
         if hits:
             return hits

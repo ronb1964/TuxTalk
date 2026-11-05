@@ -13,8 +13,8 @@ import pytest
 from conftest import CHAT_WINDOW, esc
 from desktop_fakes import FakeShell, set_desktop
 from type_at_pause_rig import service_tick_runs
-from tuxtalk import (app_finder, app_focus, app_launcher, command_phrases, kwin_windows,
-                     voice_actions, window_actions, x11_windows)
+from tuxtalk import (app_finder, app_focus, app_launcher, app_match, command_phrases,
+                     kwin_windows, voice_actions, window_actions, x11_windows)
 from tuxtalk import recording_state as rs
 from tuxtalk.app_commands import OpenRequest
 from tuxtalk.app_finder import AppEntry
@@ -30,6 +30,16 @@ FILELIGHT = AppEntry("org.kde.filelight.desktop", "Filelight", "Filelight", "Dis
                      "filelight", "")
 ALLIGATOR = AppEntry("org.kde.alligator.desktop", "Alligator", "Alligator", "Feed Reader",
                      "alligator", "")
+# Named as their menus name them, with programs that aren't the name said.
+CHROME = AppEntry("google-chrome.desktop", "Google Chrome", "Google Chrome", "Web Browser",
+                  "google-chrome-stable", "")
+BRAVE = AppEntry("brave-browser.desktop", "Brave Web Browser", "Brave Web Browser",
+                 "Web Browser", "brave-browser-stable", "")
+EDGE = AppEntry("microsoft-edge.desktop", "Microsoft Edge", "Microsoft Edge", "Web Browser",
+                "microsoft-edge-stable", "")
+WRITER = AppEntry("libreoffice-writer.desktop", "LibreOffice Writer", "LibreOffice Writer",
+                  "Word Processor", "libreoffice", "")
+WORD_NAMED = [FIREFOX, FILELIGHT, ALLIGATOR, CHROME, BRAVE, EDGE, WRITER]
 # A menu entry whose id leaves nothing to know its windows by.
 NAMELESS = AppEntry(".desktop", "Ghostwriter", "Ghostwriter", "Text Editor", "ghostwriter", "")
 
@@ -351,14 +361,38 @@ def test_close_or_switch_naming_no_app_is_typed(actions_on, chat, say, kde, apps
 
 
 @pytest.mark.parametrize("said", ["Close the fire.", "Close the file.", "Close all.",
-                                  "Close every.", "Switch to fire."])
+                                  "Close every.", "Switch to fire.", "Close the door.",
+                                  "Switch to decaf.", "Close the web."])
 def test_a_sentence_that_only_starts_like_an_apps_name_is_typed(actions_on, chat, say, kde,
                                                                 apps, nobody_is_asked, said):
-    """A window command takes only an app's whole name: the start of one
-    ("fire", "file", "all") would close the wrong window or eat the sentence."""
-    apps[:] = [FIREFOX, FILELIGHT, ALLIGATOR]
+    """A window command takes only whole words of an app's name: the start
+    of one ("fire", "file", "all") would close the wrong window or eat the
+    sentence, and so would a word of what the app is ("web")."""
+    apps[:] = WORD_NAMED
     say(said)
     assert [text for text, _ in chat[2]] == [said] and actions_on == []
+
+
+@pytest.mark.parametrize("said, app_id", [("Close Chrome.", "google-chrome.desktop"),
+                                          ("Close Edge.", "microsoft-edge.desktop"),
+                                          ("Close Writer.", "libreoffice-writer.desktop")])
+def test_a_whole_word_of_the_menu_name_closes_that_app(actions_on, chat, say, kde, apps,
+                                                       kwin_calls, said, app_id):
+    """"Chrome" is a whole word of "Google Chrome", as people call it."""
+    apps[:] = WORD_NAMED
+    say(said)
+    assert chat[2] == [] and [call[1] for call in kwin_calls] == [app_id.removesuffix(".desktop")]
+
+
+def test_switch_to_brave_by_a_word_of_its_menu_name(actions_on, chat, say, kde, apps, focused):
+    apps[:] = WORD_NAMED
+    say("Switch to Brave.")
+    assert chat[2] == [] and focused == ["brave-browser.desktop"]
+
+
+def test_open_chrome_is_unchanged(apps):
+    apps[:] = WORD_NAMED
+    assert app_match.find(OpenRequest("chrome")).entry == CHROME
 
 
 def test_close_firefox_said_alone_types_nothing(actions_on, chat, say, kde, apps, kwin_calls,

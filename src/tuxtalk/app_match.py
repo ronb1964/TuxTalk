@@ -25,8 +25,9 @@ class Match:
 
 
 def find(request: OpenRequest, strict: bool = False) -> Match:
-    """The app *request* names among the menu's apps. *strict*: by its whole
-    name, its generic name or a default-app word only (app_finder.find)."""
+    """The app *request* names among the menu's apps. *strict*: by whole
+    words only: its name or some of its words, its generic name or a
+    default-app word (app_finder.find)."""
     entries = app_finder.installed_apps()
     found = app_finder.find(request, entries, app_finder.default_apps(), strict)
     if found.kind != "one":
