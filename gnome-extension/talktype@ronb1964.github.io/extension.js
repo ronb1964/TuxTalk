@@ -123,6 +123,16 @@ const WINDOW_ACTIONS = {
     unmaximize: w => (Meta.MaximizeFlags ? w.unmaximize(Meta.MaximizeFlags.BOTH) : w.unmaximize()),
 };
 
+// Whether *w* is a window of an app's own, or its dialog, that "close
+// window" may act on: never the desktop's icons (DING: a desktop window on
+// X11, one hidden from the window list on Wayland) or a panel. A dialog
+// with a parent is left out of the taskbar too, but is still the app's.
+function isAppWindow(w) {
+    const type = w.get_window_type();
+    return type === Meta.WindowType.DIALOG || type === Meta.WindowType.MODAL_DIALOG
+        || (type === Meta.WindowType.NORMAL && !w.skip_taskbar);
+}
+
 const AppFocus = {
     // Bring forward the window of the menu entry *appId* ("firefox.desktop")
     // used last, as clicking it in the dash does. False when it has none
@@ -142,12 +152,11 @@ const AppFocus = {
     // else the app's most recently used window, or with *every* all of them.
     // False when there is no such window or action.
     //
-    // Like ActivateApp, any process on the session bus can call this. That is
-    // the same trust as launching or raising an app, and a close still asks
-    // to save, so a stray caller can't lose work.
-    //
-    // close is delete(), the same as clicking the X: an app with unsaved work
-    // still asks "Save changes?". Never kill(), which would lose that work.
+    // Like ActivateApp, any process on the session bus can call this: the
+    // same trust as launching or raising an app. close is delete(), the same
+    // as clicking the X, never kill(): an app with unsaved work asks "Save
+    // changes?", and that question is the only protection. An app that
+    // doesn't ask closes, and with *every* all of its windows do.
     WindowAction(action, appId, every) {
         // Own keys only: 'constructor' or '__proto__' must not count as actions.
         if (!Object.hasOwn(WINDOW_ACTIONS, action))
@@ -155,7 +164,8 @@ const AppFocus = {
         const act = WINDOW_ACTIONS[action];
         let windows;
         if (appId === '') {
-            windows = global.display.focus_window ? [global.display.focus_window] : [];
+            const focused = global.display.focus_window;
+            windows = focused && isAppWindow(focused) ? [focused] : [];
         } else {
             const app = Shell.AppSystem.get_default().lookup_app(appId);
             windows = app ? app.get_windows().filter(w => !w.skip_taskbar) : [];

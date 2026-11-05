@@ -97,6 +97,7 @@ export const Meta = {
     KeyBindingFlags: {NONE: 0},
     KeyBindingAction: {NONE: 0},
     MaximizeFlags: {BOTH: 3},
+    WindowType: {NORMAL: 0, DESKTOP: 1, DOCK: 2, DIALOG: 3, MODAL_DIALOG: 4},
     external_binding_name_for_action: action => `external-grab-${action}`,
 };
 
@@ -329,6 +330,11 @@ export class Window extends Signals {
         this.wmClass = wmClass;
         this.id = id;
         this.skip_taskbar = false;
+        this.type = Meta.WindowType.NORMAL;
+    }
+
+    get_window_type() {
+        return this.type;
     }
 
     get_wm_class() {

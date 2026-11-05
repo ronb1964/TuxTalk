@@ -112,8 +112,9 @@ class FakeKWin:
         self.closed, self.maximized = result["closed"], result["maximized"]
         for service, path, interface, method, *args in result["calls"]:
             # Sent and not waited for, as callDBus does.
+            signature = "(s)" if method == "Failed" else "(b)"
             self._bus.call(service, path, interface, method,
-                           GLib.Variant("(b)", tuple(args)), None,
+                           GLib.Variant(signature, tuple(args)), None,
                            Gio.DBusCallFlags.NONE, -1, None, None, None)
 
     def close(self):
@@ -124,8 +125,7 @@ class FakeKWin:
 @pytest.fixture
 def fake_kwin(monkeypatch, tmp_path):
     kwin = FakeKWin()
-    monkeypatch.setattr(kwin_activate, "script_path", lambda: str(tmp_path / "activate.js"))
-    monkeypatch.setattr(kwin_windows, "script_path", lambda: str(tmp_path / "windows.js"))
+    monkeypatch.setattr(kwin_activate, "script_path", lambda name: str(tmp_path / name))
     monkeypatch.setattr(kwin_activate.kwin_focus, "session_bus", lambda: kwin)
     yield kwin
     kwin.close()

@@ -4,6 +4,8 @@ there was one. The KWin it runs in is a stand-in (desktop_fakes.py).
 """
 import json
 
+import pytest
+
 from tuxtalk import kwin_windows
 
 KONSOLE = 'makeWindow("org.kde.konsole", "{k}", 0, 0, 800, 600)'
@@ -36,6 +38,31 @@ def test_kde_close_window_closes_the_active_one(kde, fake_kwin):
     fake_kwin.active = 0
     assert kwin_windows.act("close", "", set(), False, 1.0) is True
     assert fake_kwin.closed == [True, False]
+
+
+def test_kde_close_window_closes_a_focused_dialog(kde, fake_kwin):
+    """A "Save changes?" question is the window the user is in."""
+    fake_kwin.windows = [KONSOLE, 'Object.assign(makeWindow("org.kde.kwrite", "{d}", 0, 0, 9, 9),'
+                                  ' {normalWindow: false, dialog: true})']
+    fake_kwin.active = 1
+    assert kwin_windows.act("close", "", set(), False, 1.0) is True
+    assert fake_kwin.closed == [False, True]
+
+
+def test_kde_close_window_never_closes_the_desktop(kde, fake_kwin):
+    fake_kwin.windows = ['Object.assign(makeWindow("plasmashell", "{desk}", 0, 0, 9, 9),'
+                         ' {normalWindow: false, desktopWindow: true})']
+    fake_kwin.active = 0
+    assert kwin_windows.act("close", "", set(), False, 1.0) is False
+    assert fake_kwin.closed == [False]
+
+
+def test_a_script_error_is_told_apart_from_no_window(kde, fake_kwin):
+    """KWin failing to act isn't "Firefox has no open window"."""
+    fake_kwin.windows = ['Object.assign(makeWindow("firefox", "{f}", 0, 0, 9, 9),'
+                         ' {closeWindow() { throw new Error("refused"); }})']
+    with pytest.raises(RuntimeError, match="refused"):
+        kwin_windows.act("close", "firefox", {"firefox"}, False, 1.0)
 
 
 def test_kde_minimizes_and_maximizes_the_active_window(kde, fake_kwin):

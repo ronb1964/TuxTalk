@@ -43,6 +43,8 @@ function makeWindow(resourceClass, internalId, x, y, width, height) {
         resourceClass, internalId,
         desktopFileName: '',
         normalWindow: true,
+        dialog: false,
+        desktopWindow: false,
         deleted: false,
         minimized: false,
         closed: false,

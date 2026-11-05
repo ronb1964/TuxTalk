@@ -60,6 +60,35 @@ def test_an_empty_app_id_acts_on_the_focused_window():
     assert closed == [[5, 1234]]
 
 
+def test_close_window_never_closes_the_desktop_icons():
+    """Ubuntu's desktop icons (DING): a desktop window on X11, one hidden
+    from the window list on Wayland. Neither is the window the user means."""
+    answers, _logs = run(ENABLED + FIREFOX + """
+        const hidden = new t.Window('ding', 3);
+        hidden.skip_taskbar = true;
+        const desktop = new t.Window('ding', 4);
+        desktop.type = t.Meta.WindowType.DESKTOP;
+        t.focus(hidden);
+        const onWayland = served.object.WindowAction('close', '', false);
+        t.focus(desktop);
+        t.report([onWayland, served.object.WindowAction('close', '', false), t.shell.closed]);
+    """)
+    assert answers == [False, False, []]
+
+
+def test_close_window_closes_a_focused_save_question():
+    """An app's dialog is out of the taskbar too, but it's the window the
+    user is in."""
+    answer, _logs = run(ENABLED + FIREFOX + """
+        const question = new t.Window('org.gnome.TextEditor', 6);
+        question.skip_taskbar = true;
+        question.type = t.Meta.WindowType.MODAL_DIALOG;
+        t.focus(question);
+        t.report([served.object.WindowAction('close', '', false), t.shell.closed]);
+    """)
+    assert answer == [True, [[6, 1234]]]
+
+
 def test_minimize_and_maximize_the_focused_window():
     """Each is recorded on the window with the focus and nothing else."""
     answers, _logs = run(ENABLED + FIREFOX + """

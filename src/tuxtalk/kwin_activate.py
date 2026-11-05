@@ -37,15 +37,18 @@ _ANSWER_XML = f"""<node>
     <method name="Answer">
       <arg type="b" direction="in" name="had_window"/>
     </method>
+    <method name="Failed">
+      <arg type="s" direction="in" name="error"/>
+    </method>
   </interface>
 </node>"""
 
 
-def script_path() -> str:
-    """Where the script is written: loadScript takes a file."""
+def script_path(name: str) -> str:
+    """Where the script *name* is written: loadScript takes a file."""
     from .config import get_data_dir
 
-    return os.path.join(get_data_dir(), "kwin", "tuxtalk-activate.js")
+    return os.path.join(get_data_dir(), "kwin", name)
 
 
 # The test every KWin script of ours applies to a window w to know it as the
@@ -95,12 +98,14 @@ def build_script(desktop_file: str, classes, reply_to: str) -> str:
 
 class _Answer:
     """The private session-bus connection the script answers on (see the
-    module's docstring), taking calls only while wait() runs."""
+    module's docstring), taking calls only while wait() runs. A script that
+    failed may say so (Failed) instead of answering."""
 
     def __init__(self):
-        """Connect and serve the Answer method. Raises GLib.Error when the
-        session bus can't be reached."""
+        """Connect and serve the Answer and Failed methods. Raises GLib.Error
+        when the session bus can't be reached."""
         self.had_window = None
+        self.error = None
         self._context = GLib.MainContext()
         # A registered object's calls are handed to the main context that is
         # the thread's default when it is registered.
@@ -124,19 +129,22 @@ class _Answer:
         """The connection's unique name, which the script calls."""
         return self._bus.get_unique_name()
 
-    def _on_answer(self, _bus, _sender, _path, _interface, _method, parameters, invocation):
-        self.had_window = bool(parameters.unpack()[0])
+    def _on_answer(self, _bus, _sender, _path, _interface, method, parameters, invocation):
+        if method == "Failed":
+            self.error = str(parameters.unpack()[0])
+        else:
+            self.had_window = bool(parameters.unpack()[0])
         invocation.return_value(None)
 
     def wait(self, timeout: float):
         """The script's answer, waiting up to *timeout* seconds; None when
-        none came."""
+        none came, or when it said it failed (error)."""
         expired = []
         timer = GLib.timeout_source_new(max(1, int(timeout * 1000)))
         timer.set_callback(lambda *_: expired.append(True))
         timer.attach(self._context)
         try:
-            while self.had_window is None and not expired:
+            while self.had_window is None and self.error is None and not expired:
                 self._context.iteration(True)
         finally:
             timer.destroy()
@@ -159,7 +167,7 @@ def ask(build, plugin_name: str, path: str, timeout: float) -> bool:
     kwin_focus.DBUS_TIMEOUT_S besides. *build* makes the script from the
     name of the connection to answer to; it is written to *path* and loaded
     as *plugin_name*, and taken out of KWin afterwards. Raises when KWin
-    refuses the script."""
+    refuses the script, or RuntimeError when the script says it failed."""
     bus = kwin_focus.session_bus()
     answer = _Answer()
     try:
@@ -171,6 +179,8 @@ def ask(build, plugin_name: str, path: str, timeout: float) -> bool:
         _unload(bus, plugin_name)
         load_and_start(bus, path, plugin_name)
         had_window = answer.wait(timeout)
+        if answer.error is not None:
+            raise RuntimeError(f"KWin's {plugin_name} script failed: {answer.error}")
         if had_window is None:
             log.info("KWin didn't answer the %s script in time", plugin_name)
         return bool(had_window)
@@ -184,4 +194,4 @@ def activate(desktop_file: str, classes, timeout: float) -> bool:
     KWin said it had one within *timeout* seconds of starting the script.
     Raises when KWin refuses the script."""
     return ask(lambda reply_to: build_script(desktop_file, classes, reply_to),
-               SCRIPT_PLUGIN_NAME, script_path(), timeout)
+               SCRIPT_PLUGIN_NAME, script_path("tuxtalk-activate.js"), timeout)
