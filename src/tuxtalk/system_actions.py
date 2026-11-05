@@ -70,13 +70,17 @@ def lock(beeps_on: bool, sleep=time.sleep) -> bool:
     if not _ask_to_lock(session):
         command_notices.say("lock_failed", beeps_on)
         return False
-    beeps.beep(beeps_on, *beeps.READY_BEEP)
     sleep(LOCK_CHECK_S)
-    if locked(session):
+    confirmed = locked(session)
+    trusted = desktop_detect.get_desktop_environment() in LOCKERS_THAT_ANSWER
+    if confirmed:
         logger.info("Voice command: lock screen; the session says it is locked")
-        return True
-    logger.info("Voice command: lock screen asked; the session doesn't say it is locked")
-    if desktop_detect.get_desktop_environment() not in LOCKERS_THAT_ANSWER:
+    else:
+        logger.info("Voice command: lock screen asked; the session doesn't say it is locked")
+    if confirmed or trusted:
+        beeps.beep(beeps_on, *beeps.READY_BEEP)
+    else:
+        # Only the note sounds: a ready beep then a cancel beep would say both.
         command_notices.say("lock_unconfirmed", beeps_on)
     return True
 

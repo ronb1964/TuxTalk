@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-from tuxtalk import system_actions, tray_link
+from tuxtalk import beeps, system_actions, tray_link
 from tuxtalk.command_phrases import SystemRequest
 
 
@@ -79,7 +79,8 @@ def test_a_lock_logind_refuses_says_so(loginctl, kde, actions_on):
 
 def test_the_check_waits_for_the_locker(loginctl, kde):
     order = []
-    system_actions.lock(False, sleep=lambda s: order.append(("sleep", s, len(loginctl.commands))))
+    system_actions.lock(
+        False, sleep=lambda s: order.append(("sleep", s, len(loginctl.commands))))
     assert order == [("sleep", system_actions.LOCK_CHECK_S, 1)]
     assert loginctl.commands[1][1] == "show-session"
 
@@ -109,3 +110,42 @@ def test_lock_screen_said_alone_types_nothing(actions_on, chat, say, loginctl, k
     say("Lock the screen.")
     assert chat[2] == []
     assert loginctl.commands[0][:2] == ["loginctl", "lock-session"]
+
+
+@pytest.fixture
+def beeped(monkeypatch):
+    """The beeps asked for, with sound on, instead of played."""
+    heard = []
+    monkeypatch.setattr(beeps, "beep", lambda on, *tone: heard.append(tone) if on else None)
+    return heard
+
+
+def test_an_unconfirmed_lock_elsewhere_never_sounds_done(loginctl, cosmic, actions_on, beeped):
+    loginctl.hint = "no"
+    system_actions.lock(True, sleep=no_wait)
+    assert beeps.READY_BEEP not in beeped
+    assert actions_on == ["Lock not confirmed"]
+
+
+def test_a_confirmed_lock_sounds_done_even_elsewhere(loginctl, cosmic, actions_on, beeped):
+    loginctl.hint = "yes"
+    system_actions.lock(True, sleep=no_wait)
+    assert beeped == [beeps.READY_BEEP]
+
+
+def test_on_kde_a_lock_sounds_done_even_unconfirmed(loginctl, kde, actions_on, beeped):
+    loginctl.hint = "no"
+    system_actions.lock(True, sleep=no_wait)
+    assert beeped == [beeps.READY_BEEP]
+
+
+def test_a_slow_session_query_means_not_confirmed(loginctl, cosmic, actions_on, monkeypatch):
+    real = loginctl.__call__
+
+    def slow(cmd, **kw):
+        if cmd[1] == "show-session":
+            raise subprocess.TimeoutExpired(cmd, 2)
+        return real(cmd, **kw)
+    monkeypatch.setattr(system_actions.subprocess, "run", slow)
+    assert system_actions.lock(False, sleep=no_wait) is True
+    assert actions_on == ["Lock not confirmed"]
