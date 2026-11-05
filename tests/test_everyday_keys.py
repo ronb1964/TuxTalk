@@ -53,6 +53,29 @@ def test_some_keys_dont_apply_in_a_terminal(name, keyboard, at_konsole, floated)
     assert keyboard.events == [] and floated == ["Doesn't apply in a terminal"]
 
 
+UNKNOWN = (None, None)     # GNOME without the extension: no class, no window id
+
+
+@pytest.fixture
+def at_unknown(monkeypatch):
+    monkeypatch.setattr(focused_window, "look", lambda *a, **k: UNKNOWN)
+
+
+@pytest.mark.parametrize("name", ["copy", "paste", "save", "find", "select all", "new tab",
+                                  "close tab", "next tab", "previous tab", "reopen tab"])
+def test_a_key_a_terminal_has_its_own_of_is_never_guessed(name, keyboard, at_unknown, floated):
+    """With the window's class unknown it may be a terminal, where Ctrl+C
+    stops the running program and Ctrl+S freezes it: nothing is pressed."""
+    assert everyday_keys.press(KeyRequest(name), UNKNOWN, False) is False
+    assert keyboard.events == [] and floated == ["Couldn't tell which window"]
+
+
+@pytest.mark.parametrize("name", ["page down", "go to the top", "escape"])
+def test_a_key_the_same_everywhere_works_with_the_class_unknown(name, keyboard, at_unknown):
+    assert everyday_keys.press(KeyRequest(name), UNKNOWN, False) is True
+    assert keyboard.typed_keys()
+
+
 def test_scroll_down_three_turns_the_wheel_fifteen_clicks(keyboard, at_firefox):
     everyday_keys.press(KeyRequest("scroll down", 3), FIREFOX, False)
     assert keyboard.wheel == [-1] * 15

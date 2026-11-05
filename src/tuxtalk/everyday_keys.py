@@ -45,7 +45,14 @@ def chords_for(name: str, wm_class: str | None) -> list | None:
 def press(request: KeyRequest, where, beeps_on: bool) -> bool:
     """Do *request* in the window *where* (focused_window.look(), taken when
     the command was recognised). True when the keys or wheel went in, with the
-    ready beep; False after a note, or after Esc stopped it (already said)."""
+    ready beep; False after a note, or after Esc stopped it (already said).
+
+    With the window's class unknown (GNOME without TuxTalk's extension) it
+    may be a terminal, so a key a terminal has its own of is never guessed:
+    Ctrl+C would stop the running program there, Ctrl+S freeze it."""
+    if where[0] is None and request.name in _TERMINAL:
+        command_notices.say("no_focused_window", beeps_on)
+        return False
     chords = chords_for(request.name, where[0])
     if chords is None:
         command_notices.say("terminal", beeps_on)
