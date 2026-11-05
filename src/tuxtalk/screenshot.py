@@ -67,47 +67,58 @@ def _run_tool(command: list[str]) -> bool:
 
 
 def _first_tool(commands: list[list[str]]) -> str | None:
-    """The name of the first installed tool in *commands* that took the
-    screenshot, or None."""
+    """The name of the first installed tool in *commands* if it took the
+    screenshot. Only that one is tried: a tool that opened a window or timed
+    out may still save a shot, and a second tool would take another."""
     for command in commands:
-        if shutil.which(command[0]) and _run_tool(command):
-            return command[0]
+        if shutil.which(command[0]):
+            return command[0] if _run_tool(command) else None
     return None
 
 
 def _ask_portal() -> tuple[str, str]:
-    """Ask the screenshot portal for the whole screen. ("saved", file),
-    ("cancelled", "") when the user said no, or ("unavailable", "") when
-    there is no portal, it failed or it didn't answer in PORTAL_WAIT_S.
-    The response is waited for on a main context of its own, so GTK's loop
-    is never involved."""
+    """Ask the screenshot portal for the whole screen. Returns the outcome
+    and, for "saved", the file: "saved", "cancelled" (the user said no),
+    "failed" (the portal answered it couldn't), "unavailable" (no portal) or
+    "timeout" (no answer in PORTAL_WAIT_S; the request is still open, so a
+    late Allow can still save one). The response is waited for on a main
+    context of its own, so GTK's loop is never involved."""
     context = GLib.MainContext()
     loop = GLib.MainLoop(context)
-    answer = {"outcome": "unavailable", "file": ""}
+    answer = {"outcome": "timeout", "file": ""}
 
     def on_response(code, results):
         if code == _PORTAL_SAVED and results.get("uri"):
             answer.update(outcome="saved", file=GLib.filename_from_uri(results["uri"])[0])
-        elif code == _PORTAL_CANCELLED:
-            answer["outcome"] = "cancelled"
+        else:
+            answer["outcome"] = "cancelled" if code == _PORTAL_CANCELLED else "failed"
         loop.quit()
+
+    def on_error(_error):
+        answer["outcome"] = "failed"
+        loop.quit()
+
+    def out_of_time(*_):
+        loop.quit()
+        return GLib.SOURCE_REMOVE
 
     def options(token):
         return GLib.Variant("(sa{sv})", ("", {"handle_token": GLib.Variant("s", token),
                                               "interactive": GLib.Variant("b", False)}))
 
     timeout = GLib.timeout_source_new(int(PORTAL_WAIT_S * 1000))
-    timeout.set_callback(lambda *_: loop.quit() or GLib.SOURCE_REMOVE)
+    timeout.set_callback(out_of_time)
     context.push_thread_default()
     unsubscribe = None
     try:
         unsubscribe = portal_common.call_portal(
             portal_common.session_bus(), _PORTAL_IFACE, "Screenshot", options,
-            on_response, lambda _e: loop.quit())
+            on_response, on_error)
         timeout.attach(context)
         loop.run()
     except GLib.Error as e:
         logger.info(f"Screenshot portal not available: {e.message}")
+        answer["outcome"] = "unavailable"
     finally:
         timeout.destroy()
         if unsubscribe:
@@ -116,47 +127,52 @@ def _ask_portal() -> tuple[str, str]:
     return answer["outcome"], answer["file"]
 
 
-def _portal_shot() -> str | None:
-    """The folder the portal saved a screenshot in; "" when the user
-    cancelled; None when the portal didn't do it."""
-    outcome, file = _ask_portal()
-    if outcome == "cancelled":
-        return ""
-    if outcome == "saved" and os.path.exists(file):
-        return os.path.dirname(file)
-    return None
-
-
 def take(beeps_on: bool) -> bool:
     """Take a screenshot of the whole screen and say where it was saved.
-    False: nothing saved, with a note saying why."""
+    False: nothing saved, or not known to be, with a note saying why. Once
+    a screenshot may have been taken (Spectacle ran, or the portal was asked
+    and was slow) no other way is tried, so there is never a second one."""
     try:
         path = new_path()
     except OSError as e:
         logger.warning(f"Screenshot folder could not be made: {type(e).__name__}")
         path = None
-    on_kde = desktop_detect.get_desktop_environment() == "kde"
-    if path and on_kde and _first_tool([["spectacle", "--background", "--fullscreen",
-                                         "--nonotify", "--output", path]]):
-        return _saved("spectacle", folder(), beeps_on)
-    saved_in = _portal_shot()
-    if saved_in == "":
-        logger.info("Voice command: take a screenshot (cancelled)")
-        command_notices.say("screenshot_cancelled", beeps_on)
+    if desktop_detect.get_desktop_environment() == "kde" and shutil.which("spectacle"):
+        # KDE's portal is Spectacle again, so there is nothing else to ask.
+        if path and _run_tool(["spectacle", "--background", "--fullscreen", "--nonotify",
+                               "--output", path]):
+            return _saved("spectacle", folder(), beeps_on)
+        return _nothing_saved(beeps_on)
+    outcome, file = _ask_portal()
+    if outcome == "saved":
+        # The portal said so; not seeing the file (a sandbox) doesn't change that.
+        return _saved("the portal", os.path.dirname(file) if os.path.exists(file) else None,
+                      beeps_on)
+    if outcome in ("cancelled", "timeout"):
+        logger.info(f"Voice command: take a screenshot ({outcome})")
+        command_notices.say("screenshot_cancelled" if outcome == "cancelled"
+                            else "screenshot_unconfirmed", beeps_on)
         return False
-    if saved_in is not None:
-        return _saved("the portal", saved_in, beeps_on)
     tool = path and _first_tool([["gnome-screenshot", "-f", path],
                                  ["xfce4-screenshooter", "-f", "-s", path]])
     if tool:
         return _saved(tool, folder(), beeps_on)
+    return _nothing_saved(beeps_on)
+
+
+def _nothing_saved(beeps_on: bool) -> bool:
+    """Say that no screenshot was taken."""
     logger.info("Voice command: take a screenshot (no way to take one)")
     command_notices.say("no_screenshot_tool", beeps_on)
     return False
 
 
-def _saved(tool: str, directory: str, beeps_on: bool) -> bool:
-    """Log and say that the screenshot was saved in *directory*."""
+def _saved(tool: str, directory: str | None, beeps_on: bool) -> bool:
+    """Log and say that the screenshot was saved in *directory* (None: where
+    isn't known)."""
     logger.info(f"Voice command: take a screenshot (saved, with {tool})")
-    command_notices.tell("screenshot_saved", beeps_on, folder=_shown(directory))
+    if directory is None:
+        command_notices.tell("screenshot_saved_unseen", beeps_on)
+    else:
+        command_notices.tell("screenshot_saved", beeps_on, folder=_shown(directory))
     return True

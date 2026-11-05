@@ -516,8 +516,8 @@ _PORTAL_XML = """<node><interface name="org.freedesktop.portal.Screenshot">
 class FakePortal:
     """The screenshot portal on the test's session bus, served from a thread
     of its own. Screenshot answers with the Response signal on the request
-    path it was given: *code* (0 done, 1 cancelled, 2 failed), and for 0 a
-    file it writes in *folder*. *calls* keeps each call's options."""
+    path it was given: *code* (0 done, 1 cancelled, 2 failed, None never
+    answers), and for 0 a file it writes in *folder*. *calls* keeps each call's options."""
 
     def __init__(self, folder):
         self.code = 0
@@ -549,6 +549,8 @@ class FakePortal:
         request = ("/org/freedesktop/portal/desktop/request/"
                    f"{sender.lstrip(':').replace('.', '_')}/{options['handle_token']}")
         invocation.return_value(GLib.Variant("(o)", (request,)))
+        if self.code is None:
+            return
         results = {}
         if self.code == 0:
             os.makedirs(self._folder, exist_ok=True)

@@ -129,6 +129,10 @@ NOTES = {
         "Couldn't take a screenshot",
         "TuxTalk found no way to take a screenshot on this desktop. Use your desktop's "
         "screenshot tool, often the Print Screen key."),
+    "screenshot_unconfirmed": (
+        "Screenshot not confirmed",
+        "TuxTalk asked for a screenshot, but didn't hear back. It may still be saved "
+        "where your desktop keeps screenshots."),
     "screenshot_cancelled": (
         "Screenshot cancelled",
         "The screenshot was cancelled, so nothing was saved."),
@@ -141,6 +145,7 @@ DONE: dict[str, str] = {
     "muted": "Sound muted",
     "unmuted": "Sound on",
     "screenshot_saved": "Screenshot saved in {folder}",
+    "screenshot_saved_unseen": "Screenshot saved",
 }
 
 
