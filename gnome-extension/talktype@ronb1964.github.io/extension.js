@@ -142,12 +142,17 @@ const AppFocus = {
     // else the app's most recently used window, or with *every* all of them.
     // False when there is no such window or action.
     //
+    // Like ActivateApp, any process on the session bus can call this. That is
+    // the same trust as launching or raising an app, and a close still asks
+    // to save, so a stray caller can't lose work.
+    //
     // close is delete(), the same as clicking the X: an app with unsaved work
     // still asks "Save changes?". Never kill(), which would lose that work.
     WindowAction(action, appId, every) {
-        const act = WINDOW_ACTIONS[action];
-        if (!act)
+        // Own keys only: 'constructor' or '__proto__' must not count as actions.
+        if (!Object.hasOwn(WINDOW_ACTIONS, action))
             return false;
+        const act = WINDOW_ACTIONS[action];
         let windows;
         if (appId === '') {
             windows = global.display.focus_window ? [global.display.focus_window] : [];

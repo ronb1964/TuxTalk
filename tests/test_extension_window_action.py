@@ -38,7 +38,7 @@ def test_close_asks_the_apps_most_recent_window_to_close():
                   t.shell.closed]);
     """)
     assert answer is True
-    assert closed == [8]
+    assert closed == [[8, 1234]]
 
 
 def test_close_all_asks_every_window_of_the_app():
@@ -48,7 +48,7 @@ def test_close_all_asks_every_window_of_the_app():
                   t.shell.closed]);
     """)
     assert answer is True
-    assert closed == [8, 9]
+    assert closed == [[8, 1234], [9, 1234]]
 
 
 def test_an_empty_app_id_acts_on_the_focused_window():
@@ -57,7 +57,7 @@ def test_an_empty_app_id_acts_on_the_focused_window():
         t.report([served.object.WindowAction('close', '', false), t.shell.closed]);
     """)
     assert answer is True
-    assert closed == [5]
+    assert closed == [[5, 1234]]
 
 
 def test_minimize_and_maximize_the_focused_window():
@@ -68,7 +68,7 @@ def test_minimize_and_maximize_the_focused_window():
                   served.object.WindowAction('unmaximize', '', false),
                   t.shell.minimized, t.shell.maximized, t.shell.unmaximized, t.shell.closed]);
     """)
-    assert answers == [True, True, True, [5], [5], [5], []]
+    assert answers == [True, True, True, [5], [[5, 3]], [[5, 3]], []]
 
 
 def test_maximize_works_on_a_shell_that_dropped_the_flags():
@@ -77,7 +77,7 @@ def test_maximize_works_on_a_shell_that_dropped_the_flags():
         delete t.Meta.MaximizeFlags;
         t.report([served.object.WindowAction('maximize', '', false), t.shell.maximized]);
     """)
-    assert answer == [True, [5]]
+    assert answer == [True, [[5, None]]]  # JSON turns undefined into null
 
 
 def test_an_app_without_a_window_says_so():
@@ -91,6 +91,19 @@ def test_an_app_without_a_window_says_so():
                   t.shell.closed]);
     """)
     assert answers == [False, False, False, []]
+
+
+def test_names_every_object_has_are_not_actions():
+    """'constructor' and '__proto__' exist on any JavaScript object; they must
+    be refused like 'kill', not run or thrown on."""
+    answers, logs = run(ENABLED + FIREFOX + """
+        t.report([served.object.WindowAction('constructor', 'firefox.desktop', false),
+                  served.object.WindowAction('__proto__', 'firefox.desktop', false),
+                  served.object.WindowAction('hasOwnProperty', '', false),
+                  t.shell.closed, t.shell.minimized, t.shell.maximized]);
+    """)
+    assert answers == [False, False, False, [], [], []]
+    assert logs == []
 
 
 def test_an_unknown_action_does_nothing():

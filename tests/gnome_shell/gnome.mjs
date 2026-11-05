@@ -21,10 +21,10 @@ export const shell = {
                             // path is null once it's taken off again
     apps: new Map(),        // menu entry id -> its windows, the most recently used first
     activated: [],          // the id of each window Main.activateWindow brought forward
-    closed: [],             // the id of each window asked to close (delete)
+    closed: [],             // [id, time] of each window asked to close (delete)
     minimized: [],          // ... minimized
-    maximized: [],          // ... maximized
-    unmaximized: [],        // ... taken out of maximized
+    maximized: [],          // [id, flags] of each window maximized
+    unmaximized: [],        // [id, flags] of each window taken out of maximized
 };
 
 for (const level of ['error', 'warn']) {
@@ -347,20 +347,20 @@ export class Window extends Signals {
         return 0;
     }
 
-    delete(_time) {
-        shell.closed.push(this.id);
+    delete(time) {
+        shell.closed.push([this.id, time]);
     }
 
     minimize() {
         shell.minimized.push(this.id);
     }
 
-    maximize(_flags) {
-        shell.maximized.push(this.id);
+    maximize(flags) {
+        shell.maximized.push([this.id, flags]);
     }
 
-    unmaximize(_flags) {
-        shell.unmaximized.push(this.id);
+    unmaximize(flags) {
+        shell.unmaximized.push([this.id, flags]);
     }
 }
 
