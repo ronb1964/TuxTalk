@@ -37,7 +37,7 @@ def locked(session: str) -> bool | None:
     """Whether logind says *session* is locked; None when it can't tell."""
     cmd = ["loginctl", "show-session", session, "-p", "LockedHint", "--value"]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True,
+        result = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
                                 timeout=_QUERY_TIMEOUT_S)
     except (OSError, subprocess.SubprocessError) as e:
         logger.warning(f"loginctl show-session failed: {e}")
