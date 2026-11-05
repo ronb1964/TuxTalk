@@ -30,15 +30,32 @@ SAVE_QUESTION = "Save changes?"
 # A browser's application or window title, whatever the VM's default is.
 BROWSER = re.compile(r"firefox|chrom|brave|epiphany|web|browser|mozilla|example", re.I)
 PROFILE = f"~/{REMOTE}/ttff-profile"
-# No first-run pages, no questions about being the default browser.
+# A new profile every time, with no first-run, welcome or privacy pages, no
+# offer to restore the last session (an earlier check ended Firefox by
+# killing it) and no questions: only the test page is open, in one tab.
 FIREFOX_PREFS = """\
 user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("browser.aboutwelcome.enabled", false);
+user_pref("browser.preonboarding.enabled", false);
+user_pref("trailhead.firstrun.didSeeAboutWelcome", true);
+user_pref("browser.startup.firstrunSkipsHomepage", true);
 user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("browser.startup.homepage_welcome_url", "");
+user_pref("browser.startup.homepage_welcome_url.additional", "");
+user_pref("startup.homepage_welcome_url", "");
+user_pref("startup.homepage_welcome_url.additional", "");
+user_pref("startup.homepage_override_url", "");
+user_pref("browser.startup.page", 0);
+user_pref("browser.sessionstore.resume_from_crash", false);
+user_pref("browser.sessionstore.max_resumed_crashes", 0);
 user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
+user_pref("datareporting.policy.firstRunURL", "");
 user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
+user_pref("browser.uitour.enabled", false);
 user_pref("browser.tabs.warnOnClose", false);
 """
+# Firefox's address bar: a "combo box" in newer versions, an "entry" before.
+ADDRESS_BAR = "combo box|entry"
 # Page one sends the tab on to page two once, so that "go back" has somewhere
 # to go and does not bounce forward again.
 PAGE_ONE = """<title>TT Page One</title><p>one</p>
@@ -362,18 +379,25 @@ def _minimized(run, mark, steps):
 
 
 class _Firefox:
-    """Firefox on the two local pages in its own profile, closed afterwards."""
+    """Firefox on the two local pages in a profile of its own, made new each
+    time; afterwards the browser processes that started with it are ended
+    and the profile is removed."""
 
     def __init__(self, run):
         self.run = run
+        self.before = None
 
     def __enter__(self):
         vm = self.run.vm
-        vm.ssh(f"mkdir -p {PROFILE} && cat > {PROFILE}/user.js", input=FIREFOX_PREFS)
+        vm.ssh(f"rm -rf {PROFILE} && mkdir -p {PROFILE} && cat > {PROFILE}/user.js",
+               input=FIREFOX_PREFS)
         vm.ssh(f"cat > ~/{REMOTE}/page1.html", input=PAGE_ONE)
         vm.ssh(f"cat > ~/{REMOTE}/page2.html", input=PAGE_TWO)
-        vm.session_background("firefox", "firefox", "--no-remote", "--profile",
-                              f"{vm.home}/{REMOTE}/ttff-profile",
+        self.before = _processes(self.run)
+        # GNOME_ACCESSIBILITY: this Firefox shows its windows and tabs to
+        # AT-SPI whatever the session's switch (apps_seen) says.
+        vm.session_background("firefox", "env", "GNOME_ACCESSIBILITY=1", "firefox",
+                              "--no-remote", "--profile", f"{vm.home}/{REMOTE}/ttff-profile",
                               f"file://{vm.home}/{REMOTE}/page1.html")
         return self
 
@@ -388,8 +412,10 @@ class _Firefox:
         return sum(1 for item in found if item["role"] == "page tab")
 
     def __exit__(self, *_):
-        self.run.vm.ssh("pkill -f ttff-profile", check=False)
-        time.sleep(1.5)
+        _end_new_browsers(self.run, self.before)
+        self.run.vm.ssh("pkill -f ttff-profile", check=False)    # when ps failed first
+        _until(10, lambda: self.run.vm.ssh("pgrep -f ttff-profile", check=False).returncode)
+        self.run.vm.ssh(f"rm -rf {PROFILE}", check=False)
 
 
 def _no_firefox(run):
@@ -459,7 +485,7 @@ def go_to_in_browser(run):
         seen = []
 
         def address():
-            bar = run.vm.ui("find", "entry", "~address", "~Firefox", timeout=3)
+            bar = run.vm.ui("find", ADDRESS_BAR, "~address", "~Firefox", timeout=3)
             if bar:
                 seen.append(bar)
                 return bar["text"] if "example.com" in bar.get("text", "") else None
@@ -524,7 +550,7 @@ def _browser_shows(run, window, part, stale):
     only that a browser came forward. Another window's bar or title never
     counts, the same browser's other windows included."""
     mine = {"app": window["app"], "index": window["index"]}
-    bar = run.vm.ui("find", "entry", "~address", timeout=3, **mine) or {}
+    bar = run.vm.ui("find", ADDRESS_BAR, "~address", timeout=3, **mine) or {}
     now = next((w for w in run.vm.ui("windows", **mine) or []), {})
     title = now.get("title") or ""
     return part in (bar.get("text", "") + " " + ("" if title in stale else title)).lower()
