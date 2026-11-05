@@ -93,6 +93,36 @@ const TuxTalkIface = `
 
 const TuxTalkProxy = Gio.DBusProxy.makeProxyWrapper(TuxTalkIface);
 
+// What TuxTalk's dictation service asks of the extension (app_focus.py):
+// "open Firefox" with Firefox open brings its window forward. Served on
+// GNOME Shell's own bus connection, so TuxTalk reaches it at org.gnome.Shell,
+// with or without its tray running.
+const AppFocusIface = `
+<node>
+  <interface name="io.github.ronb1964.TuxTalk.Extension">
+    <method name="ActivateApp">
+      <arg type="s" direction="in" name="app_id"/>
+      <arg type="b" direction="out" name="had_window"/>
+    </method>
+  </interface>
+</node>`;
+const APP_FOCUS_PATH = '/io/github/ronb1964/TuxTalk/Extension';
+
+const AppFocus = {
+    // Bring forward the window of the menu entry *appId* ("firefox.desktop")
+    // used last, as clicking it in the dash does. False when it has none
+    // (not running, or only in the background): TuxTalk then starts it.
+    ActivateApp(appId) {
+        const app = Shell.AppSystem.get_default().lookup_app(appId);
+        // Most recently used first; a splash screen or tooltip isn't one to show.
+        const windows = app ? app.get_windows().filter(w => !w.skip_taskbar) : [];
+        if (windows.length === 0)
+            return false;
+        Main.activateWindow(windows[0]);
+        return true;
+    },
+};
+
 // Panel indicator for TuxTalk
 const TuxTalkIndicator = GObject.registerClass(
 class TuxTalkIndicator extends PanelMenu.Button {
@@ -744,9 +774,15 @@ export default class TuxTalkExtension extends Extension {
     enable() {
         this._indicator = new TuxTalkIndicator();
         Main.panel.addToStatusArea('talktype', this._indicator);
+        this._appFocus = Gio.DBusExportedObject.wrapJSObject(AppFocusIface, AppFocus);
+        this._appFocus.export(Gio.DBus.session, APP_FOCUS_PATH);
     }
 
     disable() {
+        if (this._appFocus) {
+            this._appFocus.unexport();
+            this._appFocus = null;
+        }
         if (this._indicator) {
             this._indicator.destroy();
             this._indicator = null;

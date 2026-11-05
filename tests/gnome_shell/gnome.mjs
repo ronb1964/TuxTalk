@@ -17,6 +17,10 @@ export const shell = {
                             // (methods: name -> its in-args' types)
     statusArea: {},
     clipboard: null,
+    exported: [],           // {xml, object, path, bus} per object put on D-Bus;
+                            // path is null once it's taken off again
+    apps: new Map(),        // menu entry id -> its windows, the most recently used first
+    activated: [],          // the id of each window Main.activateWindow brought forward
 };
 
 for (const level of ['error', 'warn']) {
@@ -91,7 +95,15 @@ export const Meta = {
     external_binding_name_for_action: action => `external-grab-${action}`,
 };
 
-export const Shell = {ActionMode: {NONE: 0, ALL: 0xffff}};
+export const Shell = {
+    ActionMode: {NONE: 0, ALL: 0xffff},
+    // The apps in shell.apps, each with the windows GNOME Shell counts as its.
+    AppSystem: {
+        get_default: () => ({
+            lookup_app: id => (shell.apps.has(id) ? {get_windows: () => shell.apps.get(id)} : null),
+        }),
+    },
+};
 
 export const Gio = {
     DBusProxyFlags: {DO_NOT_AUTO_START: 1, DO_NOT_LOAD_PROPERTIES: 2},
@@ -115,6 +127,23 @@ export const Gio = {
             unwatch_name(id) {
                 shell.watchers[id - 1].watching = false;
             },
+        },
+    },
+    // Like GJS's: a JavaScript object served on the bus with the interface
+    // in *xml*; kept in shell.exported.
+    DBusExportedObject: {
+        wrapJSObject(xml, object) {
+            const exported = {
+                xml, object, path: null, bus: null,
+                export(bus, path) {
+                    Object.assign(exported, {bus, path});
+                    shell.exported.push(exported);
+                },
+                unexport() {
+                    exported.path = null;
+                },
+            };
+            return exported;
         },
     },
     DBusProxy: {
@@ -143,6 +172,10 @@ export const Gio = {
 // --- resource:///org/gnome/shell modules ------------------------------------------
 
 // ui/main.js
+export function activateWindow(window) {
+    shell.activated.push(window.get_id());
+}
+
 // A notification's title says what happened, never just "TuxTalk".
 export function notify(title, body) {
     if (title === 'TuxTalk')
@@ -290,6 +323,7 @@ export class Window extends Signals {
         super();
         this.wmClass = wmClass;
         this.id = id;
+        this.skip_taskbar = false;
     }
 
     get_wm_class() {
