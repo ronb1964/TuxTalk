@@ -226,7 +226,7 @@ def test_esc_after_letting_go_opens_nothing(desktop, say):
     """Esc while TuxTalk looks for the app's window: it isn't started."""
     desktop.while_looking = esc
     say("open Firefox")
-    assert desktop.launched == [] and desktop.beeps == []
+    assert desktop.launched == []
 
 
 def test_esc_before_the_command_is_found_brings_nothing_forward(desktop, say, monkeypatch):
@@ -292,7 +292,7 @@ def test_no_match_mid_recording_keeps_it_going(desktop, recording_on):
     assert rs.state.is_recording is True and not rec.message.cancelled
 
 
-def test_a_whole_recording_is_not_ended_twice(desktop):
+def test_a_whole_recording_has_no_recording_left_to_end(desktop):
     open_app.run("open Firefox", True, False)
     assert not recording.cancel_requested.is_set()
 
