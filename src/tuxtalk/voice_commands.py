@@ -1,13 +1,13 @@
 """Things said instead of text: undo ("delete that", "clear everything"),
-"fix that word", select and move by voice (TuxTalk Labs), and working out
-what "edit that" should change. Each acts only on the window the last
-dictation went to."""
+"fix that word", select and move by voice and opening apps (TuxTalk Labs),
+and working out what "edit that" should change. Each that sends keys acts
+only on the window the last dictation went to."""
 import os
 import re
 import time
 
 from . import (beeps, delivery, focused_window, keyboard_output, last_dictation, notices,
-               virtual_keyboard)
+               open_app, virtual_keyboard)
 from . import live_settings as live
 from . import notify as notify_module
 from . import recording_state as rs
@@ -326,6 +326,14 @@ def navigate(raw: str, beeps_on: bool, where=None):
         notices.edit_problem("focus_moved" if pressed == "moved" else "shortcut_failed",
                              beeps_on)
     return pressed is True
+
+
+def handle_open_app(raw: str, beeps_on: bool, in_recording: bool) -> bool:
+    """Open apps by voice (TuxTalk Labs): "open Firefox". True when the whole
+    dictation was an open command, opened or refused with a notice; False to
+    type it as text. *in_recording*: a phrase of a recording still going on,
+    which opening the app ends (open_app.run)."""
+    return open_app.run(raw, beeps_on, in_recording) is not None
 
 
 def spoken_edit_target():

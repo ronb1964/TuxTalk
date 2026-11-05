@@ -59,6 +59,10 @@ numbers_language = "en"
 # Select and move by voice (TuxTalk Labs, voice_navigation.py).
 voice_navigation = False
 
+# Open apps by voice (TuxTalk Labs, open_app.py). Off in the Flatpak, whose
+# Labs are hidden: a backup from another install can't turn it on there.
+open_apps = False
+
 # Plain text in terminals and code editors (app_kind, plain_for_app).
 adapt_to_app = True
 
@@ -92,6 +96,7 @@ def apply(cfg):
     settings reload; start or stop the AI engine."""
     global remove_fillers, ai_engine, auto_stop_seconds, ai_corrections, voice_editing
     global swiss_spelling, numbers_mode, numbers_language, voice_navigation, adapt_to_app
+    global open_apps
     global auto_languages, press_enter_after
     global chunk_pause_seconds, chunk_cfg, chunk_context_marks
     global log_transcripts, usage_stats, restore_clipboard, pause_media, duck_audio
@@ -117,6 +122,7 @@ def apply(cfg):
     remove_fillers = bool(cfg.remove_fillers)
     swiss_spelling = bool(cfg.swiss_spelling)
     voice_navigation = bool(cfg.voice_navigation)
+    open_apps = bool(cfg.open_apps) and not os.environ.get("FLATPAK_ID")
     adapt_to_app = bool(cfg.adapt_to_app)
     press_enter_after = bool(cfg.press_enter_after)
     send_countdown.configure(cfg)

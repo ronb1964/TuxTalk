@@ -1,10 +1,11 @@
 """What the dictation service tells the user when something went wrong:
 nothing heard from the microphone, a microphone that wouldn't open, no
 keyboard reaching it at start, a dictation that didn't reach the window,
-a refused password field, a voice edit that didn't happen. Most of the
-wording lives in delivery_notices.py and edit_notices.py (the keyboard's
-in uinput_helper.py and hotkeys.py, the microphone's here); this decides
-how it's said (a notification, a label over the window, the cancel beep)."""
+a refused password field, a voice edit that didn't happen, an app not
+opened by voice. Most of the wording lives in delivery_notices.py and
+edit_notices.py (the keyboard's in uinput_helper.py and hotkeys.py, an
+app's in open_app.py, the microphone's here); this decides how it's said
+(a notification, a label over the window, the cancel beep)."""
 import os
 
 import sounddevice as sd
@@ -157,3 +158,14 @@ def edit_problem(kind: str, beeps_on: bool) -> None:
         logger.info(f"Could not float the message over the window: {e}")
     if not explained:
         notify_module.notify(edit_notices.LABELS[kind], message)
+
+
+def app_not_opened(label: str, sentence: str, beeps_on: bool) -> None:
+    """"open ..." said, and nothing opened (open_app.py): the cancel beep,
+    *label* over the active window, where the user is looking, and
+    *sentence* in a notification, kept in the history as a backup. Always
+    said: otherwise nothing at all would seem to happen."""
+    beeps.beep(beeps_on, *CANCEL_BEEP)
+    from . import screen_message
+    screen_message.show_over_active_window(label)
+    notify_module.notify(label, sentence)

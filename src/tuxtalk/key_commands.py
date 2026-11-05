@@ -40,12 +40,16 @@ US_LETTER_KEYS = dict(zip("abcdefghijklmnopqrstuvwxyz",
                           (30, 48, 46, 32, 18, 33, 34, 35, 23, 36, 37, 38, 50,
                            49, 24, 25, 16, 19, 31, 20, 22, 47, 17, 45, 21, 44), strict=True))
 
+# Said before a command, it types the command's words instead: "literal
+# press enter" here, "literal open Firefox" (open_app.py).
+LITERAL = r"(?:literal|the\s+words?)\s+"
+
 # "press enter", "hit enter", "press the enter key", "press return", "press
 # tab". Speech engines often capitalise and punctuate it ("... noon. Press
 # Enter."). "literal" or "the word" before it types the words.
 _TRAILING = re.compile(
     r"(?P<lead>^|[\s,;:.!?]+)"
-    r"(?P<literal>(?:literal|the\s+words?)\s+)?"
+    rf"(?P<literal>{LITERAL})?"
     r"(?:press|hit)\s+(?:the\s+)?(?P<key>enter|return|tab)(?:\s+key)?"
     r"[\s.!?,]*$",
     re.IGNORECASE,

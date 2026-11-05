@@ -19,6 +19,7 @@ from . import (
     last_dictation,
     modifier_hotkeys,
     notices,
+    open_app,
     recording,
     resampling,
     send_countdown,
@@ -165,7 +166,8 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             # sentence's final mark may be gone from the screen.
             job.message.sentence_audio = []
             return
-        raw, said = split_key_command(raw)
+        # "literal open Firefox" types "open Firefox".
+        raw, said = split_key_command(open_app.typed_as_words(raw))
         key = _key_to_press(raw, said, job)
         if said and not raw.strip():
             _press_alone(said, in_password, job)
@@ -325,7 +327,12 @@ def _ran_as_command(raw: str, job: _Job) -> bool:
                 # Select and move by voice ("select the last sentence"), TuxTalk Labs.
                 or voice_commands.handle_navigation(raw, job.beeps_on)
                 # "fix that word": Fix a Word on the dictation before this one.
-                or voice_commands.handle_fix_word(raw, job.beeps_on)):
+                or voice_commands.handle_fix_word(raw, job.beeps_on)
+                # "open Firefox" (TuxTalk Labs). A phrase of the recording still
+                # under way ends it; one of an earlier recording leaves it be.
+                or voice_commands.handle_open_app(
+                    raw, job.beeps_on,
+                    job.chunk_role == "middle" and job.message is rs.state.current.message)):
             return True
     # "edit that, make it shorter": voice editing without its key, on what
     # was just typed (TuxTalk Labs, with voice editing on). It checks Esc

@@ -334,6 +334,7 @@ class AdvancedTab(Tab):
         row += 1
 
         row = self._labs_editing(grid, row)
+        row = self._labs_open_apps(grid, row)
         self.type_at_pause = TypeAtPause(self.win)
         row = self.type_at_pause.build(grid, row)
 
@@ -412,6 +413,30 @@ class AdvancedTab(Tab):
         grid.attach(tips_again, 0, row, 2, 1)
         row += 1
         return row
+
+    def _labs_open_apps(self, grid, row):
+        """Opening apps by voice (open_app.py); returns the next row."""
+        grid.attach(subheading("Opening apps"), 0, row, 2, 1)
+        row += 1
+        hold = self.config.get("hotkey") or "F8"      # the key Help names too
+        check = Gtk.CheckButton(label="Open apps: say \u201copen Firefox\u201d")
+        check.set_active(bool(self.config.get("open_apps", False)))
+        check.set_tooltip_text(
+            f"Hold {hold}, say \u201copen\u201d and an app\u2019s name, let go: the app opens,\n"
+            "or comes to the front if it\u2019s already open. Nothing is typed.\n\n"
+            "\u2022 \u201copen\u201d, \u201claunch\u201d or \u201cstart\u201d: "
+            "\u201copen Firefox\u201d, \u201claunch the calculator\u201d\n"
+            "\u2022 \u201copen new Firefox\u201d always opens another one\n"
+            "\u2022 \u201copen the browser\u201d, \u201copen email\u201d, "
+            "\u201copen files\u201d: your usual apps\n"
+            "\u2022 \u201cliteral open Firefox\u201d types the words\n\n"
+            "Inside a longer sentence the words are typed as usual. Said in a hands-free\n"
+            "or Type at pause recording, opening the app ends the recording.\n"
+            "Works in terminals too. More in Help, on the Writing page.")
+        check.connect("toggled", lambda c: self.update_config("open_apps", c.get_active()))
+        check.set_margin_start(LABS_INDENT)
+        grid.attach(check, 0, row, 2, 1)
+        return row + 1
 
     def _labs_indicator_and_links(self, grid, row):
         """The indicator following the window, then How these work and Send feedback."""

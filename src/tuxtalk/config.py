@@ -207,6 +207,8 @@ class Settings:
     numbers_small_as_words: bool = False
     # TuxTalk Labs: "select the last sentence", "go to the end" (voice_navigation.py)
     voice_navigation: bool = False
+    # TuxTalk Labs: "open Firefox" (open_app.py)
+    open_apps: bool = False
     # No closing period in terminals and code editors, no starting capital in terminals
     adapt_to_app: bool = True
     # Press Enter after every dictation, as if each ended with "press enter"
@@ -924,6 +926,7 @@ LIVE_APPLIED_KEYS = {
     "numbers_as_digits",
     "numbers_small_as_words",
     "voice_navigation",
+    "open_apps",
     "adapt_to_app",
     "press_enter_after",
     "press_enter_delay",
