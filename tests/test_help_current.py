@@ -183,3 +183,33 @@ def test_help_spells_out_opening_apps_with_your_own_hold_key(monkeypatch):
 
 def test_labs_intro_lists_opening_apps(monkeypatch):
     assert "opening apps" in _writing(monkeypatch).split("<b>TuxTalk Labs</b>", 1)[1][:500]
+
+
+def _terminals(monkeypatch, hold, toggle="F9"):
+    """The Terminals section's text, with *hold* and *toggle* as the saved keys."""
+    from tuxtalk import help_text
+    monkeypatch.setattr(help_text, "_keys", lambda _flatpak: (hold, toggle, ""))
+    return next(text for title, text in help_text.tabs() if "Terminals" in title)
+
+
+def test_tips_offer_left_ctrl_space(monkeypatch):
+    """Everyone who finds F-keys need Fn is told Left Ctrl+Space needs none."""
+    assert "Left Ctrl+Space" in _tips(monkeypatch)
+    assert "Left Ctrl+Space" in _tips(monkeypatch, hotkey="F6")
+
+
+def test_help_for_no_working_key_offers_left_ctrl_space():
+    from tuxtalk import help_text
+    problems = next(text for title, text in help_text.tabs() if "Problems" in title)
+    assert "Scroll Lock or Left Ctrl+Space" in problems
+
+
+def test_terminals_says_what_left_ctrl_space_costs_only_when_it_is_the_key(monkeypatch):
+    """Ctrl+Space code completion waits while dictation is on, but only for
+    someone who picked it (as hold key or as toggle key)."""
+    for hold, toggle in (("Left Ctrl+Space", "F9"), ("F8", "Left Ctrl+Space")):
+        page = _terminals(monkeypatch, hold, toggle)
+        assert "code completion" in page and "Right Ctrl+Space" in page
+        assert "Left Ctrl+Space" in page
+    page = _terminals(monkeypatch, "F8")
+    assert "code completion" not in page and "Right Ctrl+Space" not in page

@@ -5,6 +5,20 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- Left Ctrl+Space is a new dictation key, for anyone whose F-keys need Fn
+  or who just likes it. Hold Left Ctrl, then Space, talk, and let go of
+  either one to stop. As the toggle key, one tap starts and the next stops.
+  Pick it in Preferences, General, under Hold Hotkey or Toggle Hotkey. It
+  was asked for in Discussion #28.
+- It costs you Ctrl+Space in your apps while dictation is on, and Right
+  Ctrl+Space too, because a desktop can't tell the two Ctrl keys apart. Code
+  completion on that shortcut waits until dictation is off. Preferences says
+  so when you pick it, and warns you if IBus, Fcitx 5, GNOME or your keyboard
+  options already use Ctrl+Space. On a desktop where TuxTalk can't hold keys
+  back from apps (anything but KDE, GNOME with the TuxTalk extension, COSMIC
+  and X11) the app gets Ctrl+Space as well.
+- It needs the newer hotkey helper (1.14). If yours is older, picking the key
+  asks to update it, with one password prompt and no restart.
 - You can open an app by saying its name. Hold your dictation key, say "open
   Firefox", let go. Firefox opens, or comes to the front if it's already
   open, and nothing is typed. "launch" and "start" work too. It's in

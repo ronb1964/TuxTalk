@@ -105,7 +105,7 @@ def _test_offer_lines():
     """hotkey_change_message's paragraphs offering the hotkey test."""
     return ["Try it once in the test to make sure it reaches TuxTalk. On some "
             "laptops the F-keys change the brightness or volume unless you hold Fn; "
-            "Right Ctrl, Right Alt and Scroll Lock never need it.",
+            "Right Ctrl, Right Alt, Scroll Lock and Left Ctrl+Space never need it.",
             # So Not Now isn't a dead end: the Test Hotkeys button can be below the fold.
             "You can also test it later with Test Hotkeys, under the hotkeys on "
             "the General tab."]

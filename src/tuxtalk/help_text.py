@@ -21,6 +21,7 @@ from gi.repository import GLib
 
 from . import commands_reference
 from .ai_download import DOWNLOAD_SIZE_TEXT as AI_SIZE_TEXT
+from .config import CTRL_SPACE
 from .cuda_download import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
@@ -87,8 +88,21 @@ def _no_hotkey_tips(is_flatpak, keys_where):
         "• Another app may use the same key: pick another in Preferences → General and "
         "try it with Test Hotkeys.\n"
         "• On many laptops and small keyboards the F-keys work only with Fn held. Hold Fn "
-        "with your key, or pick Right Ctrl, Right Alt or Scroll Lock in Preferences → "
-        "General: where a laptop has them, they need no Fn.")
+        "with your key, or pick Right Ctrl, Right Alt, Scroll Lock or Left Ctrl+Space in "
+        "Preferences → General: where a laptop has them, they need no Fn.")
+
+
+def _ctrl_space_line(keys):
+    """Terminals' note on what Left Ctrl+Space costs, empty unless the hold or
+    toggle key (the first two of *keys*) is that key."""
+    if CTRL_SPACE not in keys[:2]:
+        return ""
+    return (
+        "\n  • With <b>Left Ctrl+Space</b> as your key, Ctrl+Space (and Right Ctrl+Space)\n"
+        "    doesn't reach your apps while dictation is on, so code completion on it waits\n"
+        "    until you turn dictation off. On a desktop where TuxTalk can't hold keys back\n"
+        "    (anything but KDE, GNOME with the TuxTalk extension, COSMIC and X11), the app\n"
+        "    gets Ctrl+Space as well.")
 
 
 def tabs():
@@ -102,7 +116,8 @@ def _values():
     """What the sections' {placeholders} say on this computer."""
     f = install_facts()
     is_flatpak = f["is_flatpak"]
-    hold, toggle, paste_key = (GLib.markup_escape_text(k) for k in _keys(is_flatpak))
+    keys = _keys(is_flatpak)
+    hold, toggle, paste_key = (GLib.markup_escape_text(k) for k in keys)
 
     # --- format-aware phrasing --------------------------------------------------
     keys_where = ("your desktop's <b>System Settings → Keyboard → Shortcuts</b> "
@@ -168,10 +183,10 @@ def _values():
         key_choice_tip = f"Pick a dictation key that's easy to reach in {keys_where}."
     else:
         key_choice_tip = (
-            "Pick <b>Right Alt</b>, <b>Right Ctrl</b> or <b>Scroll Lock</b> as your key in "
-            "<b>Preferences →\n    General</b>: on a laptop they need no Fn, where it has "
-            "them. Where Right Alt is AltGr,\n    the list says which characters you'd lose, "
-            "like @ or €.")
+            "Pick <b>Right Alt</b>, <b>Right Ctrl</b>, <b>Scroll Lock</b> or <b>Left "
+            "Ctrl+Space</b> as your key in <b>Preferences →\n    General</b>: on a laptop "
+            "they need no Fn, where it has them. Where Right Alt is AltGr,\n    the list "
+            "says which characters you'd lose, like @ or €.")
 
     # The Flatpak's shortcuts portal never hears Esc.
     esc_tip = "" if is_flatpak else (
@@ -185,6 +200,7 @@ def _values():
         "Ctrl+Z).\n\n")
 
     return {"hold": hold, "toggle": toggle, "paste_tip": paste_tip, "esc_tip": esc_tip,
+            "ctrl_space_line": _ctrl_space_line(keys),
             "paste_line": paste_line, "key_choice_tip": key_choice_tip,
             "shortcut_line": shortcut_line, "typing_para": typing_para,
             "no_hotkey_block": no_hotkey_block, "kde_notice": kde_notice,
@@ -516,7 +532,7 @@ period.
   • <b>delete everything</b> clears the line you're typing (Ctrl+E, Ctrl+U).
   • Select and move and voice editing don't work there: a terminal has no
     selection to change, and those keys mean other things.
-  • Pasting uses Shift+Ctrl+V, which TuxTalk picks by itself.{shortcut_line}'''
+  • Pasting uses Shift+Ctrl+V, which TuxTalk picks by itself.{ctrl_space_line}{shortcut_line}'''
 
 HANDS_FREE = '''<span size="large"><b>Hands-free and Long Talks</b></span>
 
