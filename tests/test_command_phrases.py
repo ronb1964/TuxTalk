@@ -105,7 +105,9 @@ def test_open_still_opens():
 
 EVERY_COMMAND = ["new tab", "close tab", "next tab", "previous tab", "reopen tab", "go back",
     "go forward", "reload the page", "refresh page", "scroll down", "page up", "page down",
-    "find on page", "save the file", "copy the selection", "paste it", "press escape", "close Firefox", "close all Firefox", "close window",
+    "find on page", "save the file", "copy the selection", "paste it", "press escape",
+    "close Firefox", "close all Firefox",
+    "close window",
     "switch to Firefox", "minimize window", "maximize window", "restore window",
     "go to youtube dot com", "web search cheap tires", "open Firefox",
     "snap left", "centre window", "show desktop", "next desktop", "switch to desktop two",
@@ -145,33 +147,48 @@ def test_literal_types_the_words():
 
 
 @pytest.mark.parametrize("said, request_", [
-    ("Snap left.", DesktopRequest("snap left")), ("snap window right", DesktopRequest("snap right")),
+    ("Snap left.", DesktopRequest("snap left")),
+    ("snap window right", DesktopRequest("snap right")),
     ("snap the window to the top left", DesktopRequest("snap top left")),
     ("Move window to the bottom right.", DesktopRequest("snap bottom right")),
     ("move this window to the left", DesktopRequest("snap left")),
-    ("Centre window.", DesktopRequest("center")), ("center the window", DesktopRequest("center")),
-    ("Show desktop.", DesktopRequest("show desktop")), ("show the desktop", DesktopRequest("show desktop")),
-    ("Show all windows.", DesktopRequest("overview")), ("show windows", DesktopRequest("overview")),
+    ("Centre window.", DesktopRequest("center")),
+    ("center the window", DesktopRequest("center")),
+    ("Show desktop.", DesktopRequest("show desktop")),
+    ("show the desktop", DesktopRequest("show desktop")),
+    ("Show all windows.", DesktopRequest("overview")),
+    ("show windows", DesktopRequest("overview")),
     ("Next desktop.", DesktopRequest("next desktop")),
     ("go to the previous desktop", DesktopRequest("previous desktop")),
-    ("Switch to desktop two.", DesktopRequest("desktop", 2)), ("go to desktop 3", DesktopRequest("desktop", 3)),
+    ("Switch to desktop two.", DesktopRequest("desktop", 2)),
+    ("go to desktop 3", DesktopRequest("desktop", 3)),
     ("Move window to desktop two.", DesktopRequest("to desktop", 2)),
     ("move window to the next desktop", DesktopRequest("to next desktop")),
     ("move the window to the other screen", DesktopRequest("to next screen")),
-    ("Volume up.", SoundRequest("volume up")), ("volume down three", SoundRequest("volume down", 3)),
-    ("turn the volume up 2", SoundRequest("volume up", 2)), ("turn down the volume", SoundRequest("volume down")),
-    ("Mute the sound.", SoundRequest("mute")), ("unmute sound", SoundRequest("unmute")),
-    ("Pause music.", MusicRequest("pause")), ("resume the music", MusicRequest("play")),
-    ("play music", MusicRequest("play")), ("Next song.", MusicRequest("next")),
+    ("Volume up.", SoundRequest("volume up")),
+    ("volume down three", SoundRequest("volume down", 3)),
+    ("turn the volume up 2", SoundRequest("volume up", 2)),
+    ("turn down the volume", SoundRequest("volume down")),
+    ("Mute the sound.", SoundRequest("mute")),
+    ("unmute sound", SoundRequest("unmute")),
+    ("Pause music.", MusicRequest("pause")),
+    ("resume the music", MusicRequest("play")),
+    ("play music", MusicRequest("play")),
+    ("Next song.", MusicRequest("next")),
     ("previous track", MusicRequest("previous")),
-    ("Lock screen.", SystemRequest("lock")), ("lock the computer", SystemRequest("lock")),
-    ("Take a screenshot.", SystemRequest("screenshot")), ("take screen shot", SystemRequest("screenshot")),
-    ("What can I say?", SystemRequest("commands")), ("show voice commands", SystemRequest("commands"))])
+    ("Lock screen.", SystemRequest("lock")),
+    ("lock the computer", SystemRequest("lock")),
+    ("Take a screenshot.", SystemRequest("screenshot")),
+    ("take screen shot", SystemRequest("screenshot")),
+    ("What can I say?", SystemRequest("commands")),
+    ("show voice commands", SystemRequest("commands"))])
 def test_desktop_sound_music_and_system_phrases(said, request_):
     assert P(said) == request_
 
 @pytest.mark.parametrize("said", ["switch to desktop 10", "go to desktop zero",
-    "Switch to desktop ten.", "move window to desktop 12", "volume up 11"])
+    "Switch to desktop ten.", "move window to desktop 12", "volume up 11",
+    "switch to desktop eleven", "switch to desktop twenty", "go to desktop twelve",
+    "move window to desktop eleven"])
 def test_switch_to_desktop_with_another_number_is_never_an_app(said):
     assert P(said) is None
 

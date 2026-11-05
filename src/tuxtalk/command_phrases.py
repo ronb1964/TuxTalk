@@ -155,9 +155,11 @@ _OTHER_PHRASES = (
 )
 _FIXED = tuple((re.compile(pattern), build) for pattern, build in
                _DESKTOP_PHRASES + _SOUND_PHRASES + _OTHER_PHRASES)
-# "switch to desktop ten" names no desktop, and must not fall through to
-# "switch to <app>" and look for an app called "desktop ten".
-_NO_SUCH_DESKTOP = re.compile(rf"(?:(?:switch|go) to|move {_THIS} to) desktop (?:\d+|zero|ten)")
+# Whatever follows "switch to desktop" that isn't 1 to 9 ("ten", "eleven") names no
+# desktop, and must not fall through to "switch to <app>" and look for an app
+# called "desktop eleven".
+_NO_SUCH_DESKTOP = re.compile(
+    rf"(?:(?:switch|go) to|move {_THIS} to) (?:the )?desktop(?: .*)?")
 
 _SEARCH = re.compile(r"^\s*web\s+search\s*[,:]?\s+(?P<words>.+?)[\s.!?]*$", re.IGNORECASE)
 _GO_TO = re.compile(r"^\s*(?:go\s+to|open)\s+(?P<rest>.+)$", re.IGNORECASE)
@@ -211,8 +213,7 @@ def _volume(direction: str, raw: str | None) -> SoundRequest | None:
     return SoundRequest(f"volume {direction}", steps) if 1 <= steps <= MAX_COUNT else None
 
 
-def _fixed(said: str) -> (DesktopRequest | SoundRequest | MusicRequest | SystemRequest
-                          | None):
+def _fixed(said: str) -> DesktopRequest | SoundRequest | MusicRequest | SystemRequest | None:
     """The desktop, sound, music or system request *said* is exactly."""
     for pattern, build in _FIXED:
         if m := pattern.fullmatch(said):
