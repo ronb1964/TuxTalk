@@ -26,7 +26,10 @@ as typing:
 * any other key only while two of Ctrl, Alt and Super are held with it,
   having gone down while the desktop could see them, on a real keyboard
   (any of them, as the desktop counts them) or on the same virtual one;
-  and no more than two different such keys while those modifiers stay down.
+  and no more than two different such keys while those modifiers stay down;
+* Space while Left Ctrl is held, Left Ctrl counted as those modifiers are
+  (not Right Ctrl, never Space alone, no other key with Left Ctrl), and
+  Left Ctrl's own press and release, only to a client watching that pair.
 
 "Two of" because any one modifier can be made to type characters: Right Alt
 is AltGr on most layouts (it never counts toward the two), and XKB options turn
@@ -47,6 +50,15 @@ Windows virtual machine, where Ctrl+Alt is AltGr) would otherwise turn
 everything typed into shortcuts; a shortcut is one or two keys, typing is
 many.
 
+Left Ctrl is the one modifier that unlocks a key alone, and only Space: XKB
+offers Right Ctrl, Left Alt and Super as a third-level key, never Left Ctrl,
+so Ctrl+Space types nothing. Even under a keymap that made it one (written
+by hand, or options combined), the only key reported is Space: a client learns when
+Ctrl+Space was pressed, never a letter, a number or Enter. Its own press and
+release say no more than Right Ctrl's report does; a client that watches the
+pair needs them to hold Left Ctrl back from the desktop while TuxTalk types
+(Ctrl and a typed "w" close a tab).
+
 Everything goes only to the user at the screen: logind's active user on
 seat0, checked by user id (two sessions of the same user count as one), and
 only keyboards of seat0 are read. Letters, numbers, Enter or Shift+letter
@@ -59,7 +71,8 @@ Hiding a held hotkey
 While TuxTalk records it hides the held hotkey from the desktop and keeps
 that keyboard to itself, so a held F8 doesn't auto-repeat into the window
 being dictated into. That's allowed once per press of a hotkey (never Esc)
-that is physically held, for one client at a time. It grabs the keyboard the
+that is physically held, for one client at a time. Left Ctrl is never hidden
+on its own, only as the modifier of a held Space. It grabs the keyboard the
 press came from, and another real keyboard only if it holds a modifier
 reported with the press (Shift for a voice edit, on a split keyboard). One
 that's a mouse as well (a Logitech one: see check_keyboard) moves no pointer
@@ -88,8 +101,11 @@ client -> helper
                                (before 1.12 without the count; a client reads
                                the words it knows and passes over the rest)
   WATCH <spec> [<spec>...]     the keys to report: a code ("66" = F8) or
-                               MODS:code with MODS from C A S M
-                               (Ctrl Alt Shift Meta/Super), "CA:25" = Ctrl+Alt+P;
+                               MODS:code with MODS from C A S M L
+                               (Ctrl Alt Shift Meta/Super, and Left Ctrl alone,
+                               only in "L:57", since 1.14), "CA:25" = Ctrl+Alt+P;
+                               "L:57" also reports Left Ctrl's own press and
+                               release (DOWN 29 / UP 29) to that client;
                                the specs refused are named in ERR and the rest
                                apply, unless the whole line is refused (too many
                                keys or shortcuts: the last WATCH stays); MODS on
@@ -120,7 +136,7 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.13"
+VERSION = "1.14"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"
@@ -146,7 +162,8 @@ BTN_LEFT = 0x110
 OWN_KEYBOARD_NAME = "TuxTalk virtual keyboard"
 KEY_MAX = 0x2FF
 KEY_ESC, KEY_SCROLLLOCK, KEY_PAUSE = 1, 70, 119
-KEY_RIGHTCTRL, KEY_RIGHTALT = 97, 100
+KEY_LEFTCTRL, KEY_RIGHTCTRL, KEY_RIGHTALT = 29, 97, 100
+KEY_SPACE = 57
 BUS_VIRTUAL = 0x06
 
 F_KEYS = frozenset(list(range(59, 69)) + [87, 88] + list(range(183, 195)))   # F1-F24
@@ -154,7 +171,7 @@ F_KEYS = frozenset(list(range(59, 69)) + [87, 88] + list(range(183, 195)))   # F
 BARE_MODIFIERS = frozenset({KEY_RIGHTCTRL, KEY_RIGHTALT})
 BARE_KEYS = F_KEYS | BARE_MODIFIERS | {KEY_ESC, KEY_PAUSE, KEY_SCROLLLOCK}
 
-MODIFIERS = frozenset({29, KEY_RIGHTCTRL, 42, 54, 56, KEY_RIGHTALT, 125, 126})
+MODIFIERS = frozenset({KEY_LEFTCTRL, KEY_RIGHTCTRL, 42, 54, 56, KEY_RIGHTALT, 125, 126})
 # The modifiers that can unlock a key, by the letter the protocol uses. Right
 # Alt isn't among them: on most layouts it's AltGr, which types @, €, { and
 # the like. Shift alone never unlocks anything (it types capitals).
@@ -163,7 +180,10 @@ UNLOCKERS = {
     "A": frozenset({56}),           # Left Alt
     "S": frozenset({42, 54}),       # Shift
     "M": frozenset({125, 126}),     # Meta / Super
+    # Left Ctrl alone, for Space only (see parse_spec and the rule at the top).
+    "L": frozenset({KEY_LEFTCTRL}),
 }
+LEFT_CTRL = "L"
 SHORTCUT_LETTERS = frozenset("CAM")
 
 # Letter keys tell a keyboard from a power button, a lid switch or a game
@@ -265,6 +285,10 @@ def parse_spec(spec):
     letters = frozenset(mods.upper())
     if mods and (not letters <= set(UNLOCKERS) or len(letters) != len(mods)):
         raise ValueError(f"bad modifiers in {spec!r}")
+    if LEFT_CTRL in letters:
+        if code != KEY_SPACE:
+            raise ValueError(f"Left Ctrl alone only unlocks Space: {spec!r}")
+        return ("combo", code, letters)
     if code in BARE_KEYS:
         return ("bare", code)
     if len(letters & SHORTCUT_LETTERS) < 2:
@@ -903,8 +927,9 @@ class Helper:
 
     def deliver_down(self, keyboard, code):
         """*code* went down on *keyboard*: DOWN to each client at the screen
-        that watches it and may have it now (client_wants)."""
-        if code in MODIFIERS - BARE_MODIFIERS:
+        that watches it and may have it now (client_wants). Left Ctrl is
+        in the bare set only of a client watching Left Ctrl+Space (watch)."""
+        if code in MODIFIERS - BARE_MODIFIERS and code != KEY_LEFTCTRL:
             return
         # Most keys are wanted by nobody: drop them before anything else.
         interested = [c for c in self.clients.values()
@@ -923,7 +948,10 @@ class Helper:
         for client in interested:
             if client.uid == active and self.client_wants(client, keyboard, code, mods):
                 client.origin[code] = keyboard.path
-                client.hideable.add(code)
+                if code != KEY_LEFTCTRL:
+                    # Hidden only as a held Space's modifier: alone, a
+                    # client could take the keyboard from every Ctrl shortcut.
+                    client.hideable.add(code)
                 for mod in mods:
                     client.mods_owed[mod] = keyboard.group
                 self.send(client, f"DOWN {code} {','.join(map(str, sorted(mods))) or '-'}")
@@ -1032,8 +1060,10 @@ class Helper:
         for keyboard in list(self.keyboards.values()):
             if keyboard.path not in origins and keyboard.group not in groups:
                 continue
-            outcome = self.hide_on(keyboard, [c for path, c in presses if path == keyboard.path]
-                                   + mods, keyboard.path in origins)
+            # Once each: a Right Ctrl may be a press and another's modifier,
+            # and a second injected release would swallow the real one.
+            codes = dict.fromkeys([c for path, c in presses if path == keyboard.path] + mods)
+            outcome = self.hide_on(keyboard, list(codes), keyboard.path in origins)
             if outcome is None:
                 self.let_go(held_on)
                 return None
@@ -1274,6 +1304,8 @@ class Helper:
                 combos.setdefault(parsed[1], []).append(parsed[2])
         if sum(map(len, combos.values())) > MAX_COMBOS:
             return f"ERR no more than {MAX_COMBOS} shortcuts"
+        if any(LEFT_CTRL in letters for sets in combos.values() for letters in sets):
+            bare.add(KEY_LEFTCTRL)      # its own press and release (the rule at the top)
         client.bare, client.combos = bare, combos
         return f"ERR {'; '.join(refused)}" if refused else "OK WATCH"
 

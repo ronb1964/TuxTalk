@@ -189,12 +189,12 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False, read_
 def test_only_an_older_helper_needs_an_update():
     """1.9, installed by test builds, and 1.10 are older than 1.11: the
     numbers after the dot are compared as numbers, not as text."""
-    assert hotkey_helper.VERSION == "1.13" and si.NEEDED_HELPER_VERSION == "1.11"
+    assert hotkey_helper.VERSION == "1.14" and si.NEEDED_HELPER_VERSION == "1.11"
     for running, older, needed in (("1.0", True, True), ("1.3", True, True),
                                    ("garbled", True, True), ("1.9", True, True),
                                    ("1.10", True, True), ("1.11", True, False),
-                                   ("1.12", True, False),
-                                   (hotkey_helper.VERSION, False, False), ("1.14", False, False),
+                                   ("1.12", True, False), ("1.13", True, False),
+                                   (hotkey_helper.VERSION, False, False), ("1.15", False, False),
                                    ("9.0", False, False), (None, False, False)):
         assert si.is_older(running) is older, running
         assert si.needs_update(running) is needed, running
