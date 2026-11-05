@@ -68,6 +68,14 @@ def test_window_requests():
     assert P("switch to Firefox") == WindowRequest("switch", OpenRequest("firefox"))
     assert P("close tab") == KeyRequest("close tab")
 
+
+def test_minimize_maximize_and_restore_by_name():
+    assert P("Minimize Firefox.") == WindowRequest("minimize", OpenRequest("firefox"))
+    assert P("maximise Firefox") == WindowRequest("maximize", OpenRequest("firefox"))
+    assert P("restore Firefox") == WindowRequest("restore", OpenRequest("firefox"))
+    assert P("restore window") == WindowRequest("unmaximize")
+
+
 @pytest.mark.parametrize("said", ["Close all.", "close every", "close all the"])
 def test_close_all_naming_no_app_is_dictation(said):
     assert P(said) is None

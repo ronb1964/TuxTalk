@@ -345,6 +345,19 @@ def test_no_app_returns_none_with_no_note(kde, apps, actions_on, kwin_calls, cap
     assert "door" not in caplog.text and "decaf" not in caplog.text
 
 
+def test_minimize_firefox_on_kde_asks_kwin_for_its_window(kde, apps, kwin_calls, actions_on):
+    assert window_actions.run(WindowRequest("minimize", OpenRequest("firefox")),
+                              CHAT_WINDOW, False) is True
+    assert kwin_calls == [("minimize", "firefox", frozenset({"firefox"}), False)]
+    assert actions_on == []
+
+
+@pytest.mark.parametrize("said", ["Minimize the risk.", "Maximize profits.", "Restore the backup."])
+def test_a_name_that_fits_no_app_is_typed(actions_on, chat, say, kde, apps, said):
+    say(said)
+    assert [text for text, _ in chat[2]] == [said] and actions_on == []
+
+
 # --- through the dictation pipeline ---------------------------------------------------------
 
 

@@ -130,6 +130,26 @@ def test_maximize_works_on_a_shell_that_dropped_the_flags():
     assert answer == [True, [[5, None]]]  # JSON turns undefined into null
 
 
+def test_restore_unminimizes_unmaximizes_and_activates():
+    answer, _logs = run(ENABLED + FIREFOX + """
+        t.shell.apps.get('firefox.desktop')[1].minimized = true;
+        t.report([served.object.WindowAction('restore', 'firefox.desktop', false),
+                  t.shell.unminimized, t.shell.unmaximized, t.shell.activated]);
+    """)
+    assert answer == [True, [8], [[8, 3]], [8]]
+
+
+def test_maximize_by_name_activates_but_the_focused_window_doesnt_move():
+    answers, _logs = run(ENABLED + FIREFOX + """
+        const byName = served.object.WindowAction('maximize', 'firefox.desktop', false);
+        const activatedByName = [...t.shell.activated];
+        t.shell.activated.length = 0;
+        const focused = served.object.WindowAction('maximize', '', false);
+        t.report([byName, activatedByName, focused, t.shell.activated]);
+    """)
+    assert answers == [True, [8], True, []]
+
+
 def test_an_app_without_a_window_says_so():
     """Not running, or only a splash: false, and nothing is touched."""
     answers, _logs = run(ENABLED + FIREFOX + """

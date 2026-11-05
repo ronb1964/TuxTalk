@@ -32,7 +32,7 @@ class KeyRequest:
 
 @dataclass(frozen=True)
 class WindowRequest:
-    action: str          # "close", "minimize", "maximize", "unmaximize", "switch"
+    action: str          # "close", "minimize", "maximize", "unmaximize", "restore", "switch"
     app: OpenRequest | None = None   # None: the focused window
     every: bool = False  # "close all Firefox"
 
@@ -112,6 +112,9 @@ _WINDOW_ACTIONS = (
     (re.compile(rf"maximi[sz]e {_THIS}"), "maximize"),
     (re.compile(rf"(?:unmaximi[sz]e|restore) {_THIS}"), "unmaximize"),
 )
+# The verbs that act on a named app's window ("close <name>").
+_NAMED_WINDOW_VERBS = {"close": "close", "minimize": "minimize", "minimise": "minimize",
+                       "maximize": "maximize", "maximise": "maximize", "restore": "restore"}
 # Spoken punctuation ("close quote", "close paren") is never a window request.
 _PUNCTUATION = {"quote", "unquote", "paren", "parenthesis", "parentheses", "bracket",
                 "brackets", "brace", "braces"}
@@ -222,8 +225,9 @@ def _fixed(said: str) -> DesktopRequest | SoundRequest | MusicRequest | SystemRe
 
 
 def _window(said: str) -> WindowRequest | None:
-    """The window request *said* is. "close <name>" and "switch to <name>" accept
-    any short name here: the caller finds the app and types the words if none fits.
+    """The window request *said* is. "close <name>", "switch to <name>",
+    "minimize <name>", "maximize <name>" and "restore <name>" accept any short
+    name here: the caller finds the app and types the words if none fits.
     """
     for pattern, action in _WINDOW_ACTIONS:
         if pattern.fullmatch(said):
@@ -239,13 +243,14 @@ def _window(said: str) -> WindowRequest | None:
         named = rest[1:] if rest[:1] == ["the"] else rest
         app = app_name(rest) if named else None
         return WindowRequest("close", app, every=True) if app else None
-    if words[0] == "close":
-        app = app_name(words[1:])
-        return WindowRequest("close", app) if app else None
     if words[:2] == ["switch", "to"]:
-        app = app_name(words[2:])
-        return WindowRequest("switch", app) if app else None
-    return None
+        action, rest = "switch", words[2:]
+    elif words[0] in _NAMED_WINDOW_VERBS:
+        action, rest = _NAMED_WINDOW_VERBS[words[0]], words[1:]
+    else:
+        return None
+    app = app_name(rest)
+    return WindowRequest(action, app) if app else None
 
 
 def _address_request(raw: str) -> AddressRequest | None:

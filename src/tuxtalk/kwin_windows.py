@@ -19,14 +19,18 @@ _ACTIONS = {
     "find": "",
     "close": "w.closeWindow();",
     "minimize": "w.minimized = true;",
-    "maximize": "w.setMaximize(true, true);",
+    # A named app's window also comes forward: said from another window.
+    "maximize": "w.setMaximize(true, true); if (named) { workspace.activeWindow = w; }",
     "unmaximize": "w.setMaximize(false, false);",
+    # Named apps only: brings back a minimized or maximized window.
+    "restore": "w.minimized = false; w.setMaximize(false, false);"
+               " workspace.activeWindow = w;",
 }
 
 
 def build_script(action: str, desktop_file: str, classes, every: bool, reply_to: str) -> str:
-    """The KWin script: do *action* ("close", "minimize", "maximize" or
-    "unmaximize"; "find" only looks, touching no window) to the app's
+    """The KWin script: do *action* ("close", "minimize", "maximize",
+    "unmaximize" or "restore"; "find" only looks, touching no window) to the app's
     windows, matched as kwin_activate matches them: the topmost one, or
     every one with *every*. With no
     *desktop_file* and no *classes* it acts on the active window instead,
@@ -44,10 +48,11 @@ def build_script(action: str, desktop_file: str, classes, every: bool, reply_to:
     var classes = {json.dumps(sorted(classes))};
     var every = {json.dumps(every)};
     var reply = {json.dumps(reply_to)};
+    var named = desktopFile !== "" || classes.length > 0;
     var targets = [];
     try {{
         var windows = workspace.stackingOrder || [];
-        if (desktopFile === "" && classes.length === 0) {{
+        if (!named) {{
             var active = workspace.activeWindow;
             if (active && (active.normalWindow || active.dialog) && !active.deleted) {{
                 targets.push(active);

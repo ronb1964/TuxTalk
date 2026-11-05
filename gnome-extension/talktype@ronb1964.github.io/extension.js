@@ -129,6 +129,13 @@ const WINDOW_ACTIONS = {
     // GNOME 49 dropped the flags argument; older Shells need it.
     maximize: w => (Meta.MaximizeFlags ? w.maximize(Meta.MaximizeFlags.BOTH) : w.maximize()),
     unmaximize: w => (Meta.MaximizeFlags ? w.unmaximize(Meta.MaximizeFlags.BOTH) : w.unmaximize()),
+    // A named app's window only: brings back a minimized or maximized one.
+    restore: w => {
+        if (w.minimized)
+            w.unminimize();
+        WINDOW_ACTIONS.unmaximize(w);
+        Main.activateWindow(w);
+    },
 };
 
 // Whether the focused window *w* is one "close window" may act on: an app's
@@ -279,7 +286,8 @@ const AppFocus = {
     },
 
     // Voice commands "close this", "minimize", "maximize": *action* is close,
-    // minimize, maximize or unmaximize, or find, which only looks: whether
+    // minimize, maximize, unmaximize or restore (a named app only), or find,
+    // which only looks: whether
     // the app has a window, touching none. *appId* "" means the focused
     // window; else the app's most recently used window, or with *every* all
     // of them. False when there is no such window or action.
@@ -305,6 +313,10 @@ const AppFocus = {
                 windows = windows.slice(0, 1);
         }
         windows.forEach(act);
+        // Maximizing a named app's window brings it forward too: it may be
+        // behind the window the person is in.
+        if (action === 'maximize' && appId !== '')
+            windows.forEach(w => Main.activateWindow(w));
         return windows.length > 0;
     },
 

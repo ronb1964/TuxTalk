@@ -1,6 +1,8 @@
 """Window voice commands (TuxTalk Labs): "close Firefox", "close all
 Firefox", "close window", "switch to Firefox", "minimize window",
-"maximize window" and "restore window".
+"maximize window" and "restore window"; and by app name, "minimize Firefox",
+"maximize Firefox" and "restore Firefox" (which also brings a minimized
+window back), with the same app-name rules as "close Firefox".
 
 Each desktop does it its own way, as for bringing a window forward
 (app_focus): KDE through a KWin script (kwin_windows), GNOME through

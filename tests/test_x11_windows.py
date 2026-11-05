@@ -71,6 +71,25 @@ def test_x11_restore_removes_them(window_manager):
     assert data[0] == 0
 
 
+def test_x11_restore_removes_maximized_then_activates(window_manager):
+    editor = window_manager.window("mousepad", "Mousepad")
+    firefox = window_manager.window("Navigator", "firefox")
+    window_manager.stack([editor, firefox])
+    assert x11_windows.act("restore", "", FIREFOX, False) is True
+    (_window, data), = window_manager.requests(b"_NET_WM_STATE")
+    assert data[0] == 0
+    assert window_manager.requests(b"_NET_ACTIVE_WINDOW") == [(firefox, (2, 0, 0, 0, 0))]
+
+
+def test_x11_maximize_by_name_brings_it_forward_but_minimize_doesnt(window_manager):
+    firefox = window_manager.window("Navigator", "firefox")
+    window_manager.stack([firefox])
+    assert x11_windows.act("minimize", "", FIREFOX, False) is True
+    assert window_manager.requests(b"_NET_ACTIVE_WINDOW") == []
+    assert x11_windows.act("maximize", "", FIREFOX, False) is True
+    assert window_manager.requests(b"_NET_ACTIVE_WINDOW") == [(firefox, (2, 0, 0, 0, 0))]
+
+
 def test_x11_without_an_active_window_does_nothing(window_manager):
     window_manager.stack([window_manager.window("mousepad", "Mousepad")])
     assert x11_windows.act("close", "", frozenset(), False) is False

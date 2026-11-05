@@ -82,6 +82,29 @@ def test_kde_restore_window_unmaximizes_it(kde, fake_kwin):
     assert fake_kwin.maximized == [[False, False]]
 
 
+def test_kde_restore_brings_back_a_minimized_maximized_window(kde, fake_kwin):
+    fake_kwin.windows = [KONSOLE, 'Object.assign(makeWindow("firefox", "{f}", 0, 0, 9, 9),'
+                                  ' {minimized: true, maximized: [true, true]})']
+    assert kwin_windows.act("restore", "firefox", {"firefox"}, False, 1.0) is True
+    assert fake_kwin.minimized == [False, False]
+    assert fake_kwin.maximized == [[False, False], [False, False]]
+    assert fake_kwin.activated == "{f}"
+
+
+def test_kde_maximize_by_name_brings_it_forward(kde, fake_kwin):
+    fake_kwin.windows = [FIREFOX, KONSOLE]
+    assert kwin_windows.act("maximize", "firefox", {"firefox"}, False, 1.0) is True
+    assert fake_kwin.maximized == [[True, True], [False, False]]
+    assert fake_kwin.activated == "{f}"
+
+
+def test_kde_minimize_by_name_leaves_the_focus_alone(kde, fake_kwin):
+    fake_kwin.windows = [FIREFOX, KONSOLE]
+    fake_kwin.active = 1
+    assert kwin_windows.act("minimize", "firefox", {"firefox"}, False, 1.0) is True
+    assert fake_kwin.activated == "{k}"
+
+
 def test_kde_never_closes_a_popup_of_the_app(kde, fake_kwin):
     fake_kwin.windows = ['Object.assign(makeWindow("firefox", "{tip}", 0, 0, 9, 9),'
                          ' {normalWindow: false})']

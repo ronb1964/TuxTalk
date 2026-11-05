@@ -19,16 +19,21 @@ _REMOVE, _ADD = 0, 1
 _CURRENT_TIME = 0
 
 
-def _requests(display, action: str):
-    """(message type, data) asking for *action* on a window."""
+def _requests(display, action: str, named: bool) -> list:
+    """The (message type, data) requests that do *action* to a window.
+    Maximizing a *named* app's window and restoring one also ask for it to
+    come forward, which un-minimizes it, as for switch to."""
     if action == "close":
-        return b"_NET_CLOSE_WINDOW", (_CURRENT_TIME, x11_activate.FROM_A_TASKBAR)
+        return [(b"_NET_CLOSE_WINDOW", (_CURRENT_TIME, x11_activate.FROM_A_TASKBAR))]
     if action == "minimize":
-        return b"WM_CHANGE_STATE", (_ICONIC_STATE,)
+        return [(b"WM_CHANGE_STATE", (_ICONIC_STATE,))]
     change = _ADD if action == "maximize" else _REMOVE
-    return b"_NET_WM_STATE", (change, display.atom(b"_NET_WM_STATE_MAXIMIZED_VERT"),
-                              display.atom(b"_NET_WM_STATE_MAXIMIZED_HORZ"),
-                              x11_activate.FROM_A_TASKBAR)
+    requests = [(b"_NET_WM_STATE", (change, display.atom(b"_NET_WM_STATE_MAXIMIZED_VERT"),
+                                    display.atom(b"_NET_WM_STATE_MAXIMIZED_HORZ"),
+                                    x11_activate.FROM_A_TASKBAR))]
+    if action == "restore" or (action == "maximize" and named):
+        requests.append((b"_NET_ACTIVE_WINDOW", (x11_activate.FROM_A_TASKBAR,)))
+    return requests
 
 
 def _targets(display, desktop_file: str, names, every: bool) -> list:
@@ -43,11 +48,11 @@ def _targets(display, desktop_file: str, names, every: bool) -> list:
 
 def act(action: str, desktop_file: str, names, every: bool) -> bool:
     """Ask the window manager to do *action* ("close", "minimize",
-    "maximize" or "unmaximize"; "find" asks nothing) to the app's windows (*desktop_file* and
-    *names* as x11_activate.activate takes them) or, with neither, to the
-    focused window. True when it was asked about a window; False with no
-    X server or no such window. Raises OSError when the window manager
-    doesn't take the request or the X server refuses it."""
+    "maximize", "unmaximize" or "restore"; "find" asks nothing) to the app's
+    windows (*desktop_file* and *names* as x11_activate.activate takes them)
+    or, with neither, to the focused window. True when it was asked about a
+    window; False with no X server or no such window. Raises OSError when
+    the window manager doesn't take the request or the X server refuses it."""
     display = x11_activate.open_display()
     if display is None:
         log.info("No X server to ask about the open windows")
@@ -55,9 +60,10 @@ def act(action: str, desktop_file: str, names, every: bool) -> bool:
     try:
         targets = _targets(display, desktop_file, names, every)
         if targets and action != "find":
-            message_type, data = _requests(display, action)
+            requests = _requests(display, action, bool(desktop_file or names))
             for window in targets:
-                display.ask_window_manager(window, message_type, data)
+                for message_type, data in requests:
+                    display.ask_window_manager(window, message_type, data)
         return bool(targets)
     finally:
         display.close()
