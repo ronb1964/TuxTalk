@@ -480,8 +480,8 @@ and the name is whatever the app is called in your menu: <b>open the calculator<
 
 <b>Windows</b>
 Hold <b>{hold}</b>, say <b>close Firefox</b>, let go. Nothing is typed.
-  • <b>close Firefox</b> closes its windows, <b>close all Firefox</b> closes every one,
-    <b>close window</b> closes the one you're in.
+  • <b>close Firefox</b> closes its front window (the one you used last), <b>close all
+    Firefox</b> closes every one, <b>close window</b> closes the one you're in.
   • <b>switch to Firefox</b> brings it to the front. If Firefox isn't open, a note says
     so; say <b>open Firefox</b> to start it.
   • <b>minimize window</b>, <b>maximize window</b> and <b>restore window</b>.
@@ -493,7 +493,7 @@ Hold <b>{hold}</b>, say <b>new tab</b>, let go. The key is pressed in the window
   • Pages: <b>go back</b>, <b>go forward</b>, <b>reload</b> (or <b>refresh</b>),
     <b>page down</b>, <b>page up</b>, <b>go to the top</b>, <b>go to the bottom</b>
   • Scrolling: <b>scroll down</b>, <b>scroll up</b>; add a number to scroll more:
-    <b>scroll down 5</b>
+    <b>scroll down 5</b>. It scrolls what's under the mouse pointer, like your own wheel.
   • Editing: <b>find</b>, <b>save</b>, <b>select all</b>, <b>copy</b>, <b>paste</b>,
     <b>escape</b>
 
@@ -522,7 +522,9 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
     (log out and back in once after updating) and on X11 desktops. On COSMIC, Sway and
     similar, TuxTalk tells you it can't do that here; use the window's own buttons.
   • Apps open in a terminal too. The keys are the terminal's own there, so <b>select all</b>,
-    <b>save</b>, <b>find</b> and <b>reopen tab</b> don't apply in a terminal.
+    <b>save</b>, <b>find</b>, <b>reopen tab</b>, <b>go back</b>, <b>go forward</b> and
+    <b>reload</b> don't apply in a terminal. On GNOME without the TuxTalk extension, TuxTalk
+    can't tell a terminal, so those and copy, paste and the tab keys aren't pressed.
   • <b>go to</b> needs a real web address, like youtube.com. Only <b>web search</b> searches.
   • An AppImage can be opened only if it has a menu entry (a tool like Gear Lever
     or AppImageLauncher makes one).
