@@ -8,7 +8,7 @@ import re
 
 import pytest
 
-from tuxtalk import (ai_cleanup, commands_reference, explain, help_text, key_commands, normalize,
+from tuxtalk import (ai_cleanup, command_phrases, commands_reference, explain, help_text, key_commands, normalize,
                      spoken_quotes, undo, voice_commands, voice_edit_rules, voice_navigation)
 from tuxtalk.voice_commands_dialog import _build_markup
 
@@ -48,6 +48,8 @@ def test_each_listed_phrase_is_recognised(kind, phrase, monkeypatch):
         assert voice_edit_rules.spoken_edit(phrase)
     elif kind == "select":
         assert voice_navigation.parse(phrase) is not None
+    elif kind == "action":
+        assert command_phrases.parse(phrase, navigation=False, actions=True) is not None
     elif kind == "correction":
         assert ai_cleanup.has_correction(f"Meet at 3, {phrase}, 4.")
     elif kind == "literal":
@@ -124,3 +126,7 @@ def test_both_screens_show_the_one_literal_words_list():
     for page in (_plain(help_text._commands()), _plain(_build_markup())):
         assert page.count("Literal Words") == 1
         assert "It works with: period, comma, press tab" in page
+
+
+def test_the_voice_commands_window_lists_what_can_i_say():
+    assert "what can I say" in commands_reference.short_markup()

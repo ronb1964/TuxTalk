@@ -46,12 +46,14 @@ before 0.15.0, so older entries use that name.
   "close Firefox", "close all Firefox", "close window", "switch to Firefox",
   "minimize window", "maximize window" and "restore window"; "new tab", "close
   tab", "next tab", "previous tab", "reopen tab", "go back", "go forward",
-  "reload", "scroll down" (or "scroll down 5"), "page up", "go to the top",
-  "find", "save", "select all", "copy", "paste" and "escape"; "go to
+  "reload the page", "scroll down" (or "scroll down 5"), "page up", "go to the
+  top", "find on page", "save the file", "select all", "copy the selection",
+  "paste it" and "press escape"; "go to
   youtube.com", which uses your browser's address bar or opens your default
   browser; and "web search cheap tires", which uses your browser's own search
   engine. In a terminal the keys are the terminal's own, and select all, save,
-  find, reopen tab, go back, go forward and reload don't apply there.
+  find on page, reopen tab, go back, go forward and reload the page don't
+  apply there.
   "literal" before any of them types the words. "close Firefox" closes the
   Firefox window you used last, and one word of an open app's name is
   enough ("close Chrome"); a sentence that only sounds like an app's name
@@ -60,6 +62,26 @@ before 0.15.0, so older entries use that name.
   minimizing and switching work on KDE, on GNOME with the TuxTalk extension
   (log out and back in once after updating) and on X11 desktops. On COSMIC,
   Sway and similar, TuxTalk says it can't do that on this desktop.
+- The same Labs tickbox now runs your desktop too. Hold your dictation key,
+  say it, let go, and nothing is typed. Windows: "snap left", "snap top
+  right", "centre window", "move window to desktop two", "move window to the
+  other screen", "minimize Firefox", "maximize Firefox", "restore Firefox".
+  Desktops: "show desktop" (again brings the windows back), "show all
+  windows", "next desktop", "switch to desktop two". Sound: "volume up",
+  "volume down" (add a number for more), "mute sound". Music: "pause music",
+  "play music", "next track", "previous track", for the player that is
+  playing. Also "lock screen", "take a screenshot" and "what can I say",
+  which opens the Voice Commands window. It is still off until you tick it.
+- The one-word keys now need a noun, so ordinary talk is not taken for a
+  command: "copy the selection", "paste it", "save the file", "reload the
+  page", "press escape". One word alone (copy, pause, next) is typed as a
+  word, and "literal" before any command types the words.
+- Where it works: KDE has all of it. GNOME has it with the TuxTalk extension
+  (log out and back in once after updating). X11 desktops like Cinnamon and
+  Xfce have all but "show all windows". On COSMIC, Sway and Hyprland only
+  sound, music, lock screen and screenshot work, and TuxTalk says so for the
+  rest. "scroll down" scrolls what is under the mouse pointer. The command
+  words are English.
 - With "Send each dictation automatically" on, TuxTalk doesn't press Enter
   in a terminal any more. It ran whatever you said as a command, so
   "testing 1, 2, 3" came back "command not found". Say "press enter" at the

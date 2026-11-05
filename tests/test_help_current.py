@@ -167,6 +167,17 @@ def _writing(monkeypatch, **settings):
     return next(text for title, text in help_text.tabs() if title == "Writing")
 
 
+def test_help_spells_out_the_desktop_commands_with_your_own_hold_key(monkeypatch):
+    writing = _writing(monkeypatch, hotkey="F6")
+    section = writing.split("Apps, Windows and Keys by Voice", 1)[1].split("Indicator Follows", 1)[0]
+    assert "Hold <b>F6</b>, say <b>snap left</b>, let go" in section
+    for said in ("show desktop", "switch to desktop two", "move window to the other screen",
+                 "volume up", "pause music", "lock screen", "take a screenshot", "what can I say",
+                 "COSMIC"):
+        assert said in section, said
+    assert "F8" not in section
+
+
 def test_help_spells_out_opening_apps_with_your_own_hold_key(monkeypatch):
     """Opening apps is a Labs feature: Help says where to turn it on, the
     steps with the key from the settings, and what it can't do."""

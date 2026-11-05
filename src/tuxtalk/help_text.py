@@ -488,6 +488,36 @@ Hold <b>{hold}</b>, say <b>close Firefox</b>, let go. Nothing is typed.
     so; say <b>open Firefox</b> to start it.
   • <b>minimize window</b>, <b>maximize window</b> and <b>restore window</b>.
 
+<b>Snapping and moving windows</b>
+Hold <b>{hold}</b>, say <b>snap left</b>, let go. The window you're in fills that side.
+  • Halves: <b>snap left</b>, <b>snap right</b>, <b>snap top</b>, <b>snap bottom</b>
+  • Quarters: <b>snap top left</b>, <b>snap top right</b>, <b>snap bottom left</b>,
+    <b>snap bottom right</b>
+  • <b>centre window</b> puts it in the middle of the screen.
+  • <b>move window to desktop two</b>, <b>move window to the next desktop</b> and
+    <b>move window to the other screen</b> send it there.
+  • <b>minimize Firefox</b>, <b>maximize Firefox</b>, <b>restore Firefox</b>: any open app by
+    name.
+
+<b>Desktops</b>
+Hold <b>{hold}</b>, say <b>show desktop</b>, let go. Say it again and the windows come back.
+  • <b>show all windows</b> spreads them out so you can pick one.
+  • <b>next desktop</b>, <b>previous desktop</b>, <b>switch to desktop two</b> (one to nine).
+
+<b>Sound and music</b>
+Hold <b>{hold}</b>, say <b>volume up</b>, let go.
+  • <b>volume up</b>, <b>volume down</b>; add a number for more: <b>volume up 3</b>.
+  • <b>mute sound</b> mutes the computer, TuxTalk's beeps too. Say <b>unmute sound</b> to undo.
+  • <b>pause music</b>, <b>play music</b>, <b>next track</b>, <b>previous track</b> control the
+    player that is playing, or the one TuxTalk paused while you talked. If two players are
+    paused, a note names them and starts neither.
+
+<b>Lock, screenshot and help</b>
+  • <b>lock screen</b> uses your desktop's own lock, so you need your password to come back.
+  • <b>take a screenshot</b> saves a picture of the screen. On KDE it goes in
+    Pictures/Screenshots; elsewhere, where your desktop keeps them. GNOME may ask once.
+  • <b>what can I say</b> opens the Voice Commands window with this list.
+
 <b>Keys</b>
 Hold <b>{hold}</b>, say <b>new tab</b>, let go. The key is pressed in the window you're in.
   • Tabs: <b>new tab</b>, <b>close tab</b>, <b>next tab</b>, <b>previous tab</b>,
@@ -515,6 +545,12 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
   • A name that fits no app is typed as usual, so a sentence like "Start over." is never
     lost. Two apps that fit equally well: the cancel beep sounds, a note floats over your
     window naming them, and nothing opens.
+  • Where it works: KDE has everything. GNOME has it with the TuxTalk extension (log out and
+    back in once after updating). X11 desktops like Cinnamon and Xfce have all but
+    <b>show all windows</b>. On COSMIC, Sway and Hyprland only sound, music, lock and
+    screenshot work; TuxTalk tells you when something can't be done there.
+  • In a hands-free or Type at pause recording, the recording indicator may show up in a
+    screenshot.
   • Bringing an open app forward works on KDE, on GNOME with the TuxTalk extension, and
     on X11 desktops like Cinnamon and Xfce. Elsewhere (COSMIC, Sway, Hyprland) the app is
     started again, and most then show the window they already have.

@@ -424,7 +424,10 @@ def test_the_tooltip_lists_every_kind_of_command_with_your_own_key(prefs_window)
     for said in ("open Firefox", "close Firefox", "switch to Firefox", "minimize window",
                  "new tab", "scroll down", "go to youtube.com", "web search", "literal",
                  "copy the selection", "paste it", "save the file", "reload the page",
-                 "press escape"):
+                 "press escape", "snap left", "centre window", "show desktop",
+                 "switch to desktop two", "move window to the other screen",
+                 "minimize Firefox", "volume up", "pause music", "next track", "lock screen",
+                 "take a screenshot", "what can I say"):
         assert said in tip, said
     assert "\u201ccopy\u201d" not in tip and "\u201cpaste\u201d" not in tip
     assert "F6" in tip and "F8" not in tip

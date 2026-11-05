@@ -11,7 +11,8 @@ punctuation or formatting mid-sentence), "key" (a closing "press enter",
 split_key_command), "undo" (detect_undo_command), "fix" (Fix a Word's
 phrases), "edit" ("edit that, ..."), "select" (voice_navigation),
 "correction" (a self-correction the AI acts on, found by its pattern),
-"instruction" (an example of what to tell the AI; any wording works), or
+"instruction" (an example of what to tell the AI; any wording works),
+"action" (command_phrases.parse: the Labs apps, windows, desktops and sound), or
 "literal" (normalize_text types the word after "literal" or "the word").
 """
 from typing import NamedTuple
@@ -136,6 +137,23 @@ SECTIONS = (
                 'correct yourself mid-sentence: "meet at 3, no wait, 4" → "meet at 4"',
                 "correction"),
     )),
+    Section("Apps, Windows and Desktop", labs=True, commands=(
+        Command(("open Firefox", "close Firefox", "switch to Firefox"),
+                "open, close or bring an app forward", "action"),
+        Command(("new tab", "go back", "scroll down", "copy the selection", "paste it"),
+                "press that key in the window you're in", "action"),
+        Command(("snap left", "snap top right", "centre window"),
+                "place the window", "action"),
+        Command(("show desktop", "next desktop", "switch to desktop two"),
+                "desktops", "action"),
+        Command(("move window to desktop two", "move window to the other screen"),
+                "move the window", "action"),
+        Command(("volume up", "mute sound", "pause music", "next track"),
+                "sound and music", "action"),
+        Command(("lock screen", "take a screenshot", "what can I say"),
+                "lock, screenshot, this list", "action"),
+    ), note="One word alone (copy, pause, next) is typed. <b>literal</b> before a command "
+            "types the words."),
     Section("Literal Words",
             note="Say <b>literal</b> or <b>the word</b> before a punctuation or line-break "
                  "word to type the word itself. It works with: "
