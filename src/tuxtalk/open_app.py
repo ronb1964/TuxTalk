@@ -39,7 +39,8 @@ def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
     request = app_commands.parse(raw)
     if request is None:
         return None
-    found = app_finder.find(request, app_finder.installed_apps(), app_finder.default_apps())
+    entries = app_finder.installed_apps()
+    found = app_finder.find(request, entries, app_finder.default_apps())
     if found.kind == "none":
         # A sentence lost is worse than a typed "Open fierfox.", which is
         # easy to undo. The log keeps the user's words out.
@@ -51,11 +52,15 @@ def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
         label = _tie_label(found.entries) + " Say the full name."
         notices.app_not_opened(label, f"{label} {NOTHING_OPENED}", beeps_on)
         return False
-    return _open(found.entries[0], request.new, beeps_on, ongoing)
+    entry = found.entries[0]
+    exact = bool(request.install) or len(app_finder.copies(entry, entries)) > 1
+    return _open(entry, request.new, beeps_on, ongoing, exact)
 
 
-def _open(entry, new: bool, beeps_on: bool, ongoing) -> bool:
-    """Bring forward *entry*'s app, or start it (always, with *new*)."""
+def _open(entry, new: bool, beeps_on: bool, ongoing, exact: bool) -> bool:
+    """Bring forward *entry*'s app, or start it (always, with *new*).
+    *exact*: other copies are installed, so a window counts only by its
+    menu entry (app_focus.window_names)."""
     logger.info(f"Voice command: open {entry.app_id}")
     if _esc_pressed():
         return False
@@ -67,7 +72,7 @@ def _open(entry, new: bool, beeps_on: bool, ongoing) -> bool:
         # key may be up already), and the service tick stops the microphone
         # (service_tick._end_recording_a_command_cancelled).
         ongoing.cancelled = True
-    if not new and app_focus.focus_running(entry):
+    if not new and app_focus.focus_running(entry, exact=exact):
         beeps.beep(beeps_on, *READY_BEEP)
         return True
     # Esc while it looked for a window still stops it. Mid-recording the

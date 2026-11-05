@@ -36,8 +36,10 @@ class Desktop:
         self.focused, self.launched = [], []
         self.beeps, self.floated, self.notified = [], [], []
         self.while_looking = None   # called while it looks for the app's window
+        self.exact = []             # each look's exact= (by the menu entry only)
 
-    def focus_running(self, entry, timeout=1.0):
+    def focus_running(self, entry, timeout=1.0, exact=False):
+        self.exact.append(exact)
         if self.while_looking:
             self.while_looking()
         if self.running:
@@ -120,6 +122,21 @@ def test_open_brings_a_running_app_forward_instead(desktop):
     assert open_app.run("Open Firefox.", True) is True
     assert desktop.focused == ["firefox.desktop"] and desktop.launched == []
     assert desktop.beeps == [READY_BEEP]
+
+
+FIREFOX_FLATPAK = AppEntry("org.mozilla.firefox.desktop", "Firefox", "Firefox", "Web Browser",
+                           "firefox", "flatpak")
+
+
+def test_with_two_copies_a_window_counts_only_by_its_menu_entry(desktop):
+    """Both copies' windows have the class "firefox": the one asked for is
+    brought forward only if its own window can be told apart."""
+    open_app.run("open Firefox", True)
+    desktop.apps.append(FIREFOX_FLATPAK)
+    open_app.run("open Firefox", True)
+    open_app.run("open Firefox Flatpak", True)
+    assert desktop.exact == [False, True, True]
+    assert desktop.launched[-1] == "org.mozilla.firefox.desktop"
 
 
 def test_open_new_always_starts_another(desktop):

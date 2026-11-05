@@ -30,6 +30,8 @@ def _entry(app_id, name, program, wm_class=""):
 FIREFOX = _entry("firefox.desktop", "Firefox", "firefox")
 KONSOLE = _entry("org.kde.konsole.desktop", "Konsole", "konsole")
 IDLE = _entry("idle3.desktop", "IDLE", "python3")
+FIREFOX_FLATPAK = AppEntry("org.mozilla.firefox.desktop", "Firefox", "Firefox", "", "firefox",
+                           "flatpak", "firefox")
 # Entries whose program is a launcher with windows of its own.
 PORTAL = _entry("Portal 2.desktop", "Portal 2", "steam")
 YOUTUBE_MUSIC = _entry("chrome-cinhimbnkkaeohfgghhklpknlkffjgod-Default.desktop",
@@ -187,6 +189,19 @@ def test_kde_knows_a_window_by_its_menu_entry(kde, fake_kwin):
     fake_kwin.windows = ['Object.assign(makeWindow("org.mozilla.firefox", "{f}", 0, 0, 9, 9),'
                          ' {desktopFileName: "org.mozilla.firefox"})']
     assert app_focus.focus_running(flatpak) is True
+    assert fake_kwin.activated == "{f}"
+
+
+def test_kde_never_takes_another_copys_window_for_the_one_asked_for(kde, fake_kwin):
+    """Both Firefoxes installed, the distro's open: "open Firefox Flatpak"
+    starts the Flatpak, though both have the class "firefox"."""
+    fake_kwin.windows = ['Object.assign(makeWindow("firefox", "{d}", 0, 0, 9, 9),'
+                         ' {desktopFileName: "firefox"})']
+    assert app_focus.focus_running(FIREFOX_FLATPAK, exact=True) is False
+    assert fake_kwin.activated is None
+    fake_kwin.windows.append('Object.assign(makeWindow("firefox", "{f}", 0, 0, 9, 9),'
+                             ' {desktopFileName: "org.mozilla.firefox"})')
+    assert app_focus.focus_running(FIREFOX_FLATPAK, exact=True) is True
     assert fake_kwin.activated == "{f}"
 
 
@@ -524,6 +539,16 @@ def test_x11_knows_a_kde_window_by_its_desktop_file(window_manager):
     window_manager.stack([window])
     assert app_focus.focus_running(entry) is True
     assert window_manager.activations() == [(window, 2)]
+
+
+def test_x11_never_takes_another_copys_window_for_the_one_asked_for(window_manager):
+    """Firefox doesn't name its menu entry on the window: with two copies
+    installed, which one a "firefox" window is can't be told, so the one
+    asked for is started."""
+    window_manager.stack([window_manager.window("Navigator", "firefox")])
+    assert app_focus.focus_running(FIREFOX_FLATPAK, exact=True) is False
+    assert app_focus.focus_running(FIREFOX, exact=True) is False
+    assert window_manager.activations() == []
 
 
 def test_x11_without_the_apps_window_says_launch(window_manager):
