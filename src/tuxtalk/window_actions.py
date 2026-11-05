@@ -69,21 +69,18 @@ def _open_ones(found: app_match.Match) -> app_match.Match:
     the ones with a window open: "Close Writer." means the LibreOffice
     Writer that's open, not Fedora Media Writer, and an app that isn't open
     wasn't meant. Where the desktop can't tell, none are."""
-    open_ones = [(entry, exact) for entry, exact in found.partial
-                 if _has_window(entry, exact)]
+    try:
+        open_ones = [(entry, exact) for entry, exact in found.partial
+                     if _ask_desktop(WindowRequest("find"), entry, exact)]
+    except Exception as e:      # each desktop fails its own way: none known to be open
+        # Once, with no app named: the apps the words fit hint at the words,
+        # which are typed next.
+        logger.info(f"Couldn't tell which apps have a window open here: {e}")
+        open_ones = []
     if len(open_ones) == 1:
         return app_match.Match("one", (open_ones[0][0],), open_ones[0][1])
     kind = "tie" if open_ones else "none"
     return app_match.Match(kind, tuple(entry for entry, _exact in open_ones))
-
-
-def _has_window(entry, exact: bool) -> bool:
-    """Whether the desktop says *entry*'s app has a window."""
-    try:
-        return bool(_ask_desktop(WindowRequest("find"), entry, exact))
-    except Exception as e:      # each desktop fails its own way: not known to be open
-        logger.info(f"Couldn't tell whether {entry.app_id} has a window: {e}")
-        return False
 
 
 def _still_wanted(request: WindowRequest, entry, where, beeps_on: bool) -> bool:

@@ -462,6 +462,22 @@ def test_a_word_of_a_name_counts_nowhere_open_windows_cant_be_told(actions_on, c
     assert [text for text, _ in chat[2]] == ["Close Chrome."] and actions_on == []
 
 
+def test_gnome_without_the_extension_logs_no_app_a_word_might_name(actions_on, chat, say, gnome,
+                                                                   apps, caplog):
+    """The apps a word fits hint at the words, which are then typed: the log
+    says once that it couldn't tell, naming none of them."""
+    apps[:] = [WRITER, MEDIA_WRITER]
+    shell = FakeShell(extension=False)
+    try:
+        with caplog.at_level(logging.INFO, logger="tuxtalk"):
+            say("Close Writer.")
+    finally:
+        shell.stop()
+    assert [text for text, _ in chat[2]] == ["Close Writer."]
+    assert caplog.text.count("Couldn't tell which apps have a window open") == 1
+    assert "libreoffice" not in caplog.text and "MediaWriter" not in caplog.text
+
+
 def test_switch_to_brave_by_a_word_of_its_menu_name(actions_on, chat, say, kde, apps, focused,
                                                     open_windows):
     apps[:] = WORD_NAMED
