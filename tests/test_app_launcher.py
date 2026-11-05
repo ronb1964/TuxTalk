@@ -18,13 +18,16 @@ FIREFOX = AppEntry("firefox.desktop", "Firefox", "Firefox", "Web Browser", "fire
 class FakeAppInfo:
     """Stands in for Gio.DesktopAppInfo; keeps what the app would have been given."""
 
-    def __init__(self, pid, fail, calls):
-        self.pid, self.fail, self.calls = pid, fail, calls
+    def __init__(self, pid, fail, calls, app_id="firefox.desktop"):
+        self.pid, self.fail, self.calls, self.app_id = pid, fail, calls, app_id
+
+    def get_id(self):
+        return self.app_id
 
     def launch_uris_as_manager(self, uris, context, flags, setup, setup_data,
                                pid_callback, callback_data):
         if self.fail:
-            raise GLib.Error("no such program")
+            raise GLib.Error(f"no such program to open {' '.join(uris)}")
         self.calls.append({"uris": uris, "env": dict(
             e.split("=", 1) for e in context.get_environment())})
         if self.pid is not None:
@@ -156,31 +159,46 @@ def test_the_scope_is_asked_for_in_the_app_slice(monkeypatch):
 
 
 @pytest.fixture
-def handed_over(monkeypatch):
-    """The addresses Gio would have given the default browser, each with the
-    environment it would have started with; *fail* makes Gio refuse."""
+def default_browser(monkeypatch, fake_gio):
+    """Firefox as the default app for https addresses, as Gio would give it;
+    *handler* None: no app is set up for them."""
     from gi.repository import Gio
-    calls = types.SimpleNamespace(uris=[], fail=False)
+    state = types.SimpleNamespace(handler=FakeAppInfo(fake_gio.pid, False, fake_gio.launched),
+                                  asked=[])
 
-    def launch_default_for_uri(uri, context):
-        if calls.fail:
-            raise GLib.Error(f"Operation not supported for {uri}")
-        calls.uris.append((uri, dict(e.split("=", 1) for e in context.get_environment())))
-        return True
-    monkeypatch.setattr(Gio.AppInfo, "launch_default_for_uri", launch_default_for_uri)
-    return calls
+    def default_for(scheme):
+        state.asked.append(scheme)
+        return state.handler
+    monkeypatch.setattr(Gio.AppInfo, "get_default_for_uri_scheme", default_for)
+    return state
 
 
-def test_an_address_opens_in_the_default_browser_with_the_clean_environment(handed_over,
-                                                                            monkeypatch):
+def test_an_address_opens_in_the_default_browser_with_the_clean_environment(
+        default_browser, fake_gio, fake_systemd, monkeypatch):
     monkeypatch.setenv("PYTHONHOME", "/tmp/.mount_X/usr")
     assert app_launcher.open_uri("https://youtube.com") is True
-    uri, env = handed_over.uris[0]
-    assert uri == "https://youtube.com" and "PYTHONHOME" not in env
+    assert default_browser.asked == ["https"]
+    launched = fake_gio.launched[0]
+    assert launched["uris"] == ["https://youtube.com"] and "PYTHONHOME" not in launched["env"]
 
 
-def test_an_address_gio_refused_is_false_and_kept_out_of_the_log(handed_over, caplog):
-    handed_over.fail = True
+def test_a_browser_started_for_an_address_gets_its_own_scope(default_browser, fake_gio,
+                                                              fake_systemd):
+    assert app_launcher.open_uri("https://youtube.com")
+    assert fake_systemd.units == [("app-tuxtalk-firefox.desktop-4321.scope", [fake_gio.pid])]
+
+
+def test_an_address_gio_refused_is_false_and_kept_out_of_the_log(default_browser, fake_gio,
+                                                                fake_systemd, caplog):
+    default_browser.handler.fail = True
     with caplog.at_level(logging.DEBUG):
         assert app_launcher.open_uri("https://youtube.com") is False
-    assert "Couldn't open the address" in caplog.text and "youtube" not in caplog.text
+    assert "Couldn't open the address with firefox.desktop" in caplog.text
+    assert "youtube" not in caplog.text
+
+
+def test_an_address_no_app_is_set_up_for_is_false(default_browser, fake_gio, caplog):
+    default_browser.handler = None
+    with caplog.at_level(logging.DEBUG):
+        assert app_launcher.open_uri("https://youtube.com") is False
+    assert fake_gio.launched == [] and "youtube" not in caplog.text

@@ -141,7 +141,7 @@ _BROWSER_CLASSES_LOWER = frozenset({
 
 
 def is_browser_class(wm_class: str | None) -> bool:
-    """Whether the focused window is a web browser's."""
+    """Whether *wm_class* is a web browser's windows' class."""
     return bool(wm_class) and wm_class.lower() in _BROWSER_CLASSES_LOWER
 
 

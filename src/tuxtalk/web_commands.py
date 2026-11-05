@@ -23,9 +23,13 @@ OPENER_SETTLE_S = 0.2
 _ADDRESS_BAR = [(("CTRL",), "L")]
 _NEW_TAB = [(("CTRL",), "T")]
 _ENTER = [((), "ENTER")]
+# Delete first takes away what the browser filled in after the words (its
+# inline autofill): "web search python" would otherwise open python.org.
+_DELETE_ENTER = [((), "DELETE"), ((), "ENTER")]
 
 _GO_TO = "go to an address"
 _SEARCH = "web search"
+SEARCH_DONE = "done: a web search"      # esc_stopped's: "Not done: a web search"
 
 
 def go_to(request: AddressRequest, where, beeps_on: bool) -> bool:
@@ -35,7 +39,7 @@ def go_to(request: AddressRequest, where, beeps_on: bool) -> bool:
     True when it went in or was handed over; False after a note, or after
     Esc (said already)."""
     if is_browser_class(where[0]):
-        return _into_address_bar(where, _ADDRESS_BAR, request.url, _GO_TO, beeps_on)
+        return _into_address_bar(where, _ADDRESS_BAR, request.url, _ENTER, _GO_TO, beeps_on)
     if not app_launcher.open_uri(request.url):
         command_notices.say("address_not_opened", beeps_on)
         return False
@@ -47,26 +51,34 @@ def search(request: SearchRequest, where, beeps_on: bool) -> bool:
     searches with the engine the user picked there. In the browser window
     *where*, in its current tab; anywhere else, in a new tab of the default
     browser, brought forward or started for it. True when the words went in;
-    False after a note, or after Esc (said already)."""
+    False after a note, or after Esc (said already).
+
+    A desktop that doesn't say which window has the focus can't tell a
+    browser either, so that is said at once, not after waiting for one."""
+    if where[0] is None:
+        command_notices.say("no_focused_window", beeps_on)
+        return False
     if is_browser_class(where[0]):
-        return _into_address_bar(where, _ADDRESS_BAR, request.words, _SEARCH, beeps_on)
+        return _into_address_bar(where, _ADDRESS_BAR, request.words, _DELETE_ENTER, _SEARCH,
+                                 beeps_on)
     browser = _browser_in_front(beeps_on)
     if browser is None:
         return False
-    return _into_address_bar(browser, _NEW_TAB, request.words, _SEARCH, beeps_on)
+    return _into_address_bar(browser, _NEW_TAB, request.words, _DELETE_ENTER, _SEARCH, beeps_on)
 
 
-def _into_address_bar(where, opener, text: str, what: str, beeps_on: bool) -> bool:
+def _into_address_bar(where, opener, text: str, confirm, what: str, beeps_on: bool) -> bool:
     """*opener* (Ctrl+L or Ctrl+T, each leaving the cursor in the address
-    bar), *text* and Enter, into the window *where* only: if another window
-    takes the focus partway, what's left goes nowhere, Enter above all."""
+    bar), *text* and the *confirm* keys ending in Enter, into the window
+    *where* only: if another window takes the focus partway, what's left
+    goes nowhere, Enter above all."""
     press = keyboard_output.output_backend().press_keys
 
     def send():
         if not press(opener):
             return False
         time.sleep(OPENER_SETTLE_S)
-        return keyboard_output.type_text(text) and press(_ENTER)
+        return keyboard_output.type_text(text) and press(confirm)
     try:
         sent = keyboard_output.send_only_into(where, send)
     except virtual_keyboard.StoppedPartway as stop:
@@ -78,8 +90,8 @@ def _into_address_bar(where, opener, text: str, what: str, beeps_on: bool) -> bo
 
 def _browser_in_front(beeps_on: bool):
     """The look of the default browser's window, brought forward or started
-    for a search. None after a note (no browser, or none came forward) or
-    after Esc."""
+    for a search. None after a note (no browser, it didn't start, or none
+    came forward) or after Esc."""
     entries = app_finder.installed_apps()
     browser_id = app_finder.default_apps().get("browser")
     entry = next((e for e in entries if e.app_id == browser_id), None)
@@ -87,10 +99,10 @@ def _browser_in_front(beeps_on: bool):
         command_notices.say("no_browser", beeps_on)
         return None
     # Other copies installed (the distro's Firefox and Flathub's): only a
-    # window of the default one counts, as open_app.matched_app decides.
+    # window of the default one counts, as app_match.find decides.
     exact = len(app_finder.copies(entry, entries)) > 1
     if not app_focus.focus_running(entry, exact=exact) and not app_launcher.launch(entry):
-        command_notices.say("no_browser", beeps_on)
+        command_notices.say("browser_not_started", beeps_on)
         return None
     return _wait_for_browser(beeps_on)
 
@@ -102,7 +114,7 @@ def _wait_for_browser(beeps_on: bool):
     when Esc stopped the wait, or when none came forward (said): the words
     must not be typed into whatever window has the focus instead."""
     deadline = time.monotonic() + BROWSER_WAIT_S
-    while not keyboard_output.esc_stopped("done: a web search"):
+    while not keyboard_output.esc_stopped(SEARCH_DONE):
         look = focused_window.look()
         if is_browser_class(look[0]):
             return look

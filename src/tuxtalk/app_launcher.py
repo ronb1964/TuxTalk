@@ -92,19 +92,24 @@ def launch_context() -> Gio.AppLaunchContext:
     return context
 
 
+def _start(info, app_id: str, uris: list) -> None:
+    """Start the app of *info* (a Gio.DesktopAppInfo) with *uris*, in the
+    desktop's environment and a scope of its own. Raises GLib.Error."""
+    def got_pid(_info, pid, _data):
+        own_scope(pid, app_id)
+
+    info.launch_uris_as_manager(uris, launch_context(), GLib.SpawnFlags.SEARCH_PATH,
+                                None, None, got_pid, None)
+
+
 def launch(entry: AppEntry) -> bool:
     """Start the app of a menu entry. True when Gio reported it started."""
     info = _app_info(entry.app_id)
     if info is None:
         log.info("Couldn't open %s: it is no longer in the menu", entry.app_id)
         return False
-
-    def got_pid(_info, pid, _data):
-        own_scope(pid, entry.app_id)
-
     try:
-        info.launch_uris_as_manager([], launch_context(), GLib.SpawnFlags.SEARCH_PATH,
-                                    None, None, got_pid, None)
+        _start(info, entry.app_id, [])
     except GLib.Error as exc:
         log.info("Couldn't open %s: %s", entry.app_id, exc.message)
         return False
@@ -113,13 +118,20 @@ def launch(entry: AppEntry) -> bool:
 
 
 def open_uri(url: str) -> bool:
-    """Hand *url* to the default app for it (the user's browser, for a web
-    address), started with the desktop's environment if it isn't running.
+    """Hand *url* to the default app for its scheme (the user's browser, for
+    a web address), started as launch() starts apps if it isn't running.
     True when Gio handed it over. Neither the address nor Gio's message,
     which can quote it, is logged: it is what the user said."""
-    try:
-        Gio.AppInfo.launch_default_for_uri(url, launch_context())
-    except GLib.Error as exc:
-        log.info("Couldn't open the address: %s error %d", exc.domain, exc.code)
+    scheme = GLib.Uri.peek_scheme(url)
+    info = Gio.AppInfo.get_default_for_uri_scheme(scheme) if scheme else None
+    if info is None:
+        log.info("Couldn't open the address: no app is set up for %s addresses", scheme)
         return False
+    app_id = info.get_id() or scheme
+    try:
+        _start(info, app_id, [url])
+    except GLib.Error as exc:
+        log.info("Couldn't open the address with %s: %s error %d", app_id, exc.domain, exc.code)
+        return False
+    log.info("Handed the address to %s", app_id)
     return True

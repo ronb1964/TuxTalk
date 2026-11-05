@@ -28,7 +28,8 @@ def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
     if isinstance(request, AddressRequest):
         return _send(web_commands.go_to, request, "opened: an address", beeps_on, ongoing)
     if isinstance(request, SearchRequest):
-        return _send(web_commands.search, request, "done: a web search", beeps_on, ongoing)
+        return _send(web_commands.search, request, web_commands.SEARCH_DONE, beeps_on,
+                     ongoing)
     if isinstance(request, WindowRequest):
         return _window(request, beeps_on, ongoing)
     return None

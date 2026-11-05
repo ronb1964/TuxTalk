@@ -40,12 +40,14 @@ NOTES = {
         "then try again."),
     "no_browser": (
         "No web browser is set up",
-        "TuxTalk found no web browser to open the address in. Set a default browser "
-        "in your desktop's settings."),
+        "TuxTalk found no web browser to search with. Set a default browser in your "
+        "desktop's settings."),
+    "browser_not_started": (
+        "Your browser didn't start",
+        "Your browser didn't start, so nothing was searched. Try opening it yourself."),
     "browser_not_forward": (
         "The browser didn't come forward",
-        "The page may have opened behind your other windows. Look for your browser "
-        "in the taskbar."),
+        "Nothing was searched. Bring your browser to the front, then say it again."),
     "address_not_opened": (
         "Couldn't open that address",
         "TuxTalk couldn't hand the address to your browser. Try typing it there."),

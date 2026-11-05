@@ -32,7 +32,7 @@ logger = setup_logger(__name__)
 # keys depend on the keyboard layout.
 KEY_CODES = {"CTRL": 29, "SHIFT": 42, "ALT": 56, "LEFT": 105, "RIGHT": 106, "UP": 103,
              "DOWN": 108, "HOME": 102, "END": 107, "PAGEUP": 104, "PAGEDOWN": 109,
-             "ENTER": 28, "TAB": 15, "ESC": 1, "F5": 63}
+             "ENTER": 28, "TAB": 15, "ESC": 1, "F5": 63, "DELETE": 111}
 
 # Where the letters sit on a US keyboard: the Flatpak's keyboard types them
 # there (libei_ctypes), and a shortcut's letter goes there on a layout without

@@ -19,15 +19,25 @@ KWRITE = ("org.kde.kwrite", ("tray", "2"))
 FIREFOX_ENTRY = AppEntry("firefox.desktop", "Firefox", "Firefox", "Web Browser", "firefox", "")
 KWRITE_ENTRY = AppEntry("org.kde.kwrite.desktop", "KWrite", "KWrite", "Text Editor", "kwrite", "")
 
-CTRL, ENTER = 29, 28
+CTRL, ENTER, DELETE = 29, 28, 111
 CTRL_L = [CTRL, keyboard_output.nav_keycode("L")]
 CTRL_T = [CTRL, keyboard_output.nav_keycode("T")]
+
+
+class BoundedClock(FakeClock):
+    """FakeClock that fails the test once far more time has passed than any
+    wait may take, so a wait that never ends fails instead of hanging."""
+
+    def sleep(self, seconds):
+        super().sleep(seconds)
+        if self.now > 5 * web_commands.BROWSER_WAIT_S:
+            pytest.fail("the wait for the browser never ended")
 
 
 @pytest.fixture(autouse=True)
 def clock(monkeypatch):
     """web_commands' time: its waits pass at once."""
-    fake = FakeClock()
+    fake = BoundedClock()
     monkeypatch.setattr(web_commands, "time", fake)
     return fake
 
@@ -85,7 +95,7 @@ def browser(monkeypatch, focus):
     """Firefox as the default browser. *raised* (focus_running's answer) and
     *started* (each launch) say what was done to it; *arrives* is the looks
     the focus goes through once it was raised or started, FIREFOX by default."""
-    state = types.SimpleNamespace(running=True, started=[], arrives=[FIREFOX])
+    state = types.SimpleNamespace(running=True, starts=True, started=[], arrives=[FIREFOX])
     monkeypatch.setattr(app_finder, "installed_apps", lambda: [FIREFOX_ENTRY, KWRITE_ENTRY])
     monkeypatch.setattr(app_finder, "default_apps", lambda: {"browser": "firefox.desktop"})
 
@@ -96,8 +106,9 @@ def browser(monkeypatch, focus):
 
     def launch(entry):
         state.started.append(entry.app_id)
-        focus[:] = state.arrives
-        return True
+        if state.starts:
+            focus[:] = state.arrives
+        return state.starts
     monkeypatch.setattr(app_focus, "focus_running", focus_running)
     monkeypatch.setattr(app_launcher, "launch", launch)
     return state
@@ -107,6 +118,12 @@ def test_in_a_browser_go_to_types_the_address_in_its_bar(at_firefox, typed, keyb
     assert web_commands.go_to(AddressRequest("https://youtube.com"), FIREFOX, False) is True
     assert typed == ["https://youtube.com"]
     assert keyboard.typed_keys() == CTRL_L + [ENTER]
+
+
+def test_go_to_presses_no_delete_before_enter(at_firefox, typed, keyboard):
+    """Only a search presses Delete before Enter: an address is typed in full."""
+    web_commands.go_to(AddressRequest("https://youtube.com/watch"), FIREFOX, False)
+    assert DELETE not in keyboard.typed_keys() and keyboard.typed_keys()[-1] == ENTER
 
 
 def test_outside_a_browser_go_to_opens_the_default_browser(at_kwrite, opened_uris, keyboard):
@@ -138,14 +155,14 @@ def test_the_address_and_the_words_never_reach_the_log(focus, typed, opened_uris
 def test_web_search_in_a_browser_types_the_words_in_its_bar(at_firefox, typed, keyboard):
     assert web_commands.search(SearchRequest("cheap tires"), FIREFOX, False) is True
     assert typed == ["cheap tires"]
-    assert keyboard.typed_keys() == CTRL_L + [ENTER]
+    assert keyboard.typed_keys() == CTRL_L + [DELETE, ENTER]   # Delete: the browser's autofill
 
 
 def test_web_search_elsewhere_brings_the_browser_forward_then_opens_a_tab(
         at_kwrite, browser, typed, keyboard):
     assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is True
     assert browser.started == []
-    assert keyboard.typed_keys() == CTRL_T + [ENTER]
+    assert keyboard.typed_keys() == CTRL_T + [DELETE, ENTER]
     assert typed == ["cheap tires"]
 
 
@@ -155,8 +172,9 @@ def test_web_search_starts_the_browser_when_it_isnt_running(at_kwrite, browser, 
     browser.arrives = [KWRITE, KWRITE, FIREFOX]    # the focus arrives on the 3rd poll
     assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is True
     assert browser.started == ["firefox.desktop"]
-    assert clock.now == pytest.approx(2 * web_commands.POLL_S, abs=0.5)
-    assert keyboard.typed_keys() == CTRL_T + [ENTER] and typed == ["cheap tires"]
+    # Two polls slept through, then the pause for the new tab.
+    assert clock.now == pytest.approx(2 * web_commands.POLL_S + web_commands.OPENER_SETTLE_S)
+    assert keyboard.typed_keys() == CTRL_T + [DELETE, ENTER] and typed == ["cheap tires"]
 
 
 def test_a_browser_that_never_comes_forward_types_nothing(at_kwrite, browser, typed, keyboard,
@@ -184,6 +202,23 @@ def test_esc_while_waiting_for_the_browser_types_nothing(at_kwrite, browser, typ
         assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is False
     assert len(polls) == 2
     assert typed == [] and keyboard.events == [] and floated == []
+
+
+def test_a_browser_that_doesnt_start_says_so(at_kwrite, browser, typed, keyboard, floated,
+                                            clock):
+    browser.running = browser.starts = False
+    assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is False
+    assert floated == ["Your browser didn't start"] and clock.now == 0
+    assert typed == [] and keyboard.events == []
+
+
+def test_a_search_where_the_desktop_names_no_window_says_so_at_once(focus, browser, typed,
+                                                                   keyboard, floated, clock):
+    unknown = (None, None)
+    focus[:] = [unknown]
+    assert web_commands.search(SearchRequest("cheap tires"), unknown, False) is False
+    assert floated == ["Couldn't tell which window"] and clock.now == 0
+    assert browser.started == [] and typed == [] and keyboard.events == []
 
 
 def test_with_no_default_browser_says_so(at_kwrite, browser, typed, keyboard, floated,
@@ -230,6 +265,14 @@ def test_go_to_an_address_said_alone_types_nothing_else(actions_on, chat, say, k
     keys = keyboard.typed_keys()
     assert chat[2] == []                        # nothing typed as dictation
     assert keys[:2] == CTRL_L and keys[-1] == ENTER and keys.count(ENTER) == 1
+
+
+def test_an_address_said_without_https_is_typed_with_it(actions_on, chat, say, keyboard,
+                                                      monkeypatch):
+    texts = []
+    monkeypatch.setattr(keyboard_output, "type_text", lambda text: texts.append(text) or True)
+    say("Go to youtube dot com.")
+    assert texts == ["https://youtube.com"]
 
 
 @pytest.mark.parametrize("done", [True, False])
