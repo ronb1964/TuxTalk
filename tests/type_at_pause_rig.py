@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from conftest import audio_rng, next_recording
 from tuxtalk import delivery, engine, resampling, tray_link
@@ -132,3 +133,32 @@ def stop(auto_period=False):
     dictation_pipeline.stop_recording(beeps_on=True, smart_quotes=True, notify_on=False,
                                       language=None, auto_space=True,
                                       auto_period=auto_period, injection_mode="type")
+
+
+# Notifications on: ending the recording after a command still adds none.
+SERVICE_CFG = SimpleNamespace(beeps=True, notify=True)
+
+
+def service_tick_runs():
+    """One pass of the dictation service's tick, as its loop runs it."""
+    from tuxtalk import service_tick
+    service_tick.tick(SERVICE_CFG, service_tick.ServiceState(SERVICE_CFG))
+
+
+@pytest.fixture
+def recording_on(chat, monkeypatch):
+    """A Type at pause recording under way, its phrases typed as they come.
+    Returns (recording, phrase); phrase(*heard) is one phrase cut at a pause:
+    what the engine hears of it, and of it with the phrase before when that
+    held back its final mark."""
+    monkeypatch.setattr(capture, "indicator", None)
+    monkeypatch.setattr(capture, "stop_stream_safely", lambda rec: None)
+    monkeypatch.setattr(capture, "resume_media_players", lambda: None)
+    monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
+    monkeypatch.setattr(rs.state, "is_recording", True)
+    rec = next_recording()
+
+    def phrase(*heard):
+        chat[1].extend(heard)
+        type_chunk(frames_of(speech(1.0)), "middle")
+    return rec, phrase

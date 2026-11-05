@@ -3,14 +3,13 @@ opens Firefox, or brings its window forward, and types nothing. The menu's
 apps, the focusing and the starting are stand-ins: no test starts a real app
 or touches the desktop."""
 import logging
-import types
 
 import pytest
 
 from conftest import QueuedWorker, esc, next_recording
-from type_at_pause_rig import frames_of, speech, type_chunk
-from tuxtalk import (app_finder, app_focus, app_launcher, config, dictation_worker, open_app,
-                     pipeline, recording, screen_message, service_tick)
+from type_at_pause_rig import frames_of, service_tick_runs, speech, type_chunk
+from tuxtalk import (app_finder, app_focus, app_launcher, config, dictation_worker,
+                     pipeline, recording, screen_message, voice_actions)
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk.app_finder import AppEntry
@@ -85,7 +84,7 @@ def test_the_setting_is_off_by_default():
 
 def test_off_means_it_isnt_a_command(desktop, monkeypatch):
     monkeypatch.setattr(live, "open_apps", False)
-    assert open_app.run("open Firefox", True) is None
+    assert voice_actions.run("open Firefox", True) is None
     assert desktop.launched == [] and desktop.focused == []
 
 
@@ -112,14 +111,14 @@ def test_it_is_live_applied():
 # --- opening -------------------------------------------------------------------------------
 
 def test_open_starts_an_app_that_isnt_running(desktop):
-    assert open_app.run("open Firefox", True) is True
+    assert voice_actions.run("open Firefox", True) is True
     assert desktop.launched == ["firefox.desktop"] and desktop.beeps == [READY_BEEP]
     assert desktop.floated == []
 
 
 def test_open_brings_a_running_app_forward_instead(desktop):
     desktop.running = True
-    assert open_app.run("Open Firefox.", True) is True
+    assert voice_actions.run("Open Firefox.", True) is True
     assert desktop.focused == ["firefox.desktop"] and desktop.launched == []
     assert desktop.beeps == [READY_BEEP]
 
@@ -131,41 +130,41 @@ FIREFOX_FLATPAK = AppEntry("org.mozilla.firefox.desktop", "Firefox", "Firefox", 
 def test_with_two_copies_a_window_counts_only_by_its_menu_entry(desktop):
     """Both copies' windows have the class "firefox": the one asked for is
     brought forward only if its own window can be told apart."""
-    open_app.run("open Firefox", True)
+    voice_actions.run("open Firefox", True)
     desktop.apps.append(FIREFOX_FLATPAK)
-    open_app.run("open Firefox", True)
-    open_app.run("open Firefox Flatpak", True)
+    voice_actions.run("open Firefox", True)
+    voice_actions.run("open Firefox Flatpak", True)
     assert desktop.exact == [False, True, True]
     assert desktop.launched[-1] == "org.mozilla.firefox.desktop"
 
 
 def test_open_new_always_starts_another(desktop):
     desktop.running = True
-    assert open_app.run("open new Firefox", True) is True
+    assert voice_actions.run("open new Firefox", True) is True
     assert desktop.launched == ["firefox.desktop"] and desktop.focused == []
 
 
 def test_the_browser_opens_the_default_one(desktop):
-    assert open_app.run("open the browser", True) is True
+    assert voice_actions.run("open the browser", True) is True
     assert desktop.launched == ["firefox.desktop"]
 
 
 def test_launch_and_start_work_like_open(desktop):
-    open_app.run("launch KWrite", True)
-    open_app.run("start firefox", True)
+    voice_actions.run("launch KWrite", True)
+    voice_actions.run("start firefox", True)
     assert desktop.launched == ["org.kde.kwrite.desktop", "firefox.desktop"]
 
 
 def test_it_works_in_a_terminal(desktop):
     """Unlike select and move, which can't work in one."""
     desktop.chat[0][0] = "org.kde.konsole"
-    assert open_app.run("open Firefox", True) is True
+    assert voice_actions.run("open Firefox", True) is True
     assert desktop.launched == ["firefox.desktop"]
 
 
 def test_the_log_names_the_app_not_the_words(desktop, caplog):
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
-        open_app.run("open fire fox", True)
+        voice_actions.run("open fire fox", True)
     assert "Voice command: open firefox.desktop" in caplog.text
     assert "fire fox" not in caplog.text
 
@@ -176,7 +175,7 @@ def test_no_match_is_typed_and_opens_nothing(desktop, caplog):
     """"Start over." names no app: lost, it would be the worst outcome, and a
     typed "Open fierfox zz." is easy to undo."""
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
-        assert open_app.run("open fierfox zz", True) is None
+        assert voice_actions.run("open fierfox zz", True) is None
     assert desktop.launched == [] and desktop.focused == []
     assert desktop.floated == [] and desktop.notified == [] and desktop.beeps == []
     assert "Open command: no app matched; typed as words" in caplog.text
@@ -186,7 +185,7 @@ def test_no_match_is_typed_and_opens_nothing(desktop, caplog):
 def test_a_tie_names_both_and_opens_neither(desktop):
     desktop.apps = [KONSOLE, KITTY]
     desktop.defaults = {}
-    assert open_app.run("open terminal", True) is False
+    assert voice_actions.run("open terminal", True) is False
     assert desktop.launched == []
     assert desktop.floated == ["Two apps fit: Konsole, Kitty. Say the full name."]
     assert desktop.notified[0][1] == ("Two apps fit: Konsole, Kitty. Say the full name. "
@@ -199,14 +198,14 @@ def test_a_tie_of_many_names_three(desktop):
     desktop.apps = [AppEntry(f"libreoffice-{n.lower()}.desktop", f"LibreOffice {n}",
                              f"LibreOffice {n}", "", "libreoffice", "")
                     for n in ("Writer", "Calc", "Impress", "Draw")]
-    open_app.run("open libre", True)
+    voice_actions.run("open libre", True)
     assert desktop.floated == ["Several apps fit: LibreOffice Writer, LibreOffice Calc, "
                                "LibreOffice Impress and more. Say the full name."]
 
 
 def test_an_app_that_doesnt_start_says_so(desktop):
     desktop.starts = False
-    assert open_app.run("open Firefox", True) is False
+    assert voice_actions.run("open Firefox", True) is False
     assert desktop.floated == ["Couldn't open Firefox"]
     assert desktop.beeps == [CANCEL_BEEP]
 
@@ -296,33 +295,6 @@ def test_esc_before_the_command_is_found_brings_nothing_forward(desktop, say, mo
 
 # --- in a hands-free or Type at pause recording ----------------------------------------------
 
-# Notifications on: ending the recording after opening an app still adds none.
-CFG = types.SimpleNamespace(beeps=True, notify=True)
-
-
-def service_tick_runs():
-    """One pass of the dictation service's tick, as its loop runs it."""
-    service_tick.tick(CFG, service_tick.ServiceState(CFG))
-
-
-@pytest.fixture
-def recording_on(desktop, monkeypatch):
-    """A Type at pause recording under way, its phrases typed as they come."""
-    monkeypatch.setattr(recording, "indicator", None)
-    monkeypatch.setattr(recording, "stop_stream_safely", lambda rec: None)
-    monkeypatch.setattr(recording, "resume_media_players", lambda: None)
-    monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a: None)
-    monkeypatch.setattr(rs.state, "is_recording", True)
-    rec = next_recording()
-
-    def phrase(*heard):
-        """A phrase cut at a pause: what the engine hears of it, and of it
-        with the phrase before when that held back its final mark."""
-        desktop.chat[1].extend(heard)
-        type_chunk(frames_of(speech(1.0)), "middle")
-    return rec, phrase
-
-
 def test_opening_mid_recording_ends_it(desktop, recording_on, keyboard):
     """Phrases typed before it stay; later words never land in whichever
     window has the focus while the app starts; no automatic Enter; the
@@ -351,7 +323,7 @@ def test_no_match_mid_recording_is_typed_and_keeps_it_going(desktop, recording_o
 
 def test_a_whole_recording_has_no_recording_left_to_end(desktop):
     message = rs.state.current.message
-    open_app.run("open Firefox", True)
+    voice_actions.run("open Firefox", True)
     assert not message.cancelled
 
 

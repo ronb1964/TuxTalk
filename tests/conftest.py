@@ -1342,8 +1342,10 @@ def chat(monkeypatch, keyboard):
     return focus, heard, typed, notices
 
 
-# The dictation worker rig lives in dictation_rig.py; tests import it from here.
+# The dictation worker rig lives in dictation_rig.py and the Type at pause one
+# in type_at_pause_rig.py; tests import them from here.
 from dictation_rig import QueuedWorker, esc, let_go  # noqa: E402,F401
+from type_at_pause_rig import recording_on  # noqa: E402,F401
 
 
 @pytest.fixture

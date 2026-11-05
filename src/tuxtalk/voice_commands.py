@@ -1,13 +1,13 @@
 """Things said instead of text: undo ("delete that", "clear everything"),
-"fix that word", select and move by voice and opening apps (TuxTalk Labs),
-and working out what "edit that" should change. Each that sends keys acts
+"fix that word", select and move by voice and voice commands such as opening
+apps (TuxTalk Labs), and working out what "edit that" should change. Each that sends keys acts
 only on the window the last dictation went to."""
 import os
 import re
 import time
 
 from . import (beeps, delivery, focused_window, keyboard_output, last_dictation, notices,
-               open_app, virtual_keyboard)
+               virtual_keyboard, voice_actions)
 from . import live_settings as live
 from . import notify as notify_module
 from . import recording_state as rs
@@ -309,12 +309,13 @@ def navigate(raw: str, beeps_on: bool, where=None):
     return pressed is True
 
 
-def handle_open_app(raw: str, beeps_on: bool, ongoing=None) -> bool:
-    """Open apps by voice (TuxTalk Labs): "open Firefox". True when the whole
-    dictation was an open command, opened or refused with a notice; False to
-    type it as text, as when it names no app. *ongoing*: the Message of the recording *raw* is a
-    phrase of, cut at a pause, which opening the app ends (open_app.run)."""
-    return open_app.run(raw, beeps_on, ongoing) is not None
+def handle_voice_action(raw: str, beeps_on: bool, ongoing=None) -> bool:
+    """Voice commands (TuxTalk Labs): "open Firefox", "new tab". True when
+    the whole dictation was one, done or refused with a notice; False to type
+    it as text, as when "open" names no app. *ongoing*: the Message of the
+    recording *raw* is a phrase of, cut at a pause, which an action ends
+    (voice_actions.run)."""
+    return voice_actions.run(raw, beeps_on, ongoing) is not None
 
 
 def spoken_edit_target():

@@ -9,11 +9,9 @@ Run on the dictation worker, never GTK's thread: bringing a window forward
 and starting an app can each wait seconds for the desktop. Works in terminals
 too: unlike select and move, it sends no keys to the focused window.
 """
-import re
-
-from . import app_commands, app_finder, app_focus, app_launcher, beeps, keyboard_output
-from . import live_settings as live
+from . import app_finder, app_focus, app_launcher, beeps, keyboard_output
 from . import notices
+from .app_commands import OpenRequest
 from .beeps import READY_BEEP
 from .logger import setup_logger
 
@@ -21,24 +19,15 @@ logger = setup_logger(__name__)
 
 NOTHING_OPENED = "Nothing was opened."
 
-# Only "literal": "the word open means unlocked" is a sentence.
-_LITERAL_FIRST = re.compile(r"^\s*literal\s+", re.IGNORECASE)
 
-
-def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
-    """Open the app *raw* asks for. None: not an open command, open apps is
-    off, or it names no app ("Start over."), so it's typed; True: opened or
-    brought forward; False: nothing opened, said with a notice, or stopped
-    by Esc.
+def open_request(request: OpenRequest, beeps_on: bool, ongoing=None) -> bool | None:
+    """Open the app *request* asks for. None: it names no app ("Start
+    over."), so it's typed; True: opened or brought forward; False: nothing
+    opened, said with a notice, or stopped by Esc.
 
     *ongoing*: the recording_state.Message of the Type at pause recording
-    *raw* is a phrase of, cut at a pause, else None. Opening the app ends
-    that recording."""
-    if not live.open_apps:
-        return None
-    request = app_commands.parse(raw)
-    if request is None:
-        return None
+    the request is a phrase of, cut at a pause, else None. Opening the app
+    ends that recording."""
     entries = app_finder.installed_apps()
     found = app_finder.find(request, entries, app_finder.default_apps())
     if found.kind == "none":
@@ -49,7 +38,7 @@ def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
     if found.kind == "tie":
         logger.info("Voice command: open, but these fit equally: "
                     + ", ".join(e.app_id for e in found.entries))
-        label = _tie_label(found.entries) + " Say the full name."
+        label = tie_label(found.entries) + " Say the full name."
         notices.command_refused(label, f"{label} {NOTHING_OPENED}", beeps_on)
         return False
     entry = found.entries[0]
@@ -88,22 +77,9 @@ def _open(entry, new: bool, beeps_on: bool, ongoing, exact: bool) -> bool:
     return True
 
 
-def _tie_label(entries) -> str:
+def tie_label(entries) -> str:
     """"Two apps fit: Konsole, Kitty." Up to three names, so it stays short."""
     names = [e.name for e in entries]
     count = {2: "Two", 3: "Three"}.get(len(names), "Several")
     shown = ", ".join(names[:3]) + (" and more" if len(names) > 3 else "")
     return f"{count} apps fit: {shown}."
-
-
-def typed_as_words(raw: str) -> str:
-    """*raw* without the "literal" before an open command: "literal open
-    Firefox" types "open Firefox", as "literal press enter" types "press
-    enter". Anything else, or with open apps off, unchanged: "literal
-    translations" stays as said."""
-    if not live.open_apps:
-        return raw
-    match = _LITERAL_FIRST.match(raw)
-    if match and app_commands.parse(raw[match.end():]) is not None:
-        return raw[match.end():]
-    return raw

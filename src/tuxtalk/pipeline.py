@@ -19,12 +19,12 @@ from . import (
     last_dictation,
     modifier_hotkeys,
     notices,
-    open_app,
     recording,
     resampling,
     send_countdown,
     silence,
     type_at_pause,
+    voice_actions,
     voice_commands,
     voice_edit,
 )
@@ -167,7 +167,7 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             job.message.sentence_audio = []
             return
         # "literal open Firefox" types "open Firefox".
-        raw, said = split_key_command(open_app.typed_as_words(raw))
+        raw, said = split_key_command(voice_actions.typed_as_words(raw))
         key = _key_to_press(raw, said, job)
         if said and not raw.strip():
             _press_alone(said, in_password, job)
@@ -330,7 +330,7 @@ def _ran_as_command(raw: str, job: _Job) -> bool:
                 or voice_commands.handle_fix_word(raw, job.beeps_on)
                 # "open Firefox" (TuxTalk Labs). A phrase cut at a pause ends
                 # its recording.
-                or voice_commands.handle_open_app(
+                or voice_commands.handle_voice_action(
                     raw, job.beeps_on, job.message if job.chunk_role == "middle" else None)):
             return True
     # "edit that, make it shorter": voice editing without its key, on what
