@@ -16,9 +16,10 @@ before 0.15.0, so older entries use that name.
   (or Snap, or AppImage) picks that copy when you have two. "literal open
   Firefox" types the words.
 - Only a dictation that is just the command opens something. "I opened
-  Firefox yesterday" is typed as usual. If no app fits, or two fit equally
-  well, a note floats over your window, the cancel beep sounds and nothing
-  opens.
+  Firefox yesterday" is typed as usual, and so is a short one that names no
+  app, like "Start over.", so no sentence is lost. If two apps fit equally
+  well, a note floats over your window naming them, the cancel beep sounds
+  and nothing opens.
 - Bringing an open app to the front works on KDE, on GNOME with the TuxTalk
   extension and on X11 desktops like Cinnamon and Xfce. On COSMIC, Sway and
   Hyprland the app is started again. In a hands-free or Type at pause

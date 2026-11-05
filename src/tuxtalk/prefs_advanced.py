@@ -430,8 +430,9 @@ class AdvancedTab(Tab):
             "\u2022 \u201copen the browser\u201d, \u201copen email\u201d, "
             "\u201copen files\u201d: your usual apps\n"
             "\u2022 \u201cliteral open Firefox\u201d types the words\n\n"
-            "Inside a longer sentence the words are typed as usual. Said in a hands-free\n"
-            "or Type at pause recording, opening the app ends the recording.\n"
+            "Inside a longer sentence, or naming no app, the words are typed as usual.\n"
+            "Said in a hands-free or Type at pause recording, opening the app ends\n"
+            "the recording.\n"
             "Works in terminals too. More in Help, on the Writing page.")
         check.connect("toggled", lambda c: self.update_config("open_apps", c.get_active()))
         check.set_margin_start(LABS_INDENT)

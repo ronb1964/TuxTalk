@@ -1,6 +1,6 @@
 """Open apps by voice (TuxTalk Labs): "open the text editor" starts it, said
-again it brings the open window forward, a name that fits nothing opens
-nothing, and a GTK app starts as from the menu. CLAUDE.md Step 8: "Open apps
+again it brings the open window forward, a name that fits nothing is typed
+as words, and a GTK app starts as from the menu. CLAUDE.md Step 8: "Open apps
 by voice".
 
 The apps are found by name in the VM's own menu, so the text editor is
@@ -15,7 +15,7 @@ import time
 from harness import Outcome, check
 
 SECTION = "Open apps by voice"
-NO_MATCH = "Voice command: open, but no app matched"
+NO_MATCH = "Open command: no app matched; typed as words"
 # What an AppImage or a venv leaves in TuxTalk's environment, and an app
 # started from the menu must not inherit (launch_env.py).
 LEAKS = "APPDIR|APPIMAGE|ARGV0|OWD|PYTHONPATH|PYTHONHOME|GI_TYPELIB_PATH"
@@ -159,31 +159,31 @@ def open_again_focuses(run):
                 _close(run, app)
 
 
-@check(SECTION, "open_unknown_app", "A name that fits no app opens nothing and says so")
+@check(SECTION, "open_unknown_app", "A name that fits no app is typed as words, opening nothing")
 def open_unknown_app(run):
     with _open_apps_on(run):
         run.sink_ready(fresh=True)
         before = _apps(run)
         _typed, _heard, mark = run.say("open_unknown_app", wait=False)
-        run.wait_log(mark, NO_MATCH, "Voice command: open", "Text injected", timeout=25)
-        shot = run.shot("open-no-match")        # the floating label is up for a few seconds
+        run.wait_log(mark, "Text injected", "Voice command: open", timeout=25)
         time.sleep(3)
         typed, log = run.sink_text().strip(), run.log_since(mark)
+        shot = run.shot("open-no-match")
         problems = []
         if NO_MATCH not in log:
-            if typed:
+            if typed and "Voice command: open" not in log:
                 return Outcome("misheard", "the computer voice was heard as another sentence",
                                typed=typed, screenshot=shot)
-            problems.append("no “no app matched” in the log")
+            problems.append(f"no “{NO_MATCH}” in the log")
         opened = sorted(_apps(run) - before)
         if opened:
             problems.append(f"{opened} opened")
-        if typed:
-            problems.append("something was typed")
+        if not typed:
+            problems.append("nothing was typed")
         if problems:
             return Outcome("fail", "; ".join(problems), typed=typed, screenshot=shot)
-        return Outcome("pass", "Nothing opened or typed; log: “Voice command: open, but no "
-                       "app matched”. The floating label is in the screenshot.", screenshot=shot)
+        return Outcome("pass", f"Typed as words and nothing opened; log: “{NO_MATCH}”",
+                       typed=typed, screenshot=shot)
 
 
 @check(SECTION, "open_gtk_app", "A Python or GTK app opened by voice starts clean")
@@ -196,6 +196,9 @@ def open_gtk_app(run):
     with _open_apps_on(run):
         before, mark = _say_and_wait(run, phrase, "Opened ", "already open")
         log = run.log_since(mark)
+        if NO_MATCH in log:
+            return Outcome("misheard", f"the computer voice wasn't heard as {program}'s name",
+                           typed=run.sink_text().strip())
         if "already open" in log:
             return Outcome("skip", f"{program} was already running; close it and run again")
         app = _new_app(run, before)

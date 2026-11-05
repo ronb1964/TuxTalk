@@ -10,7 +10,7 @@ from tuxtalk import app_launcher
 from tuxtalk.app_finder import AppEntry
 from tuxtalk.app_launcher import launch, own_scope
 
-FIREFOX = AppEntry("firefox.desktop", "Firefox", "Firefox", "Web Browser", (), "firefox", "")
+FIREFOX = AppEntry("firefox.desktop", "Firefox", "Firefox", "Web Browser", "firefox", "")
 
 
 class FakeAppInfo:

@@ -331,7 +331,7 @@ def navigate(raw: str, beeps_on: bool, where=None):
 def handle_open_app(raw: str, beeps_on: bool, ongoing=None) -> bool:
     """Open apps by voice (TuxTalk Labs): "open Firefox". True when the whole
     dictation was an open command, opened or refused with a notice; False to
-    type it as text. *ongoing*: the Message of the recording *raw* is a
+    type it as text, as when it names no app. *ongoing*: the Message of the recording *raw* is a
     phrase of, cut at a pause, which opening the app ends (open_app.run)."""
     return open_app.run(raw, beeps_on, ongoing) is not None
 

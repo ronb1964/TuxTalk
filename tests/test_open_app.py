@@ -16,12 +16,12 @@ from tuxtalk import recording_state as rs
 from tuxtalk.app_finder import AppEntry
 from tuxtalk.beeps import CANCEL_BEEP, READY_BEEP
 
-FIREFOX = AppEntry("firefox.desktop", "Firefox", "Firefox", "Web Browser", ("Internet",),
-                   "firefox", "")
-KWRITE = AppEntry("org.kde.kwrite.desktop", "KWrite", "KWrite", "Text Editor", (), "kwrite", "")
-KONSOLE = AppEntry("org.kde.konsole.desktop", "Konsole", "Konsole", "Terminal", (), "konsole",
-                   "")
-KITTY = AppEntry("kitty.desktop", "Kitty", "Kitty", "Terminal", (), "kitty", "")
+FIREFOX = AppEntry("firefox.desktop", "Firefox", "Firefox", "Web Browser", "firefox", "")
+KWRITE = AppEntry("org.kde.kwrite.desktop", "KWrite", "KWrite", "Text Editor", "kwrite", "")
+KONSOLE = AppEntry("org.kde.konsole.desktop", "Konsole", "Konsole", "Terminal", "konsole", "")
+KITTY = AppEntry("kitty.desktop", "Kitty", "Kitty", "Terminal", "kitty", "")
+# Before the desktop fixture stands in for it.
+READ_THE_MENU = app_finder.installed_apps
 
 
 class Desktop:
@@ -155,15 +155,15 @@ def test_the_log_names_the_app_not_the_words(desktop, caplog):
 
 # --- nothing opened ------------------------------------------------------------------------
 
-def test_no_match_says_what_it_heard_and_opens_nothing(desktop, caplog):
+def test_no_match_is_typed_and_opens_nothing(desktop, caplog):
+    """"Start over." names no app: lost, it would be the worst outcome, and a
+    typed "Open fierfox zz." is easy to undo."""
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
-        assert open_app.run("open fierfox zz", True) is False
+        assert open_app.run("open fierfox zz", True) is None
     assert desktop.launched == [] and desktop.focused == []
-    assert desktop.floated == ["No app called “fierfox zz”"]
-    assert desktop.notified == [("No app called “fierfox zz”",
-                                 "No app called “fierfox zz”. Nothing was opened.")]
-    assert desktop.beeps == [CANCEL_BEEP]
-    assert "no app matched" in caplog.text and "fierfox" not in caplog.text
+    assert desktop.floated == [] and desktop.notified == [] and desktop.beeps == []
+    assert "Open command: no app matched; typed as words" in caplog.text
+    assert "fierfox" not in caplog.text
 
 
 def test_a_tie_names_both_and_opens_neither(desktop):
@@ -180,7 +180,7 @@ def test_a_tie_names_both_and_opens_neither(desktop):
 def test_a_tie_of_many_names_three(desktop):
     """"open libre" fits every LibreOffice app: the label stays short."""
     desktop.apps = [AppEntry(f"libreoffice-{n.lower()}.desktop", f"LibreOffice {n}",
-                             f"LibreOffice {n}", "", (), "libreoffice", "")
+                             f"LibreOffice {n}", "", "libreoffice", "")
                     for n in ("Writer", "Calc", "Impress", "Draw")]
     open_app.run("open libre", True)
     assert desktop.floated == ["Several apps fit: LibreOffice Writer, LibreOffice Calc, "
@@ -207,6 +207,38 @@ def test_a_sentence_about_opening_is_typed(desktop, say):
     say("I opened Firefox yesterday")
     assert desktop.chat[2][0][0].startswith("I opened Firefox yesterday")
     assert desktop.launched == []
+
+
+@pytest.mark.parametrize("said, typed", [("Start over.", "Start over."),
+                                         ("start with the introduction",
+                                          "Start with the introduction"),
+                                         ("open fierfox zz", "Open fierfox zz")])
+def test_a_short_sentence_naming_no_app_is_typed(desktop, say, said, typed):
+    say(said)
+    assert desktop.chat[2][0][0].startswith(typed)
+    assert desktop.launched == [] and desktop.floated == [] and desktop.beeps == []
+
+
+def test_spoken_quotation_is_typed_not_opened(desktop, say):
+    """"open quote" is the curly quote's own command."""
+    say("open quote hello close quote")
+    assert desktop.chat[2][0][0].startswith('"Hello')
+    assert desktop.launched == [] and desktop.floated == []
+
+
+def test_a_word_the_menu_entry_only_lists_as_a_keyword_opens_nothing(desktop, say, tmp_path,
+                                                                       monkeypatch):
+    """Konsole's Keywords include "script": "start the script" is a sentence."""
+    from gi.repository import Gio
+    path = tmp_path / "org.kde.konsole.desktop"
+    path.write_text("[Desktop Entry]\nType=Application\nName=Konsole\nExec=true\n"
+                    "GenericName=Terminal\nKeywords=terminal;shell;script;command;\n")
+    monkeypatch.setattr(app_finder, "_desktop_apps",
+                        lambda: [Gio.DesktopAppInfo.new_from_filename(str(path))])
+    monkeypatch.setattr(app_finder, "installed_apps", READ_THE_MENU)
+    say("start the script")
+    assert desktop.launched == []
+    assert desktop.chat[2][0][0].startswith("Start the script")
 
 
 def test_literal_types_the_words(desktop, say):
@@ -292,11 +324,12 @@ def test_opening_mid_recording_ends_it(desktop, recording_on, keyboard):
     assert desktop.beeps == [READY_BEEP] and desktop.notified == []
 
 
-def test_no_match_mid_recording_keeps_it_going(desktop, recording_on):
+def test_no_match_mid_recording_is_typed_and_keeps_it_going(desktop, recording_on):
     rec, phrase = recording_on
     phrase("open fierfox zz")
     service_tick_runs()
     assert rs.state.is_recording is True and not rec.message.cancelled
+    assert "".join(text for text, _ in desktop.chat[2]).startswith("Open fierfox zz")
 
 
 def test_a_whole_recording_has_no_recording_left_to_end(desktop):
@@ -385,7 +418,7 @@ def test_it_is_a_labs_tickbox_after_select_and_move(prefs_window):
     assert not box.get_active()
     tip = box.get_tooltip_text()
     for said in ("“launch”", "“open new Firefox”", "“open the browser”",
-                 "“literal open Firefox”", "hands-free"):
+                 "“literal open Firefox”", "hands-free", "naming no app"):
         assert said in tip
     box.set_active(True)
     assert window.config["open_apps"] is True

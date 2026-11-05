@@ -31,3 +31,10 @@ def test_sentences_are_not_commands():
 def test_a_bare_install_word_or_new_is_not_an_app_name():
     for said in ("open flatpak", "open new", "open another snap"):
         assert parse(said) is None
+
+
+def test_spoken_quotation_is_never_a_command():
+    """"open quote" is the curly quote's command (spoken_quotes.py)."""
+    for said in ("open quote hello close quote", "open quote", "start quote yes end quote",
+                 "launch unquote"):
+        assert parse(said) is None

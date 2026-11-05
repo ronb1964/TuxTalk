@@ -46,7 +46,6 @@ class AppEntry:
     name: str            # as the menu shows it (localised)
     english_name: str    # the untranslated Name, so "Files" works on a German desktop
     generic: str         # "Web Browser", "Calculator"
-    keywords: tuple
     program: str         # the command it runs: "firefox"
     install: str         # "", "flatpak", "snap" or "appimage"
     wm_class: str = ""   # StartupWMClass: its windows' class, when the entry says
@@ -74,8 +73,9 @@ class _Indexed:
         names = {" ".join(_clean(n)) for n in (entry.name, entry.english_name)}
         self.names = sorted(n for n in names if n)
         self.program = " ".join(_clean(entry.program))
-        self.labels = {" ".join(_clean(t)) for t in (entry.generic, *entry.keywords)}
-        self.labels.discard("")
+        # GenericName, not Keywords: Konsole's "script" made "start the script"
+        # open a terminal.
+        self.labels = {" ".join(_clean(entry.generic))} - {""}
         # Names and program with the spaces taken out ("fire fox" -> "firefox").
         self.letters = {s.replace(" ", "") for s in (*self.names, self.program) if s}
 
@@ -215,7 +215,6 @@ def installed_apps():
             name=app.get_name() or "",
             english_name=app.get_string("Name") or "",
             generic=app.get_generic_name() or "",
-            keywords=tuple(app.get_keywords() or ()),
             program=program_name(command),
             install=install_kind(command),
             wm_class=app.get_startup_wm_class() or ""))

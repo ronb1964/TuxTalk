@@ -24,7 +24,7 @@ from tuxtalk.app_finder import AppEntry
 
 
 def _entry(app_id, name, program, wm_class=""):
-    return AppEntry(app_id, name, name, "", (), program, "", wm_class)
+    return AppEntry(app_id, name, name, "", program, "", wm_class)
 
 
 FIREFOX = _entry("firefox.desktop", "Firefox", "firefox")

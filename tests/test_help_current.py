@@ -157,6 +157,7 @@ def test_help_spells_out_opening_apps_with_your_own_hold_key(monkeypatch):
     for said in ("open new Firefox", "open the browser", "literal open Firefox"):
         assert said in opening, said
     assert "menu entry" in opening and "English" in opening
+    assert "fits no app is typed as usual" in opening
 
 
 def test_labs_intro_lists_opening_apps(monkeypatch):

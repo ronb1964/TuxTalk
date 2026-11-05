@@ -25,10 +25,11 @@ NOTHING_OPENED = "Nothing was opened."
 _LITERAL_FIRST = re.compile(r"^\s*literal\s+", re.IGNORECASE)
 
 
-def run(raw: str, beeps_on: bool, ongoing=None):
-    """Open the app *raw* asks for. None: not an open command, or open apps
-    is off, so it's typed; True: opened or brought forward; False: nothing
-    opened, said with a notice, or stopped by Esc.
+def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
+    """Open the app *raw* asks for. None: not an open command, open apps is
+    off, or it names no app ("Start over."), so it's typed; True: opened or
+    brought forward; False: nothing opened, said with a notice, or stopped
+    by Esc.
 
     *ongoing*: the recording_state.Message of the Type at pause recording
     *raw* is a phrase of, cut at a pause, else None. Opening the app ends
@@ -40,11 +41,10 @@ def run(raw: str, beeps_on: bool, ongoing=None):
         return None
     found = app_finder.find(request, app_finder.installed_apps(), app_finder.default_apps())
     if found.kind == "none":
-        # What was heard is on screen; the log keeps the user's words out.
-        logger.info("Voice command: open, but no app matched")
-        label = f"No app called “{request.name}”"
-        notices.app_not_opened(label, f"{label}. {NOTHING_OPENED}", beeps_on)
-        return False
+        # A sentence lost is worse than a typed "Open fierfox.", which is
+        # easy to undo. The log keeps the user's words out.
+        logger.info("Open command: no app matched; typed as words")
+        return None
     if found.kind == "tie":
         logger.info("Voice command: open, but these fit equally: "
                     + ", ".join(e.app_id for e in found.entries))

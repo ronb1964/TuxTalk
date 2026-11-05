@@ -459,8 +459,9 @@ and the name is whatever the app is called in your menu: <b>open the calculator<
 <b>Good to know</b>
   • Only a dictation that is just the command counts. "I opened Firefox yesterday" and
     "open the door and come in" are typed as usual.
-  • No app fits, or two fit equally well: the cancel beep sounds, a note floats over your
-    window saying what it heard or which apps fit, and nothing opens.
+  • A name that fits no app is typed as usual, so a sentence like "Start over." is never
+    lost. Two apps that fit equally well: the cancel beep sounds, a note floats over your
+    window naming them, and nothing opens.
   • Bringing an open app forward works on KDE, on GNOME with the TuxTalk extension, and
     on X11 desktops like Cinnamon and Xfce. Elsewhere (COSMIC, Sway, Hyprland) the app is
     started again, and most then show the window they already have.

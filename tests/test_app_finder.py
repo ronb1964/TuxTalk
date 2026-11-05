@@ -6,28 +6,24 @@ from tuxtalk import app_finder
 from tuxtalk.app_finder import AppEntry, find, install_kind, program_name
 
 
-def entry(app_id, name, generic="", keywords=(), program="", install=""):
-    return AppEntry(app_id, name, name, generic, tuple(keywords), program, install)
+def entry(app_id, name, generic="", program="", install=""):
+    return AppEntry(app_id, name, name, generic, program, install)
 
 
 @pytest.fixture
 def apps():
     return [
-        entry("firefox.desktop", "Firefox", "Web Browser", ("web", "internet"), "firefox"),
-        entry("org.mozilla.firefox.desktop", "Firefox", "Web Browser", ("web",), "",
-              "flatpak"),
-        entry("org.kde.konsole.desktop", "Konsole", "Terminal", ("shell", "terminal"),
-              "konsole"),
-        entry("kitty.desktop", "kitty", "Terminal emulator", ("terminal",), "kitty"),
-        entry("org.kde.kwrite.desktop", "KWrite", "Text Editor", (), "kwrite"),
-        entry("org.kde.kate.desktop", "Kate", "Text Editor", (), "kate"),
-        entry("eu.betterbird.Betterbird.desktop", "Betterbird", "Email Client",
-              ("mail",), "betterbird"),
-        entry("libreoffice-writer.desktop", "LibreOffice Writer", "Word Processor", (),
+        entry("firefox.desktop", "Firefox", "Web Browser", "firefox"),
+        entry("org.mozilla.firefox.desktop", "Firefox", "Web Browser", "", "flatpak"),
+        entry("org.kde.konsole.desktop", "Konsole", "Terminal", "konsole"),
+        entry("kitty.desktop", "kitty", "Terminal", "kitty"),
+        entry("org.kde.kwrite.desktop", "KWrite", "Text Editor", "kwrite"),
+        entry("org.kde.kate.desktop", "Kate", "Text Editor", "kate"),
+        entry("eu.betterbird.Betterbird.desktop", "Betterbird", "Email Client", "betterbird"),
+        entry("libreoffice-writer.desktop", "LibreOffice Writer", "Word Processor",
               "libreoffice"),
-        entry("libreoffice-calc.desktop", "LibreOffice Calc", "Spreadsheet", (),
-              "libreoffice"),
-        entry("org.kde.kcalc.desktop", "KCalc", "Calculator", ("calculator",), "kcalc"),
+        entry("libreoffice-calc.desktop", "LibreOffice Calc", "Spreadsheet", "libreoffice"),
+        entry("org.kde.kcalc.desktop", "KCalc", "Calculator", "kcalc"),
     ]
 
 
@@ -93,6 +89,19 @@ def test_two_different_apps_tie_without_a_default(apps):
     assert sorted(ids(found)) == ["kitty.desktop", "org.kde.konsole.desktop"]
 
 
+def test_a_keyword_alone_never_opens_an_app(tmp_path, monkeypatch):
+    """Keywords are too loose: "start the script" opened a terminal."""
+    from gi.repository import Gio
+    path = tmp_path / "org.kde.konsole.desktop"
+    path.write_text("[Desktop Entry]\nType=Application\nName=Konsole\nExec=true\n"
+                    "Keywords=terminal;shell;script;\n")
+    monkeypatch.setattr(app_finder, "_desktop_apps",
+                        lambda: [Gio.DesktopAppInfo.new_from_filename(str(path))])
+    menu = app_finder.installed_apps()
+    assert find(parse("open shell"), menu, {}).kind == "none"
+    assert find(parse("start the script"), menu, {}).kind == "none"
+
+
 def test_nothing_close_is_none(apps):
     assert find(parse("open fierfox zz"), apps, {}).kind == "none"
     assert find(parse("open the door"), apps, {}).kind == "none"
@@ -100,8 +109,8 @@ def test_nothing_close_is_none(apps):
 
 
 def test_odd_entries_never_crash_or_win():
-    odd = [AppEntry("x.desktop", "", "", "", (), "", ""),
-           AppEntry("y.desktop", "Tool 2.0 & Co", "", "", (), "tool", "")]
+    odd = [AppEntry("x.desktop", "", "", "", "", ""),
+           AppEntry("y.desktop", "Tool 2.0 & Co", "", "", "tool", "")]
     assert find(parse("open tool"), odd, {}).kind in ("one", "none")
     assert find(parse("open tool"), [], {}).kind == "none"
 
