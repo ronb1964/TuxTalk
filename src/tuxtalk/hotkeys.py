@@ -14,6 +14,7 @@ from evdev import InputDevice, ecodes, list_devices
 from . import (
     beeps,
     ctrl_space,
+    ctrl_space_clashes,
     delivery,
     delivery_notices,
     desktop_detect,
@@ -669,6 +670,8 @@ def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys") -> None:
                           *ctrl_space.held_with(keys.hold_key),
                           *ctrl_space.held_with(keys.toggle_key))
     modifier_hotkeys.read_compose_keys()
+    if ctrl_space.KEY in (keys.hold_key, keys.toggle_key):
+        ctrl_space_clashes.log_clashes()
 
 
 def _on_key_event(event, keys: "hotkey_keys.Hotkeys", held_modifiers, devices, cfg: Settings,

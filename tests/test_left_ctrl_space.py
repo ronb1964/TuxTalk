@@ -13,8 +13,8 @@ from evdev import ecodes
 
 from conftest import KeyEvent
 from hotkey_loop_fakes import Cfg, Grabbable, Keyboard
-from tuxtalk import (cosmic_hotkeys, ctrl_space, gnome_hotkeys, hotkey_claims, hotkeys,
-                     x11_hotkeys, keyboard_grab, keyboard_layout, keyboard_output,
+from tuxtalk import (cosmic_hotkeys, ctrl_space, ctrl_space_clashes, gnome_hotkeys,
+                     hotkey_claims, hotkeys, x11_hotkeys, keyboard_grab, keyboard_layout, keyboard_output,
                      modifier_hotkeys, pipeline, recording)
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
@@ -31,6 +31,12 @@ A_KEY = [(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)]
 def _no_pair_down(monkeypatch):
     """Each test starts with the pair up, as the service does."""
     monkeypatch.setattr(hotkeys, "_ctrl_space", ctrl_space.Presses())
+
+
+@pytest.fixture(autouse=True)
+def _nobody_else_uses_ctrl_space(monkeypatch):
+    """Watching the pair asks who else uses Ctrl+Space: not the real desktop."""
+    monkeypatch.setattr(ctrl_space_clashes, "clashes", lambda: [])
 
 
 @pytest.fixture
