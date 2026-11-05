@@ -177,11 +177,13 @@ class VM:
         self.ssh(f"setsid -f ~/{REMOTE}/session-run.sh {line} "
                  f"> ~/{REMOTE}/{name}.out 2>&1 < /dev/null")
 
-    def ui(self, *args, timeout=20, check=False, hidden=False, app=None):
+    def ui(self, *args, timeout=20, check=False, hidden=False, app=None, index=None):
         """Run guest/ui.py; its JSON answer, or None when it found nothing.
-        *app*: only that application's windows."""
+        *app*: only that application's windows; *index*: only its window of
+        that index (ui.py windows' "index")."""
         options = ["--timeout", str(timeout)] + (["--hidden"] if hidden else [])
         options += ["--app", app] if app else []
+        options += ["--index", str(index)] if index is not None else []
         line = " ".join(shlex.quote(a) for a in options + list(args))
         result = self.ssh(f"~/{REMOTE}/session-run.sh python3 ~/{REMOTE}/ui.py {line}",
                           check=False, timeout=timeout + 60)

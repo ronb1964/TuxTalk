@@ -120,15 +120,30 @@ def _editor_open(run):
 # --- windows ---------------------------------------------------------------
 
 
-SAVE_WORDS = re.compile("save|unsaved|changes|discard", re.I)
+def _document_name(title):
+    """The document's name in an editor window's title: "Untitled 1" of
+    "*Untitled 1 - Mousepad"."""
+    return re.split(r"\s+[-\u2013\u2014]\s+", title or "")[0].strip("*\u2022 ").strip()
 
 
-def _save_question(run, app, before):
-    """The title of the editor's save question: its window that wasn't open
-    before the close (*before*, the titles then), or one asking about
-    saving. None when there is none."""
-    return next((title for name, title, _focused in _windows(run)
-                 if name == app and (title not in before or SAVE_WORDS.search(title))), None)
+def _new_window(run, app, before):
+    """Whether the editor has a window that wasn't open before the close
+    (*before*, its titles then): the question it asks."""
+    return any(name == app and title not in before for name, title, _focused in _windows(run))
+
+
+def _save_question(run, app, before, document):
+    """The title of the save question for *document*: a window of the editor
+    that wasn't open before the close and whose title or text names the
+    document. None otherwise (a question naming no document, or one for
+    another document already open): Discard is pressed nowhere then."""
+    for name, title, _focused in _windows(run):
+        if name != app or title in before:
+            continue
+        texts = run.vm.ui("texts", title, timeout=3, app=app) or []
+        if document and document in " ".join([title or "", *texts]):
+            return title
+    return None
 
 
 def _discard_and_close(run, app, question):
@@ -151,16 +166,19 @@ def close_asks_to_save(run):
         app, why = _editor_open(run)
         if app is None:
             return Outcome("skip", why)
-        asked = None
+        question = None
         try:
             run.vm.click_centre()
             for key in ("h", "i"):
                 run.vm.tap(key)
             time.sleep(0.5)
-            titles = {title for name, title, _focused in _windows(run) if name == app}
+            mine = [(title, focused) for name, title, focused in _windows(run) if name == app]
+            titles = {title for title, _focused in mine}
+            document = _document_name(next((t for t, focused in mine if focused), ""))
             _typed, _heard, mark = run.say("close_text_editor", wait=False)
             run.wait_log(mark, "Voice command: close", "Voice command not done", timeout=30)
-            asked = _until(10, lambda: _save_question(run, app, titles))
+            asked = _until(10, lambda: _new_window(run, app, titles))
+            question = _save_question(run, app, titles, document) if asked else None
             log = run.log_since(mark)
             running = not run.vm.ssh(f"pgrep -f {_running(app)}", check=False).returncode
             shot = run.shot("close-asks")
@@ -176,7 +194,7 @@ def close_asks_to_save(run):
             return Outcome("pass", f"{app} asked what to do with the unsaved line and is still "
                            "running", screenshot=shot)
         finally:
-            _discard_and_close(run, app, asked)
+            _discard_and_close(run, app, question)
 
 
 @check(SECTION, "close_this_window", "“close this window” closes the focused window")
@@ -280,6 +298,12 @@ def _sink_state(window):
     return None if "active" in window["states"] else "unfocused"
 
 
+def _wayland(run):
+    """Whether the VM's desktop session says it is a Wayland one."""
+    out = run.vm.session("printenv", "XDG_SESSION_TYPE", check=False).stdout
+    return out.strip() == "wayland"
+
+
 def _minimized(run, mark, steps):
     """The Outcome of "minimize window": the window says it's minimized
     where its toolkit learns of it (X11). Only on Wayland, where an app is
@@ -287,14 +311,16 @@ def _minimized(run, mark, steps):
     the command was done: any "not done" (a note, or the focus moving before
     the desktop was asked) fails it."""
     log = run.log_since(mark)
-    if "not done" in log or "minimize the focused window" not in log:
+    refused = "not done" in log.casefold()     # "Not done (minimize): Esc ..." too
+    if refused or "minimize the focused window" not in log:
         return Outcome("fail", "“minimize window” wasn't done: "
-                       + ("the log says why" if "not done" in log else "no line in the log"),
+                       + ("the log says why" if refused else "no line in the log"),
                        screenshot=run.shot("minimize"))
     state = _until(8, lambda: _sink_state(_sink(run)))
-    if state == "unfocused" and "x11" in run.vm.spec.tags:
+    if state == "unfocused" and not _wayland(run):
         return Outcome("fail", "the window lost the focus but doesn't say it's minimized, "
-                       "which X11 tells it", screenshot=run.shot("minimize"))
+                       "which only a Wayland session can't tell it",
+                       screenshot=run.shot("minimize"))
     if not state:
         return Outcome("fail", "the window was still showing and focused after “minimize "
                        "window”", screenshot=run.shot("minimize"))
@@ -426,16 +452,14 @@ def go_to_in_browser(run):
                        screenshot=shot)
 
 
-def _browser_windows(run):
-    """[(application, title, has the focus)] of the windows that look like a browser's."""
-    return [w for w in _windows(run) if BROWSER.search(w[0] or "") or BROWSER.search(w[1] or "")]
-
-
 def _forward_browser(run, before, timeout=40):
-    """A browser window that is new since *before* (the applications then) or
-    has the focus now, once there is one."""
-    return _until(timeout, lambda: next(
-        (w for w in _browser_windows(run) if w[0] not in before or w[2]), None))
+    """The ui.py window (app, title, index...) of a browser that is new since
+    *before* (the applications then) or has the focus now, once there is one."""
+    def found():
+        return next((w for w in run.vm.ui("windows") or []
+                     if (BROWSER.search(w["app"] or "") or BROWSER.search(w["title"] or ""))
+                     and (w["app"] not in before or "active" in w["states"])), None)
+    return _until(timeout, found)
 
 
 def _processes(run):
@@ -468,15 +492,17 @@ def _closing_new_browsers(run, judge):
     return outcome
 
 
-def _browser_shows(run, browser, part, stale):
-    """Whether the browser that came forward (*browser*, its application) has
-    *part* in its address bar or in a window title that wasn't there before
-    the command (*stale*, every title then): where it went, not only that a
-    browser came forward, and never another app's field or an old title."""
-    bar = run.vm.ui("find", "entry", "~address", timeout=3, app=browser) or {}
-    titles = " ".join(title or "" for name, title, _focused in _windows(run)
-                      if name == browser and title not in stale)
-    return part in (bar.get("text", "") + " " + titles).lower()
+def _browser_shows(run, window, part, stale):
+    """Whether the browser window that came forward (*window*, ui.py's) has
+    *part* in its own address bar or its title, when that title wasn't one
+    there before the command (*stale*, every title then): where it went, not
+    only that a browser came forward. Another window's bar or title never
+    counts, the same browser's other windows included."""
+    mine = {"app": window["app"], "index": window["index"]}
+    bar = run.vm.ui("find", "entry", "~address", timeout=3, **mine) or {}
+    now = next((w for w in run.vm.ui("windows", **mine) or []), {})
+    title = now.get("title") or ""
+    return part in (bar.get("text", "") + " " + ("" if title in stale else title)).lower()
 
 
 def _no_default_browser(run):
@@ -496,7 +522,7 @@ def _said_to_browser(run, phrase_id, done, word, timeout):
     _typed, _heard, mark = run.say(phrase_id, wait=False)
     run.wait_log(mark, done, "Voice command not done", "Text injected", timeout=timeout)
     window = _forward_browser(run, before)
-    shown = window and _until(15, lambda: _browser_shows(run, window[0], word, stale))
+    shown = window and _until(15, lambda: _browser_shows(run, window, word, stale))
     log, typed = run.log_since(mark), run.sink_text().strip()
     shot = run.shot(phrase_id.replace("_", "-"))
     if typed and "Voice command" not in log:
@@ -513,7 +539,7 @@ def _said_to_browser(run, phrase_id, done, word, timeout):
         problems.append("the words are in the log")
     if problems:
         return Outcome("fail", "; ".join(problems), typed=typed, screenshot=shot)
-    return Outcome("pass", f"A browser (“{window[0]}”) came forward showing “{word}”; the "
+    return Outcome("pass", f"A browser (“{window['app']}”) came forward showing “{word}”; the "
                    "words stayed out of the sink and the log", screenshot=shot)
 
 

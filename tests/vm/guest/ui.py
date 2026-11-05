@@ -5,7 +5,8 @@ instead of by where it happens to be drawn. Runs with the guest's own
 python3 inside the desktop session (session-run.sh). Prints JSON.
 
   ui.py windows                      every app's top-level windows, with their
-                                     states and size on screen (width, height)
+                                     states, size on screen (width, height) and
+                                     index among the app's windows
   ui.py dump [WINDOW]                the widget tree, for writing new checks
   ui.py find ROLE NAME [WINDOW]      wait for a widget, print it
   ui.py click ROLE NAME [WINDOW]     wait for a widget and press it
@@ -21,7 +22,9 @@ Options go first. --timeout N: waiting stops after N seconds (default 20)
 with exit code 1. --hidden: also find widgets that aren't on screen (the
 language list of a dropdown that only shows in Manual mode). --app NAME:
 only that application's windows, matched as NAME is (an editor's save
-question, never another app's button of the same name). They are options,
+question, never another app's button of the same name). --index N: only
+that application's window number N (the windows command's "index"): one
+window whatever its title becomes as a page loads. They are options,
 not environment variables, because session-run.sh starts the program with
 the desktop's environment only.
 """
@@ -37,6 +40,7 @@ from gi.repository import Atspi  # noqa: E402
 TIMEOUT = 20.0
 HIDDEN_TOO = False
 APP = None
+INDEX = None
 PRESS_ACTIONS = ("click", "press", "activate", "toggle")
 ITEM_ROLES = ("menu item", "check menu item", "radio menu item", "list item", "table cell")
 
@@ -103,7 +107,8 @@ def windows():
         if not matches(APP, app.get_name()):
             continue
         for win in children(app):
-            yield app, win
+            if INDEX is None or win.get_index_in_parent() == INDEX:
+                yield app, win
 
 
 def walk(obj, depth=0, limit=40):
@@ -149,12 +154,14 @@ def press(obj):
 
 
 def main(argv):
-    global TIMEOUT, HIDDEN_TOO, APP
+    global TIMEOUT, HIDDEN_TOO, APP, INDEX
     while argv and argv[0].startswith("--"):
         if argv[0] == "--timeout":
             TIMEOUT, argv = float(argv[1]), argv[2:]
         elif argv[0] == "--app":
             APP, argv = argv[1], argv[2:]
+        elif argv[0] == "--index":
+            INDEX, argv = int(argv[1]), argv[2:]
         elif argv[0] == "--hidden":
             HIDDEN_TOO, argv = True, argv[1:]
         else:
@@ -163,7 +170,7 @@ def main(argv):
     command, args = argv[0], argv[1:]
     if command == "windows":
         out = [{"app": app.get_name(), "title": win.get_name(), "states": states(win),
-                "size": size(win)}
+                "size": size(win), "index": win.get_index_in_parent()}
                for app, win in windows()]
     elif command == "dump":
         out = []
