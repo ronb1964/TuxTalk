@@ -14,8 +14,8 @@ from evdev import ecodes
 from conftest import KeyEvent
 from hotkey_loop_fakes import Cfg, Grabbable, Keyboard
 from tuxtalk import (cosmic_hotkeys, ctrl_space, ctrl_space_clashes, gnome_hotkeys,
-                     hotkey_claims, hotkeys, x11_hotkeys, keyboard_grab, keyboard_layout, keyboard_output,
-                     modifier_hotkeys, pipeline, recording)
+                     hotkey_claims, hotkeys, keyboard_grab, keyboard_layout, keyboard_output,
+                     modifier_hotkeys, pipeline, recording, x11_hotkeys)
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk.hotkey_helper_client import HelperKeyboard

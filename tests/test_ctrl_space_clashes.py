@@ -1,5 +1,6 @@
 """Who else uses Ctrl+Space is found, and the service says so in its log."""
 import logging
+import threading
 
 import pytest
 from evdev import ecodes
@@ -103,6 +104,7 @@ def test_running_finds_this_users_process_by_name(tmp_path):
 @pytest.fixture
 def watch(monkeypatch):
     """hotkeys._watch with the desktop, the helper and the options left out."""
+    monkeypatch.setattr(hotkeys, "_clash_lookup_for", None)
     monkeypatch.setattr(hotkeys, "_claim_desktop_hotkeys", lambda cfg: None)
     monkeypatch.setattr(hotkeys, "_helper_watch", lambda *a: None)
     monkeypatch.setattr(hotkeys.modifier_hotkeys, "note", lambda *a: None)
@@ -113,10 +115,25 @@ def watch(monkeypatch):
     return run
 
 
+def looked_at(monkeypatch, found=()):
+    """Replace the lookup; the Event is set each time it has run."""
+    ran = threading.Event()
+
+    def clashes():
+        ran.set()
+        return list(found)
+    monkeypatch.setattr(csc, "clashes", clashes)
+    return ran
+
+
 def test_the_service_logs_who_also_uses_ctrl_space(watch, monkeypatch, caplog):
-    monkeypatch.setattr(csc, "clashes", lambda: [csc.IBUS])
+    ran = looked_at(monkeypatch, [csc.IBUS])
     with caplog.at_level(logging.INFO):
         watch(ecodes.KEY_SPACE)
+        assert ran.wait(2)
+        for thread in threading.enumerate():
+            if thread is not threading.current_thread() and thread.daemon:
+                thread.join(2)
     assert ("IBus also uses Ctrl+Space to switch input methods; "
             "Left Ctrl+Space may do that instead of dictating") in caplog.text
 
@@ -126,3 +143,30 @@ def test_another_hold_key_asks_nobody(watch, monkeypatch):
         raise AssertionError("looked for Ctrl+Space users")
     monkeypatch.setattr(csc, "clashes", asked)
     watch(ecodes.KEY_F8)
+
+
+def test_a_slow_lookup_does_not_hold_up_the_hotkeys(watch, monkeypatch):
+    release = threading.Event()
+    started = threading.Event()
+
+    def stuck():
+        started.set()
+        release.wait(5)
+        return []
+    monkeypatch.setattr(csc, "clashes", stuck)
+    watch(ecodes.KEY_SPACE)         # returns while the lookup is still waiting
+    assert started.wait(2)
+    release.set()
+
+
+def test_the_same_keys_are_looked_at_once_and_a_change_looks_again(watch, monkeypatch):
+    ran = looked_at(monkeypatch)
+    watch(ecodes.KEY_SPACE)
+    assert ran.wait(2)
+    ran.clear()
+    watch(ecodes.KEY_SPACE)         # a settings reload with the same keys
+    assert not ran.wait(0.2)
+    watch(ecodes.KEY_F8)
+    assert not ran.wait(0.2)
+    watch(ecodes.KEY_SPACE)         # back to Left Ctrl+Space
+    assert ran.wait(2)

@@ -7,6 +7,7 @@ and go are picked up while no recording runs."""
 import atexit
 import os
 import sys
+import threading
 import time
 
 from evdev import InputDevice, ecodes, list_devices
@@ -53,6 +54,8 @@ _hotkey_test_was_on = False  # for logging when test mode starts and ends
 
 # Whether Left Ctrl+Space, as a dictation key, is down (ctrl_space).
 _ctrl_space = ctrl_space.Presses()
+# The (hold, toggle) keys last looked at for others using Ctrl+Space.
+_clash_lookup_for = None
 
 
 def _hotkey_test_active() -> bool:
@@ -658,6 +661,19 @@ def _from_system_check(state: str):
     return state, f"{state}. Open {uinput_helper.SYSTEM_CHECK_PATH}."
 
 
+def _log_ctrl_space_clashes(keys: "hotkey_keys.Hotkeys") -> None:
+    """Say in the log who else uses Ctrl+Space, once per change of dictation
+    keys. It asks gsettings and the like, which a hung dconf can stall for
+    seconds, so it runs beside the hotkey loop; it only logs."""
+    global _clash_lookup_for
+    pair = (keys.hold_key, keys.toggle_key)
+    if pair == _clash_lookup_for:
+        return
+    _clash_lookup_for = pair
+    if ctrl_space.KEY in pair:
+        threading.Thread(target=ctrl_space_clashes.log_clashes, daemon=True).start()
+
+
 def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys") -> None:
     """Have the desktop hold *keys* back from the focused app (see
     _claim_desktop_hotkeys), and tell the hotkey helper and the modifier-key
@@ -670,8 +686,7 @@ def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys") -> None:
                           *ctrl_space.held_with(keys.hold_key),
                           *ctrl_space.held_with(keys.toggle_key))
     modifier_hotkeys.read_compose_keys()
-    if ctrl_space.KEY in (keys.hold_key, keys.toggle_key):
-        ctrl_space_clashes.log_clashes()
+    _log_ctrl_space_clashes(keys)
 
 
 def _on_key_event(event, keys: "hotkey_keys.Hotkeys", held_modifiers, devices, cfg: Settings,

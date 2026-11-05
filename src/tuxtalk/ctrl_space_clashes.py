@@ -88,9 +88,15 @@ def xkb_options_use_left_ctrl(options: str | None) -> bool:
 
 
 def _running(name: str, proc: str = "/proc") -> bool:
-    """Whether this user has a process called *name* (its /proc/<pid>/comm)."""
+    """Whether this user has a process called *name* (its /proc/<pid>/comm,
+    which keeps 15 characters: names must stay short)."""
     uid = os.getuid()
-    for pid in os.listdir(proc):
+    try:
+        pids = os.listdir(proc)
+    except OSError as e:
+        logger.info(f"Could not list the running programs: {e}")
+        return False
+    for pid in pids:
         if not pid.isdigit():
             continue
         try:
