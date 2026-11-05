@@ -303,6 +303,24 @@ def test_two_input_methods_are_both_named():
     assert "IBus already uses" in text and "GNOME already uses" in text
 
 
+def test_a_lookup_that_fails_is_logged_and_preferences_doesnt_wait_it_out(prefs_window,
+                                                                         monkeypatch,
+                                                                         caplog):
+    import logging
+    import time
+    from tuxtalk import ctrl_space_clashes
+
+    def broken():
+        raise UnicodeDecodeError("utf-8", b"\xe3", 0, 1, "unexpected end of data")
+    monkeypatch.setattr(ctrl_space_clashes, "clashes", broken)
+    tab = prefs_window(hotkey=CTRL_SPACE).general_tab
+    began = time.monotonic()
+    with caplog.at_level(logging.INFO):
+        assert tab._ctrl_space_clashes({CTRL_SPACE}) == []
+    assert time.monotonic() - began < 2
+    assert "Couldn't look for who else uses Ctrl+Space" in caplog.text
+
+
 def test_after_apply_the_clashes_are_looked_for_only_when_left_ctrl_space_was_picked(
         prefs_window, monkeypatch):
     from gi.repository import Gtk

@@ -507,8 +507,14 @@ class GeneralTab(Tab):
         if CTRL_SPACE not in keys:
             return []
         found = []
-        threading.Thread(target=lambda: found.append(ctrl_space_clashes.clashes()),
-                         daemon=True).start()
+
+        def look():
+            try:
+                found.append(ctrl_space_clashes.clashes())
+            except Exception as e:      # an answer either way, so the wait ends now
+                logger.warning(f"Couldn't look for who else uses Ctrl+Space: {e}")
+                found.append([])
+        threading.Thread(target=look, daemon=True).start()
         self._while_drawn(lambda: bool(found), ctrl_space_clashes.LOOKUP_BUDGET_S + 1)
         return found[0] if found else []
 

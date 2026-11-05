@@ -150,7 +150,9 @@ def _running(name: str, proc: str = "/proc") -> bool:
         try:
             if os.stat(os.path.join(proc, pid)).st_uid != uid:
                 continue
-            with open(os.path.join(proc, pid, "comm"), encoding="utf-8") as f:
+            # errors="replace": comm's 15 bytes can end inside a character.
+            with open(os.path.join(proc, pid, "comm"), encoding="utf-8",
+                      errors="replace") as f:
                 if f.read().strip() == name:
                     return True
         except OSError:     # the process ended while we looked
