@@ -105,3 +105,41 @@ def test_the_window_phrases_are_window_commands(phrase, action):
     request = command_phrases.parse(said, navigation=True, actions=True)
     assert isinstance(request, command_phrases.WindowRequest)
     assert request.action == action
+
+
+class _KdeAfterMinimize:
+    """A stand-in KDE Wayland VM after "minimize the window": the test
+    window still says it's shown and focused, as it does there, and KWin's
+    answer for it is *kwin*."""
+
+    def __init__(self, kwin):
+        self.vm = self
+        self.spec = type("Spec", (), {"tags": ("kde",)})()
+        self.home = "/home/ron"
+        self.kwin = kwin
+
+    def log_since(self, _mark):
+        return "Voice command: minimize the focused window\n"
+
+    def ui(self, *_args, **_options):
+        return [{"app": "tt-sink", "title": "TT Sink", "states": ["visible", "active"]}]
+
+    def session(self, *command, check=True):
+        out = self.kwin if command[1].endswith("kwin_window.py") else "wayland\n"
+        return type("Done", (), {"stdout": out, "returncode": 0})()
+
+    def shot(self, name):
+        return f"{name}.jpg"
+
+
+@pytest.mark.parametrize("kwin, status", [
+    ('[{"minimized": true, "active": false}]\n', "pass"),
+    ('[{"minimized": false, "active": true}]\n', "fail"),
+    ('{"error": "KWin didn\'t answer"}\n', "fail"),
+])
+def test_on_kde_wayland_kwin_says_whether_the_window_was_minimized(monkeypatch, kwin, status):
+    """On KDE the window was gone from the screen while AT-SPI still called
+    it focused, and the check failed TuxTalk for it."""
+    monkeypatch.setattr(actions, "_until", lambda _seconds, test: test())
+    outcome = actions._minimized(_KdeAfterMinimize(kwin), 0, ["restore", "maximize"])
+    assert outcome.status == status

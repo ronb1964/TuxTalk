@@ -15,6 +15,7 @@ needs the internet; the default browser checks look for its window and for
 the address or the search words in its address bar or title.
 """
 import contextlib
+import json
 import re
 import time
 
@@ -352,19 +353,37 @@ def _wayland(run):
     return out.strip() == "wayland"
 
 
+def _kwin_state(run):
+    """"minimized (KWin)" once KWin says the test window is minimized, else
+    None; None too off KDE. On KDE Wayland the window itself keeps saying it
+    is shown and focused after a minimize, so only KWin can tell."""
+    if "kde" not in run.vm.spec.tags:
+        return None
+    out = run.vm.session("python3", f"{run.vm.home}/{REMOTE}/kwin_window.py", "TT Sink",
+                         check=False).stdout.strip().splitlines()
+    try:
+        found = json.loads(out[-1])
+    except (IndexError, json.JSONDecodeError):
+        return None
+    if isinstance(found, list) and found and all(w["minimized"] for w in found):
+        return "minimized (KWin)"
+    return None
+
+
 def _minimized(run, mark, steps):
     """The Outcome of "minimize window": the window says it's minimized
-    where its toolkit learns of it (X11). Only on Wayland, where an app is
-    never told, is the window losing the focus the sign, once the log shows
-    the command was done: any "not done" (a note, or the focus moving before
-    the desktop was asked) fails it."""
+    where its toolkit learns of it (X11), or KWin says so (KDE). Only on
+    other Wayland desktops, where an app is never told, is the window losing
+    the focus the sign, once the log shows the command was done: any "not
+    done" (a note, or the focus moving before the desktop was asked) fails
+    it."""
     log = run.log_since(mark)
     refused = "not done" in log.casefold()     # "Not done (minimize): Esc ..." too
     if refused or "minimize the focused window" not in log:
         return Outcome("fail", "“minimize window” wasn't done: "
                        + ("the log says why" if refused else "no line in the log"),
                        screenshot=run.shot("minimize"))
-    state = _until(8, lambda: _sink_state(_sink(run)))
+    state = _until(8, lambda: _sink_state(_sink(run)) or _kwin_state(run))
     if state == "unfocused" and not _wayland(run):
         return Outcome("fail", "the window lost the focus but doesn't say it's minimized, "
                        "which only a Wayland session can't tell it",
@@ -374,6 +393,8 @@ def _minimized(run, mark, steps):
                        "window”", screenshot=run.shot("minimize"))
     how = {"iconified": "minimized (the window says so)",
            "gone": "minimized (gone from the window list)",
+           "minimized (KWin)": "minimized (KWin says so; the window itself is never told "
+                               "on Wayland)",
            "unfocused": "minimized as far as can be seen: the window lost the focus; it can't "
                         "say it's minimized here (Wayland tells an app nothing)"}[state]
     return Outcome("pass", "; ".join(steps) + "; " + how)
