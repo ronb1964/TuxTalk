@@ -167,3 +167,12 @@ say = "Search for cheap tires."
 
 [sentence_copy]
 say = "Copy that."
+
+[sentence_close_door]
+say = "Close the door."
+
+[sentence_switch_decaf]
+say = "Switch to decaf."
+
+[sentence_close_quote]
+say = "He said quote hello close quote."

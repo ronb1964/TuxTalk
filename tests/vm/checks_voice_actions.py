@@ -11,8 +11,10 @@ the focus, so COSMIC and GNOME without the TuxTalk extension skip them.
 
 The text editor is whatever the VM's menu has by that name (as in
 checks_open_apps.py). Firefox is driven on two local pages, so nothing here
-needs the internet; the default browser checks only look for its window.
+needs the internet; the default browser checks look for its window and for
+the address or the search words in its address bar or title.
 """
+import contextlib
 import re
 import time
 
@@ -42,6 +44,17 @@ PAGE_ONE = """<title>TT Page One</title><p>one</p>
 <script>if (!sessionStorage.seen) { sessionStorage.seen = 1;
 setTimeout(() => location.href = 'page2.html', 1000); }</script>"""
 PAGE_TWO = "<title>TT Page Two</title><p>two</p>"
+
+
+@contextlib.contextmanager
+def _open_apps_on_unlogged(run):
+    """Open apps ticked and "Log transcribed text" off for the block, as the
+    VM had them afterwards: the dictation checks turn the logging on, which
+    would put the address and the search words in the log these checks make
+    sure they stay out of. One restart of the service for both."""
+    with run.settings_put_back("open_apps", "log_transcripts"):
+        run.set_config(open_apps=True, log_transcripts=False)
+        yield
 
 
 def _action_blocker(run):
@@ -108,10 +121,11 @@ def _editor_open(run):
 
 
 def _discard_and_close(run, app):
-    """Answer the save question with its discard button, as a person would;
-    only an editor whose dialog has none (or has none showing) is killed."""
-    for name in ("~iscard", "~on't save", "~without sav", "~Close"):
-        if run.vm.ui("click", "button", name, timeout=2):
+    """Answer the save question with its discard button, as a person would,
+    looked for in the editor's own windows only; an editor whose dialog has
+    none (or has none showing) is killed."""
+    for name in ("~iscard", "~on't save", "~on\u2019t save", "~without sav"):
+        if run.vm.ui("click", "button", name, timeout=2, app=app):
             time.sleep(1.5)
             break
     _close(run, app)
@@ -242,12 +256,38 @@ def minimize_maximize(run):
         mark = _command(run, "minimize_window", "Voice command: ", fresh=False)
         if misheard := _unheard(run, mark):
             return misheard
-        gone = _until(8, lambda: (lambda w: w is None or "iconified" in w["states"]
-                                  or "active" not in w["states"])(_sink(run)))
-        if not gone:
-            return Outcome("fail", "the window was still showing and focused after “minimize "
-                           "window”", screenshot=run.shot("minimize"))
-        return Outcome("pass", "; ".join(steps) + "; minimized")
+        return _minimized(run, mark, steps)
+
+
+def _sink_state(window):
+    """"gone", "iconified" or "unfocused" for the test window once it's no
+    longer showing with the focus, else None."""
+    if window is None:
+        return "gone"
+    if "iconified" in window["states"]:
+        return "iconified"
+    return None if "active" in window["states"] else "unfocused"
+
+
+def _minimized(run, mark, steps):
+    """The Outcome of "minimize window": the window says it's minimized
+    where its toolkit learns of it (X11). On Wayland an app is never told,
+    so there the window losing the focus is the sign, once the log shows the
+    command was done: a note or another window taking the focus isn't it."""
+    log = run.log_since(mark)
+    if "Voice command not done" in log or "minimize the focused window" not in log:
+        return Outcome("fail", "“minimize window” wasn't done: "
+                       + ("a note said why" if "not done" in log else "no line in the log"),
+                       screenshot=run.shot("minimize"))
+    state = _until(8, lambda: _sink_state(_sink(run)))
+    if not state:
+        return Outcome("fail", "the window was still showing and focused after “minimize "
+                       "window”", screenshot=run.shot("minimize"))
+    how = {"iconified": "minimized (the window says so)",
+           "gone": "minimized (gone from the window list)",
+           "unfocused": "minimized as far as can be seen: the window lost the focus; it can't "
+                        "say it's minimized here (Wayland tells an app nothing)"}[state]
+    return Outcome("pass", "; ".join(steps) + "; " + how)
 
 
 # --- keys and browser ------------------------------------------------------
@@ -291,8 +331,8 @@ def _no_firefox(run):
     return None
 
 
-@check(SECTION, "firefox_new_tab_and_back", "“go back” goes to the page before, “new tab” opens a tab")
-def firefox_new_tab_and_back(run):
+@check(SECTION, "firefox_go_back", "“go back” goes to the page before")
+def firefox_go_back(run):
     if skip := _no_firefox(run):
         return skip
     with _open_apps_on(run), _Firefox(run) as firefox:
@@ -303,14 +343,24 @@ def firefox_new_tab_and_back(run):
         run.wait_log(mark, "Voice command: go back", "Voice command not done",
                      "Text injected", timeout=30)
         back = firefox.title("TT Page One", 10)
+        shot = run.shot("go-back")
         if back is None:
             return Outcome("fail", "the window never showed “TT Page One” after “go back”",
-                           screenshot=run.shot("go-back"))
+                           screenshot=shot)
+        return Outcome("pass", "“go back” showed the first page again", screenshot=shot)
+
+
+@check(SECTION, "firefox_new_tab", "“new tab” opens a tab")
+def firefox_new_tab(run):
+    if skip := _no_firefox(run):
+        return skip
+    with _open_apps_on(run), _Firefox(run) as firefox:
+        if firefox.title("TT Page", 45) is None:
+            return Outcome("skip", "Firefox never opened the test page")
         tabs = firefox.tabs()
         if not tabs:
-            return Outcome("pass", "“go back” showed the first page again. The tab half wasn't "
-                           "checked: Firefox shows no tabs through AT-SPI here",
-                           screenshot=run.shot("go-back"))
+            return Outcome("skip", "Firefox shows no tabs through AT-SPI here")
+        run.vm.click_centre()
         _typed, _heard, mark = run.say("new_tab", wait=False)
         run.wait_log(mark, "Voice command: new tab", "Voice command not done",
                      "Text injected", timeout=30)
@@ -319,8 +369,8 @@ def firefox_new_tab_and_back(run):
         if not more:
             return Outcome("fail", f"{tabs} tab(s) before “new tab”, {firefox.tabs()} after",
                            screenshot=shot)
-        return Outcome("pass", f"“go back” showed the first page again; “new tab” took "
-                       f"Firefox from {tabs} to {tabs + 1} tabs", screenshot=shot)
+        return Outcome("pass", f"“new tab” took Firefox from {tabs} to {tabs + 1} tabs",
+                       screenshot=shot)
 
 
 @check(SECTION, "go_to_in_browser", "“go to example dot com” fills the browser's address bar")
@@ -329,7 +379,7 @@ def go_to_in_browser(run):
         return skip
     if why := _action_blocker(run):
         return Outcome("skip", why)
-    with _open_apps_on(run), _Firefox(run) as firefox:
+    with _open_apps_on_unlogged(run), _Firefox(run) as firefox:
         if firefox.title("TT Page", 45) is None:
             return Outcome("skip", "Firefox never opened the test page")
         time.sleep(2)
@@ -374,19 +424,41 @@ def _forward_browser(run, before, timeout=40):
 
 
 def _processes(run):
-    """{pid: command name} of the user's processes now."""
-    out = run.vm.ssh("ps -u $(id -u) -o pid=,comm=", check=False).stdout
-    return dict(line.split(None, 1) for line in out.splitlines() if " " in line.strip())
+    """{pid: command name} of the user's processes now, None when ps failed."""
+    result = run.vm.ssh("ps -u $(id -u) -o pid=,comm=", check=False)
+    if result.returncode:
+        return None
+    return dict(line.split(None, 1) for line in result.stdout.splitlines()
+                if " " in line.strip())
 
 
-def _close_new_browsers(run, before):
-    """Kill the browser processes that started since *before* (_processes()):
-    a browser that was already running is left alone, whatever its name."""
-    new = [pid for pid, name in _processes(run).items()
-           if pid not in before and BROWSER.search(name)]
-    if new:
-        run.vm.ssh(f"kill {' '.join(new)}", check=False)
-        time.sleep(1.5)
+def _closing_new_browsers(run, judge):
+    """*judge*()'s Outcome, with the browser processes that started meanwhile
+    killed afterwards: one already running is the VM user's and is left
+    alone, whatever its name. When the processes couldn't be listed first,
+    every browser would look new, so none is killed and the Outcome says so."""
+    before = _processes(run)
+    try:
+        outcome = judge()
+    finally:
+        now = _processes(run) if before is not None else None
+        new = [pid for pid, name in (now or {}).items()
+               if pid not in before and BROWSER.search(name)]
+        if new:
+            run.vm.ssh(f"kill {' '.join(new)}", check=False)
+            time.sleep(1.5)
+    if before is None:
+        outcome.detail = "; ".join(filter(None, (
+            outcome.detail, "browsers left running: ps couldn't list the processes first")))
+    return outcome
+
+
+def _browser_shows(run, part):
+    """Whether a browser's address bar or window title holds *part*: where
+    it went, not only that a browser came forward."""
+    bar = run.vm.ui("find", "entry", "~address", timeout=3) or {}
+    titles = " ".join(w[1] or "" for w in _browser_windows(run))
+    return part in (bar.get("text", "") + " " + titles).lower()
 
 
 def _no_default_browser(run):
@@ -395,40 +467,46 @@ def _no_default_browser(run):
     return None if out.strip() else Outcome("skip", "this VM has no default web browser")
 
 
+def _said_to_browser(run, phrase_id, done, word, timeout):
+    """Say *phrase_id* in the test window and judge it: the log has *done*,
+    a browser came forward with *word* (of the address or the search) in its
+    address bar or title, and it stayed out of the test window and the log."""
+    run.sink_ready(fresh=True)
+    before = _apps(run)
+    _typed, _heard, mark = run.say(phrase_id, wait=False)
+    run.wait_log(mark, done, "Voice command not done", "Text injected", timeout=timeout)
+    window = _forward_browser(run, before)
+    shown = _until(15, lambda: _browser_shows(run, word))
+    log, typed = run.log_since(mark), run.sink_text().strip()
+    shot = run.shot(phrase_id.replace("_", "-"))
+    if typed and "Voice command" not in log:
+        return Outcome("misheard", "the computer voice was heard as another sentence",
+                       typed=typed, screenshot=shot)
+    problems = [f"no “{done}” in the log"] if done not in log else []
+    if window is None:
+        problems.append("no browser window appeared or came forward")
+    if not shown:
+        problems.append(f"neither a browser's address bar nor its title holds “{word}”")
+    if typed:
+        problems.append(f"the sink got text: {typed[:60]!r}")
+    if word in log.lower():
+        problems.append("the words are in the log")
+    if problems:
+        return Outcome("fail", "; ".join(problems), typed=typed, screenshot=shot)
+    return Outcome("pass", f"A browser (“{window[0]}”) came forward showing “{word}”; the "
+                   "words stayed out of the sink and the log", screenshot=shot)
+
+
 # In the two checks below, "nothing leaked" rests on the test window being empty and
-# the words being absent from the log; "Text injected" only guards the wait.
+# the words being absent from the log, with "Log transcribed text" off for them;
+# "Text injected" only guards the wait.
 @check(SECTION, "go_to_outside_browser", "“go to example dot com” in another app opens it in the browser")
 def go_to_outside_browser(run):
     if skip := _no_default_browser(run):
         return skip
-    with _open_apps_on(run):
-        run.sink_ready(fresh=True)
-        before, pids = _apps(run), _processes(run)
-        _typed, _heard, mark = run.say("go_to_example", wait=False)
-        run.wait_log(mark, "Voice command: go to an address", "Voice command not done",
-                     "Text injected", timeout=30)
-        window = _forward_browser(run, before)
-        log, typed = run.log_since(mark), run.sink_text().strip()
-        shot = run.shot("go-to-outside")
-        try:
-            if typed and "Voice command" not in log:
-                return Outcome("misheard", "the computer voice was heard as another sentence",
-                               typed=typed, screenshot=shot)
-            problems = []
-            if "Voice command: go to an address" not in log:
-                problems.append("no “Voice command: go to an address” in the log")
-            if window is None:
-                problems.append("no browser window appeared or came forward")
-            if typed:
-                problems.append(f"the sink got text: {typed[:60]!r}")
-            if "example" in log:
-                problems.append("the address is in the log")
-            if problems:
-                return Outcome("fail", "; ".join(problems), typed=typed, screenshot=shot)
-            return Outcome("pass", f"A browser window (“{window[0]}”) came forward; the address "
-                           "stayed out of the sink and the log", screenshot=shot)
-        finally:
-            _close_new_browsers(run, pids)
+    with _open_apps_on_unlogged(run):
+        return _closing_new_browsers(run, lambda: _said_to_browser(
+            run, "go_to_example", "Voice command: go to an address", "example", 30))
 
 
 @check(SECTION, "web_search", "“web search cheap tires” searches in the default browser")
@@ -437,43 +515,9 @@ def web_search(run):
         return Outcome("skip", why)
     if skip := _no_default_browser(run):
         return skip
-    with _open_apps_on(run):
-        run.sink_ready(fresh=True)
-        before, pids = _apps(run), _processes(run)
-        _typed, _heard, mark = run.say("web_search_tires", wait=False)
-        run.wait_log(mark, "Voice command: web search", "Voice command not done",
-                     "Text injected", timeout=45)
-        window = _forward_browser(run, before)
-        time.sleep(3)
-
-        def holds_words():
-            bar = run.vm.ui("find", "entry", "~address", timeout=3) or {}
-            titles = " ".join(w[1] for w in _browser_windows(run))
-            return "tires" in (bar.get("text", "") + " " + titles).lower()
-        found = _until(10, holds_words)
-        log, typed = run.log_since(mark), run.sink_text().strip()
-        shot = run.shot("web-search")
-        try:
-            if typed and "Voice command" not in log:
-                return Outcome("misheard", "the computer voice was heard as another sentence",
-                               typed=typed, screenshot=shot)
-            problems = []
-            if "Voice command: web search" not in log:
-                problems.append("no “Voice command: web search” in the log")
-            if window is None:
-                problems.append("the browser never came forward")
-            if not found:
-                problems.append("neither its address bar nor its title holds “cheap tires”")
-            if typed:
-                problems.append(f"the sink got text: {typed[:60]!r}")
-            if "tires" in log:
-                problems.append("the search words are in the log")
-            if problems:
-                return Outcome("fail", "; ".join(problems), typed=typed, screenshot=shot)
-            return Outcome("pass", "The default browser came forward with the search; the words "
-                           "stayed out of the sink and the log", screenshot=shot)
-        finally:
-            _close_new_browsers(run, pids)
+    with _open_apps_on_unlogged(run):
+        return _closing_new_browsers(run, lambda: _said_to_browser(
+            run, "web_search_tires", "Voice command: web search", "tires", 45))
 
 
 @check(SECTION, "scroll_down", "“scroll down” scrolls the window under the pointer's focus")
@@ -500,10 +544,16 @@ def scroll_down(run):
 
 # --- sentences that only start like a command --------------------------------
 
-SENTENCES = (("sentence_new_tab", "I opened a new tab yesterday."),
-             ("sentence_go_to", "Go to the store."),
-             ("sentence_search", "Search for cheap tires."),
-             ("sentence_copy", "Copy that."))
+SENTENCES = (("sentence_new_tab", "I opened a new tab yesterday.", True),
+             ("sentence_go_to", "Go to the store.", True),
+             ("sentence_search", "Search for cheap tires.", True),
+             ("sentence_copy", "Copy that.", True),
+             ("sentence_close_door", "Close the door.", True),
+             ("sentence_switch_decaf", "Switch to decaf.", True),
+             # Only the words are pinned: how the marks are spaced is spoken_quotes' own test.
+             ("sentence_close_quote", "hello", False))
+# Logged for "Close the door.", which names no app: it is typed, as it should be.
+TYPED_AS_WORDS = "Window command: no app matched; typed as words"
 
 
 @check(SECTION, "sentences_are_typed", "Sentences that start like a command are typed as words")
@@ -511,18 +561,19 @@ def sentences_are_typed(run):
     with _open_apps_on(run):
         run.sink_ready(fresh=True)
         before = _apps(run)
-        for phrase, expected in SENTENCES:
+        for phrase, expected, exact in SENTENCES:
             run.sink_ready(fresh=True)
             typed, heard, log = run.say(phrase)
-            outcome = run.expect_typed(phrase, expected, typed, heard)
+            outcome = run.expect_typed(phrase, expected, typed, heard, exact=exact)
             if outcome.status != "pass":
                 outcome.detail = outcome.detail or f"“{expected}” was not typed as it was said"
                 outcome.screenshot = run.shot(f"sentence-{phrase}")
                 return outcome
+            log = log.replace(TYPED_AS_WORDS, "")
             if "Voice command" in log or "Window command" in log:
                 return Outcome("fail", f"“{expected}” was taken as a command", typed=typed)
         opened = sorted(_apps(run) - before)
         if opened:
             return Outcome("fail", f"{opened} opened")
-        return Outcome("pass", "All four were typed exactly as said; no key pressed, "
-                       "nothing opened")
+        return Outcome("pass", f"All {len(SENTENCES)} were typed as said; no key pressed, "
+                       "nothing opened or closed")

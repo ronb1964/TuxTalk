@@ -19,9 +19,11 @@ matched the same way against window titles (default: any window). Roles are
 AT-SPI role names: "button", "check box", "combo box", "label", ...
 Options go first. --timeout N: waiting stops after N seconds (default 20)
 with exit code 1. --hidden: also find widgets that aren't on screen (the
-language list of a dropdown that only shows in Manual mode). They are
-options, not environment variables, because session-run.sh starts the
-program with the desktop's environment only.
+language list of a dropdown that only shows in Manual mode). --app NAME:
+only that application's windows, matched as NAME is (an editor's save
+question, never another app's button of the same name). They are options,
+not environment variables, because session-run.sh starts the program with
+the desktop's environment only.
 """
 import json
 import sys
@@ -34,6 +36,7 @@ from gi.repository import Atspi  # noqa: E402
 
 TIMEOUT = 20.0
 HIDDEN_TOO = False
+APP = None
 PRESS_ACTIONS = ("click", "press", "activate", "toggle")
 ITEM_ROLES = ("menu item", "check menu item", "radio menu item", "list item", "table cell")
 
@@ -48,8 +51,10 @@ def matches(pattern, name):
 
 
 def states(obj):
+    # "iconified": a minimized window, where the toolkit learns of it (X11;
+    # Wayland tells an app nothing when its window is minimized).
     wanted = ("visible", "showing", "sensitive", "checked", "selected", "focused", "active",
-              "editable")
+              "editable", "iconified")
     found = obj.get_state_set()
     return [s for s in wanted if found.contains(getattr(Atspi.StateType, s.upper()))]
 
@@ -95,6 +100,8 @@ def children(obj):
 def windows():
     desktop = Atspi.get_desktop(0)
     for app in children(desktop):
+        if not matches(APP, app.get_name()):
+            continue
         for win in children(app):
             yield app, win
 
@@ -142,10 +149,12 @@ def press(obj):
 
 
 def main(argv):
-    global TIMEOUT, HIDDEN_TOO
+    global TIMEOUT, HIDDEN_TOO, APP
     while argv and argv[0].startswith("--"):
         if argv[0] == "--timeout":
             TIMEOUT, argv = float(argv[1]), argv[2:]
+        elif argv[0] == "--app":
+            APP, argv = argv[1], argv[2:]
         elif argv[0] == "--hidden":
             HIDDEN_TOO, argv = True, argv[1:]
         else:
