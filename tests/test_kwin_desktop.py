@@ -1,6 +1,11 @@
 """Snapping, centring, desktops and screens on KDE (kwin_desktop.py), against
 stand-ins for kglobalaccel and KWin (desktop_fakes.py): nothing here touches
 the real desktop."""
+import json
+import re
+
+import pytest
+
 from tuxtalk import kwin_desktop
 
 # Read from Plasma 6.7.5 (shortcutNames of /component/kwin); a renamed shortcut does nothing.
@@ -90,3 +95,30 @@ def test_the_screens_script_is_taken_out_of_kwin_afterwards(fake_kde, fake_kwin)
 def test_an_unknown_action_is_never_sent(fake_kde):
     assert kwin_desktop.act("kill", None, 1.0) == "unknown"
     assert fake_kde.calls == []
+
+
+def test_a_silent_kwin_is_not_taken_for_one_screen(fake_kde, fake_kwin):
+    fake_kwin.silent = True
+    with pytest.raises(TimeoutError):
+        kwin_desktop.act("to next screen", None, 0.3)
+    assert not _invoked(fake_kde)
+
+
+def test_the_screens_script_carries_the_reply_name_as_json(fake_kde, fake_kwin):
+    kwin_desktop.act("to next screen", None, 1.0)
+    reply = re.search(r'callDBus\((".*?"), ', fake_kwin.scripts[0]).group(1)
+    assert json.loads(reply).startswith(":")
+    assert 'callDBus("' + json.loads(reply) + '"' in fake_kwin.scripts[0]
+
+
+def test_a_screens_script_that_fails_raises(fake_kde, fake_kwin, monkeypatch):
+    build = kwin_desktop._screens_script
+    monkeypatch.setattr(kwin_desktop, "_screens_script", lambda _expression: build("nothing.here"))
+    with pytest.raises(RuntimeError):
+        kwin_desktop.act("to next screen", None, 1.0)
+
+
+def test_a_desktop_above_nine_is_never_sent(fake_kde):
+    fake_kde.desktops = 12
+    assert kwin_desktop.act("to desktop", 10, 1.0) == "no_desktop"
+    assert not _invoked(fake_kde)
