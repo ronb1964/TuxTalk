@@ -45,6 +45,14 @@ function makeWindow(resourceClass, internalId, x, y, width, height) {
         normalWindow: true,
         deleted: false,
         minimized: false,
+        closed: false,
+        maximized: [false, false],
+        closeWindow() {
+            this.closed = true;
+        },
+        setMaximize(vertically, horizontally) {
+            this.maximized = [vertically, horizontally];
+        },
         frameGeometry: {x, y, width, height},
         output: {name: 'DP-1', geometry: {x: 0, y: 0, width: 1920, height: 1080}},
         move: false,

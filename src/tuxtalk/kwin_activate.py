@@ -30,10 +30,10 @@ log = logging.getLogger(__name__)
 
 SCRIPT_PLUGIN_NAME = "tuxtalk-activate"
 
-_ANSWER_PATH = "/io/github/ronb1964/TuxTalk/AppFocus"
-_ANSWER_INTERFACE = "io.github.ronb1964.TuxTalk.AppFocus"
+ANSWER_PATH = "/io/github/ronb1964/TuxTalk/AppFocus"
+ANSWER_INTERFACE = "io.github.ronb1964.TuxTalk.AppFocus"
 _ANSWER_XML = f"""<node>
-  <interface name="{_ANSWER_INTERFACE}">
+  <interface name="{ANSWER_INTERFACE}">
     <method name="Answer">
       <arg type="b" direction="in" name="had_window"/>
     </method>
@@ -46,6 +46,13 @@ def script_path() -> str:
     from .config import get_data_dir
 
     return os.path.join(get_data_dir(), "kwin", "tuxtalk-activate.js")
+
+
+# The test every KWin script of ours applies to a window w to know it as the
+# app's: a normal window (not a menu or tooltip) whose menu entry is
+# desktopFile or whose class, lowercased, is in classes.
+WINDOW_IS_THE_APPS_JS = """w.normalWindow && !w.deleted && (w.desktopFileName === desktopFile
+                    || classes.indexOf(String(w.resourceClass).toLowerCase()) >= 0)"""
 
 
 def build_script(desktop_file: str, classes, reply_to: str) -> str:
@@ -69,8 +76,7 @@ def build_script(desktop_file: str, classes, reply_to: str) -> str:
         // From the top of the stack: the window of the app used last.
         for (var i = windows.length - 1; i >= 0 && !found; i--) {{
             var w = windows[i];
-            if (w.normalWindow && !w.deleted && (w.desktopFileName === desktopFile
-                    || classes.indexOf(String(w.resourceClass).toLowerCase()) >= 0)) {{
+            if ({WINDOW_IS_THE_APPS_JS}) {{
                 found = w;
             }}
         }}
@@ -81,7 +87,7 @@ def build_script(desktop_file: str, classes, reply_to: str) -> str:
     }} catch (e) {{
         found = null;
     }}
-    callDBus({json.dumps(reply_to)}, "{_ANSWER_PATH}", "{_ANSWER_INTERFACE}", "Answer",
+    callDBus({json.dumps(reply_to)}, "{ANSWER_PATH}", "{ANSWER_INTERFACE}", "Answer",
              found !== null);
 }})();
 """
@@ -109,7 +115,7 @@ class _Answer:
             # (Ubuntu 22.04's 2.72) has only register_object.
             register = getattr(self._bus, "register_object_with_closures2",
                                self._bus.register_object)
-            register(_ANSWER_PATH, interface, self._on_answer, None, None)
+            register(ANSWER_PATH, interface, self._on_answer, None, None)
         finally:
             self._context.pop_thread_default()
 
@@ -140,33 +146,42 @@ class _Answer:
         self._bus.close_sync(None)
 
 
-def _unload(bus) -> None:
+def _unload(bus, plugin_name: str) -> None:
     try:
-        bus.call("unloadScript", SCRIPT_PLUGIN_NAME)
+        bus.call("unloadScript", plugin_name)
     except Exception as e:      # KWin didn't answer; the next attempt unloads it first
-        log.info("Could not unload the KWin activate script: %s", e)
+        log.info("Could not unload the KWin script %s: %s", plugin_name, e)
+
+
+def ask(build, plugin_name: str, path: str, timeout: float) -> bool:
+    """Run a KWin script and return what it answers: True when it said yes
+    within *timeout* seconds of starting; each D-Bus call to KWin has
+    kwin_focus.DBUS_TIMEOUT_S besides. *build* makes the script from the
+    name of the connection to answer to; it is written to *path* and loaded
+    as *plugin_name*, and taken out of KWin afterwards. Raises when KWin
+    refuses the script."""
+    bus = kwin_focus.session_bus()
+    answer = _Answer()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(build(answer.name))
+        # A script left by an attempt that stopped halfway would make
+        # loadScript refuse this one.
+        _unload(bus, plugin_name)
+        load_and_start(bus, path, plugin_name)
+        had_window = answer.wait(timeout)
+        if had_window is None:
+            log.info("KWin didn't answer the %s script in time", plugin_name)
+        return bool(had_window)
+    finally:
+        _unload(bus, plugin_name)
+        answer.close()
 
 
 def activate(desktop_file: str, classes, timeout: float) -> bool:
     """Bring forward the app's window (build_script says which). True when
-    KWin said it had one within *timeout* seconds of starting the script;
-    each D-Bus call to KWin has kwin_focus.DBUS_TIMEOUT_S besides. Raises
-    when KWin refuses the script."""
-    bus = kwin_focus.session_bus()
-    answer = _Answer()
-    try:
-        path = script_path()
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as f:
-            f.write(build_script(desktop_file, classes, answer.name))
-        # A script left by an attempt that stopped halfway would make
-        # loadScript refuse this one.
-        _unload(bus)
-        load_and_start(bus, path, SCRIPT_PLUGIN_NAME)
-        had_window = answer.wait(timeout)
-        if had_window is None:
-            log.info("KWin didn't say in time whether %s has a window", desktop_file)
-        return bool(had_window)
-    finally:
-        _unload(bus)
-        answer.close()
+    KWin said it had one within *timeout* seconds of starting the script.
+    Raises when KWin refuses the script."""
+    return ask(lambda reply_to: build_script(desktop_file, classes, reply_to),
+               SCRIPT_PLUGIN_NAME, script_path(), timeout)
