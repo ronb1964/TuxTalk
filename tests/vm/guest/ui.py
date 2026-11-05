@@ -5,8 +5,9 @@ instead of by where it happens to be drawn. Runs with the guest's own
 python3 inside the desktop session (session-run.sh). Prints JSON.
 
   ui.py windows                      every app's top-level windows, with their
-                                     states, size on screen (width, height) and
-                                     index among the app's windows
+                                     states, size and position on screen
+                                     (width, height; x, y) and index among the
+                                     app's windows
   ui.py dump [WINDOW]                the widget tree, for writing new checks
   ui.py find ROLE NAME [WINDOW]      wait for a widget, print it
   ui.py click ROLE NAME [WINDOW]     wait for a widget and press it
@@ -17,7 +18,9 @@ python3 inside the desktop session (session-run.sh). Prints JSON.
 
 NAME matches exactly; "~part" matches any name containing "part". WINDOW is
 matched the same way against window titles (default: any window). Roles are
-AT-SPI role names: "button", "check box", "combo box", "label", ...
+AT-SPI role names: "button", "check box", "combo box", "label", ...;
+"combo box|entry" matches either (Firefox's address bar is one or the other,
+by version).
 Options go first. --timeout N: waiting stops after N seconds (default 20)
 with exit code 1. --hidden: also find widgets that aren't on screen (the
 language list of a dropdown that only shows in Manual mode). --app NAME:
@@ -78,13 +81,14 @@ def describe(obj):
     return info
 
 
-def size(obj):
-    """[width, height] of *obj* on screen, None when it has no extents."""
+def extents(obj):
+    """(x, y, width, height) of *obj* on screen, None when it has none. On
+    Wayland an app doesn't know where its window is: x and y are 0 there."""
     try:
         box = Atspi.Component.get_extents(obj, Atspi.CoordType.SCREEN)
     except gi.repository.GLib.Error:
         return None
-    return [box.width, box.height]
+    return box.x, box.y, box.width, box.height
 
 
 def children(obj):
@@ -125,7 +129,7 @@ def find(wanted_role, name, window=None):
         for _depth, obj in walk(win):
             # "visible", not "showing": GTK says showing only for widgets
             # scrolled into view, and buttons below the fold still work.
-            if role(obj) == wanted_role and matches(name, obj.get_name()) \
+            if role(obj) in wanted_role.split("|") and matches(name, obj.get_name()) \
                     and (HIDDEN_TOO or "visible" in states(obj)):
                 return obj
     return None
@@ -169,9 +173,13 @@ def main(argv):
             return 2
     command, args = argv[0], argv[1:]
     if command == "windows":
-        out = [{"app": app.get_name(), "title": win.get_name(), "states": states(win),
-                "size": size(win), "index": win.get_index_in_parent()}
-               for app, win in windows()]
+        out = []
+        for app, win in windows():
+            box = extents(win)
+            out.append({"app": app.get_name(), "title": win.get_name(), "states": states(win),
+                        "size": list(box[2:]) if box else None,
+                        "position": list(box[:2]) if box else None,
+                        "index": win.get_index_in_parent()})
     elif command == "dump":
         out = []
         for _app, win in windows():
