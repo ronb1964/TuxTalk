@@ -111,6 +111,16 @@ NOTES = {
         "Several players paused: {players}",
         "More than one player is paused, so TuxTalk didn't pick one. Start the one you "
         "want yourself."),
+    "lock_failed": (
+        "Couldn't lock the screen",
+        "The computer didn't take the request to lock. Lock it from your desktop's menu."),
+    "lock_unconfirmed": (
+        "Lock not confirmed",
+        "TuxTalk asked the computer to lock but couldn't confirm it did. Check the screen "
+        "before you walk away."),
+    "no_screenshot_tool": (
+        "Can't take a screenshot",
+        "TuxTalk found no way to take a screenshot here. Use your desktop's own keys."),
 }
 
 # kind -> label, for a command that was done but whose result the user may
