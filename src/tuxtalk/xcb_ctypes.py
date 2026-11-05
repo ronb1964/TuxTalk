@@ -1,7 +1,8 @@
 """libxcb, the X server's own client library, through ctypes: the few
-calls compositor_focus (which window has focus on X11) and x11_hotkeys (the
-hotkeys held back on X11) make. It's on every X11 system (Xlib itself is
-built on it), so this needs no new dependency. XCB rather than Xlib: Xlib
+calls compositor_focus (which window has focus on X11), x11_hotkeys (the
+hotkeys held back on X11) and x11_activate (bringing a window forward)
+make. It's on every X11 system (Xlib itself is built on it), so this needs
+no new dependency. XCB rather than Xlib: Xlib
 reports an error through a process-wide handler whose default exits the
 program, and replacing it would fight GTK's own, which the recording
 indicator runs on X11 in the same process as compositor_focus. XCB returns
@@ -68,6 +69,8 @@ def xcb_lib():
         lib.xcb_wait_for_event.restype = P
         lib.xcb_wait_for_event.argtypes = [P]
         lib.xcb_flush.argtypes = [P]
+        lib.xcb_send_event_checked.restype = Cookie
+        lib.xcb_send_event_checked.argtypes = [P, U8, U32, U32, ctypes.c_char_p]
         _xcb = lib
     return _xcb
 
@@ -84,3 +87,37 @@ def x11_root(lib, conn, screen_number):
     if not screens.data:
         return None
     return ctypes.c_uint32.from_address(screens.data).value   # xcb_screen_t starts with root
+
+
+def intern_atom(lib, conn, name: bytes):
+    """The atom the X server has for *name*, or None when it has none yet
+    (only_if_exists: a property nobody set can't be on any window)."""
+    error = ctypes.c_void_p()
+    reply = lib.xcb_intern_atom_reply(conn, lib.xcb_intern_atom(conn, 1, len(name), name),
+                                      ctypes.byref(error))
+    if error.value:
+        free(error)
+    if not reply:
+        return None
+    atom = reply.contents.atom
+    free(reply)
+    return atom or None
+
+
+_GET_PROPERTY_TYPE_ANY = 0
+
+
+def get_property(lib, conn, window, atom):
+    """Raw bytes of *atom* on *window*, or None (an error, or not set)."""
+    error = ctypes.c_void_p()
+    cookie = lib.xcb_get_property(conn, 0, window, atom, _GET_PROPERTY_TYPE_ANY, 0, 1024)
+    reply = lib.xcb_get_property_reply(conn, cookie, ctypes.byref(error))
+    if error.value:
+        free(error)
+    if not reply:
+        return None
+    try:
+        length = lib.xcb_get_property_value_length(reply)
+        return ctypes.string_at(lib.xcb_get_property_value(reply), length) if length > 0 else None
+    finally:
+        free(reply)

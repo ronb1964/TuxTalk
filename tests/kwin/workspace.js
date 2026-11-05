@@ -1,6 +1,7 @@
-// Stand-ins for what KWin gives TuxTalk's focus script (kwin_focus.py), and
-// the controls a test drives it with: windows, focus moving between them,
-// drags and resizes. Each callDBus the script makes is kept in dbusCalls.
+// Stand-ins for what KWin gives TuxTalk's scripts (kwin_focus.py,
+// kwin_activate.py), and the controls a test drives them with: windows,
+// focus moving between them, drags and resizes. Each callDBus a script makes
+// is kept in dbusCalls.
 // Only as much of KWin's scripting API as the script uses, as Plasma 6 has it.
 // gnome_extension_js.run_kwin_script puts the script and the test after this.
 
@@ -40,6 +41,10 @@ function callDBus(...call) {
 function makeWindow(resourceClass, internalId, x, y, width, height) {
     return {
         resourceClass, internalId,
+        desktopFileName: '',
+        normalWindow: true,
+        deleted: false,
+        minimized: false,
         frameGeometry: {x, y, width, height},
         output: {name: 'DP-1', geometry: {x: 0, y: 0, width: 1920, height: 1080}},
         move: false,
@@ -49,7 +54,8 @@ function makeWindow(resourceClass, internalId, x, y, width, height) {
     };
 }
 
-const workspace = {activeWindow: null, windowActivated: new Signal()};
+// stackingOrder: every window, the bottom one first.
+const workspace = {activeWindow: null, windowActivated: new Signal(), stackingOrder: []};
 
 /** The user clicks into *window*. */
 function activate(window) {

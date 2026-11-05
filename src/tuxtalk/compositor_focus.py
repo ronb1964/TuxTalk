@@ -42,7 +42,7 @@ from . import desktop_detect
 from .compositor_ipc import I3_GET_TREE, TIMEOUT, hyprland_request, i3_request, niri_request
 from .logger import FailureNotes, setup_logger
 from .single_instance import session_runtime_dir
-from .xcb_ctypes import free, x11_root, xcb_lib
+from .xcb_ctypes import get_property, intern_atom, x11_root, xcb_lib
 
 logger = setup_logger(__name__)
 _failures = FailureNotes()      # asked before every typed chunk: each failure logged once
@@ -299,24 +299,7 @@ def _wayland_socket(env):
 
 # --- X11 ----------------------------------------------------------------------------
 
-_XCB_ATOM_WM_CLASS = 67         # a predefined atom (xproto)
-_XCB_GET_PROPERTY_TYPE_ANY = 0
-
-
-def _x11_property(lib, conn, window, atom):
-    """Raw bytes of *atom* on *window*, or None (an error, or not set)."""
-    error = ctypes.c_void_p()
-    cookie = lib.xcb_get_property(conn, 0, window, atom, _XCB_GET_PROPERTY_TYPE_ANY, 0, 1024)
-    reply = lib.xcb_get_property_reply(conn, cookie, ctypes.byref(error))
-    if error.value:
-        free(error)
-    if not reply:
-        return None
-    try:
-        length = lib.xcb_get_property_value_length(reply)
-        return ctypes.string_at(lib.xcb_get_property_value(reply), length) if length > 0 else None
-    finally:
-        free(reply)
+XCB_ATOM_WM_CLASS = 67          # a predefined atom (xproto)
 
 
 def parse_wm_class(raw):
@@ -338,27 +321,17 @@ def _from_x11():
         root = x11_root(lib, conn, screen_number.value)
         if not root:
             return None, None
-
-        name = b"_NET_ACTIVE_WINDOW"
-        error = ctypes.c_void_p()
-        atom_reply = lib.xcb_intern_atom_reply(
-            conn, lib.xcb_intern_atom(conn, 1, len(name), name), ctypes.byref(error))
-        if error.value:
-            free(error)
-        if not atom_reply:
-            return None, None
-        active_atom = atom_reply.contents.atom
-        free(atom_reply)
+        active_atom = intern_atom(lib, conn, b"_NET_ACTIVE_WINDOW")
         if not active_atom:
             return None, None       # no EWMH window manager running
 
-        raw = _x11_property(lib, conn, root, active_atom)
+        raw = get_property(lib, conn, root, active_atom)
         if not raw or len(raw) < 4:
             return None, None
         window = struct.unpack("=I", raw[:4])[0]
         if not window:
             return None, None       # nothing has focus (the desktop itself)
-        wm_class = _x11_property(lib, conn, window, _XCB_ATOM_WM_CLASS)
+        wm_class = get_property(lib, conn, window, XCB_ATOM_WM_CLASS)
         return (parse_wm_class(wm_class) if wm_class else None), window
     finally:
         if conn:

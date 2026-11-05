@@ -1,0 +1,87 @@
+"""Open apps by voice (TuxTalk Labs): "open Firefox" with Firefox already open
+brings its window forward instead of starting another.
+
+Each desktop does it its own way:
+  KDE    a one-shot KWin script (kwin_activate);
+  GNOME  TuxTalk's extension, through GNOME Shell's own bus connection: it
+         serves ActivateApp there, and GNOME Shell already knows which
+         windows belong to which menu entry;
+  X11    the window manager's list of windows and a _NET_ACTIVE_WINDOW
+         request (x11_activate), on Xfce, MATE, Cinnamon, i3 and the rest.
+Elsewhere (COSMIC, Sway, Hyprland, niri) there's no way TuxTalk knows of, and
+the app is started again; most then show their open window or a new one.
+
+The dictation service asks GNOME Shell directly rather than through the
+tray: the tray adds nothing to the answer, and the call works with no tray
+running.
+
+False always means "start it": no window, a desktop that can't, an error,
+or no answer in time. It may wait up to the timeout, so it's called from the
+dictation worker, never GTK's thread.
+"""
+import logging
+import os
+
+from . import desktop_detect, kwin_activate, x11_activate
+from .app_finder import AppEntry
+
+log = logging.getLogger(__name__)
+
+GNOME_SHELL = "org.gnome.Shell"
+EXTENSION_PATH = "/io/github/ronb1964/TuxTalk/Extension"
+EXTENSION_INTERFACE = "io.github.ronb1964.TuxTalk.Extension"
+
+# Programs a menu entry can start that run some other app: a window of class
+# "python3" could be any Python program, so these never name a window.
+_NOT_AN_APP = frozenset({"python", "python3", "perl", "ruby", "node", "java",
+                         "sh", "bash", "env", "flatpak", "snap", "wine"})
+
+
+def _desktop_file(entry: AppEntry) -> str:
+    """The menu entry's id without ".desktop": what KWin calls the window's
+    desktop file ("org.kde.konsole")."""
+    return entry.app_id.removesuffix(".desktop")
+
+
+def window_names(entry: AppEntry) -> frozenset:
+    """The window classes the app's windows may have, without case: its menu
+    entry's id (a Wayland app's id is that) and its program (X11's class)."""
+    names = {_desktop_file(entry), entry.program}
+    return frozenset(n.casefold() for n in names if n and n not in _NOT_AN_APP)
+
+
+def _ask_extension(app_id: str, timeout: float) -> bool:
+    """Ask the GNOME extension to bring forward the app's window; its answer
+    says whether there was one. Raises a D-Bus error with no extension (or
+    one from before ActivateApp) to answer."""
+    import dbus
+    bus = dbus.SessionBus()
+    return bool(bus.call_blocking(GNOME_SHELL, EXTENSION_PATH, EXTENSION_INTERFACE,
+                                  "ActivateApp", "s", (app_id,), timeout=timeout))
+
+
+def _bring_forward(entry: AppEntry, timeout: float):
+    """This desktop's answer (True or False), or None where nothing can be asked."""
+    desktop = desktop_detect.get_desktop_environment()
+    if desktop == "kde":
+        return kwin_activate.activate(_desktop_file(entry), window_names(entry), timeout)
+    if desktop == "gnome":
+        return _ask_extension(entry.app_id, timeout)
+    if desktop_detect.is_x11_session(os.environ):
+        return x11_activate.activate(window_names(entry))
+    return None
+
+
+def focus_running(entry: AppEntry, timeout: float = 1.0) -> bool:
+    """Bring forward a window *entry*'s app already has. True only when one
+    was brought forward; False means the caller starts the app."""
+    try:
+        found = _bring_forward(entry, timeout)
+    except Exception as e:      # a desktop's many ways to fail all mean "start it"
+        log.info("Couldn't bring %s forward, starting it instead: %s", entry.app_id, e)
+        return False
+    if found is None:
+        log.info("This desktop can't bring a window forward; starting %s", entry.app_id)
+    elif found:
+        log.info("Brought %s forward: it was already open", entry.app_id)
+    return bool(found)
