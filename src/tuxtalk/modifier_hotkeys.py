@@ -1,6 +1,6 @@
-"""Right Ctrl and Right Alt as dictation keys.
+"""Right Ctrl and Right Alt as dictation keys, and Left Ctrl held with Space.
 
-Both are modifiers: a key TuxTalk presses while one is down arrives as a
+All are modifiers: a key TuxTalk presses while one is down arrives as a
 shortcut (Ctrl+W closes the tab), and a lone tap of Alt opens an app's menu
 bar. Where the keyboard options make one the Compose key (Pop!_OS's Right
 Ctrl), its press begins a compose that would swallow the next keys typed.
@@ -71,13 +71,17 @@ _SETTLE_S = 0.05
 # Alt, Ctrl and Super: a key TuxTalk presses while one is down is a shortcut
 # (Alt+Space opens KRunner). Not Shift: Shift+Space is still a space.
 SHORTCUT_MODIFIERS = frozenset(MODIFIER_CODES - SHIFT_CODES)
-# Key codes to the names Preferences shows ("Right Ctrl"), for the log.
-_NAMES = {ecodes.ecodes[key]: name for name, key in HOTKEY_CHOICES.items()}
+# Key codes to the names Preferences shows ("Right Ctrl"), for the log, and
+# the Left Ctrl that Left Ctrl+Space is held with.
+_NAMES = {**{ecodes.ecodes[key]: name for name, key in HOTKEY_CHOICES.items()},
+          ecodes.KEY_LEFTCTRL: "Left Ctrl"}
 
 
 def note(devices, *keys) -> None:
     """Remember the hotkey loop's *devices* and which of its dictation *keys*
-    are modifiers, for wait_while_held."""
+    are modifiers, for wait_while_held: Right Ctrl or Right Alt, and the
+    Left Ctrl a Left Ctrl+Space dictation key is held with, which the hotkey
+    loop names among *keys* (ctrl_space.held_with)."""
     global _noted
     _noted = (devices, frozenset(k for k in keys if k in MODIFIER_CODES))
 
@@ -218,13 +222,13 @@ def _keyboards():
 
 def wait_while_held(destination=None):
     """A check for virtual_keyboard.send to make before each key: None when
-    no Right Ctrl or Right Alt dictation key the desktop can see is down and
-    no compose one began is left to end, otherwise a function that waits
-    until none is and ends it (end_compose), which send runs with the
-    keyboard free for other threads. It gives up after HELD_LIMIT_S and
-    raises virtual_keyboard.GaveUp("key_held"). wait_while_held itself
-    returns None when neither is a dictation key and no compose is left to
-    end (one whose ending failed, from before the keys changed).
+    no dictation modifier (note) the desktop can see is down and no compose
+    one began is left to end, otherwise a function that waits until none is
+    and ends it (end_compose), which send runs with the keyboard free for
+    other threads. It gives up after HELD_LIMIT_S and raises
+    virtual_keyboard.GaveUp("key_held"). wait_while_held itself returns
+    None when no dictation modifier is noted and no compose is left to end
+    (one whose ending failed, from before the keys changed).
 
     *destination*, if given, says where the keys go (focused_window.destination: the
     focused window's class, which window it is, and whether the cursor is in
@@ -288,8 +292,10 @@ def read_compose_keys() -> None:
     note_compose_key: when the hotkey loop starts watching, and after each
     dictation, so options changed meanwhile count from the next press
     rather than the next start. Only when a dictation key is Right Ctrl or
-    Right Alt: the desktop can take a moment to answer."""
-    note_compose_keys(keyboard_layout.compose_keys() if _noted[1] else ())
+    Right Alt: the desktop can take a moment to answer, and Left Ctrl (held
+    with Space) is never asked about."""
+    dictation_keys = _noted[1] & {ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT}
+    note_compose_keys(keyboard_layout.compose_keys() if dictation_keys else ())
 
 
 def note_compose_keys(bindings) -> None:

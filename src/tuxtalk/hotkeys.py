@@ -13,6 +13,7 @@ from evdev import InputDevice, ecodes, list_devices
 
 from . import (
     beeps,
+    ctrl_space,
     delivery,
     delivery_notices,
     desktop_detect,
@@ -48,6 +49,9 @@ logger = setup_logger(__name__)
 _hotkey_test_flag = None    # the flag's path, worked out on first use
 
 _hotkey_test_was_on = False  # for logging when test mode starts and ends
+
+# Whether Left Ctrl+Space, as a dictation key, is down (ctrl_space).
+_ctrl_space = ctrl_space.Presses()
 
 
 def _hotkey_test_active() -> bool:
@@ -156,6 +160,8 @@ def _forget_lost_presses(devices, keys) -> None:
     dictation key now, since their release won't be read. Otherwise a space
     they held back waited until that key was pressed again."""
     down = keys_down(devices) & {keys.hold_key, keys.toggle_key}   # read outside the lock
+    if ctrl_space.KEY not in down:
+        _ctrl_space.forget()
     if send_countdown.forget_presses(down) and send_countdown.owes_space():
         dictation_worker.submit(send_countdown.give_back_space)
 
@@ -174,12 +180,13 @@ def _held_shift(held_modifiers) -> set:
     return set(held_modifiers) & SHIFT_CODES
 
 
-def _someone_elses_shortcut(held_modifiers) -> bool:
-    """A dictation key pressed with modifiers the desktop doesn't hold back
-    for us (hotkey_claims.keys_to_claim: the plain key, and Shift with it
-    when voice editing is on). Such a press reaches the app (Alt+F8 resizes
-    the window on KDE and GNOME), so it mustn't start a dictation as well."""
-    allowed = SHIFT_CODES if live.voice_editing else frozenset()
+def _someone_elses_shortcut(held_modifiers, key) -> bool:
+    """Dictation key *key* pressed with modifiers the desktop doesn't hold
+    back for us (hotkey_claims.keys_to_claim: the plain key, Left Ctrl with
+    Space, and Shift with it when voice editing is on). Such a press reaches
+    the app (Alt+F8 resizes the window on KDE and GNOME), so it mustn't
+    start a dictation as well."""
+    allowed = {key, *ctrl_space.held_with(key), *(SHIFT_CODES if live.voice_editing else ())}
     return bool(set(held_modifiers) - allowed)
 
 
@@ -221,7 +228,7 @@ def _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers) -> None:
     key would break."""
     if (event.value == 1 and not keyboard_grab.grabbed_devices
             and (event.code == toggle_key or rs.state.is_recording)
-            and not _someone_elses_shortcut(held_modifiers - {event.code})):
+            and not _someone_elses_shortcut(held_modifiers, event.code)):
         keyboard_grab.grab_keyboards_hiding(devices, {event.code})
         rs.state.hidden_key = event.code
     elif event.value == 0:
@@ -237,14 +244,15 @@ def _toggle_tap_holds_send(event, toggle_key, held_modifiers) -> bool:
     (_hide_modifier_hotkey): once hidden, the send's Enter, which waits for
     the key, could go out before the hold."""
     return (event.code == toggle_key and event.value == 1 and not rs.state.is_recording
-            and not _someone_elses_shortcut(held_modifiers - {toggle_key})
+            and not _someone_elses_shortcut(held_modifiers, toggle_key)
             and not (live.voice_editing and _held_shift(held_modifiers))
             and send_countdown.hold(announce=True))
 
 
 def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_idx) -> None:
     """The hold key went down: hold a send counting down, then hide the key
-    (and Shift, for voice editing) from the desktop, and record.
+    (with Left Ctrl for Left Ctrl+Space, and Shift for voice editing) from
+    the desktop, and record.
 
     The send goes first: once the key is hidden, an Enter that waits for it
     to come up goes out. The grab keeps the hotkey from the focused app,
@@ -255,7 +263,10 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
     send_countdown.key_pressed(hold_key)
     held = send_countdown.hold(announce=False)
     shift = _held_shift(held_modifiers) if live.voice_editing else set()
-    keyboard_grab.grab_keyboards_hiding(devices, {hold_key, *shift})
+    pair = ctrl_space.held_with(hold_key)
+    keyboard_grab.grab_keyboards_hiding(devices, {hold_key, *pair, *shift})
+    if pair:
+        _ctrl_space.modifier_hidden()
     rec = recording.start_recording(cfg.beeps, cfg.notify, input_device_idx,
                                     edit_mode=bool(shift), held_send=held)
     if rec is not None and rec.held_send:
@@ -408,7 +419,7 @@ def _on_hold_key(event, hold_key, held_modifiers, devices, cfg, input_device_idx
             _stop_recording(cfg)
     elif event.value == 1:
         rs.state.hold_stops = None
-        if _someone_elses_shortcut(held_modifiers - {hold_key}):
+        if _someone_elses_shortcut(held_modifiers, hold_key):
             return
         if not rs.state.is_recording:
             _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_idx)
@@ -433,7 +444,7 @@ def _on_toggle_key(event, toggle_key, held_modifiers, devices, cfg, input_device
     is a voice edit. True when a voice edit was cancelled."""
     if event.value == 0:
         _dictation_key_up(toggle_key)
-    if event.value != 1 or _someone_elses_shortcut(held_modifiers - {toggle_key}):
+    if event.value != 1 or _someone_elses_shortcut(held_modifiers, toggle_key):
         return False
     send_countdown.key_pressed(toggle_key)
     shift = _held_shift(held_modifiers) if live.voice_editing else set()
@@ -654,8 +665,29 @@ def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys") -> None:
     _claim_desktop_hotkeys(cfg)
     _helper_watch(devices, keys.hold_key, keys.toggle_key, keys.voice_cmds_combo,
                   keys.paste_last_combo)
-    modifier_hotkeys.note(devices, keys.hold_key, keys.toggle_key)
+    modifier_hotkeys.note(devices, keys.hold_key, keys.toggle_key,
+                          *ctrl_space.held_with(keys.hold_key),
+                          *ctrl_space.held_with(keys.toggle_key))
     modifier_hotkeys.read_compose_keys()
+
+
+def _on_key_event(event, keys: "hotkey_keys.Hotkeys", held_modifiers, devices, cfg: Settings,
+                  svc, now: float) -> None:
+    """Act on one key event read from a keyboard, TuxTalk's own aside."""
+    track_modifier(held_modifiers, event)
+    if event.code == ctrl_space.MODIFIER and event.value == 0:
+        # As for a Right Ctrl dictation key (_hide_modifier_hotkey): typing
+        # that found it stuck waits for it again.
+        modifier_hotkeys.note_released(event.code)
+    for key_event in _ctrl_space.events(event, held_modifiers, (keys.hold_key, keys.toggle_key)):
+        # Any hotkey counts as activity, whether or not the auto-timeout is
+        # on now: it can be switched on later, and must then count from the
+        # last real use.
+        if key_event.code in keys.watched():
+            svc.last_activity = now
+        _handle_key_event(key_event, keys.hold_key, keys.toggle_key, keys.voice_cmds_combo,
+                          held_modifiers, devices, cfg, svc.input_device_idx,
+                          paste_last_combo=keys.paste_last_combo)
 
 
 def _read_key_events(devices, keys: "hotkey_keys.Hotkeys", held_modifiers, cfg: Settings, svc,
@@ -671,15 +703,7 @@ def _read_key_events(devices, keys: "hotkey_keys.Hotkeys", held_modifiers, cfg: 
                 # through this same read; they are not input.
                 if keyboard_grab.is_own_injected_event(dev, event):
                     continue
-                track_modifier(held_modifiers, event)
-                # Any hotkey counts as activity, whether or not the
-                # auto-timeout is on now: it can be switched on later,
-                # and must then count from the last real use.
-                if event.code in keys.watched():
-                    svc.last_activity = now
-                _handle_key_event(event, keys.hold_key, keys.toggle_key, keys.voice_cmds_combo,
-                                  held_modifiers, devices, cfg, svc.input_device_idx,
-                                  paste_last_combo=keys.paste_last_combo)
+                _on_key_event(event, keys, held_modifiers, devices, cfg, svc, now)
         except BlockingIOError:
             pass
         except OSError as e:
