@@ -153,10 +153,18 @@ def test_space_tapped_twice_under_one_left_ctrl_is_reported_twice(setup):
 
 # --- whose Left Ctrl counts -----------------------------------------------------------
 
+def _virtual(helper):
+    """A keyboard a program made through uinput, in a group of its own."""
+    virtual = FakeKeyboard("/dev/input/event-virtual")
+    virtual.group = "virtual:13:99"
+    helper.keyboards[virtual.path] = virtual
+    return virtual
+
+
 def test_a_virtual_keyboards_left_ctrl_cant_unlock_the_real_space(setup):
     helper, kb, connect, say, heard, _seat = setup
-    virtual = FakeKeyboard("/dev/input/event-virtual")
-    helper.keyboards[virtual.path] = virtual
+    kb.group = "real"
+    virtual = _virtual(helper)
     sock = _ready(connect, say, heard)
     virtual.press(LCTRL)
     assert heard(sock) == ["DOWN 29 -"]      # its own press, as Right Ctrl's would be
@@ -194,12 +202,29 @@ def test_a_left_ctrl_down_before_the_keyboard_was_opened_doesnt_count(setup):
 def test_left_ctrl_space_on_the_same_virtual_keyboard_is_reported(setup):
     """A remapper's keyboard (keyd, kanata) holding its own Ctrl."""
     helper, _kb, connect, say, heard, _seat = setup
-    virtual = FakeKeyboard("/dev/input/event-virtual")
-    helper.keyboards[virtual.path] = virtual
+    virtual = _virtual(helper)
     sock = _ready(connect, say, heard)
     virtual.press(LCTRL)
     virtual.press(SPACE)
     assert heard(sock) == ["DOWN 29 -", "DOWN 57 29"]
+
+
+@pytest.mark.parametrize("specs, ctrl, key", [("L:57", LCTRL, SPACE), ("97 67", RCTRL, 67)])
+def test_a_programs_ctrl_let_go_doesnt_say_the_real_one_came_up(setup, specs, ctrl, key):
+    """The user holds Ctrl; a program presses its own Ctrl and a hotkey, then
+    lets go. The Ctrl reported stays down until the user lets go: an early
+    UP would let TuxTalk type while the desktop still holds Ctrl."""
+    helper, kb, connect, say, heard, _seat = setup
+    kb.group = "real"
+    virtual = _virtual(helper)
+    sock = _ready(connect, say, heard, specs)
+    kb.press(ctrl)
+    virtual.press(ctrl)
+    _tap(virtual, key)
+    virtual.press(ctrl, 0)
+    assert heard(sock) == [f"DOWN {ctrl} -", f"DOWN {key} {ctrl}", f"UP {key}"]
+    kb.press(ctrl, 0)
+    assert heard(sock) == [f"UP {ctrl}"]
 
 
 # --- hiding it while TuxTalk records --------------------------------------------------
@@ -221,6 +246,17 @@ def test_a_held_left_ctrl_space_hides_both_keys(setup):
     say(sock, "UNHIDE")
     assert heard(sock) == ["UP 57", "OK UNHIDE"]
     assert helper.hide is None
+
+
+def test_a_left_ctrl_held_with_f8_is_hidden_with_it(setup):
+    _helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard)
+    kb.press(LCTRL)
+    kb.press(66)
+    assert heard(sock) == ["DOWN 29 -", "DOWN 66 29"]
+    say(sock, "HIDE 66 29")
+    assert heard(sock) == ["OK HIDE"]
+    assert kb.calls[:3] == [("inject", 66, 0), ("inject", LCTRL, 0), ("grab", True)]
 
 
 def test_a_hide_naming_left_ctrl_twice_lets_it_up_once(setup):

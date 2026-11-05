@@ -50,21 +50,24 @@ Windows virtual machine, where Ctrl+Alt is AltGr) would otherwise turn
 everything typed into shortcuts; a shortcut is one or two keys, typing is
 many.
 
-Left Ctrl is the one modifier that unlocks a key alone, and only Space: XKB
-offers Right Ctrl, Left Alt and Super as a third-level key, never Left Ctrl,
-so Ctrl+Space types nothing. Even under a keymap that made it one (written
-by hand, or options combined), the only key reported is Space: a client learns when
-Ctrl+Space was pressed, never a letter, a number or Enter. Its own press and
-release say no more than Right Ctrl's report does; a client that watches the
-pair needs them to hold Left Ctrl back from the desktop while TuxTalk types
-(Ctrl and a typed "w" close a tab).
+Left Ctrl is the one modifier that unlocks a key alone, and only Space. XKB
+never makes Left Ctrl a third-level key, but its options can make it Compose,
+a layout switch, or Alt, Super or Meta: then Left Ctrl+Space may type a
+space, and Left Ctrl's own press tells when a Compose sequence or a layout
+switch began, as Right Ctrl's does under such options. Even so, only Space
+and Left Ctrl's own press and release are ever reported, never a letter, a
+number or Enter. A client that watches the pair needs Left Ctrl's press and
+release to hold it back from the desktop while TuxTalk types (Ctrl and a
+typed "w" close a tab).
 
 Everything goes only to the user at the screen: logind's active user on
 seat0, checked by user id (two sessions of the same user count as one), and
 only keyboards of seat0 are read. Letters, numbers, Enter or Shift+letter
 are never reported, so even a hostile program that connects learns nothing
-about what is typed beyond those AltGr presses. Each client may ask for four shortcuts at most;
-TuxTalk asks for two.
+about what is typed beyond when an AltGr, Compose or layout-switch key went
+down (Right Alt, Right Ctrl, and Left Ctrl to a client watching Left
+Ctrl+Space). Each client may ask for four shortcuts at most; TuxTalk asks
+for two.
 
 Hiding a held hotkey
 --------------------
@@ -72,7 +75,7 @@ While TuxTalk records it hides the held hotkey from the desktop and keeps
 that keyboard to itself, so a held F8 doesn't auto-repeat into the window
 being dictated into. That's allowed once per press of a hotkey (never Esc)
 that is physically held, for one client at a time. Left Ctrl is never hidden
-on its own, only as the modifier of a held Space. It grabs the keyboard the
+on its own, only as the modifier of a held hotkey. It grabs the keyboard the
 press came from, and another real keyboard only if it holds a modifier
 reported with the press (Shift for a voice edit, on a split keyboard). One
 that's a mouse as well (a Logitech one: see check_keyboard) moves no pointer
@@ -103,8 +106,8 @@ client -> helper
   WATCH <spec> [<spec>...]     the keys to report: a code ("66" = F8) or
                                MODS:code with MODS from C A S M L
                                (Ctrl Alt Shift Meta/Super, and Left Ctrl alone,
-                               only in "L:57", since 1.14), "CA:25" = Ctrl+Alt+P;
-                               "L:57" also reports Left Ctrl's own press and
+                               only with key 57, since 1.14), "CA:25" = Ctrl+Alt+P;
+                               a spec with L also reports Left Ctrl's own press and
                                release (DOWN 29 / UP 29) to that client;
                                the specs refused are named in ERR and the rest
                                apply, unless the whole line is refused (too many
@@ -923,7 +926,12 @@ class Helper:
             elif client.mods_owed.get(code) == keyboard.group and \
                     not self.held(code, keyboard.group):
                 del client.mods_owed[code]
-                self.send(client, f"UP {code}")
+                # Still held where it was reported on its own (a program's
+                # keyboard let go of its own Ctrl): that keyboard's release
+                # is the UP, and an early one would let TuxTalk type while
+                # the desktop holds Ctrl.
+                if code not in client.origin:
+                    self.send(client, f"UP {code}")
 
     def deliver_down(self, keyboard, code):
         """*code* went down on *keyboard*: DOWN to each client at the screen
