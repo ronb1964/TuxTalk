@@ -50,7 +50,7 @@ def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
         logger.info("Voice command: open, but these fit equally: "
                     + ", ".join(e.app_id for e in found.entries))
         label = _tie_label(found.entries) + " Say the full name."
-        notices.app_not_opened(label, f"{label} {NOTHING_OPENED}", beeps_on)
+        notices.command_refused(label, f"{label} {NOTHING_OPENED}", beeps_on)
         return False
     entry = found.entries[0]
     exact = bool(request.install) or len(app_finder.copies(entry, entries)) > 1
@@ -80,9 +80,9 @@ def _open(entry, new: bool, beeps_on: bool, ongoing, exact: bool) -> bool:
     if ongoing is None and keyboard_output.esc_stopped("opened"):
         return False
     if not app_launcher.launch(entry):
-        notices.app_not_opened(f"Couldn't open {entry.name}",
-                               f"{entry.name} didn't start. Try opening it from the menu.",
-                               beeps_on)
+        notices.command_refused(f"Couldn't open {entry.name}",
+                                f"{entry.name} didn't start. Try opening it from the menu.",
+                                beeps_on)
         return False
     beeps.beep(beeps_on, *READY_BEEP)
     return True
