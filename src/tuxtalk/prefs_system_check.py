@@ -116,8 +116,9 @@ def _helper_state(refused_shortcuts):
                 'with the hotkey helper a shortcut needs two of Ctrl, Alt and Super. '
                 'Pick one from the list in General → More shortcuts</span>', _READY, False, False)
     return ('<span color="#4CAF50">✓ Ready. Only TuxTalk\'s hotkey helper reads the '
-            'keyboard, and it tells TuxTalk about its hotkeys and Right Ctrl or '
-            'Right Alt going down, never what you type</span>', _READY, False, True)
+            'keyboard, and it tells TuxTalk about its hotkeys, Right Ctrl or Right Alt '
+            'going down, and Left Ctrl going down and up while Left Ctrl+Space is a '
+            'dictation key, never what you type</span>', _READY, False, True)
 
 
 def _input_group_state():

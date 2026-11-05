@@ -51,7 +51,7 @@ KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinpu
 
 UNIT = f"""\
 [Unit]
-Description=TuxTalk hotkey helper (hotkeys, and Right Ctrl or Right Alt going down; never typing)
+Description=TuxTalk hotkey helper (hotkeys, Right Ctrl, Right Alt, Left Ctrl; never typing)
 Documentation=https://github.com/ronb1964/TuxTalk
 
 [Service]
@@ -452,7 +452,8 @@ def fix_description():
     if can_install()[0]:
         return ([
             "Installs TuxTalk's hotkey helper, the only program that reads the keyboard. "
-            "It tells TuxTalk about its hotkeys and Right Ctrl or Right Alt going down, "
+            "It tells TuxTalk about its hotkeys, Right Ctrl or Right Alt going down, and "
+            "Left Ctrl going down and up while Left Ctrl+Space is a dictation key, "
             "never what you type",
             "Lets TuxTalk type with a virtual keyboard, as Steam does for game controllers",
         ], False)

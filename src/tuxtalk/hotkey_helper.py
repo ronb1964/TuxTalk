@@ -52,13 +52,14 @@ many.
 
 Left Ctrl is the one modifier that unlocks a key alone, and only Space. XKB
 never makes Left Ctrl a third-level key, but its options can make it Compose,
-a layout switch, or Alt, Super or Meta: then Left Ctrl+Space may type a
-space, and Left Ctrl's own press tells when a Compose sequence or a layout
-switch began, as Right Ctrl's does under such options. Even so, only Space
-and Left Ctrl's own press and release are ever reported, never a letter, a
-number or Enter. A client that watches the pair needs Left Ctrl's press and
-release to hold it back from the desktop while TuxTalk types (Ctrl and a
-typed "w" close a tab).
+a layout switch, Caps Lock, or Alt, Super or Meta: then Left Ctrl+Space may
+type a space, which a client then learns, and Left Ctrl's own press tells
+when a Compose sequence, a layout switch or Caps Lock began, as Right Ctrl's
+does under such options. Even so, only Space, Left Ctrl's own press and
+release, and the release of a modifier held at that press are ever
+reported, never a letter, a number or Enter. A client that watches the pair
+needs Left Ctrl's press and release to hold it back from the desktop while
+TuxTalk types (Ctrl and a typed "w" close a tab).
 
 Everything goes only to the user at the screen: logind's active user on
 seat0, checked by user id (two sessions of the same user count as one), and

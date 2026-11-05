@@ -95,6 +95,25 @@ def test_fix_uses_the_helper_where_it_can_and_needs_no_restart(monkeypatch):
     assert not restarts and "hotkey helper" in lines[0]
 
 
+LEFT_CTRL_TOLD = ("Left Ctrl going down and up while Left Ctrl+Space is a dictation key, "
+                  "never what you type")
+
+
+def test_every_place_that_says_what_the_helper_reports_names_left_ctrl(monkeypatch):
+    """Helper 1.14 reports Left Ctrl's own press and release to TuxTalk while
+    Left Ctrl+Space is a dictation key: the screens, the README and the
+    service's description say so, not only Right Ctrl and Right Alt."""
+    from pathlib import Path
+    from tuxtalk import prefs_system_check, uinput_helper
+    monkeypatch.setattr(si, "can_install", lambda: (True, ""))
+    monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: False)
+    readme = " ".join(Path(__file__).parents[1].joinpath("README.md").read_text().split())
+    for text in (si.fix_description()[0][0], prefs_system_check._helper_state([])[0], readme):
+        assert LEFT_CTRL_TOLD in text
+    [description] = [line for line in si.UNIT.splitlines() if line.startswith("Description=")]
+    assert "Left Ctrl" in description and len(description) < 120
+
+
 def test_fix_falls_back_to_the_input_group(monkeypatch):
     from tuxtalk import uinput_helper
     monkeypatch.setattr(uinput_helper, "install_udev_rule_with_pkexec", lambda: (True, "ok"))

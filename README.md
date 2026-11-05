@@ -588,7 +588,8 @@ windows, so TuxTalk needs a little help to notice F8.
 - Preferences → Advanced → Show system check → **Fix Typing Permissions**
 - On most systems that installs TuxTalk's hotkey helper. It's a small
   background service, and it's the only thing that reads the keyboard. It
-  tells TuxTalk about its hotkeys and Right Ctrl or Right Alt going down,
+  tells TuxTalk about its hotkeys, Right Ctrl or Right Alt going down, and
+  Left Ctrl going down and up while Left Ctrl+Space is a dictation key,
   never what you type, and no other program you run gets to read your keys.
   No restart needed. Check it with
   `systemctl status tuxtalk-hotkeys`
