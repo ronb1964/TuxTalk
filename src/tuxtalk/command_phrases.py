@@ -1,7 +1,8 @@
 """Every whole-recording command phrase, read by one parser.
 
 parse() says what a dictation is: select and move's Command, an open-app
-request, an everyday key, a window request, a web address or a web search.
+request, an everyday key, a desktop, sound, music or system request, a window
+request, a web address or a web search.
 Like the other command parsers it is pure and whole-recording only, so a
 sentence that merely contains a command is typed as text.
 
@@ -10,6 +11,8 @@ The order matters, first match wins:
   its own; "go to the top/bottom" are keys only when it is off;
 - web search before the rest, since it takes any words after its prefix;
 - keys before windows, so "close tab" is a key and not an app named "tab";
+- fixed phrases (desktop, sound, music, system) before windows, so "switch to
+  desktop two" is never an app named "desktop two";
 - addresses before open-app, so "open youtube.com" isn't an app.
 """
 import re
@@ -32,6 +35,37 @@ class WindowRequest:
     action: str          # "close", "minimize", "maximize", "unmaximize", "switch"
     app: OpenRequest | None = None   # None: the focused window
     every: bool = False  # "close all Firefox"
+
+
+SNAP_PLACES = ("left", "right", "top", "bottom", "top left", "top right", "bottom left",
+               "bottom right")
+FRONT_WINDOW_ACTIONS = frozenset(
+    {f"snap {place}" for place in SNAP_PLACES}
+    | {"center", "to desktop", "to next desktop", "to previous desktop", "to next screen"})
+DESKTOP_ACTIONS = FRONT_WINDOW_ACTIONS | {
+    "show desktop", "overview", "desktop", "next desktop", "previous desktop"}
+
+
+@dataclass(frozen=True)
+class DesktopRequest:
+    action: str                  # a DESKTOP_ACTIONS name
+    number: int | None = None    # 1..9, for "desktop" and "to desktop" only
+
+
+@dataclass(frozen=True)
+class SoundRequest:
+    action: str          # "volume up", "volume down", "mute", "unmute"
+    steps: int = 1       # 1..MAX_COUNT
+
+
+@dataclass(frozen=True)
+class MusicRequest:
+    action: str          # "pause", "play", "next", "previous"
+
+
+@dataclass(frozen=True)
+class SystemRequest:
+    action: str          # "lock", "screenshot", "commands"
 
 
 @dataclass(frozen=True)
@@ -82,6 +116,49 @@ _WINDOW_ACTIONS = (
 _PUNCTUATION = {"quote", "unquote", "paren", "parenthesis", "parentheses", "bracket",
                 "brackets", "brace", "braces"}
 
+_PLACE = "|".join(sorted(SNAP_PLACES, key=len, reverse=True))
+_DIGIT = r"[1-9]|one|two|three|four|five|six|seven|eight|nine"
+_COUNT = r"\d+|" + "|".join(w for w in NUMBER_WORDS if w not in ("a", "an"))
+# Whole-recording phrases that name one request; the first group, when there is
+# one, is the place, the direction or the desktop number.
+_DESKTOP_PHRASES = (
+    (rf"snap(?: {_THIS})?(?: to the)? ({_PLACE})", lambda m: DesktopRequest(f"snap {m[1]}")),
+    (rf"move {_THIS} to the ({_PLACE})", lambda m: DesktopRequest(f"snap {m[1]}")),
+    (rf"cent(?:er|re) {_THIS}", lambda m: DesktopRequest("center")),
+    (rf"move {_THIS} to the cent(?:er|re)", lambda m: DesktopRequest("center")),
+    (r"show (?:the )?desktop", lambda m: DesktopRequest("show desktop")),
+    (r"show (?:all )?(?:the )?windows", lambda m: DesktopRequest("overview")),
+    (r"(?:(?:go|switch) to the )?(next|previous) desktop",
+     lambda m: DesktopRequest(f"{m[1]} desktop")),
+    (rf"(?:switch|go) to desktop ({_DIGIT})",
+     lambda m: DesktopRequest("desktop", _number(m[1]))),
+    (rf"move {_THIS} to desktop ({_DIGIT})",
+     lambda m: DesktopRequest("to desktop", _number(m[1]))),
+    (rf"move {_THIS} to the (next|previous) desktop",
+     lambda m: DesktopRequest(f"to {m[1]} desktop")),
+    (rf"move {_THIS} to the (?:other|next) screen", lambda m: DesktopRequest("to next screen")),
+)
+_SOUND_PHRASES = (
+    (rf"(?:turn (?:the )?)?volume (up|down)(?: ({_COUNT}))?",
+     lambda m: _volume(m[1], m[2])),
+    (r"turn (up|down) the volume", lambda m: SoundRequest(f"volume {m[1]}")),
+    (r"mute (?:the )?sound", lambda m: SoundRequest("mute")),
+    (r"unmute (?:the )?sound", lambda m: SoundRequest("unmute")),
+)
+_OTHER_PHRASES = (
+    (r"pause (?:the )?music", lambda m: MusicRequest("pause")),
+    (r"(?:play|resume) (?:the )?music", lambda m: MusicRequest("play")),
+    (r"(next|previous) (?:track|song)", lambda m: MusicRequest(m[1])),
+    (r"lock (?:the )?(?:screen|computer)", lambda m: SystemRequest("lock")),
+    (r"take (?:a )?screen ?shot", lambda m: SystemRequest("screenshot")),
+    (r"what can i say|show (?:the )?voice commands", lambda m: SystemRequest("commands")),
+)
+_FIXED = tuple((re.compile(pattern), build) for pattern, build in
+               _DESKTOP_PHRASES + _SOUND_PHRASES + _OTHER_PHRASES)
+# "switch to desktop ten" names no desktop, and must not fall through to
+# "switch to <app>" and look for an app called "desktop ten".
+_NO_SUCH_DESKTOP = re.compile(rf"(?:(?:switch|go) to|move {_THIS} to) desktop (?:\d+|zero|ten)")
+
 _SEARCH = re.compile(r"^\s*web\s+search\s*[,:]?\s+(?P<words>.+?)[\s.!?]*$", re.IGNORECASE)
 _GO_TO = re.compile(r"^\s*(?:go\s+to|open)\s+(?P<rest>.+)$", re.IGNORECASE)
 _LITERAL = re.compile(r"^\s*literal\s+(?P<rest>.+)$", re.IGNORECASE)
@@ -125,6 +202,24 @@ def _key(said: str) -> KeyRequest | None:
     return KeyRequest(f"scroll {m.group(1)}", count) if 1 <= count <= MAX_COUNT else None
 
 
+def _number(word: str) -> int:
+    return int(word) if word.isdigit() else NUMBER_WORDS[word]
+
+
+def _volume(direction: str, raw: str | None) -> SoundRequest | None:
+    steps = 1 if raw is None else _number(raw)
+    return SoundRequest(f"volume {direction}", steps) if 1 <= steps <= MAX_COUNT else None
+
+
+def _fixed(said: str) -> (DesktopRequest | SoundRequest | MusicRequest | SystemRequest
+                          | None):
+    """The desktop, sound, music or system request *said* is exactly."""
+    for pattern, build in _FIXED:
+        if m := pattern.fullmatch(said):
+            return build(m)
+    return None
+
+
 def _window(said: str) -> WindowRequest | None:
     """The window request *said* is. "close <name>" and "switch to <name>" accept
     any short name here: the caller finds the app and types the words if none fits.
@@ -159,8 +254,9 @@ def _address_request(raw: str) -> AddressRequest | None:
 
 
 def parse(text: str, *, navigation: bool, actions: bool) -> (
-        voice_navigation.Command | OpenRequest | KeyRequest | WindowRequest
-        | AddressRequest | SearchRequest | None):
+        voice_navigation.Command | OpenRequest | KeyRequest | DesktopRequest | SoundRequest
+        | MusicRequest | SystemRequest | WindowRequest | AddressRequest | SearchRequest
+        | None):
     """What *text* commands, or None when it's dictation to type.
 
     *navigation* is select and move being on, *actions* the voice commands.
@@ -172,7 +268,13 @@ def parse(text: str, *, navigation: bool, actions: bool) -> (
     if m := _SEARCH.match(text):
         return SearchRequest(m.group("words"))
     said = normalize(text)
-    return _key(said) or _window(said) or _address_request(text) or parse_open(text)
+    if key := _key(said):
+        return key
+    if fixed := _fixed(said):
+        return fixed
+    if _NO_SUCH_DESKTOP.fullmatch(said):
+        return None
+    return _window(said) or _address_request(text) or parse_open(text)
 
 
 def literal_words(raw: str, *, navigation: bool, actions: bool) -> str:

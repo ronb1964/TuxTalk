@@ -6,7 +6,8 @@ import pytest
 from tuxtalk import voice_navigation
 from tuxtalk.app_commands import OpenRequest
 from tuxtalk.command_phrases import (
-    AddressRequest, KeyRequest, SearchRequest, WindowRequest,
+    DESKTOP_ACTIONS, FRONT_WINDOW_ACTIONS, AddressRequest, DesktopRequest, KeyRequest,
+    MusicRequest, SearchRequest, SoundRequest, SystemRequest, WindowRequest,
     literal_words, parse)
 
 P = functools.partial(parse, navigation=True, actions=True)
@@ -106,7 +107,10 @@ EVERY_COMMAND = ["new tab", "close tab", "next tab", "previous tab", "reopen tab
     "go forward", "reload the page", "refresh page", "scroll down", "page up", "page down",
     "find on page", "save the file", "copy the selection", "paste it", "press escape", "close Firefox", "close all Firefox", "close window",
     "switch to Firefox", "minimize window", "maximize window", "restore window",
-    "go to youtube dot com", "web search cheap tires", "open Firefox"]
+    "go to youtube dot com", "web search cheap tires", "open Firefox",
+    "snap left", "centre window", "show desktop", "next desktop", "switch to desktop two",
+    "move window to the other screen", "volume up", "mute sound", "pause music",
+    "next track", "lock screen", "take a screenshot", "what can I say"]
 
 @pytest.mark.parametrize("phrase", EVERY_COMMAND)
 def test_every_command_inside_a_sentence_is_dictation(phrase):
@@ -138,3 +142,56 @@ def test_literal_types_the_words():
     assert lw("Literal open Firefox") == "open Firefox"
     assert lw("literal translations") == "literal translations"
     assert literal_words("literal new tab", navigation=True, actions=False) == "literal new tab"
+
+
+@pytest.mark.parametrize("said, request_", [
+    ("Snap left.", DesktopRequest("snap left")), ("snap window right", DesktopRequest("snap right")),
+    ("snap the window to the top left", DesktopRequest("snap top left")),
+    ("Move window to the bottom right.", DesktopRequest("snap bottom right")),
+    ("move this window to the left", DesktopRequest("snap left")),
+    ("Centre window.", DesktopRequest("center")), ("center the window", DesktopRequest("center")),
+    ("Show desktop.", DesktopRequest("show desktop")), ("show the desktop", DesktopRequest("show desktop")),
+    ("Show all windows.", DesktopRequest("overview")), ("show windows", DesktopRequest("overview")),
+    ("Next desktop.", DesktopRequest("next desktop")),
+    ("go to the previous desktop", DesktopRequest("previous desktop")),
+    ("Switch to desktop two.", DesktopRequest("desktop", 2)), ("go to desktop 3", DesktopRequest("desktop", 3)),
+    ("Move window to desktop two.", DesktopRequest("to desktop", 2)),
+    ("move window to the next desktop", DesktopRequest("to next desktop")),
+    ("move the window to the other screen", DesktopRequest("to next screen")),
+    ("Volume up.", SoundRequest("volume up")), ("volume down three", SoundRequest("volume down", 3)),
+    ("turn the volume up 2", SoundRequest("volume up", 2)), ("turn down the volume", SoundRequest("volume down")),
+    ("Mute the sound.", SoundRequest("mute")), ("unmute sound", SoundRequest("unmute")),
+    ("Pause music.", MusicRequest("pause")), ("resume the music", MusicRequest("play")),
+    ("play music", MusicRequest("play")), ("Next song.", MusicRequest("next")),
+    ("previous track", MusicRequest("previous")),
+    ("Lock screen.", SystemRequest("lock")), ("lock the computer", SystemRequest("lock")),
+    ("Take a screenshot.", SystemRequest("screenshot")), ("take screen shot", SystemRequest("screenshot")),
+    ("What can I say?", SystemRequest("commands")), ("show voice commands", SystemRequest("commands"))])
+def test_desktop_sound_music_and_system_phrases(said, request_):
+    assert P(said) == request_
+
+@pytest.mark.parametrize("said", ["switch to desktop 10", "go to desktop zero",
+    "Switch to desktop ten.", "move window to desktop 12", "volume up 11"])
+def test_switch_to_desktop_with_another_number_is_never_an_app(said):
+    assert P(said) is None
+
+@pytest.mark.parametrize("said", ["Pause.", "Play.", "Stop.", "Next.", "Back.", "Mute.", "Up.",
+    "Down.", "Left.", "Right.", "Lock.", "Lock it.", "Show me the desktop.", "Volume is too loud.",
+    "Snap.", "Take a break.", "Show me the windows.", "Move the window later.",
+    "Next song is mine.", "Pause the movie.", "Lock the door.", "Play some music."])
+def test_near_miss_sentences_stay_dictation(said):
+    assert P(said) is None
+
+def test_select_and_move_keeps_its_go_to_phrases():
+    assert isinstance(P("go to the top"), voice_navigation.Command)
+    assert P("go to desktop two") == DesktopRequest("desktop", 2)
+
+def test_every_desktop_action_the_parser_makes_is_listed():
+    made = {P(s).action for s in ("snap left", "snap top right", "centre window", "show desktop",
+            "show all windows", "next desktop", "previous desktop", "switch to desktop 2",
+            "move window to desktop 2", "move window to the next desktop",
+            "move window to the previous desktop", "move window to the other screen")}
+    assert made <= DESKTOP_ACTIONS and FRONT_WINDOW_ACTIONS < DESKTOP_ACTIONS
+
+def test_literal_types_a_desktop_command():
+    assert literal_words("literal snap left", navigation=True, actions=True) == "snap left"
