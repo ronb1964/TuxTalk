@@ -16,8 +16,7 @@ import re
 from dataclasses import dataclass
 
 from . import voice_navigation
-from .app_commands import OpenRequest, app_name
-from .app_commands import parse as parse_open
+from .app_commands import OpenRequest, app_name, parse as parse_open
 from .undo import NUMBER_WORDS
 from .voice_navigation import MAX_COUNT, normalize
 
@@ -148,7 +147,9 @@ def _address_request(raw: str) -> AddressRequest | None:
     return AddressRequest(url) if url else None
 
 
-def parse(text: str, *, navigation: bool, actions: bool):
+def parse(text: str, *, navigation: bool, actions: bool) -> (
+        voice_navigation.Command | OpenRequest | KeyRequest | WindowRequest
+        | AddressRequest | SearchRequest | None):
     """What *text* commands, or None when it's dictation to type.
 
     *navigation* is select and move being on, *actions* the voice commands.

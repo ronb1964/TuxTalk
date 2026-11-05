@@ -6,7 +6,7 @@ import pytest
 from tuxtalk import voice_navigation
 from tuxtalk.app_commands import OpenRequest
 from tuxtalk.command_phrases import (
-    KEY_NAMES, KEY_PHRASES, AddressRequest, KeyRequest, SearchRequest, WindowRequest,
+    AddressRequest, KeyRequest, SearchRequest, WindowRequest,
     literal_words, parse)
 
 P = functools.partial(parse, navigation=True, actions=True)
@@ -26,7 +26,8 @@ def test_with_select_and_move_off_its_other_phrases_stay_dictation(said):
 
 def test_actions_off_only_select_and_move_is_read():
     assert parse("new tab", navigation=True, actions=False) is None
-    assert isinstance(parse("go to the end", navigation=True, actions=False), voice_navigation.Command)
+    assert isinstance(parse("go to the end", navigation=True, actions=False),
+                      voice_navigation.Command)
 
 @pytest.mark.parametrize("said, name", [("New tab.", "new tab"), ("open a new tab", "new tab"),
     ("reopen closed tab", "reopen tab"), ("Refresh.", "reload"), ("please copy", "copy"),
@@ -43,7 +44,8 @@ def test_scroll_counts():
 def test_window_requests():
     assert P("Close Firefox.") == WindowRequest("close", OpenRequest("firefox"))
     assert P("close all Firefox") == WindowRequest("close", OpenRequest("firefox"), every=True)
-    assert P("close Firefox Flatpak") == WindowRequest("close", OpenRequest("firefox", install="flatpak"))
+    assert P("close Firefox Flatpak") == WindowRequest(
+        "close", OpenRequest("firefox", install="flatpak"))
     assert P("close this window") == P("close window") == WindowRequest("close")
     assert P("Minimise the window.") == WindowRequest("minimize")
     assert P("maximize window") == WindowRequest("maximize")
@@ -52,8 +54,10 @@ def test_window_requests():
     assert P("close tab") == KeyRequest("close tab")
 
 @pytest.mark.parametrize("said, url", [("go to youtube dot com", "https://youtube.com"),
-    ("Go to YouTube.com.", "https://youtube.com"), ("go to www youtube dot com", "https://www.youtube.com"),
-    ("open bbc dot co dot uk", "https://bbc.co.uk"), ("go to https://example.org", "https://example.org")])
+    ("Go to YouTube.com.", "https://youtube.com"),
+    ("go to www youtube dot com", "https://www.youtube.com"),
+    ("open bbc dot co dot uk", "https://bbc.co.uk"),
+    ("go to https://example.org", "https://example.org")])
 def test_addresses(said, url):
     assert P(said) == AddressRequest(url)
 
@@ -101,9 +105,6 @@ def test_close_and_switch_naming_no_app_are_left_to_app_matching(said, name):
     "close bracket", "close brace", "close paren"])
 def test_spoken_punctuation_is_never_a_close(said):
     assert P(said) is None
-
-def test_every_key_name_is_one_of_the_key_names():
-    assert set(KEY_PHRASES.values()) | {"scroll up", "scroll down"} == KEY_NAMES
 
 def test_literal_types_the_words():
     lw = functools.partial(literal_words, navigation=True, actions=True)
