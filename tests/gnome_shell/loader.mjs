@@ -12,7 +12,7 @@ const STAND_INS = new URL('./gnome.mjs', import.meta.url).href;
 // these stand-ins do (then one is added here).
 const GI = ['GLib', 'GObject', 'Gio', 'Meta', 'Pango', 'Shell', 'St'];
 const SHELL = {
-    'resource:///org/gnome/shell/ui/main.js': ['activateWindow', 'notify', 'panel', 'wm'],
+    'resource:///org/gnome/shell/ui/main.js': ['activateWindow', 'notify', 'overview', 'panel', 'wm'],
     'resource:///org/gnome/shell/ui/panelMenu.js': ['Button'],
     'resource:///org/gnome/shell/ui/popupMenu.js': ['Ornament', 'PopupImageMenuItem',
         'PopupMenuItem', 'PopupMenuSection', 'PopupSeparatorMenuItem',

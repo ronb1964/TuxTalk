@@ -25,6 +25,16 @@ export const shell = {
     minimized: [],          // ... minimized
     maximized: [],          // [id, flags] of each window maximized
     unmaximized: [],        // [id, flags] of each window taken out of maximized
+    unminimized: [],        // ... brought back from minimized
+    placed: [],             // [id, x, y, width, height] or [id, x, y] of each window moved/resized
+    movedToWorkspace: [],   // [id, index] of each window sent to a workspace
+    movedToMonitor: [],     // [id, monitor] of each window sent to a monitor
+    activatedWorkspace: [], // the index of each workspace switched to
+    overviewToggles: 0,
+    monitors: 1,
+    workspaces: 2,          // how many there are
+    activeWorkspace: 0,     // the index of the current one
+    workspaceWindows: [],   // the windows on the current workspace
 };
 
 for (const level of ['error', 'warn']) {
@@ -97,6 +107,7 @@ export const Meta = {
     KeyBindingFlags: {NONE: 0},
     KeyBindingAction: {NONE: 0},
     MaximizeFlags: {BOTH: 3},
+    MotionDirection: {LEFT: 0, RIGHT: 1},
     WindowType: {NORMAL: 0, DESKTOP: 1, DOCK: 2, DIALOG: 3, MODAL_DIALOG: 4},
     external_binding_name_for_action: action => `external-grab-${action}`,
 };
@@ -188,6 +199,12 @@ export function notify(title, body) {
         throw new Error(`A notification titled only "TuxTalk": ${body}`);
     shell.notifications.push([title, body]);
 }
+
+export const overview = {
+    toggle() {
+        shell.overviewToggles++;
+    },
+};
 
 export const panel = {
     addToStatusArea(role, button) {
@@ -331,6 +348,7 @@ export class Window extends Signals {
         this.id = id;
         this.skip_taskbar = false;
         this.type = Meta.WindowType.NORMAL;
+        this.minimized = false;
     }
 
     get_window_type() {
@@ -359,6 +377,32 @@ export class Window extends Signals {
 
     minimize() {
         shell.minimized.push(this.id);
+        this.minimized = true;
+    }
+
+    unminimize() {
+        shell.unminimized.push(this.id);
+        this.minimized = false;
+    }
+
+    get_work_area_current_monitor() {
+        return {x: 0, y: 32, width: 1920, height: 1048};
+    }
+
+    move_resize_frame(_user, x, y, width, height) {
+        shell.placed.push([this.id, x, y, width, height]);
+    }
+
+    move_frame(_user, x, y) {
+        shell.placed.push([this.id, x, y]);
+    }
+
+    change_workspace_by_index(index, _append) {
+        shell.movedToWorkspace.push([this.id, index]);
+    }
+
+    move_to_monitor(monitor) {
+        shell.movedToMonitor.push([this.id, monitor]);
     }
 
     maximize(flags) {
@@ -387,12 +431,40 @@ class Display extends Signals {
         shell.grabs.delete(action);
     }
 
+    get_n_monitors() {
+        return shell.monitors;
+    }
+
     get_monitor_geometry() {
         return {x: 0, y: 0, width: 1920, height: 1080};
     }
 }
 
-globalThis.global = {display: new Display(), get_current_time: () => 1234};
+// A workspace of the stand-in desktop, by its index.
+function workspace(index) {
+    return {
+        index: () => index,
+        activate: _time => shell.activatedWorkspace.push(index),
+        list_windows: () => shell.workspaceWindows,
+        // The workspace itself where there is none further that way.
+        get_neighbor: direction => {
+            const next = index + (direction === Meta.MotionDirection.RIGHT ? 1 : -1);
+            return workspace(next >= 0 && next < shell.workspaces ? next : index);
+        },
+    };
+}
+
+globalThis.global = {
+    display: new Display(),
+    get_current_time: () => 1234,
+    workspace_manager: {
+        get n_workspaces() {
+            return shell.workspaces;
+        },
+        get_active_workspace: () => workspace(shell.activeWorkspace),
+        get_workspace_by_index: index => workspace(index),
+    },
+};
 
 // --- what a test drives the extension with --------------------------------------------
 

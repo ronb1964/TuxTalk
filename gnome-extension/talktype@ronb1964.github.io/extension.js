@@ -110,6 +110,11 @@ const AppFocusIface = `
       <arg type="b" direction="in" name="every"/>
       <arg type="b" direction="out" name="acted"/>
     </method>
+    <method name="DesktopCommand">
+      <arg type="s" direction="in" name="action"/>
+      <arg type="i" direction="in" name="number"/>
+      <arg type="s" direction="out" name="answer"/>
+    </method>
   </interface>
 </node>`;
 const APP_FOCUS_PATH = '/io/github/ronb1964/TuxTalk/Extension';
@@ -134,6 +139,130 @@ function isAppWindow(w) {
     return [Meta.WindowType.NORMAL, Meta.WindowType.DIALOG, Meta.WindowType.MODAL_DIALOG]
         .includes(w.get_window_type());
 }
+
+// Where "snap <place>" puts a window: which part of the work area's width and
+// then of its height (the first half, the second half, or all of it).
+const SNAP_PLACES = {
+    'snap left': ['first', 'all'],
+    'snap right': ['second', 'all'],
+    'snap top': ['all', 'first'],
+    'snap bottom': ['all', 'second'],
+    'snap top left': ['first', 'first'],
+    'snap top right': ['second', 'first'],
+    'snap bottom left': ['first', 'second'],
+    'snap bottom right': ['second', 'second'],
+};
+
+// The part *part* of the span starting at *start* that is *size* long; the
+// second half takes the odd pixel so two halves leave no gap.
+function spanPart(start, size, part) {
+    const half = Math.floor(size / 2);
+    if (part === 'first')
+        return [start, half];
+    return part === 'second' ? [start + half, size - half] : [start, size];
+}
+
+// Put the front window *w* in the part of its monitor's work area (the screen
+// without the top bar) that *place* names. Unmaximized first: a maximized
+// window ignores a new size.
+function snapWindow(w, place) {
+    WINDOW_ACTIONS.unmaximize(w);
+    const area = w.get_work_area_current_monitor();
+    const [x, width] = spanPart(area.x, area.width, place[0]);
+    const [y, height] = spanPart(area.y, area.height, place[1]);
+    w.move_resize_frame(true, x, y, width, height);
+    return 'done';
+}
+
+function centerWindow(w) {
+    const area = w.get_work_area_current_monitor();
+    const frame = w.get_frame_rect();
+    w.move_frame(true,
+        area.x + Math.floor((area.width - frame.width) / 2),
+        area.y + Math.floor((area.height - frame.height) / 2));
+    return 'done';
+}
+
+// The workspace one step RIGHT or LEFT of the current one, or what to answer
+// when there is none: only one workspace, or already at that end.
+function neighbourWorkspace(direction) {
+    const manager = global.workspace_manager;
+    if (manager.n_workspaces === 1)
+        return 'one_desktop';
+    const current = manager.get_active_workspace();
+    const neighbour = current.get_neighbor(direction);
+    return neighbour.index() === current.index() ? 'edge' : neighbour;
+}
+
+// The workspace TuxTalk's number n (1 is the first) names, or 'no_desktop'.
+function numberedWorkspace(n) {
+    const manager = global.workspace_manager;
+    return n >= 1 && n <= manager.n_workspaces ? manager.get_workspace_by_index(n - 1) : 'no_desktop';
+}
+
+// Switch to *target* (a workspace, or the answer neighbourWorkspace gave).
+function switchTo(target) {
+    if (typeof target === 'string')
+        return target;
+    target.activate(global.get_current_time());
+    return 'done';
+}
+
+// Send the front window *w* to *target* (as switchTo).
+function sendTo(w, target) {
+    if (typeof target === 'string')
+        return target;
+    w.change_workspace_by_index(target.index(), false);
+    return 'done';
+}
+
+// The windows "show desktop" minimized, to bring back with the next one.
+// GNOME has no show-desktop action of its own, so it is done by minimizing
+// the normal windows and remembering them: windows the person minimized
+// earlier must stay minimized when they come back.
+let hiddenByShowDesktop = [];
+
+function showDesktop() {
+    const hidden = hiddenByShowDesktop.filter(w => w.minimized);
+    hiddenByShowDesktop = [];
+    if (hidden.length > 0) {
+        hidden.forEach(w => w.unminimize());
+        return 'done';
+    }
+    const shown = global.workspace_manager.get_active_workspace().list_windows()
+        .filter(w => isAppWindow(w) && !w.minimized && !w.skip_taskbar);
+    shown.forEach(w => w.minimize());
+    hiddenByShowDesktop = shown;
+    return 'done';
+}
+
+// What each DesktopCommand does: (number) for the ones that need no window,
+// and the front window first for the others.
+const DESKTOP_COMMANDS = {
+    'show desktop': showDesktop,
+    overview: () => {
+        Main.overview.toggle();
+        return 'done';
+    },
+    desktop: n => switchTo(numberedWorkspace(n)),
+    'next desktop': () => switchTo(neighbourWorkspace(Meta.MotionDirection.RIGHT)),
+    'previous desktop': () => switchTo(neighbourWorkspace(Meta.MotionDirection.LEFT)),
+};
+const FRONT_WINDOW_COMMANDS = {
+    ...Object.fromEntries(Object.entries(SNAP_PLACES).map(
+        ([action, place]) => [action, w => snapWindow(w, place)])),
+    center: centerWindow,
+    'to desktop': (w, n) => sendTo(w, numberedWorkspace(n)),
+    'to next desktop': w => sendTo(w, neighbourWorkspace(Meta.MotionDirection.RIGHT)),
+    'to previous desktop': w => sendTo(w, neighbourWorkspace(Meta.MotionDirection.LEFT)),
+    'to next screen': w => {
+        const monitors = global.display.get_n_monitors();
+        if (monitors < 2)
+            return 'one_screen';
+        w.move_to_monitor((w.get_monitor() + 1) % monitors);
+        return 'done';
+    },
+};
 
 const AppFocus = {
     // Bring forward the window of the menu entry *appId* ("firefox.desktop")
@@ -177,6 +306,26 @@ const AppFocus = {
         }
         windows.forEach(act);
         return windows.length > 0;
+    },
+
+    // Voice commands that snap or move the focused window, switch workspace
+    // or show the desktop or overview (desktop_commands.py). *number* is the
+    // workspace's for "desktop" and "to desktop", else 0. The answer is
+    // 'done', or why nothing was done: no_window, no_desktop, one_desktop,
+    // edge (no workspace further that way), one_screen, unknown.
+    //
+    // The same trust as WindowAction: any process on the session bus can ask.
+    // Nothing here closes a window; show desktop only minimizes.
+    DesktopCommand(action, number) {
+        // Own keys only: 'constructor' or '__proto__' must not count as actions.
+        if (Object.hasOwn(DESKTOP_COMMANDS, action))
+            return DESKTOP_COMMANDS[action](number);
+        if (!Object.hasOwn(FRONT_WINDOW_COMMANDS, action))
+            return 'unknown';
+        const focused = global.display.focus_window;
+        if (!focused || !isAppWindow(focused))
+            return 'no_window';
+        return FRONT_WINDOW_COMMANDS[action](focused, number);
     },
 };
 
@@ -836,6 +985,7 @@ export default class TuxTalkExtension extends Extension {
     }
 
     disable() {
+        hiddenByShowDesktop = [];
         if (this._appFocus) {
             this._appFocus.unexport();
             this._appFocus = null;
