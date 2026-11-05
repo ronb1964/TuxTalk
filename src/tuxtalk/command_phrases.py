@@ -130,9 +130,10 @@ def _window(said: str) -> WindowRequest | None:
     words = said.split()
     if len(words) < 2 or _PUNCTUATION.intersection(words):
         return None
-    if words[0] == "close" and words[1] in ("all", "every") and len(words) > 2:
-        rest = words[3:] if words[2] == "the" else words[2:]
-        app = app_name(rest)
+    if words[0] == "close" and words[1] in ("all", "every"):
+        # "Close all." names no app, never one whose name is "all".
+        rest = words[3:] if words[2:3] == ["the"] else words[2:]
+        app = app_name(rest) if rest else None
         return WindowRequest("close", app, every=True) if app else None
     if words[0] == "close":
         app = app_name(words[1:])

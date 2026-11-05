@@ -42,7 +42,9 @@ def run(request: WindowRequest, beeps_on: bool) -> bool | None:
     if request.app is None:
         logger.info(f"Voice command: {request.action} the focused window")
         return _act(request, None, False, beeps_on)
-    found = app_match.find(request.app)
+    # The whole name only: the start of one ("Close the fire.") would close
+    # the wrong window, or eat the sentence with a note about another app.
+    found = app_match.find(request.app, strict=True)
     if found.kind == "none":
         # As for "open": a sentence lost is worse than one typed. The log
         # keeps the user's words out.

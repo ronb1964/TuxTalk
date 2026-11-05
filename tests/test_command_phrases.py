@@ -53,6 +53,10 @@ def test_window_requests():
     assert P("switch to Firefox") == WindowRequest("switch", OpenRequest("firefox"))
     assert P("close tab") == KeyRequest("close tab")
 
+@pytest.mark.parametrize("said", ["Close all.", "close every", "close all the"])
+def test_close_all_naming_no_app_is_dictation(said):
+    assert P(said) is None
+
 @pytest.mark.parametrize("said, url", [("go to youtube dot com", "https://youtube.com"),
     ("Go to YouTube.com.", "https://youtube.com"),
     ("go to www youtube dot com", "https://www.youtube.com"),

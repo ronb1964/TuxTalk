@@ -25,6 +25,11 @@ FIREFOX = AppEntry("firefox.desktop", "Firefox", "Firefox", "Web Browser", "fire
 KWRITE = AppEntry("org.kde.kwrite.desktop", "KWrite", "KWrite", "Text Editor", "kwrite", "")
 KONSOLE = AppEntry("org.kde.konsole.desktop", "Konsole", "Konsole", "Terminal", "konsole", "")
 KITTY = AppEntry("kitty.desktop", "Kitty", "Kitty", "Terminal", "kitty", "")
+# Names that start like words of a sentence: "the file", "all".
+FILELIGHT = AppEntry("org.kde.filelight.desktop", "Filelight", "Filelight", "Disk Usage Analyzer",
+                     "filelight", "")
+ALLIGATOR = AppEntry("org.kde.alligator.desktop", "Alligator", "Alligator", "Feed Reader",
+                     "alligator", "")
 # A menu entry whose id leaves nothing to know its windows by.
 NAMELESS = AppEntry(".desktop", "Ghostwriter", "Ghostwriter", "Text Editor", "ghostwriter", "")
 
@@ -111,6 +116,15 @@ def test_close_firefox_on_kde_asks_kwin_with_the_apps_window_names(kde, apps, kw
     assert window_actions.run(close("firefox"), True) is True
     assert kwin_calls == [("close", "firefox", frozenset({"firefox"}), False)]
     assert actions_on == [] and beeps_played == [READY_BEEP]
+
+
+def test_close_firefox_where_the_menu_names_it_firefox_web_browser(kde, apps, kwin_calls,
+                                                                     actions_on):
+    """Mint's menu: the program's name is a whole name too."""
+    apps[:] = [AppEntry("firefox.desktop", "Firefox Web Browser", "Firefox Web Browser",
+                        "Web Browser", "firefox", "")]
+    assert window_actions.run(close("firefox"), False) is True
+    assert kwin_calls == [("close", "firefox", frozenset({"firefox"}), False)]
 
 
 def test_close_all_firefox_asks_for_every_window(kde, apps, kwin_calls, actions_on):
@@ -328,6 +342,17 @@ def test_no_app_returns_none_with_no_note(kde, apps, actions_on, kwin_calls, cap
                                   "Close all."])
 def test_close_or_switch_naming_no_app_is_typed(actions_on, chat, say, kde, apps,
                                                 nobody_is_asked, said):
+    say(said)
+    assert [text for text, _ in chat[2]] == [said] and actions_on == []
+
+
+@pytest.mark.parametrize("said", ["Close the fire.", "Close the file.", "Close all.",
+                                  "Close every.", "Switch to fire."])
+def test_a_sentence_that_only_starts_like_an_apps_name_is_typed(actions_on, chat, say, kde,
+                                                                apps, nobody_is_asked, said):
+    """A window command takes only an app's whole name: the start of one
+    ("fire", "file", "all") would close the wrong window or eat the sentence."""
+    apps[:] = [FIREFOX, FILELIGHT, ALLIGATOR]
     say(said)
     assert [text for text, _ in chat[2]] == [said] and actions_on == []
 

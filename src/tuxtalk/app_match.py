@@ -24,10 +24,11 @@ class Match:
         return self.entries[0]
 
 
-def find(request: OpenRequest) -> Match:
-    """The app *request* names among the menu's apps."""
+def find(request: OpenRequest, strict: bool = False) -> Match:
+    """The app *request* names among the menu's apps. *strict*: by its whole
+    name, its generic name or a default-app word only (app_finder.find)."""
     entries = app_finder.installed_apps()
-    found = app_finder.find(request, entries, app_finder.default_apps())
+    found = app_finder.find(request, entries, app_finder.default_apps(), strict)
     if found.kind != "one":
         return Match(found.kind, tuple(found.entries))
     entry = found.entries[0]

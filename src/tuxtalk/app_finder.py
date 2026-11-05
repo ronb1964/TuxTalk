@@ -125,8 +125,11 @@ def _fuzzy(letters, indexed):
     return [item for score, item in scored if score == best]
 
 
-def _candidates(words, indexed):
-    """The entries the first matching rule finds, rules in the spec's order."""
+def _candidates(words, indexed, strict=False):
+    """The entries the first matching rule finds, rules in the spec's order.
+    *strict*: only the rules that take the whole name as said, never the
+    start of a name, a sound or a close spelling, for a window command,
+    where "Close the fire." must not close Firefox."""
     said = " ".join(words)
     letters = said.replace(" ", "")
     sounds = _sounds(letters) if len(letters) >= MIN_SOUND_LETTERS else ""
@@ -139,11 +142,11 @@ def _candidates(words, indexed):
         lambda i: i.starts_name(words),
         lambda i: bool(sounds) and sounds in i.sounds,
     )
-    for rule in rules:
+    for rule in rules[:3] if strict else rules:
         hits = [i for i in indexed if rule(i)]
         if hits:
             return hits
-    return _fuzzy(letters, indexed)
+    return [] if strict else _fuzzy(letters, indexed)
 
 
 def _name_key(entry):
@@ -201,11 +204,12 @@ def _one_of_each_app(hits, entries, install):
     return tuple(chosen)
 
 
-def find(request, entries, defaults):
+def find(request, entries, defaults, strict=False):
     """The Found result for *request* among *entries*.
 
     *defaults* maps "browser", "email", "files", "text editor" and "terminal"
-    to app ids; saying one of those words opens the default app.
+    to app ids; saying one of those words opens the default app. *strict*:
+    the whole name only (_candidates).
     """
     words = _clean(request.name)
     if not words:
@@ -219,7 +223,7 @@ def find(request, entries, defaults):
             chosen = next((c for c in copies(match[0], entries)
                            if request.install and c.install == request.install), match[0])
             return Found("one", (chosen,))
-    hits = _candidates(words, [_Indexed(e) for e in entries])
+    hits = _candidates(words, [_Indexed(e) for e in entries], strict)
     if not hits:
         return _NONE
     apps = _one_of_each_app(hits, entries, request.install)
