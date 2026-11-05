@@ -120,14 +120,26 @@ def _editor_open(run):
 # --- windows ---------------------------------------------------------------
 
 
-def _discard_and_close(run, app):
-    """Answer the save question with its discard button, as a person would,
-    looked for in the editor's own windows only; an editor whose dialog has
-    none (or has none showing) is killed."""
-    for name in ("~iscard", "~on't save", "~on\u2019t save", "~without sav"):
-        if run.vm.ui("click", "button", name, timeout=2, app=app):
-            time.sleep(1.5)
-            break
+SAVE_WORDS = re.compile("save|unsaved|changes|discard", re.I)
+
+
+def _save_question(run, app, before):
+    """The title of the editor's save question: its window that wasn't open
+    before the close (*before*, the titles then), or one asking about
+    saving. None when there is none."""
+    return next((title for name, title, _focused in _windows(run)
+                 if name == app and (title not in before or SAVE_WORDS.search(title))), None)
+
+
+def _discard_and_close(run, app, question):
+    """Answer the save question titled *question* with its discard button, as
+    a person would, looked for in that dialog only: never a button of another
+    window, the editor's other documents included. Then the editor is closed
+    (killed if it's still there)."""
+    names = ("~iscard", "~on't save", "~on\u2019t save", "~without sav")
+    if question is not None and any(
+            run.vm.ui("click", "button", name, question, timeout=2, app=app) for name in names):
+        time.sleep(1.5)
     _close(run, app)
 
 
@@ -139,17 +151,16 @@ def close_asks_to_save(run):
         app, why = _editor_open(run)
         if app is None:
             return Outcome("skip", why)
+        asked = None
         try:
             run.vm.click_centre()
             for key in ("h", "i"):
                 run.vm.tap(key)
             time.sleep(0.5)
-            windows = sum(1 for w in _windows(run) if w[0] == app)
+            titles = {title for name, title, _focused in _windows(run) if name == app}
             _typed, _heard, mark = run.say("close_text_editor", wait=False)
             run.wait_log(mark, "Voice command: close", "Voice command not done", timeout=30)
-            asked = _until(10, lambda: sum(1 for w in _windows(run) if w[0] == app) > windows
-                           or any(re.search("save|unsaved|changes|discard", w[1], re.I)
-                                  for w in _windows(run) if w[0] == app))
+            asked = _until(10, lambda: _save_question(run, app, titles))
             log = run.log_since(mark)
             running = not run.vm.ssh(f"pgrep -f {_running(app)}", check=False).returncode
             shot = run.shot("close-asks")
@@ -165,7 +176,7 @@ def close_asks_to_save(run):
             return Outcome("pass", f"{app} asked what to do with the unsaved line and is still "
                            "running", screenshot=shot)
         finally:
-            _discard_and_close(run, app)
+            _discard_and_close(run, app, asked)
 
 
 @check(SECTION, "close_this_window", "“close this window” closes the focused window")
@@ -271,15 +282,19 @@ def _sink_state(window):
 
 def _minimized(run, mark, steps):
     """The Outcome of "minimize window": the window says it's minimized
-    where its toolkit learns of it (X11). On Wayland an app is never told,
-    so there the window losing the focus is the sign, once the log shows the
-    command was done: a note or another window taking the focus isn't it."""
+    where its toolkit learns of it (X11). Only on Wayland, where an app is
+    never told, is the window losing the focus the sign, once the log shows
+    the command was done: any "not done" (a note, or the focus moving before
+    the desktop was asked) fails it."""
     log = run.log_since(mark)
-    if "Voice command not done" in log or "minimize the focused window" not in log:
+    if "not done" in log or "minimize the focused window" not in log:
         return Outcome("fail", "“minimize window” wasn't done: "
-                       + ("a note said why" if "not done" in log else "no line in the log"),
+                       + ("the log says why" if "not done" in log else "no line in the log"),
                        screenshot=run.shot("minimize"))
     state = _until(8, lambda: _sink_state(_sink(run)))
+    if state == "unfocused" and "x11" in run.vm.spec.tags:
+        return Outcome("fail", "the window lost the focus but doesn't say it's minimized, "
+                       "which X11 tells it", screenshot=run.shot("minimize"))
     if not state:
         return Outcome("fail", "the window was still showing and focused after “minimize "
                        "window”", screenshot=run.shot("minimize"))
@@ -453,11 +468,14 @@ def _closing_new_browsers(run, judge):
     return outcome
 
 
-def _browser_shows(run, part):
-    """Whether a browser's address bar or window title holds *part*: where
-    it went, not only that a browser came forward."""
-    bar = run.vm.ui("find", "entry", "~address", timeout=3) or {}
-    titles = " ".join(w[1] or "" for w in _browser_windows(run))
+def _browser_shows(run, browser, part, stale):
+    """Whether the browser that came forward (*browser*, its application) has
+    *part* in its address bar or in a window title that wasn't there before
+    the command (*stale*, every title then): where it went, not only that a
+    browser came forward, and never another app's field or an old title."""
+    bar = run.vm.ui("find", "entry", "~address", timeout=3, app=browser) or {}
+    titles = " ".join(title or "" for name, title, _focused in _windows(run)
+                      if name == browser and title not in stale)
     return part in (bar.get("text", "") + " " + titles).lower()
 
 
@@ -470,13 +488,15 @@ def _no_default_browser(run):
 def _said_to_browser(run, phrase_id, done, word, timeout):
     """Say *phrase_id* in the test window and judge it: the log has *done*,
     a browser came forward with *word* (of the address or the search) in its
-    address bar or title, and it stayed out of the test window and the log."""
+    own address bar or a new title, and it stayed out of the test window and
+    the log."""
     run.sink_ready(fresh=True)
     before = _apps(run)
+    stale = {title for _name, title, _focused in _windows(run)}
     _typed, _heard, mark = run.say(phrase_id, wait=False)
     run.wait_log(mark, done, "Voice command not done", "Text injected", timeout=timeout)
     window = _forward_browser(run, before)
-    shown = _until(15, lambda: _browser_shows(run, word))
+    shown = window and _until(15, lambda: _browser_shows(run, window[0], word, stale))
     log, typed = run.log_since(mark), run.sink_text().strip()
     shot = run.shot(phrase_id.replace("_", "-"))
     if typed and "Voice command" not in log:
