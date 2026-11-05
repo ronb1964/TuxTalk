@@ -57,10 +57,12 @@ def _send(act, request, what: str, beeps_on: bool, ongoing) -> bool:
 def _window(request: WindowRequest, beeps_on: bool, ongoing) -> bool | None:
     """A window command. It sends no keys, so the recording can end after
     it; only one that was done ends it, so a refused one ("Couldn't tell
-    which window") lets the user carry on talking."""
+    which window") lets the user carry on talking. Esc is looked at again
+    in window_actions, after the app was found."""
+    where = focused_window.look()
     if keyboard_output.esc_stopped(f"done ({request.action})"):
         return False
-    done = window_actions.run(request, beeps_on)
+    done = window_actions.run(request, where, beeps_on)
     if done and ongoing is not None:
         ongoing.cancelled = True
     return done

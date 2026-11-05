@@ -10,7 +10,7 @@ import logging
 
 import pytest
 
-from conftest import esc
+from conftest import CHAT_WINDOW, esc
 from desktop_fakes import FakeShell, set_desktop
 from type_at_pause_rig import service_tick_runs
 from tuxtalk import (app_finder, app_focus, app_launcher, command_phrases, kwin_windows,
@@ -108,12 +108,16 @@ def close(app="", every=False):
     return WindowRequest("close", OpenRequest(app) if app else None, every)
 
 
+def switch(app):
+    return WindowRequest("switch", OpenRequest(app))
+
+
 # --- KDE ------------------------------------------------------------------------------------
 
 
 def test_close_firefox_on_kde_asks_kwin_with_the_apps_window_names(kde, apps, kwin_calls,
                                                                     actions_on, beeps_played):
-    assert window_actions.run(close("firefox"), True) is True
+    assert window_actions.run(close("firefox"), CHAT_WINDOW, True) is True
     assert kwin_calls == [("close", "firefox", frozenset({"firefox"}), False)]
     assert actions_on == [] and beeps_played == [READY_BEEP]
 
@@ -123,30 +127,30 @@ def test_close_firefox_where_the_menu_names_it_firefox_web_browser(kde, apps, kw
     """Mint's menu: the program's name is a whole name too."""
     apps[:] = [AppEntry("firefox.desktop", "Firefox Web Browser", "Firefox Web Browser",
                         "Web Browser", "firefox", "")]
-    assert window_actions.run(close("firefox"), False) is True
+    assert window_actions.run(close("firefox"), CHAT_WINDOW, False) is True
     assert kwin_calls == [("close", "firefox", frozenset({"firefox"}), False)]
 
 
 def test_close_all_firefox_asks_for_every_window(kde, apps, kwin_calls, actions_on):
-    assert window_actions.run(close("firefox", every=True), False) is True
+    assert window_actions.run(close("firefox", every=True), CHAT_WINDOW, False) is True
     assert kwin_calls == [("close", "firefox", frozenset({"firefox"}), True)]
 
 
 def test_close_window_on_kde_asks_for_the_focused_one(kde, kwin_calls, actions_on):
-    assert window_actions.run(close(), False) is True
+    assert window_actions.run(close(), CHAT_WINDOW, False) is True
     assert kwin_calls == [("close", "", frozenset(), False)]
 
 
 def test_close_an_app_with_no_window_says_so(kde, apps, kwin_calls, actions_on):
     """Firefox in the menu but not open: nothing is closed, and a note says why."""
     kwin_calls.answer = False
-    assert window_actions.run(close("firefox"), False) is False
+    assert window_actions.run(close("firefox"), CHAT_WINDOW, False) is False
     assert actions_on == ["Firefox has no open window"]
 
 
 def test_close_window_with_no_focused_window_says_so(kde, kwin_calls, actions_on):
     kwin_calls.answer = False
-    assert window_actions.run(close(), False) is False
+    assert window_actions.run(close(), CHAT_WINDOW, False) is False
     assert actions_on == ["Couldn't tell which window"]
 
 
@@ -155,7 +159,7 @@ def test_a_kwin_error_says_it_cant_and_is_logged(kde, apps, actions_on, monkeypa
         raise RuntimeError("KWin refused the script")
     monkeypatch.setattr(kwin_windows, "act", refused)
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
-        assert window_actions.run(WindowRequest("maximize"), False) is False
+        assert window_actions.run(WindowRequest("maximize"), CHAT_WINDOW, False) is False
     assert actions_on == ["Can't minimize or maximize here"]
     assert "maximize" in caplog.text and "KWin refused the script" in caplog.text
 
@@ -166,27 +170,27 @@ def test_an_x11_error_says_it_cant_and_is_logged(x11_session, apps, actions_on, 
         raise OSError("the X server refused the request (error 3)")
     monkeypatch.setattr(x11_windows, "act", refused)
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
-        assert window_actions.run(close("firefox"), False) is False
+        assert window_actions.run(close("firefox"), CHAT_WINDOW, False) is False
     assert actions_on == ["Can't close windows on this desktop"]
     assert "close" in caplog.text and "error 3" in caplog.text
 
 
 def test_the_log_names_the_app_not_the_words(kde, apps, kwin_calls, actions_on, caplog):
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
-        window_actions.run(close("fire fox"), False)
+        window_actions.run(close("fire fox"), CHAT_WINDOW, False)
     assert "Voice command: close firefox.desktop" in caplog.text
     assert "fire fox" not in caplog.text
 
 
 def test_the_log_says_the_focused_window(kde, kwin_calls, actions_on, caplog):
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
-        window_actions.run(WindowRequest("minimize"), False)
+        window_actions.run(WindowRequest("minimize"), CHAT_WINDOW, False)
     assert "Voice command: minimize the focused window" in caplog.text
 
 
 def test_a_tie_names_both_and_closes_neither(kde, apps, kwin_calls, actions_on):
     apps[:] = [KONSOLE, KITTY]
-    assert window_actions.run(close("terminal"), False) is False
+    assert window_actions.run(close("terminal"), CHAT_WINDOW, False) is False
     assert kwin_calls == []
     assert actions_on == ["Two apps fit: Konsole, Kitty. Say the full name."]
 
@@ -199,7 +203,7 @@ def test_a_named_app_with_nothing_to_know_it_by_never_closes_the_focused_window(
     whose entry gives none must not close whatever the user is in."""
     set_desktop(monkeypatch, desktop, session)
     apps.append(NAMELESS)
-    assert window_actions.run(close("ghostwriter"), False) is False
+    assert window_actions.run(close("ghostwriter"), CHAT_WINDOW, False) is False
     assert actions_on == ["Ghostwriter has no open window"]
 
 
@@ -208,19 +212,19 @@ def test_a_named_app_with_nothing_to_know_it_by_never_closes_the_focused_window(
 
 def test_close_window_on_gnome_asks_the_extension_for_the_focused_one(gnome, fake_extension,
                                                                       actions_on):
-    assert window_actions.run(close(), False) is True
+    assert window_actions.run(close(), CHAT_WINDOW, False) is True
     assert fake_extension.window_calls == [("close", "", False)]
 
 
 def test_close_all_firefox_on_gnome_names_its_menu_entry(gnome, apps, fake_extension,
                                                          actions_on):
-    assert window_actions.run(close("firefox", every=True), False) is True
+    assert window_actions.run(close("firefox", every=True), CHAT_WINDOW, False) is True
     assert fake_extension.window_calls == [("close", "firefox.desktop", True)]
 
 
 def test_gnome_with_no_such_window_says_so(gnome, apps, fake_extension, actions_on):
     fake_extension.window_answer = False
-    assert window_actions.run(close("firefox"), False) is False
+    assert window_actions.run(close("firefox"), CHAT_WINDOW, False) is False
     assert actions_on == ["Firefox has no open window"]
 
 
@@ -233,14 +237,14 @@ def test_gnome_without_the_extension_says_it_cant(gnome, actions_on, request_, s
     nothing to log out and back in for."""
     shell = FakeShell(extension=False)
     try:
-        assert window_actions.run(request_, False) is False
+        assert window_actions.run(request_, CHAT_WINDOW, False) is False
         assert actions_on == [said]
     finally:
         shell.stop()
 
 
 def test_gnome_shell_not_on_the_bus_says_it_cant(gnome, actions_on):
-    assert window_actions.run(close(), False) is False
+    assert window_actions.run(close(), CHAT_WINDOW, False) is False
     assert actions_on == ["Can't close windows on this desktop"]
 
 
@@ -249,7 +253,7 @@ def test_gnome_extension_before_logout_says_to_log_out(gnome, actions_on):
     out: one from before the update has no WindowAction."""
     shell = FakeShell(extension="old")
     try:
-        assert window_actions.run(WindowRequest("minimize"), False) is False
+        assert window_actions.run(WindowRequest("minimize"), CHAT_WINDOW, False) is False
         assert actions_on == ["Log out and back in for this"]
     finally:
         shell.stop()
@@ -259,14 +263,14 @@ def test_gnome_extension_before_logout_says_to_log_out(gnome, actions_on):
 
 
 def test_minimize_on_x11_uses_the_window_manager(x11_session, x11_calls, actions_on):
-    assert window_actions.run(WindowRequest("minimize"), False) is True
+    assert window_actions.run(WindowRequest("minimize"), CHAT_WINDOW, False) is True
     assert x11_calls == [("minimize", "", frozenset(), False)]
 
 
 def test_close_firefox_on_x11_reaches_the_window_manager(window_manager, apps, actions_on):
     firefox = window_manager.window("Navigator", "firefox")
     window_manager.stack([window_manager.window("mousepad", "Mousepad"), firefox])
-    assert window_actions.run(close("firefox"), False) is True
+    assert window_actions.run(close("firefox"), CHAT_WINDOW, False) is True
     assert window_manager.requests(b"_NET_CLOSE_WINDOW") == [(firefox, (0, 2, 0, 0, 0))]
 
 
@@ -274,12 +278,12 @@ def test_close_firefox_on_x11_reaches_the_window_manager(window_manager, apps, a
 
 
 def test_cosmic_closes_nothing_and_says_so(cosmic, nobody_is_asked, actions_on):
-    assert window_actions.run(close(), False) is False
+    assert window_actions.run(close(), CHAT_WINDOW, False) is False
     assert actions_on == ["Can't close windows on this desktop"]
 
 
 def test_cosmic_minimizes_nothing_and_says_so(cosmic, nobody_is_asked, actions_on):
-    assert window_actions.run(WindowRequest("maximize"), False) is False
+    assert window_actions.run(WindowRequest("maximize"), CHAT_WINDOW, False) is False
     assert actions_on == ["Can't minimize or maximize here"]
 
 
@@ -288,25 +292,25 @@ def test_cosmic_minimizes_nothing_and_says_so(cosmic, nobody_is_asked, actions_o
 
 def test_switch_to_brings_it_forward_and_never_starts_it(kde, apps, focused, actions_on,
                                                          beeps_played):
-    assert window_actions.run(WindowRequest("switch", OpenRequest("firefox")), True) is True
+    assert window_actions.run(switch("firefox"), CHAT_WINDOW, True) is True
     assert focused == ["firefox.desktop"] and beeps_played == [READY_BEEP]
 
 
 def test_switch_to_an_app_not_running_says_so(kde, apps, focused, actions_on):
     focused.answer = False
-    assert window_actions.run(WindowRequest("switch", OpenRequest("firefox")), False) is False
+    assert window_actions.run(switch("firefox"), CHAT_WINDOW, False) is False
     assert actions_on == ["Firefox isn't open"]
 
 
 def test_switch_to_on_cosmic_says_it_cant(cosmic, apps, nobody_is_asked, actions_on,
                                           monkeypatch):
     monkeypatch.setattr(app_launcher, "launch", lambda entry: pytest.fail("started"))
-    assert window_actions.run(WindowRequest("switch", OpenRequest("firefox")), False) is False
+    assert window_actions.run(switch("firefox"), CHAT_WINDOW, False) is False
     assert actions_on == ["Can't switch windows on this desktop"]
 
 
 def test_switch_to_on_gnome_asks_the_extension(gnome, apps, fake_extension, actions_on):
-    assert window_actions.run(WindowRequest("switch", OpenRequest("firefox")), False) is True
+    assert window_actions.run(switch("firefox"), CHAT_WINDOW, False) is True
     assert fake_extension.called == ["firefox.desktop"]
 
 
@@ -316,8 +320,7 @@ def test_switch_to_on_gnome_without_the_extension_says_it_cant(gnome, apps, acti
     monkeypatch.setattr(app_launcher, "launch", lambda entry: pytest.fail("started"))
     shell = FakeShell(extension=False)
     try:
-        assert window_actions.run(WindowRequest("switch", OpenRequest("firefox")),
-                                  False) is False
+        assert window_actions.run(switch("firefox"), CHAT_WINDOW, False) is False
         assert actions_on == ["Can't switch windows on this desktop"]
     finally:
         shell.stop()
@@ -328,8 +331,8 @@ def test_switch_to_on_gnome_without_the_extension_says_it_cant(gnome, apps, acti
 
 def test_no_app_returns_none_with_no_note(kde, apps, actions_on, kwin_calls, caplog):
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
-        assert window_actions.run(close("the door"), False) is None
-        assert window_actions.run(WindowRequest("switch", OpenRequest("decaf")), False) is None
+        assert window_actions.run(close("the door"), CHAT_WINDOW, False) is None
+        assert window_actions.run(switch("decaf"), CHAT_WINDOW, False) is None
     assert actions_on == [] and kwin_calls == []
     assert "Window command: no app matched; typed as words" in caplog.text
     assert "door" not in caplog.text and "decaf" not in caplog.text
@@ -375,6 +378,31 @@ def test_esc_before_a_window_command_does_nothing(actions_on, chat, say, kde, ap
     monkeypatch.setattr(command_phrases, "parse", parse_then_esc)
     say("Close Firefox.")
     assert kwin_calls == [] and chat[2] == []
+
+
+def test_close_window_after_the_focus_moved_closes_nothing(kde, kwin_calls, actions_on,
+                                                           chat):
+    """The desktop closes whichever window has the focus when it gets the
+    request: one the user switched to since must not be closed instead."""
+    chat[0][:] = ["org.kde.kwrite", ("tray", "{another window}")]
+    assert window_actions.run(close(), CHAT_WINDOW, False) is False
+    assert kwin_calls == [] and actions_on == ["Window changed, nothing done"]
+
+
+def test_a_named_app_is_closed_wherever_the_focus_is(kde, apps, kwin_calls, actions_on, chat):
+    chat[0][:] = ["org.kde.kwrite", ("tray", "{another window}")]
+    assert window_actions.run(close("firefox"), CHAT_WINDOW, False) is True
+    assert kwin_calls == [("close", "firefox", frozenset({"firefox"}), False)]
+
+
+def test_esc_while_the_app_is_found_closes_nothing(actions_on, chat, say, kde, apps, kwin_calls,
+                                                   monkeypatch):
+    def apps_then_esc():
+        esc()
+        return [FIREFOX, KWRITE]
+    monkeypatch.setattr(app_finder, "installed_apps", apps_then_esc)
+    say("Close Firefox.")
+    assert kwin_calls == [] and chat[2] == [] and actions_on == []
 
 
 def test_a_window_command_mid_recording_ends_it(actions_on, recording_on, chat, kde,

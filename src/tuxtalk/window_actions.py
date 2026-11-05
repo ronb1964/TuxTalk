@@ -16,8 +16,8 @@ worker: each desktop may take up to TIMEOUT_S to answer.
 """
 import os
 
-from . import (app_focus, app_match, beeps, command_notices, desktop_detect, kwin_windows,
-               x11_windows)
+from . import (app_focus, app_match, beeps, command_notices, desktop_detect, focused_window,
+               keyboard_output, kwin_windows, notices, x11_windows)
 from .beeps import READY_BEEP
 from .command_phrases import WindowRequest
 from .logger import setup_logger
@@ -36,12 +36,14 @@ def _cant(action: str) -> str:
     return _CANT.get(action, "cant_size_here")
 
 
-def run(request: WindowRequest, beeps_on: bool) -> bool | None:
+def run(request: WindowRequest, where, beeps_on: bool) -> bool | None:
     """Do *request*. None: it names no app ("Close the door."), so the words
-    are typed; True: done; False: not done, said with a note."""
+    are typed; True: done; False: not done, said with a note, or stopped by
+    Esc. *where*: focused_window.look(), taken when the command was heard:
+    "close window" is for that window only."""
     if request.app is None:
         logger.info(f"Voice command: {request.action} the focused window")
-        return _act(request, None, False, beeps_on)
+        return _act(request, None, False, where, beeps_on)
     # The whole name only: the start of one ("Close the fire.") would close
     # the wrong window, or eat the sentence with a note about another app.
     found = app_match.find(request.app, strict=True)
@@ -54,12 +56,28 @@ def run(request: WindowRequest, beeps_on: bool) -> bool | None:
         app_match.say_tie(found, request.action, NOTHING_DONE, beeps_on)
         return False
     logger.info(f"Voice command: {request.action} {found.entry.app_id}")
-    return _act(request, found.entry, found.exact, beeps_on)
+    return _act(request, found.entry, found.exact, where, beeps_on)
 
 
-def _act(request: WindowRequest, entry, exact: bool, beeps_on: bool) -> bool:
-    """Do *request* to *entry*'s windows, or the focused window with no
-    *entry*, and say what came of it."""
+def _still_wanted(request: WindowRequest, entry, where, beeps_on: bool) -> bool:
+    """Whether *request* may still be done, right before the desktop is
+    asked: Esc may have come while the app was being found, and a desktop
+    acts on whichever window has the focus when the request gets there, so
+    with no *entry* that must still be *where*. Says why not."""
+    if keyboard_output.esc_stopped(f"done ({request.action})"):
+        return False
+    if entry is None and focused_window.changed(where, focused_window.look()):
+        logger.info(f"Window command {request.action} not done: another window has the focus")
+        notices.edit_problem("focus_moved", beeps_on)
+        return False
+    return True
+
+
+def _act(request: WindowRequest, entry, exact: bool, where, beeps_on: bool) -> bool:
+    """Do *request* to *entry*'s windows, or the focused window *where* with
+    no *entry*, and say what came of it."""
+    if not _still_wanted(request, entry, where, beeps_on):
+        return False
     try:
         if request.action == "switch":
             # Never starts the app: "switch to" one that isn't open gets a note.
