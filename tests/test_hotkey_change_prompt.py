@@ -264,15 +264,26 @@ def test_picking_left_ctrl_space_where_ibus_uses_it_says_so():
                            "or give IBus another shortcut (IBus Preferences, Next input method).")
 
 
-def test_the_keyboard_options_clash_reads_as_plain_english():
+def test_the_keyboard_options_clash_says_what_they_do_to_left_ctrl():
     cfg = {**CFG, "hotkey": CTRL_SPACE}
-    _title, text, _, _ = hotkey_change_message(cfg, {"hotkey"}, [],
-                                               ctrl_space=[KEYBOARD_OPTIONS])
+    title, text, _, _ = hotkey_change_message(cfg, {"hotkey"}, [],
+                                              ctrl_space=[KEYBOARD_OPTIONS])
+    assert title == "Your keyboard options change Left Ctrl"
     assert text.startswith(
-        "Your keyboard setup already uses Ctrl+Space (it makes Left Ctrl a Compose or "
-        "layout-switch key), so pressing Left Ctrl+Space may do that instead of dictating. "
-        "Pick another key, or change those keyboard options "
-        "(Settings, Keyboard, Keyboard options).")
+        "Your keyboard options make Left Ctrl a Compose or layout-switch key, so pressing "
+        "Left Ctrl+Space may do that instead of dictating. Pick another key, or change "
+        "those keyboard options (Settings, Keyboard, Keyboard options).")
+    assert KEYBOARD_OPTIONS.log_line() == (
+        "Your keyboard options make Left Ctrl a Compose or layout-switch key; "
+        "Left Ctrl+Space may do that instead of dictating")
+    assert IBUS.log_line() == ("IBus also uses Ctrl+Space to switch input methods; "
+                               "Left Ctrl+Space may do that instead of dictating")
+
+
+def test_with_no_helper_running_the_dropdown_has_no_password_words(monkeypatch):
+    from tuxtalk import hotkey_labels, secure_input
+    monkeypatch.setattr(secure_input, "running_version", lambda: None)
+    assert "password" not in dict(hotkey_labels.dropdown_entries())[CTRL_SPACE]
 
 
 def test_kde_clash_comes_first_and_the_update_after_it():

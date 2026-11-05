@@ -22,19 +22,31 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class Clash:
     """A program or setting that takes Ctrl+Space: *who* does *what*, and
-    *where* it is changed. *change* is what to do there when "give *who*
-    another shortcut" doesn't read right for *who*."""
+    *where* it is changed. *sentence* replaces the stock wording, with
+    *headline* as the question's title, for a clash that isn't "uses
+    Ctrl+Space" (it gives Left Ctrl another job); *fix* is then the advice."""
     who: str
     what: str
     where: str
-    change: str = ""
+    headline: str = ""
+    sentence: str = ""
+    fix: str = ""
+
+    def title(self) -> str:
+        """The title of the question Preferences asks."""
+        return self.headline or f"{self.who} already uses Ctrl+Space"
 
     def paragraph(self) -> str:
         """What Preferences tells someone who picks Left Ctrl+Space."""
-        fix = self.change or f"give {self.who} another shortcut"
-        return (f"{self.who} already uses Ctrl+Space {self.what}, so pressing Left "
-                f"Ctrl+Space may do that instead of dictating. Pick another key, "
-                f"or {fix} ({self.where}).")
+        fix = self.fix or f"give {self.who} another shortcut"
+        return (f"{self.sentence or f'{self.who} already uses Ctrl+Space {self.what}'}, "
+                f"so pressing Left Ctrl+Space may do that instead of dictating. "
+                f"Pick another key, or {fix} ({self.where}).")
+
+    def log_line(self) -> str:
+        """What the log says about it at the service's start."""
+        return (f"{self.sentence or f'{self.who} also uses Ctrl+Space {self.what}'}; "
+                "Left Ctrl+Space may do that instead of dictating")
 
 
 IBUS = Clash("IBus", "to switch input methods", "IBus Preferences, Next input method")
@@ -42,10 +54,11 @@ FCITX5 = Clash("Fcitx 5", "to turn the input method on and off",
                "Fcitx 5 Configuration, Global Options, Trigger Input Method")
 GNOME = Clash("GNOME", "to switch the input source",
               "Settings, Keyboard, View and Customize Shortcuts")
-KEYBOARD_OPTIONS = Clash("Your keyboard setup",
-                         "(it makes Left Ctrl a Compose or layout-switch key)",
-                         "Settings, Keyboard, Keyboard options",
-                         change="change those keyboard options")
+KEYBOARD_OPTIONS = Clash("Your keyboard options", "", "Settings, Keyboard, Keyboard options",
+                         headline="Your keyboard options change Left Ctrl",
+                         sentence="Your keyboard options make Left Ctrl a Compose or "
+                                  "layout-switch key",
+                         fix="change those keyboard options")
 
 # The XKB options that give Left Ctrl a job of its own.
 _LEFT_CTRL_OPTIONS = frozenset({
@@ -60,6 +73,10 @@ _GNOME_SCHEMAS = (
     "org.gnome.settings-daemon.plugins.media-keys",
     "org.gnome.mutter.keybindings",
 )
+
+GSETTINGS_TIMEOUT_S = 2
+# The longest clashes() can take: IBus's one lookup and one per GNOME schema.
+LOOKUP_BUDGET_S = GSETTINGS_TIMEOUT_S * (1 + len(_GNOME_SCHEMAS))
 
 # Ctrl+Space as GTK accelerators write it, and no other key with it.
 _CTRL_SPACE_ACCEL = re.compile(r"'<(?:Control|Primary|Ctrl)>space'", re.IGNORECASE)
@@ -125,7 +142,7 @@ def _gsettings(*args: str) -> str:
     an unknown schema, too slow)."""
     try:
         return subprocess.run(["gsettings", *args], capture_output=True, text=True,
-                              errors="replace", timeout=2, check=True).stdout
+                              errors="replace", timeout=GSETTINGS_TIMEOUT_S, check=True).stdout
     except (OSError, subprocess.SubprocessError) as e:
         logger.info(f"gsettings {' '.join(args)} gave no answer: {e}")
         return ""
@@ -170,5 +187,4 @@ def clashes() -> list[Clash]:
 def log_clashes() -> None:
     """Say in the log who else uses Ctrl+Space, for each."""
     for clash in clashes():
-        logger.info(f"{clash.who} also uses Ctrl+Space {clash.what}; "
-                    "Left Ctrl+Space may do that instead of dictating")
+        logger.info(clash.log_line())

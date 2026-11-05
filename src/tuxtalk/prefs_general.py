@@ -133,7 +133,7 @@ def _question_title(clashes, unheard, ctrl_space=()):
     if clashes:
         return f"KDE already uses {clashes[0][0]}"
     if ctrl_space:
-        return f"{ctrl_space[0].who} already uses Ctrl+Space"
+        return ctrl_space[0].title()
     if unheard:
         return f"{_needs(unheard)} a newer hotkey helper"
     return "Try your new hotkey?"
@@ -499,9 +499,9 @@ class GeneralTab(Tab):
 
     def _ctrl_space_clashes(self, keys):
         """Who else uses Ctrl+Space, when Left Ctrl+Space was just picked.
-        The lookup runs gsettings (2 s each, up to 5 of them), so it runs off
-        the main loop with the window drawn and locked; no answer in 12 s
-        counts as no clash."""
+        The lookup runs gsettings, so it runs off the main loop with the
+        window drawn and locked; no answer within the lookup's longest
+        possible time (LOOKUP_BUDGET_S) counts as no clash."""
         from . import ctrl_space_clashes
         from .config import CTRL_SPACE
         if CTRL_SPACE not in keys:
@@ -509,7 +509,7 @@ class GeneralTab(Tab):
         found = []
         threading.Thread(target=lambda: found.append(ctrl_space_clashes.clashes()),
                          daemon=True).start()
-        self._while_drawn(lambda: bool(found), 12)
+        self._while_drawn(lambda: bool(found), ctrl_space_clashes.LOOKUP_BUDGET_S + 1)
         return found[0] if found else []
 
     def _update_helper(self, unheard) -> bool:
