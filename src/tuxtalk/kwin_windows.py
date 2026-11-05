@@ -26,8 +26,9 @@ _ACTIONS = {
 
 def build_script(action: str, desktop_file: str, classes, every: bool, reply_to: str) -> str:
     """The KWin script: do *action* ("close", "minimize", "maximize" or
-    "unmaximize") to the app's windows, matched as kwin_activate matches
-    them: the topmost one, or every one with *every*. With no
+    "unmaximize"; "find" only looks, touching no window) to the app's
+    windows, matched as kwin_activate matches them: the topmost one, or
+    every one with *every*. With no
     *desktop_file* and no *classes* it acts on the active window instead,
     an app's window or its dialog, never the desktop or a panel. It answers
     to the connection *reply_to* whether it acted on any.

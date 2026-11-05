@@ -150,9 +150,10 @@ const AppFocus = {
     },
 
     // Voice commands "close this", "minimize", "maximize": *action* is close,
-    // minimize, maximize or unmaximize. *appId* "" means the focused window;
-    // else the app's most recently used window, or with *every* all of them.
-    // False when there is no such window or action.
+    // minimize, maximize or unmaximize, or find, which only looks: whether
+    // the app has a window, touching none. *appId* "" means the focused
+    // window; else the app's most recently used window, or with *every* all
+    // of them. False when there is no such window or action.
     //
     // Like ActivateApp, any process on the session bus can call this: the
     // same trust as launching or raising an app. close is delete(), the same
