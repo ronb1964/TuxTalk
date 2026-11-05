@@ -1,37 +1,14 @@
 """Esc after the dictation key is let go, while what was said is still
 being transcribed or typed: what isn't in yet stays out, and no Enter
 follows it. Once it's all in, Esc is the app's again."""
-import threading
 
 from evdev import ecodes
 
-from conftest import CHAT_WINDOW, esc
+from conftest import CHAT_WINDOW, QueuedWorker, esc
 from type_at_pause_rig import fake_pipeline, frames_of, speech, type_chunk
 from tuxtalk import (delivery, dictation_worker, keyboard_output, pipeline,
                      send_countdown, type_at_pause)
 from tuxtalk import recording_state as rs
-
-
-class QueuedWorker:
-    """The dictation worker, busy: jobs wait until run() runs them, on the
-    test's thread, which then counts as the worker's (a key pressed from a
-    job runs within it, as dictation_worker.call does)."""
-
-    thread = None
-
-    def __init__(self):
-        self.jobs = []
-
-    def submit(self, job):
-        self.jobs.append(job)
-
-    def idle(self):
-        return not self.jobs
-
-    def run(self):
-        self.thread = threading.current_thread()
-        while self.jobs:
-            self.jobs.pop(0)()
 
 
 def test_esc_before_the_words_are_heard_types_nothing(chat, keyboard, let_go, monkeypatch):

@@ -13,25 +13,26 @@ import re
 
 from . import app_commands, app_finder, app_focus, app_launcher, beeps, keyboard_output
 from . import live_settings as live
-from . import notices, recording
+from . import notices
 from .beeps import READY_BEEP
-from .key_commands import LITERAL
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
 NOTHING_OPENED = "Nothing was opened."
 
-_LITERAL_FIRST = re.compile(rf"^\s*{LITERAL}", re.IGNORECASE)
+# Only "literal": "the word open means unlocked" is a sentence.
+_LITERAL_FIRST = re.compile(r"^\s*literal\s+", re.IGNORECASE)
 
 
-def run(raw: str, beeps_on: bool, in_recording: bool):
+def run(raw: str, beeps_on: bool, ongoing=None):
     """Open the app *raw* asks for. None: not an open command, or open apps
     is off, so it's typed; True: opened or brought forward; False: nothing
     opened, said with a notice, or stopped by Esc.
 
-    *in_recording*: said as a phrase of a hands-free or Type at pause
-    recording that is still going on, which opening the app ends."""
+    *ongoing*: the recording_state.Message of the Type at pause recording
+    *raw* is a phrase of, cut at a pause, else None. Opening the app ends
+    that recording."""
     if not live.open_apps:
         return None
     request = app_commands.parse(raw)
@@ -50,25 +51,28 @@ def run(raw: str, beeps_on: bool, in_recording: bool):
         label = _tie_label(found.entries) + " Say the full name."
         notices.app_not_opened(label, f"{label} {NOTHING_OPENED}", beeps_on)
         return False
-    return _open(found.entries[0], request.new, beeps_on, in_recording)
+    return _open(found.entries[0], request.new, beeps_on, ongoing)
 
 
-def _open(entry, new: bool, beeps_on: bool, in_recording: bool) -> bool:
+def _open(entry, new: bool, beeps_on: bool, ongoing) -> bool:
     """Bring forward *entry*'s app, or start it (always, with *new*)."""
     logger.info(f"Voice command: open {entry.app_id}")
     if _esc_pressed():
         return False
-    if in_recording:
-        # Before the app starts, which takes a moment: words said meanwhile
-        # would land in whichever window has the focus.
-        recording.cancel_requested.set()
+    if ongoing is not None:
+        # Before the app starts, which takes a moment: nothing more of the
+        # recording is typed, as after Esc but without its beep, so words
+        # said meanwhile can't land in whichever window has the focus. Its
+        # phrases still queued and the rest at the stop are dropped (the
+        # key may be up already), and the service tick stops the microphone
+        # (service_tick._end_recording_a_command_cancelled).
+        ongoing.cancelled = True
     if not new and app_focus.focus_running(entry):
         beeps.beep(beeps_on, *READY_BEEP)
         return True
     # Esc while it looked for a window still stops it. Mid-recording the
-    # recording was just ended, which looks the same as Esc, and Esc no
-    # longer belongs to it.
-    if not in_recording and _esc_pressed():
+    # message was just cancelled here, which looks the same as Esc.
+    if ongoing is None and _esc_pressed():
         return False
     if not app_launcher.launch(entry):
         notices.app_not_opened(f"Couldn't open {entry.name}",
@@ -99,8 +103,8 @@ def _tie_label(entries) -> str:
 def typed_as_words(raw: str) -> str:
     """*raw* without the "literal" before an open command: "literal open
     Firefox" types "open Firefox", as "literal press enter" types "press
-    enter" (key_commands.LITERAL). Anything else, or with open apps off,
-    unchanged: "literal translations" stays as said."""
+    enter". Anything else, or with open apps off, unchanged: "literal
+    translations" stays as said."""
     if not live.open_apps:
         return raw
     match = _LITERAL_FIRST.match(raw)

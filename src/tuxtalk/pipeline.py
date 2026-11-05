@@ -328,11 +328,10 @@ def _ran_as_command(raw: str, job: _Job) -> bool:
                 or voice_commands.handle_navigation(raw, job.beeps_on)
                 # "fix that word": Fix a Word on the dictation before this one.
                 or voice_commands.handle_fix_word(raw, job.beeps_on)
-                # "open Firefox" (TuxTalk Labs). A phrase of the recording still
-                # under way ends it; one of an earlier recording leaves it be.
+                # "open Firefox" (TuxTalk Labs). A phrase cut at a pause ends
+                # its recording.
                 or voice_commands.handle_open_app(
-                    raw, job.beeps_on,
-                    job.chunk_role == "middle" and job.message is rs.state.current.message)):
+                    raw, job.beeps_on, job.message if job.chunk_role == "middle" else None)):
             return True
     # "edit that, make it shorter": voice editing without its key, on what
     # was just typed (TuxTalk Labs, with voice editing on). It checks Esc

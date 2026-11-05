@@ -7,10 +7,10 @@ import types
 
 import pytest
 
-from conftest import esc, next_recording
+from conftest import QueuedWorker, esc, next_recording
 from type_at_pause_rig import frames_of, speech, type_chunk
-from tuxtalk import (app_finder, app_focus, app_launcher, config, open_app, pipeline,
-                     recording, screen_message, service_tick)
+from tuxtalk import (app_finder, app_focus, app_launcher, config, dictation_worker, open_app,
+                     pipeline, recording, screen_message, service_tick)
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk.app_finder import AppEntry
@@ -63,9 +63,7 @@ def desktop(chat, monkeypatch):
                         lambda text, *a, **k: d.floated.append(text))
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body="", **k:
                         d.notified.append((title, body)))
-    recording.cancel_requested.clear()
-    yield d
-    recording.cancel_requested.clear()
+    return d
 
 
 @pytest.fixture
@@ -85,7 +83,7 @@ def test_the_setting_is_off_by_default():
 
 def test_off_means_it_isnt_a_command(desktop, monkeypatch):
     monkeypatch.setattr(live, "open_apps", False)
-    assert open_app.run("open Firefox", True, False) is None
+    assert open_app.run("open Firefox", True) is None
     assert desktop.launched == [] and desktop.focused == []
 
 
@@ -112,45 +110,45 @@ def test_it_is_live_applied():
 # --- opening -------------------------------------------------------------------------------
 
 def test_open_starts_an_app_that_isnt_running(desktop):
-    assert open_app.run("open Firefox", True, False) is True
+    assert open_app.run("open Firefox", True) is True
     assert desktop.launched == ["firefox.desktop"] and desktop.beeps == [READY_BEEP]
     assert desktop.floated == []
 
 
 def test_open_brings_a_running_app_forward_instead(desktop):
     desktop.running = True
-    assert open_app.run("Open Firefox.", True, False) is True
+    assert open_app.run("Open Firefox.", True) is True
     assert desktop.focused == ["firefox.desktop"] and desktop.launched == []
     assert desktop.beeps == [READY_BEEP]
 
 
 def test_open_new_always_starts_another(desktop):
     desktop.running = True
-    assert open_app.run("open new Firefox", True, False) is True
+    assert open_app.run("open new Firefox", True) is True
     assert desktop.launched == ["firefox.desktop"] and desktop.focused == []
 
 
 def test_the_browser_opens_the_default_one(desktop):
-    assert open_app.run("open the browser", True, False) is True
+    assert open_app.run("open the browser", True) is True
     assert desktop.launched == ["firefox.desktop"]
 
 
 def test_launch_and_start_work_like_open(desktop):
-    open_app.run("launch KWrite", True, False)
-    open_app.run("start firefox", True, False)
+    open_app.run("launch KWrite", True)
+    open_app.run("start firefox", True)
     assert desktop.launched == ["org.kde.kwrite.desktop", "firefox.desktop"]
 
 
 def test_it_works_in_a_terminal(desktop):
     """Unlike select and move, which can't work in one."""
     desktop.chat[0][0] = "org.kde.konsole"
-    assert open_app.run("open Firefox", True, False) is True
+    assert open_app.run("open Firefox", True) is True
     assert desktop.launched == ["firefox.desktop"]
 
 
 def test_the_log_names_the_app_not_the_words(desktop, caplog):
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
-        open_app.run("open fire fox", True, False)
+        open_app.run("open fire fox", True)
     assert "Voice command: open firefox.desktop" in caplog.text
     assert "fire fox" not in caplog.text
 
@@ -159,7 +157,7 @@ def test_the_log_names_the_app_not_the_words(desktop, caplog):
 
 def test_no_match_says_what_it_heard_and_opens_nothing(desktop, caplog):
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
-        assert open_app.run("open fierfox zz", True, False) is False
+        assert open_app.run("open fierfox zz", True) is False
     assert desktop.launched == [] and desktop.focused == []
     assert desktop.floated == ["No app called “fierfox zz”"]
     assert desktop.notified == [("No app called “fierfox zz”",
@@ -171,7 +169,7 @@ def test_no_match_says_what_it_heard_and_opens_nothing(desktop, caplog):
 def test_a_tie_names_both_and_opens_neither(desktop):
     desktop.apps = [KONSOLE, KITTY]
     desktop.defaults = {}
-    assert open_app.run("open terminal", True, False) is False
+    assert open_app.run("open terminal", True) is False
     assert desktop.launched == []
     assert desktop.floated == ["Two apps fit: Konsole, Kitty. Say the full name."]
     assert desktop.notified[0][1] == ("Two apps fit: Konsole, Kitty. Say the full name. "
@@ -184,14 +182,14 @@ def test_a_tie_of_many_names_three(desktop):
     desktop.apps = [AppEntry(f"libreoffice-{n.lower()}.desktop", f"LibreOffice {n}",
                              f"LibreOffice {n}", "", (), "libreoffice", "")
                     for n in ("Writer", "Calc", "Impress", "Draw")]
-    open_app.run("open libre", True, False)
+    open_app.run("open libre", True)
     assert desktop.floated == ["Several apps fit: LibreOffice Writer, LibreOffice Calc, "
                                "LibreOffice Impress and more. Say the full name."]
 
 
 def test_an_app_that_doesnt_start_says_so(desktop):
     desktop.starts = False
-    assert open_app.run("open Firefox", True, False) is False
+    assert open_app.run("open Firefox", True) is False
     assert desktop.floated == ["Couldn't open Firefox"]
     assert desktop.beeps == [CANCEL_BEEP]
 
@@ -215,6 +213,14 @@ def test_literal_types_the_words(desktop, say):
     say("literal open Firefox")
     assert desktop.chat[2][0][0].startswith("Open Firefox")
     assert desktop.launched == [] and desktop.floated == []
+
+
+@pytest.mark.parametrize("said", ["The word open means unlocked",
+                                  "The words open source are confusing"])
+def test_the_word_before_open_is_typed_whole(desktop, say, said):
+    """Only "literal" is the escape: "the word" starts sentences."""
+    say(said)
+    assert desktop.chat[2][0][0].startswith(said)
 
 
 def test_literal_on_its_own_sentence_is_kept(desktop, say):
@@ -241,7 +247,8 @@ def test_esc_before_the_command_is_found_brings_nothing_forward(desktop, say, mo
 
 # --- in a hands-free or Type at pause recording ----------------------------------------------
 
-CFG = types.SimpleNamespace(beeps=True, notify=False)
+# Notifications on: ending the recording after opening an app still adds none.
+CFG = types.SimpleNamespace(beeps=True, notify=True)
 
 
 def service_tick_runs():
@@ -282,7 +289,7 @@ def test_opening_mid_recording_ends_it(desktop, recording_on, keyboard):
     phrase("and this goes nowhere")
     assert "".join(text for text, _ in desktop.chat[2]) == typed
     assert keyboard.typed_keys() == []
-    assert desktop.beeps == [READY_BEEP]
+    assert desktop.beeps == [READY_BEEP] and desktop.notified == []
 
 
 def test_no_match_mid_recording_keeps_it_going(desktop, recording_on):
@@ -293,8 +300,9 @@ def test_no_match_mid_recording_keeps_it_going(desktop, recording_on):
 
 
 def test_a_whole_recording_has_no_recording_left_to_end(desktop):
-    open_app.run("open Firefox", True, False)
-    assert not recording.cancel_requested.is_set()
+    message = rs.state.current.message
+    open_app.run("open Firefox", True)
+    assert not message.cancelled
 
 
 def test_a_phrase_of_an_older_recording_leaves_the_new_one_alone(desktop, recording_on):
@@ -307,8 +315,47 @@ def test_a_phrase_of_an_older_recording_leaves_the_new_one_alone(desktop, record
     pipeline.transcribe_and_inject(frames_of(speech(1.0)), 16000, True, True, False, None, True,
                                    False, "type", chunk_role="middle", message=older)
     service_tick_runs()
-    assert desktop.launched == ["firefox.desktop"]
+    assert desktop.launched == ["firefox.desktop"] and older.cancelled
     assert rs.state.is_recording is True and not newer.message.cancelled
+
+
+def test_the_rest_queued_as_the_key_came_up_is_dropped_too(desktop, recording_on, keyboard,
+                                                           monkeypatch):
+    """The key came up after "open Firefox" was cut at a pause, while the
+    dictation worker was still busy: the rest it queued at the stop isn't
+    typed, nor sent with "Send each dictation automatically", into whichever
+    window has the focus while Firefox starts."""
+    rec, _phrase = recording_on
+    worker = QueuedWorker()
+    monkeypatch.setattr(dictation_worker, "_instance", worker)
+    desktop.chat[1].extend(["open Firefox", "thanks"])
+    dictation_worker.submit(lambda: type_chunk(frames_of(speech(1.0)), "middle"))
+    rec.chunks_submitted = 1
+    rec.frames = frames_of(speech(1.0))
+    pipeline.stop_recording(False, False, False)
+    service_tick_runs()
+    worker.run()
+    service_tick_runs()
+    assert desktop.launched == ["firefox.desktop"]
+    assert desktop.chat[2] == [] and keyboard.typed_keys() == []
+
+
+def test_a_recording_started_in_the_same_tick_keeps_going(desktop, recording_on, monkeypatch):
+    """"open Firefox" was cut at a pause, the key came up, and the next press
+    is taken in the same pass of the tick that ends recordings."""
+    _rec, phrase = recording_on
+    phrase("open Firefox")
+    monkeypatch.setattr(rs.state, "is_recording", False)
+    started = []
+
+    def start(*args, **kwargs):
+        started.append(next_recording())
+        rs.state.is_recording = True
+    monkeypatch.setattr(recording, "start_recording", start)
+    recording.start_requested.set()
+    service_tick_runs()
+    assert len(started) == 1 and rs.state.is_recording is True
+    assert not started[0].message.cancelled
 
 
 # --- Preferences ---------------------------------------------------------------------------

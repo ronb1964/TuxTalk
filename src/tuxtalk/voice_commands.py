@@ -328,12 +328,12 @@ def navigate(raw: str, beeps_on: bool, where=None):
     return pressed is True
 
 
-def handle_open_app(raw: str, beeps_on: bool, in_recording: bool) -> bool:
+def handle_open_app(raw: str, beeps_on: bool, ongoing=None) -> bool:
     """Open apps by voice (TuxTalk Labs): "open Firefox". True when the whole
     dictation was an open command, opened or refused with a notice; False to
-    type it as text. *in_recording*: a phrase of a recording still going on,
-    which opening the app ends (open_app.run)."""
-    return open_app.run(raw, beeps_on, in_recording) is not None
+    type it as text. *ongoing*: the Message of the recording *raw* is a
+    phrase of, cut at a pause, which opening the app ends (open_app.run)."""
+    return open_app.run(raw, beeps_on, ongoing) is not None
 
 
 def spoken_edit_target():

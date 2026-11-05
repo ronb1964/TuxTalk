@@ -144,7 +144,7 @@ def tick(cfg, svc: "ServiceState") -> "hotkey_keys.Hotkeys | None":
     _take_toggle(svc)
     _take_start_request(cfg, svc, now)
     _take_stop_request(cfg, svc, now)
-    _take_cancel_request(cfg)
+    _end_recording_a_command_cancelled()
     # Not mid-dictation, nor with one waiting to be typed; idle counts from key-up.
     if (svc.timeout_enabled and not rs.state.is_recording and engine.model is not None
             and dictation_worker.idle()
@@ -238,16 +238,16 @@ def _take_stop_request(cfg, svc: ServiceState, now: float) -> None:
     svc.last_activity = now
 
 
-def _take_cancel_request(cfg) -> None:
-    """End the recording without typing the rest if a phrase of it opened an
-    app (open_app.py), so later words don't land in whichever window has the
-    focus while the app starts. No cancel beep: the ready beep said it worked."""
-    if not recording.cancel_requested.is_set():
-        return
-    recording.cancel_requested.clear()
-    if rs.state.is_recording:
+def _end_recording_a_command_cancelled() -> None:
+    """End the recording under way if a phrase of it opened an app: the
+    dictation worker cancelled its message (open_app.py), so nothing more of
+    it is typed, and this stops the microphone. Only that recording: one
+    started since has a message of its own. No cancel beep and no
+    notification: the ready beep said it worked."""
+    rec = rs.state.current
+    if rs.state.is_recording and rec.message.cancelled:
         keyboard_grab.release_all()
-        recording.cancel_recording(rs.state.current, False, cfg.notify, reason="Opened an app")
+        recording.cancel_recording(rec, False, False, reason="Opened an app")
 
 
 def _log_auto_stop(rec) -> None:

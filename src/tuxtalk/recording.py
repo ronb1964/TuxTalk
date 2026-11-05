@@ -223,9 +223,6 @@ spectrum_processor = None
 # Hands-free's own stop is the recording's (Recording.went_quiet).
 start_requested = threading.Event()
 stop_requested = threading.Event()
-# Set by the dictation worker when a phrase opened an app mid-recording
-# (open_app.py): the service tick ends the recording without typing the rest.
-cancel_requested = threading.Event()
 # Set by the SIGTERM handler (Quit, Restart Service, an update), taken by the
 # service tick, which finishes what's being typed before the process exits.
 quit_asked = False

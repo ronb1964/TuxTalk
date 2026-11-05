@@ -1337,6 +1337,28 @@ def chat(monkeypatch, keyboard):
     return focus, heard, typed, notices
 
 
+class QueuedWorker:
+    """The dictation worker, busy: jobs wait until run() runs them, on the
+    test's thread, which then counts as the worker's (a key pressed from a
+    job runs within it, as dictation_worker.call does)."""
+
+    thread = None
+
+    def __init__(self):
+        self.jobs = []
+
+    def submit(self, job):
+        self.jobs.append(job)
+
+    def idle(self):
+        return not self.jobs
+
+    def run(self):
+        self.thread = threading.current_thread()
+        while self.jobs:
+            self.jobs.pop(0)()
+
+
 # The settings the hotkey loop passes along when Esc is pressed (esc).
 _ESC_CFG = types.SimpleNamespace(beeps=False, notify=False, smart_quotes=False, language=None,
                                  auto_space=True, auto_period=True, injection_mode="type")
