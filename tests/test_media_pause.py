@@ -27,6 +27,7 @@ class FakeBus:
         self.calls = []               # (player, method) in order
         self.hang = set()             # players that never answer
         self.release = threading.Event()
+        self.identities = {}          # player name -> its MPRIS Identity
 
     def players(self):
         return list(self.status)
@@ -37,9 +38,15 @@ class FakeBus:
             raise TimeoutError(name)
         return self.status[name]
 
+    def identity(self, name):
+        return self.identities.get(name, "")
+
     def call(self, name, method):
         self.calls.append((name, method))
-        self.status[name] = {"Pause": "Paused", "Play": "Playing"}[method]
+        if method in ("Pause", "Play"):
+            self.status[name] = {"Pause": "Paused", "Play": "Playing"}[method]
+        else:
+            assert method in ("Next", "Previous"), method   # a track change keeps the status
 
 
 def run(pauser, *steps):

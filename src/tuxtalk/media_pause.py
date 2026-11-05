@@ -14,6 +14,10 @@ a D-Bus call for 25 seconds, so all the D-Bus work happens on one background
 thread with a short timeout per call. The thread also keeps pause and resume
 in order, so a quick tap can never leave the music paused, and it alone
 touches the list of paused players, the resume at exit included.
+
+The music voice commands (music_control) run on the same thread through
+run_command, so a pause, a command and a resume always happen in the order
+they were asked, and a command can tell which players this recording paused.
 """
 import queue
 import threading
@@ -56,13 +60,37 @@ class SessionBus:
                            GLib.Variant("(ss)", (PLAYER_IFACE, "PlaybackStatus")))
         return reply.unpack()[0]
 
+    def identity(self, name):
+        """The player's own name for itself ("Spotify"), "" when it doesn't say."""
+        from gi.repository import GLib
+        try:
+            reply = self._call(name, MPRIS_PATH, "org.freedesktop.DBus.Properties", "Get",
+                               GLib.Variant("(ss)", ("org.mpris.MediaPlayer2", "Identity")))
+        except Exception as e:
+            logger.info(f"Media: no name from {name}: {e}")
+            return ""
+        return reply.unpack()[0]
+
     def call(self, name, method):
         self._call(name, MPRIS_PATH, PLAYER_IFACE, method)
+
+
+def status_of(bus, name):
+    """*name*'s PlaybackStatus on *bus*, None when it doesn't answer."""
+    try:
+        return bus.playback_status(name)
+    except Exception as e:
+        logger.info(f"Media: no answer from {name}: {e}")
+        return None
 
 
 # How long exit waits for the worker's last resume: a pause already under
 # way finishes first, and each call may take CALL_TIMEOUT_MS.
 EXIT_WAIT_S = 3.0
+
+# How long a music voice command waits for the worker: a pause queued before
+# it finishes first, and each call may take CALL_TIMEOUT_MS.
+COMMAND_WAIT_S = 3.0
 
 
 class MediaPauser:
@@ -104,6 +132,31 @@ class MediaPauser:
             logger.warning("Media pause: a player didn't answer in time at exit; "
                            "it may stay paused")
 
+    def run_command(self, act, timeout=COMMAND_WAIT_S):
+        """Run act(bus, paused) on the worker, after any pause or resume asked
+        for before it, and return its result. *paused* holds the players this
+        recording paused; act returns (result, forget), and the players in
+        *forget* aren't resumed (the user paused them by voice). None past
+        *timeout*: the command is then dropped if it hasn't started, so it
+        can't act long after it was said."""
+        answer, done, dropped = [], threading.Event(), threading.Event()
+
+        def job():
+            if dropped.is_set():
+                return
+            try:
+                result, forget = act(self._bus, tuple(self._paused))
+                self._paused = [n for n in self._paused if n not in forget]
+                answer.append(result)
+            finally:
+                done.set()
+        self._submit(job)
+        if not done.wait(timeout):
+            dropped.set()
+            logger.warning("Media command: the players didn't answer in time")
+            return None
+        return answer[0] if answer else None
+
     def wait_idle(self, timeout):
         """Wait for queued jobs to finish. True if they did. Only the tests
         need it: they wait on the worker without reaching into its queue."""
@@ -124,22 +177,15 @@ class MediaPauser:
             job = self._jobs.get()
             try:
                 job()
-            except Exception as e:      # one failed pause mustn't end the worker
-                logger.info(f"Couldn't pause or resume other media: {e}")
-
-    def _status(self, name):
-        try:
-            return self._bus.playback_status(name)
-        except Exception as e:
-            logger.info(f"Media pause: no answer from {name}: {e}")
-            return None
+            except Exception as e:      # one failed job mustn't end the worker
+                logger.info(f"Couldn't pause, resume or control other media: {e}")
 
     def _pause_now(self):
         """Pause every player that's playing, noting each, for _resume_now."""
         if self._closing:
             return
         for name in self._bus.players():
-            if self._status(name) != "Playing":
+            if status_of(self._bus, name) != "Playing":
                 continue
             try:
                 self._bus.call(name, "Pause")
@@ -153,7 +199,7 @@ class MediaPauser:
     def _resume_now(self):
         names, self._paused = self._paused, []
         for name in names:
-            if self._status(name) != "Paused":
+            if status_of(self._bus, name) != "Paused":
                 continue
             try:
                 self._bus.call(name, "Play")

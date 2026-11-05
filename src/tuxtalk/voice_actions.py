@@ -7,11 +7,12 @@ the dictation (voice_commands.handle_navigation)."""
 from collections.abc import Callable
 
 from . import (command_phrases, delivery, desktop_actions, everyday_keys, focused_window,
-               keyboard_output, open_app, sound_control, web_commands, window_actions)
+               keyboard_output, music_control, open_app, sound_control, web_commands,
+               window_actions)
 from . import live_settings as live
 from .app_commands import OpenRequest
-from .command_phrases import (AddressRequest, DesktopRequest, KeyRequest, SearchRequest,
-                              SoundRequest, WindowRequest)
+from .command_phrases import (AddressRequest, DesktopRequest, KeyRequest, MusicRequest,
+                              SearchRequest, SoundRequest, WindowRequest)
 
 
 def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
@@ -39,9 +40,9 @@ def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
         acts = window_actions if isinstance(request, WindowRequest) else desktop_actions
         return _act(f"done ({request.action})", lambda: acts.run(request, where, beeps_on),
                     ongoing)
-    if isinstance(request, SoundRequest):
-        return _act(f"done ({request.action})",
-                    lambda: sound_control.run(request, beeps_on), ongoing)
+    if isinstance(request, (SoundRequest, MusicRequest)):
+        acts = sound_control if isinstance(request, SoundRequest) else music_control
+        return _act(f"done ({request.action})", lambda: acts.run(request, beeps_on), ongoing)
     return None
 
 
@@ -65,11 +66,11 @@ def _send(act, request, what: str, beeps_on: bool, ongoing) -> bool:
 
 
 def _act(what: str, do: Callable[[], bool | None], ongoing) -> bool | None:
-    """A command that sends no keys (a window or desktop command), done by
-    do(), so the recording can end after it; only one that was done ends
-    it, so a refused one ("Couldn't tell which window") lets the user carry
-    on talking. *what* is for the log when Esc came first; do() looks at
-    Esc again right before the desktop is asked."""
+    """A command that sends no keys (a window, desktop, sound or music
+    command), done by do(), so the recording can end after it; only one
+    that was done ends it, so a refused one ("Couldn't tell which window")
+    lets the user carry on talking. *what* is for the log when Esc came
+    first; do() looks at Esc again right before the desktop is asked."""
     if keyboard_output.esc_stopped(what):
         return False
     done = do()

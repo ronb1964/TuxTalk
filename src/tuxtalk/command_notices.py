@@ -1,15 +1,15 @@
-"""The notes for a voice command that wasn't done (everyday keys, window
-and desktop commands, addresses and searches): a short label floated over the
-window and a sentence in a notification, each saying what happened and what
-to do; and for one that was, the log line and the ready beep, with a short
-label where the result isn't seen on the screen."""
+"""The notes for a voice command that wasn't done (everyday keys, window,
+desktop, sound and music commands, addresses and searches): a short label
+floated over the window and a sentence in a notification, each saying what
+happened and what to do; and for one that was, the log line and the ready
+beep, with a short label where the result isn't seen on the screen."""
 from . import app_focus, beeps, desktop_detect, notices, screen_message
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# kind -> (label, sentence). {app} and {number} are filled from say()'s keyword
-# names.
+# kind -> (label, sentence). {app}, {number} and {players} are filled from
+# say()'s keyword names.
 NOTES = {
     "terminal": (
         "Doesn't apply in a terminal",
@@ -100,6 +100,17 @@ NOTES = {
         "Couldn't change the volume",
         "TuxTalk couldn't reach the sound system (PipeWire or PulseAudio). Use your "
         "desktop's volume control."),
+    "no_player": (
+        "No music player to control",
+        "TuxTalk found no music or video player it can control. Start one, then try "
+        "again."),
+    "nothing_playing": (
+        "No music is playing",
+        "Nothing is playing, so there was nothing to pause."),
+    "which_player": (
+        "Several players paused: {players}",
+        "More than one player is paused, so TuxTalk didn't pick one. Start the one you "
+        "want yourself."),
 }
 
 # kind -> label, for a command that was done but whose result the user may
@@ -114,7 +125,7 @@ DONE: dict[str, str] = {
 def say(kind: str, beeps_on: bool, **names) -> None:
     """Tell the user the command of *kind* (a NOTES key) wasn't done: the
     cancel beep, the label over the window and the sentence in a
-    notification. *names* fill the {app} or {number} in the texts."""
+    notification. *names* fill the {app}, {number} or {players} in the texts."""
     label, sentence = NOTES[kind]
     logger.info(f"Voice command not done: {kind}")
     notices.command_refused(label.format(**names), sentence.format(**names), beeps_on)

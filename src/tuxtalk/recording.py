@@ -38,15 +38,32 @@ from .voice_detector import Unavailable
 
 logger = setup_logger(__name__)
 
-_media_pauser = None            # media_pause.MediaPauser, created on the first pause
+_media_pauser = None            # media_pause.MediaPauser, made by media_pauser()
+_media_pauser_lock = threading.Lock()
 
 _audio_ducker = None            # audio_duck.AudioDucker, created on the first duck
+
+
+def media_pauser():
+    """The one MediaPauser, made on first need. Pausing while dictating and
+    the music voice commands share it, so they keep their order and a
+    command knows what this recording paused; the commands need it with
+    pause_media off too. A recording's start and a command on the
+    dictation worker may both be first, hence the lock."""
+    global _media_pauser
+    with _media_pauser_lock:
+        if _media_pauser is None:
+            from .media_pause import MediaPauser
+            _media_pauser = MediaPauser()
+            # Quitting mid-dictation would otherwise leave the music paused.
+            atexit.register(_media_pauser.close)
+        return _media_pauser
 
 
 def pause_media_players():
     """Pause playing music and videos and turn other sounds down, as the
     options say, in the background (the keyboard is grabbed)."""
-    global _media_pauser, _audio_ducker
+    global _audio_ducker
     if live.duck_audio:
         if _audio_ducker is None:
             from .audio_duck import AudioDucker
@@ -54,14 +71,8 @@ def pause_media_players():
             # Quitting mid-dictation would otherwise leave everything quiet.
             atexit.register(_audio_ducker.close)
         _audio_ducker.duck()
-    if not live.pause_media:
-        return
-    if _media_pauser is None:
-        from .media_pause import MediaPauser
-        _media_pauser = MediaPauser()
-        # Quitting mid-dictation would otherwise leave the music paused.
-        atexit.register(_media_pauser.close)
-    _media_pauser.pause()
+    if live.pause_media:
+        media_pauser().pause()
 
 
 def resume_media_players():
