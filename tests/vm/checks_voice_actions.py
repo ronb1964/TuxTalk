@@ -19,8 +19,9 @@ import re
 import time
 
 from checks_open_apps import (
-    _apps, _close, _new_app, _nothing_to_open, _open_apps_on, _running, _say_and_wait,
-    _windows)
+    _apps, _nothing_to_open, _open_apps_on, _processes, _running, _windows, apps_seen,
+    opened_by_voice)
+import voices
 from harness import Outcome, check
 from vmlib import REMOTE
 
@@ -52,7 +53,7 @@ def _open_apps_on_unlogged(run):
     VM had them afterwards: the dictation checks turn the logging on, which
     would put the address and the search words in the log these checks make
     sure they stay out of. One restart of the service for both."""
-    with run.settings_put_back("open_apps", "log_transcripts"):
+    with run.settings_put_back("open_apps", "log_transcripts"), apps_seen(run):
         run.set_config(open_apps=True, log_transcripts=False)
         yield
 
@@ -94,27 +95,42 @@ def _command(run, phrase_id, *outcomes, timeout=30, mode=None, fresh=True):
     return mark
 
 
-def _unheard(run, mark):
-    """A misheard Outcome when the log shows the words were typed instead of
-    done as a command, else None."""
+def _unheard(run, mark, phrase_id):
+    """A misheard Outcome naming *phrase_id* when the log shows the words
+    were typed instead of done as a command, else None."""
     if "Voice command" not in run.log_since(mark) and run.sink_text().strip():
-        return Outcome("misheard", "the computer voice was heard as another sentence",
-                       typed=run.sink_text().strip())
+        said = voices.load_phrases()[phrase_id]["say"]
+        return Outcome("misheard", f"the computer voice's “{said}” was heard as another "
+                       "sentence", typed=run.sink_text().strip())
     return None
 
 
-def _editor_open(run):
-    """(app, mark) of the default text editor, opened by voice and focused,
-    or (None, a reason) when this VM has none or it was running already."""
-    before, mark = _say_and_wait(run, "open_text_editor", "Opened ", "already open")
-    why = _nothing_to_open(run.log_since(mark), "default text editor")
-    if why:
-        return None, why
-    app = _new_app(run, before)
-    if app is None:
-        return None, "the text editor didn't open"
-    time.sleep(1.5)
-    return app, ""
+def _no_editor(opened):
+    """Why a check that needs the text editor's window (an Opened) can't go
+    on, or None."""
+    if why := _nothing_to_open(opened.log, "default text editor"):
+        return why
+    if opened.app is None:
+        return (f"no window of the text editor ({opened.program}) shows through AT-SPI; new "
+                f"there: {', '.join(opened.new_apps) or 'nothing'}")
+    return None
+
+
+def _in_front(run, app):
+    """Whether a window of *app* has the focus, after a click in the middle
+    of its window when it hadn't. Not the middle of the screen: an editor can
+    open beside it (Cinnamon), where that click lands on the test window."""
+    def focused():
+        return any("active" in w["states"] for w in run.vm.ui("windows", app=app) or [])
+    if _until(3, focused):
+        return True
+    window = next((w for w in run.vm.ui("windows", app=app) or []
+                   if _area(w) and w.get("position")), None)
+    if window is None:
+        return False
+    (x, y), (width, height) = window["position"], window["size"]
+    run.vm.click(x + width // 2, y + height // 2)
+    return bool(_until(5, focused))
 
 
 # --- windows ---------------------------------------------------------------
@@ -146,32 +162,42 @@ def _save_question(run, app, before, document):
     return None
 
 
-def _discard_and_close(run, app, question):
+def _discard(run, app, question):
     """Answer the save question titled *question* with its discard button, as
     a person would, looked for in that dialog only: never a button of another
-    window, the editor's other documents included. Then the editor is closed
-    (killed if it's still there)."""
+    window, the editor's other documents included. The editor itself is
+    ended with the processes it started (opened_by_voice)."""
     names = ("~iscard", "~on't save", "~on\u2019t save", "~without sav")
     if question is not None and any(
             run.vm.ui("click", "button", name, question, timeout=2, app=app) for name in names):
         time.sleep(1.5)
-    _close(run, app)
+
+
+def _unsaved_line(run, app):
+    """Type a line into *app*'s window, which must have the focus; a
+    problem (str) when it can't be given the focus or the keys went to the
+    test window instead, else None."""
+    if not _in_front(run, app):
+        return f"{app}'s window couldn't be given the focus to type a line into it"
+    for key in ("h", "i"):
+        run.vm.tap(key)
+    time.sleep(0.5)
+    if run.sink_text().strip():
+        return f"the line meant for {app} was typed into the test window"
+    return None
 
 
 @check(SECTION, "close_asks_to_save", "“close the text editor” asks to save, closing nothing")
 def close_asks_to_save(run):
     if why := _action_blocker(run):
         return Outcome("skip", why)
-    with _open_apps_on(run):
-        app, why = _editor_open(run)
-        if app is None:
+    with _open_apps_on(run), opened_by_voice(run, "open_text_editor") as opened:
+        if why := _no_editor(opened):
             return Outcome("skip", why)
-        question = None
+        app, question = opened.app, None
         try:
-            run.vm.click_centre()
-            for key in ("h", "i"):
-                run.vm.tap(key)
-            time.sleep(0.5)
+            if problem := _unsaved_line(run, app):
+                return Outcome("fail", problem, screenshot=run.shot("close-asks"))
             mine = [(title, focused) for name, title, focused in _windows(run) if name == app]
             titles = {title for title, _focused in mine}
             document = _document_name(next((t for t, focused in mine if focused), ""))
@@ -180,7 +206,8 @@ def close_asks_to_save(run):
             asked = _until(10, lambda: _new_window(run, app, titles))
             question = _save_question(run, app, titles, document) if asked else None
             log = run.log_since(mark)
-            running = not run.vm.ssh(f"pgrep -f {_running(app)}", check=False).returncode
+            running = not run.vm.ssh(f"pgrep -f {_running(opened.program)}",
+                                     check=False).returncode
             shot = run.shot("close-asks")
             problems = []
             if "Voice command: close" not in log:
@@ -194,7 +221,7 @@ def close_asks_to_save(run):
             return Outcome("pass", f"{app} asked what to do with the unsaved line and is still "
                            "running", screenshot=shot)
         finally:
-            _discard_and_close(run, app, question)
+            _discard(run, app, question)
 
 
 @check(SECTION, "close_this_window", "“close this window” closes the focused window")
@@ -203,10 +230,13 @@ def close_this_window(run):
         return Outcome("skip", why)
     with _open_apps_on(run):
         mark = _command(run, "close_this_window", "Voice command: close", mode="ask")
-        if misheard := _unheard(run, mark):
+        sink = _sink(run) or {}
+        if misheard := _unheard(run, mark, "close_this_window"):
             return misheard
-        asked = _until(10, lambda: any(w["title"] == SAVE_QUESTION
-                                       for w in run.vm.ui("windows") or []))
+        # By its text, not its title: GTK 3 can give a message dialog a name of
+        # its own for screen readers ("Question"), and on Mint the question
+        # was on screen while no window in AT-SPI bore its title.
+        asked = run.vm.ui("find", "label", SAVE_QUESTION, timeout=10, app=sink.get("app"))
         shot = run.shot("close-this-window")
         log = run.log_since(mark)
         if "Voice command: close the focused window" not in log:
@@ -222,35 +252,32 @@ def close_this_window(run):
 def switch_to(run):
     if why := _action_blocker(run):
         return Outcome("skip", why)
-    with _open_apps_on(run):
-        app, why = _editor_open(run)
-        if app is None:
+    with _open_apps_on(run), opened_by_voice(run, "open_text_editor") as opened:
+        if why := _no_editor(opened):
             return Outcome("skip", why)
-        try:
-            count = sum(1 for w in _windows(run) if w[0] == app)
-            mark = _command(run, "switch_text_editor", "Voice command: switch")
-            if misheard := _unheard(run, mark):
-                return misheard
-            windows = [w for w in _windows(run) if w[0] == app]
-            front = _until(10, lambda: any(w[2] for w in
-                                           [w for w in _windows(run) if w[0] == app]))
-            typed = run.sink_text().strip()
-            shot = run.shot("switch-to")
-            problems = []
-            if "Voice command: switch" not in run.log_since(mark):
-                problems.append("no “Voice command: switch” in the log")
-            if not front:
-                problems.append(f"{app} didn't get the focus")
-            if len(windows) != count:
-                problems.append(f"{count} window(s) of {app} before, {len(windows)} after")
-            if typed:
-                problems.append(f"the words were typed: {typed[:60]!r}")
-            if problems:
-                return Outcome("fail", "; ".join(problems), typed=typed, screenshot=shot)
-            return Outcome("pass", f"The open {app} window came forward; no new window, "
-                           "nothing typed", screenshot=shot)
-        finally:
-            _close(run, app)
+        app = opened.app
+        count = sum(1 for w in _windows(run) if w[0] == app)
+        mark = _command(run, "switch_text_editor", "Voice command: switch")
+        if misheard := _unheard(run, mark, "switch_text_editor"):
+            return misheard
+        windows = [w for w in _windows(run) if w[0] == app]
+        front = _until(10, lambda: any(w[2] for w in
+                                       [w for w in _windows(run) if w[0] == app]))
+        typed = run.sink_text().strip()
+        shot = run.shot("switch-to")
+        problems = []
+        if "Voice command: switch" not in run.log_since(mark):
+            problems.append("no “Voice command: switch” in the log")
+        if not front:
+            problems.append(f"{app} didn't get the focus")
+        if len(windows) != count:
+            problems.append(f"{count} window(s) of {app} before, {len(windows)} after")
+        if typed:
+            problems.append(f"the words were typed: {typed[:60]!r}")
+        if problems:
+            return Outcome("fail", "; ".join(problems), typed=typed, screenshot=shot)
+        return Outcome("pass", f"The open {app} window came forward; no new window, "
+                       "nothing typed", screenshot=shot)
 
 
 def _area(window):
@@ -271,7 +298,7 @@ def minimize_maximize(run):
         for phrase, wanted in (("restore_window", "smaller"), ("maximize_window", "bigger")):
             before = _area(_sink(run))
             mark = _command(run, phrase, "Voice command: ", fresh=False)
-            if misheard := _unheard(run, mark):
+            if misheard := _unheard(run, mark, phrase):
                 return misheard
             after = _until(8, lambda before=before: (
                 _area(_sink(run)) != before and _area(_sink(run))))
@@ -283,7 +310,7 @@ def minimize_maximize(run):
         if "active" not in ((_sink(run) or {}).get("states") or []):
             return Outcome("skip", "the test window doesn't have the focus to be minimized from")
         mark = _command(run, "minimize_window", "Voice command: ", fresh=False)
-        if misheard := _unheard(run, mark):
+        if misheard := _unheard(run, mark, "minimize_window"):
             return misheard
         return _minimized(run, mark, steps)
 
@@ -462,30 +489,28 @@ def _forward_browser(run, before, timeout=40):
     return _until(timeout, found)
 
 
-def _processes(run):
-    """{pid: command name} of the user's processes now, None when ps failed."""
-    result = run.vm.ssh("ps -u $(id -u) -o pid=,comm=", check=False)
-    if result.returncode:
-        return None
-    return dict(line.split(None, 1) for line in result.stdout.splitlines()
-                if " " in line.strip())
+def _end_new_browsers(run, before):
+    """End the browser processes that aren't in *before* (_processes then):
+    one already running is the VM user's and is left alone, whatever its
+    name. Nothing is ended when *before* is None: every browser would look
+    new."""
+    now = _processes(run) if before is not None else None
+    new = [pid for pid, (name, _args) in (now or {}).items()
+           if pid not in before and BROWSER.search(name)]
+    if new:
+        run.vm.ssh(f"kill {' '.join(new)}", check=False)
+        time.sleep(1.5)
 
 
 def _closing_new_browsers(run, judge):
     """*judge*()'s Outcome, with the browser processes that started meanwhile
-    killed afterwards: one already running is the VM user's and is left
-    alone, whatever its name. When the processes couldn't be listed first,
-    every browser would look new, so none is killed and the Outcome says so."""
+    ended afterwards (_end_new_browsers). When the processes couldn't be
+    listed first, none is ended and the Outcome says so."""
     before = _processes(run)
     try:
         outcome = judge()
     finally:
-        now = _processes(run) if before is not None else None
-        new = [pid for pid, name in (now or {}).items()
-               if pid not in before and BROWSER.search(name)]
-        if new:
-            run.vm.ssh(f"kill {' '.join(new)}", check=False)
-            time.sleep(1.5)
+        _end_new_browsers(run, before)
     if before is None:
         outcome.detail = "; ".join(filter(None, (
             outcome.detail, "browsers left running: ps couldn't list the processes first")))
@@ -570,7 +595,7 @@ def web_search(run):
 def scroll_down(run):
     with _open_apps_on(run):
         mark = _command(run, "scroll_down", "Voice command: scroll down", mode="long")
-        if misheard := _unheard(run, mark):
+        if misheard := _unheard(run, mark, "scroll_down"):
             return misheard
         position = float(run.vm.read(f"~/{REMOTE}/sink.txt.scroll").strip() or 0)
         typed = run.sink_text().strip()

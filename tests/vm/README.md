@@ -15,6 +15,10 @@ either (none are named `test_*.py`), because they need the VMs.
    buttons through AT-SPI, the accessibility interface screen readers use,
    by their labels. F8 and F9 are pressed on the VM's own virtual keyboard
    (QEMU `input-send-event`), so the guest kernel sees real key events.
+   GTK apps always show their windows there; Qt apps (KWrite), Firefox and
+   COSMIC's only while the session's accessibility switch (`org.a11y.Status`
+   IsEnabled) is on, so the open-apps and window checks turn it on for
+   themselves and back off afterwards.
 3. **The password prompt.** The harness clicks Fix Typing, checks that the
    desktop's password prompt appears exactly once, takes a screenshot and
    cancels it. Nobody ever types a password. Only then does it put
