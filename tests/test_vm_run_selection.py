@@ -92,3 +92,48 @@ def test_the_phrases_the_open_apps_checks_say_exist():
     voices = import_vm_tool("voices")
     assert set(checks.PHRASES) <= set(voices.load_phrases())
     assert {phrase for _program, phrase in checks.GTK_APPS} <= set(checks.PHRASES)
+
+
+class _AnswerRun:
+    """A stand-in for harness.Run that answers the one ssh call with *stdout*."""
+
+    def __init__(self, stdout):
+        self.vm = self
+        self.stdout = stdout
+        self.sent = []
+
+    def ssh(self, command, check=True):
+        self.sent.append(command)
+        return type("Done", (), {"stdout": self.stdout, "returncode": 0})()
+
+
+def test_a_long_program_name_is_found_by_its_command_not_by_its_process_name():
+    """pgrep -x matches 15 characters of a name: "gnome-calculator" and
+    "gnome-text-editor" never matched, and the check passed on nothing."""
+    import re
+    checks = import_vm_tool("checks_open_apps")
+    pattern = re.compile(checks._running("gnome-calculator").strip("'"))
+    assert pattern.search("/usr/bin/gnome-calculator")
+    assert pattern.search("gnome-calculator --new-window")
+    assert not pattern.search("/usr/bin/gnome-calculator-search-provider")
+
+
+@pytest.mark.parametrize("stdout, problem", [
+    ("NOT_FOUND\n", "couldn't find meld's process"),
+    ("PYTHONPATH=/tmp/.mount_x/usr\nAPPDIR=/tmp/.mount_x\nREAD\n",
+     "meld started with TuxTalk's APPDIR, PYTHONPATH"),
+    ("READ\n", None),
+])
+def test_the_clean_environment_check_fails_when_it_reads_nothing(stdout, problem):
+    """An app whose process wasn't found is not "started clean"."""
+    checks = import_vm_tool("checks_open_apps")
+    problems = checks._inherited(_AnswerRun(stdout), "meld")
+    assert (problems[0].startswith(problem) if problem else problems == [])
+
+
+def test_an_app_already_running_or_missing_is_skipped_not_failed():
+    checks = import_vm_tool("checks_open_apps")
+    assert "already running" in checks._nothing_to_open("Brought kate forward: it was "
+                                                       "already open", "editor")
+    assert "no editor" in checks._nothing_to_open(checks.NO_MATCH, "editor")
+    assert checks._nothing_to_open("Opened org.kde.kate.desktop", "editor") is None
