@@ -7,10 +7,11 @@ for that browser to have the focus, then opens a tab for it (Ctrl+T).
 The address and the words are never logged: they are as private as a
 dictation. Run on the dictation worker, never GTK's thread, since a browser
 that has to start can take seconds to come forward."""
+import os
 import time
 from typing import NamedTuple
 
-from . import app_finder, app_focus, app_launcher, command_notices, focused_window
+from . import app_finder, app_focus, app_launcher, command_notices, desktop_detect, focused_window
 from . import keyboard_output, virtual_keyboard
 from .app_finder import AppEntry
 from .command_phrases import AddressRequest, SearchRequest
@@ -43,32 +44,35 @@ class _Browser(NamedTuple):
     # window of this one counts, as app_match.find decides.
     exact: bool
     classes: frozenset      # its windows' classes, without case; never empty
-    # Another copy's windows have one of those classes too: no window can be
-    # told for this copy's.
+    # On X11, another copy's windows may have one of those classes too: no
+    # window can be told for this copy's.
     alike: bool = False
 
 
-def _own_classes(entry: AppEntry) -> frozenset:
-    """The classes the entry itself says its windows have: its id (a
-    Wayland app's) and its StartupWMClass, without case."""
-    return frozenset({app_focus.desktop_file(entry).casefold(), entry.wm_class.casefold()}
-                     - {""})
+def _x11_classes(entry: AppEntry) -> frozenset:
+    """Every class *entry*'s windows may have on X11: its id, its
+    StartupWMClass and, unless they disagree, its program's name, which a
+    Flatpak's windows have whether its entry says so or not."""
+    return app_focus.window_names(entry) | {app_focus.desktop_file(entry).casefold()}
 
 
 def _default_browser() -> _Browser | None:
     """The default browser, or None when the desktop names none in the menu.
-    With other copies installed only the entry's own classes count, never
-    one guessed from its program's name, which the copies share."""
+    With other copies installed, on Wayland only its app id counts (a
+    Wayland window's class, which copies don't share); on X11 every class
+    its windows may have, and copies that share one are alike."""
     entries = app_finder.installed_apps()
     browser_id = app_finder.default_apps().get("browser")
     entry = next((e for e in entries if e.app_id == browser_id), None)
     if entry is None:
         return None
     copies = app_finder.copies(entry, entries)
+    classes = _x11_classes(entry)
     if len(copies) == 1:
-        return _Browser(entry, False, app_focus.window_names(entry) | _own_classes(entry))
-    classes = _own_classes(entry)
-    alike = any(classes & _own_classes(other) for other in copies[1:])
+        return _Browser(entry, False, classes)
+    if not desktop_detect.is_x11_session(os.environ):
+        return _Browser(entry, True, frozenset({app_focus.desktop_file(entry).casefold()}))
+    alike = any(classes & _x11_classes(other) for other in copies[1:])
     return _Browser(entry, True, classes, alike)
 
 

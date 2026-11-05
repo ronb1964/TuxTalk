@@ -9,6 +9,7 @@ import types
 import pytest
 
 from conftest import FakeClock
+from desktop_fakes import set_desktop
 from tuxtalk import (app_finder, app_focus, app_launcher, focused_window, keyboard_output,
                      screen_message, voice_actions, web_commands, window_classes)
 from tuxtalk.app_finder import AppEntry
@@ -242,21 +243,39 @@ def test_go_to_in_a_default_browser_on_no_list_uses_its_bar(focus, vivaldi_defau
     assert keyboard.typed_keys()[:2] == CTRL_L
 
 
-# Firefox installed twice: Flathub's entry says its windows' class is
-# "firefox", the distro's own windows' class too.
+# Firefox installed twice: the distro's, and Flathub's, whose entry may say
+# its windows' class is "firefox" (StartupWMClass) or say nothing.
 FLATPAK_FIREFOX = AppEntry("org.mozilla.firefox.desktop", "Firefox", "Firefox", "Web Browser",
                            "firefox", "flatpak", wm_class="firefox")
+QUIET_FLATPAK = AppEntry("org.mozilla.firefox.desktop", "Firefox", "Firefox", "Web Browser",
+                         "firefox", "flatpak")
 SNAP_FIREFOX = AppEntry("firefox_firefox.desktop", "Firefox", "Firefox", "Web Browser",
                         "firefox", "snap", wm_class="firefox_firefox")
 
 
-def test_two_copies_whose_windows_look_alike_get_no_search(at_kwrite, browser, typed, keyboard,
-                                                          floated, monkeypatch):
-    """The distro's Firefox is the default and Flathub's is installed too:
-    a window of class "firefox" may be either, so the words never go into
-    one, and the note says so at once instead of after a wait."""
-    monkeypatch.setattr(app_finder, "installed_apps",
-                        lambda: [FIREFOX_ENTRY, FLATPAK_FIREFOX, KWRITE_ENTRY])
+@pytest.fixture
+def x11(monkeypatch):
+    set_desktop(monkeypatch, "XFCE", "x11")
+
+
+@pytest.fixture
+def wayland(monkeypatch):
+    set_desktop(monkeypatch, "KDE", "wayland")
+
+
+def installed(monkeypatch, *entries, default="firefox.desktop"):
+    monkeypatch.setattr(app_finder, "installed_apps", lambda: [*entries, KWRITE_ENTRY])
+    monkeypatch.setattr(app_finder, "default_apps", lambda: {"browser": default})
+
+
+@pytest.mark.parametrize("flatpak", [FLATPAK_FIREFOX, QUIET_FLATPAK])
+def test_on_x11_two_copies_whose_windows_may_look_alike_get_no_search(
+        x11, at_kwrite, browser, typed, keyboard, floated, monkeypatch, flatpak):
+    """The distro's Firefox is the default and Flathub's is installed too.
+    On X11 a Flatpak's window has its program's class, "firefox", whether
+    its entry says so or not: either copy's window may be that one, so the
+    words never go into one, and the note says so at once, before a wait."""
+    installed(monkeypatch, FIREFOX_ENTRY, flatpak)
     raised = []
     monkeypatch.setattr(app_focus, "focus_running", lambda *a, **k: raised.append(1))
     assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is False
@@ -264,26 +283,33 @@ def test_two_copies_whose_windows_look_alike_get_no_search(at_kwrite, browser, t
     assert floated == ["Two copies of your browser"]
 
 
-def test_the_default_copys_own_window_class_is_waited_for(at_kwrite, browser, typed, keyboard,
-                                                         monkeypatch):
+@pytest.mark.parametrize("arrives, searched", [("firefox", True),
+                                               ("org.mozilla.firefox", False)])
+def test_on_wayland_copies_are_told_apart_by_their_app_id(wayland, at_kwrite, browser, typed,
+                                                         floated, monkeypatch, arrives,
+                                                         searched):
+    """A Wayland window's class is its app's id, the menu entry's: the
+    distro's Firefox is "firefox", Flathub's "org.mozilla.firefox"."""
+    installed(monkeypatch, FIREFOX_ENTRY, FLATPAK_FIREFOX)
+    browser.arrives = [(arrives, ("tray", "7"))]
+    assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is searched
+    assert typed == (["cheap tires"] if searched else [])
+
+
+def test_on_x11_the_default_copys_own_window_class_is_waited_for(x11, at_kwrite, browser,
+                                                                 typed, monkeypatch):
     """Flathub's Firefox is the default, the Snap is installed too: on X11
     the Flatpak's windows have the class its entry names, "firefox"."""
-    monkeypatch.setattr(app_finder, "installed_apps",
-                        lambda: [FLATPAK_FIREFOX, SNAP_FIREFOX, KWRITE_ENTRY])
-    monkeypatch.setattr(app_finder, "default_apps",
-                        lambda: {"browser": "org.mozilla.firefox.desktop"})
+    installed(monkeypatch, FLATPAK_FIREFOX, SNAP_FIREFOX, default="org.mozilla.firefox.desktop")
     browser.arrives = [("firefox", ("x11", "7"))]
     assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is True
     assert typed == ["cheap tires"]
 
 
-def test_another_copys_window_isnt_the_default(at_kwrite, browser, typed, keyboard, floated,
-                                              monkeypatch):
+def test_on_x11_another_copys_window_isnt_the_default(x11, at_kwrite, browser, typed, floated,
+                                                     monkeypatch):
     """The Snap's window comes forward while the Flatpak is the default."""
-    monkeypatch.setattr(app_finder, "installed_apps",
-                        lambda: [FLATPAK_FIREFOX, SNAP_FIREFOX, KWRITE_ENTRY])
-    monkeypatch.setattr(app_finder, "default_apps",
-                        lambda: {"browser": "org.mozilla.firefox.desktop"})
+    installed(monkeypatch, FLATPAK_FIREFOX, SNAP_FIREFOX, default="org.mozilla.firefox.desktop")
     browser.arrives = [("firefox_firefox", ("x11", "8"))]
     assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is False
     assert typed == [] and floated == ["The browser didn't come forward"]
