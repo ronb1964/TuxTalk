@@ -23,7 +23,7 @@ from .voice_navigation import MAX_COUNT, normalize
 
 @dataclass(frozen=True)
 class KeyRequest:
-    name: str            # a KEY_NAMES entry: "new tab", "scroll down"
+    name: str            # a KEY_PHRASES name ("new tab"), "scroll up" or "scroll down"
     count: int = 1       # scrolling only
 
 
@@ -66,7 +66,6 @@ KEY_PHRASES = {
     "paste": "paste",
     **dict.fromkeys(("escape", "press escape"), "escape"),
 }
-KEY_NAMES = frozenset(KEY_PHRASES.values()) | {"scroll up", "scroll down"}
 
 _SCROLL = re.compile(r"scroll (up|down)(?: (\d+|" + "|".join(NUMBER_WORDS) + "))?")
 

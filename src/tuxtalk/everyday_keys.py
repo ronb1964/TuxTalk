@@ -21,12 +21,14 @@ _GENERAL = {
     "copy": (_C, "C"), "paste": (_C, "V"), "escape": ((), "ESC"),
 }
 # Where a terminal differs; a name left out here is the general chord, and
-# None is a key a terminal has no equivalent of (Ctrl+F, S and A are the
-# shell's own line editing there).
+# None is a key a terminal has no equivalent of: Ctrl+F, S and A are the
+# shell's own line editing there, and Alt+Left, Alt+Right and F5 put
+# escape-sequence leftovers on the command line.
 _TERMINAL = {
     "new tab": (_CS, "T"), "close tab": (_CS, "W"), "next tab": (_C, "PAGEDOWN"),
     "previous tab": (_C, "PAGEUP"), "reopen tab": None, "find": None, "save": None,
     "select all": None, "copy": (_CS, "C"), "paste": (_CS, "V"),
+    "go back": None, "go forward": None, "reload": None,
 }
 
 
@@ -51,7 +53,7 @@ def press(request: KeyRequest, where, beeps_on: bool) -> bool:
     may be a terminal, so a key a terminal has its own of is never guessed:
     Ctrl+C would stop the running program there, Ctrl+S freeze it."""
     if where[0] is None and request.name in _TERMINAL:
-        command_notices.say("no_focused_window", beeps_on)
+        command_notices.say_focus_unknown(beeps_on)
         return False
     chords = chords_for(request.name, where[0])
     if chords is None:

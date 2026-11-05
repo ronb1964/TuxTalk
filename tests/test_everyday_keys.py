@@ -5,7 +5,7 @@ running program."""
 import pytest
 
 from tuxtalk import everyday_keys, focused_window, keyboard_output, screen_message
-from tuxtalk.command_phrases import KEY_NAMES, KeyRequest
+from tuxtalk.command_phrases import KEY_PHRASES, KeyRequest
 
 FIREFOX = ("firefox", ("tray", "1"))
 KONSOLE = ("org.kde.konsole", ("tray", "2"))
@@ -37,17 +37,38 @@ def test_new_tab_presses_ctrl_t(keyboard, at_firefox):
     assert keyboard.typed_keys() == [29, keyboard_output.nav_keycode("T")]
 
 
-def test_terminal_tab_commands_use_the_terminals_keys():
-    assert everyday_keys.chords_for("new tab", "org.kde.konsole") == [(("CTRL", "SHIFT"), "T")]
-    assert everyday_keys.chords_for("next tab", "kitty") == [(("CTRL",), "PAGEDOWN")]
+_C, _CS, _A = ("CTRL",), ("CTRL", "SHIFT"), ("ALT",)
+# Every key command: its shortcut outside a terminal, and in one (None: it
+# doesn't apply there). A terminal's Ctrl+C stops the running program, and
+# Alt+Left or F5 leave escape-sequence leftovers on its command line.
+SHORTCUTS = {
+    "new tab": ((_C, "T"), (_CS, "T")), "close tab": ((_C, "W"), (_CS, "W")),
+    "next tab": ((_C, "TAB"), (_C, "PAGEDOWN")),
+    "previous tab": ((_CS, "TAB"), (_C, "PAGEUP")), "reopen tab": ((_CS, "T"), None),
+    "go back": ((_A, "LEFT"), None), "go forward": ((_A, "RIGHT"), None),
+    "reload": (((), "F5"), None),
+    "page up": (((), "PAGEUP"),) * 2, "page down": (((), "PAGEDOWN"),) * 2,
+    "go to the top": ((_C, "HOME"),) * 2, "go to the bottom": ((_C, "END"),) * 2,
+    "find": ((_C, "F"), None), "save": ((_C, "S"), None), "select all": ((_C, "A"), None),
+    "copy": ((_C, "C"), (_CS, "C")), "paste": ((_C, "V"), (_CS, "V")),
+    "escape": (((), "ESC"),) * 2,
+}
 
 
-def test_copy_in_a_terminal_never_sends_ctrl_c():
-    assert everyday_keys.chords_for("copy", "konsole") == [(("CTRL", "SHIFT"), "C")]
-    assert everyday_keys.chords_for("paste", "konsole") == [(("CTRL", "SHIFT"), "V")]
+@pytest.mark.parametrize("name", sorted(SHORTCUTS))
+def test_each_key_command_presses_its_shortcut(name):
+    general, terminal = SHORTCUTS[name]
+    assert everyday_keys.chords_for(name, "firefox") == [general]
+    assert everyday_keys.chords_for(name, "org.kde.konsole") == (
+        [terminal] if terminal else None)
 
 
-@pytest.mark.parametrize("name", ["select all", "save", "find", "reopen tab"])
+def test_every_key_command_has_its_shortcut_pinned():
+    assert set(KEY_PHRASES.values()) == set(SHORTCUTS)
+
+
+@pytest.mark.parametrize("name", ["select all", "save", "find", "reopen tab", "go back",
+                                  "go forward", "reload"])
 def test_some_keys_dont_apply_in_a_terminal(name, keyboard, at_konsole, floated):
     assert everyday_keys.press(KeyRequest(name), KONSOLE, False) is False
     assert keyboard.events == [] and floated == ["Doesn't apply in a terminal"]
@@ -70,6 +91,20 @@ def test_a_key_a_terminal_has_its_own_of_is_never_guessed(name, keyboard, at_unk
     assert keyboard.events == [] and floated == ["Couldn't tell which window"]
 
 
+@pytest.mark.parametrize("desktop, advice", [("GNOME", "Turn on the TuxTalk GNOME extension"),
+                                              ("KDE", "Click the window and try again")])
+def test_the_note_says_what_would_tell_the_window(desktop, advice, keyboard, at_unknown,
+                                                  floated, monkeypatch):
+    """GNOME says which window has the focus only through TuxTalk's
+    extension: there, clicking the window wouldn't help."""
+    sentences = []
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, text, *a, **k:
+                        sentences.append(text))
+    everyday_keys.press(KeyRequest("copy"), UNKNOWN, False)
+    assert len(sentences) == 1 and advice in sentences[0]
+
+
 @pytest.mark.parametrize("name", ["page down", "go to the top", "escape"])
 def test_a_key_the_same_everywhere_works_with_the_class_unknown(name, keyboard, at_unknown):
     assert everyday_keys.press(KeyRequest(name), UNKNOWN, False) is True
@@ -89,8 +124,3 @@ def test_go_to_the_top_presses_ctrl_home(keyboard, at_firefox):
 def test_keys_go_nowhere_once_another_window_has_the_focus(keyboard, at_konsole, floated):
     assert everyday_keys.press(KeyRequest("new tab"), FIREFOX, False) is False
     assert keyboard.events == [] and floated == ["Window changed, nothing done"]
-
-
-def test_every_key_name_has_keys_outside_a_terminal():
-    for name in KEY_NAMES - {"scroll up", "scroll down"}:
-        assert everyday_keys.chords_for(name, "firefox"), name

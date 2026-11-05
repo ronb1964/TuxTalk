@@ -94,7 +94,7 @@ def search(request: SearchRequest, where, beeps_on: bool) -> bool:
     A desktop that doesn't say which window has the focus can't tell a
     browser either, so that is said at once, not after waiting for one."""
     if where[0] is None:
-        command_notices.say("no_focused_window", beeps_on)
+        command_notices.say_focus_unknown(beeps_on)
         return False
     default = _default_browser()
     if is_browser_class(where[0]) or _is_default(where[0], default):
