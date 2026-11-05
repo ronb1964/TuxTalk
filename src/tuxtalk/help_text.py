@@ -482,24 +482,28 @@ and the name is whatever the app is called in your menu: <b>open the calculator<
 Hold <b>{hold}</b>, say <b>close Firefox</b>, let go. Nothing is typed.
   • <b>close Firefox</b> closes its windows, <b>close all Firefox</b> closes every one,
     <b>close window</b> closes the one you're in.
-  • <b>switch to Firefox</b> brings it to the front.
+  • <b>switch to Firefox</b> brings it to the front. If Firefox isn't open, a note says
+    so; say <b>open Firefox</b> to start it.
   • <b>minimize window</b>, <b>maximize window</b> and <b>restore window</b>.
 
 <b>Keys</b>
 Hold <b>{hold}</b>, say <b>new tab</b>, let go. The key is pressed in the window you're in.
-  • <b>new tab</b>  •  <b>close tab</b>  •  <b>next tab</b>  •  <b>previous tab</b>
-    •  <b>reopen tab</b>
-  • <b>go back</b>  •  <b>go forward</b>  •  <b>reload</b> (or <b>refresh</b>)
-  • <b>scroll down</b>  •  <b>scroll up 5</b> (a number scrolls more)
-  • <b>page down</b>  •  <b>page up</b>  •  <b>go to the top</b>  •  <b>go to the bottom</b>
-  • <b>find</b>  •  <b>save</b>  •  <b>select all</b>  •  <b>copy</b>  •  <b>paste</b>
-    •  <b>escape</b>
+  • Tabs: <b>new tab</b>, <b>close tab</b>, <b>next tab</b>, <b>previous tab</b>,
+    <b>reopen tab</b>
+  • Pages: <b>go back</b>, <b>go forward</b>, <b>reload</b> (or <b>refresh</b>),
+    <b>page down</b>, <b>page up</b>, <b>go to the top</b>, <b>go to the bottom</b>
+  • Scrolling: <b>scroll down</b>, <b>scroll up</b>; add a number to scroll more:
+    <b>scroll down 5</b>
+  • Editing: <b>find</b>, <b>save</b>, <b>select all</b>, <b>copy</b>, <b>paste</b>,
+    <b>escape</b>
 
 <b>Addresses and web search</b>
 Hold <b>{hold}</b>, say <b>go to youtube.com</b> (or <b>open youtube dot com</b>), let go.
-In a browser it uses the address bar; anywhere else your default browser opens it.
+In a browser it uses the address bar, so it replaces the page you're on; anywhere else
+your default browser opens it.
 Hold <b>{hold}</b>, say <b>web search cheap tires</b>, let go: your browser's own search
-engine shows the results.
+engine shows the results. In a browser that replaces the page you're on too; from any
+other app a new tab opens.
 
 Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>.
 
@@ -516,7 +520,7 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
   • Closing asks to save unsaved work, just like clicking the X.
   • Closing, minimizing and switching work on KDE, on GNOME with the TuxTalk extension
     (log out and back in once after updating) and on X11 desktops. On COSMIC, Sway and
-    similar, TuxTalk says "Can't … on this desktop".
+    similar, TuxTalk tells you it can't do that here; use the window's own buttons.
   • Apps open in a terminal too. The keys are the terminal's own there, so <b>select all</b>,
     <b>save</b>, <b>find</b> and <b>reopen tab</b> don't apply in a terminal.
   • <b>go to</b> needs a real web address, like youtube.com. Only <b>web search</b> searches.

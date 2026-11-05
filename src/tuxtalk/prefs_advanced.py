@@ -446,7 +446,7 @@ class AdvancedTab(Tab):
             "\u201cgo to the bottom\u201d,\n"
             "  \u201cfind\u201d, \u201csave\u201d, \u201cselect all\u201d, \u201ccopy\u201d, "
             "\u201cpaste\u201d, \u201cescape\u201d\n"
-            "\u2022 \u201cgo to youtube.com\u201d: opens the address in your browser\n"
+            "\u2022 \u201cgo to youtube.com\u201d: opens the address (replaces the page)\n"
             "\u2022 \u201cweb search cheap tires\u201d: your browser\u2019s own search\n"
             "\u2022 \u201cliteral open Firefox\u201d: \u201cliteral\u201d before\n"
             "  any of these types the words instead\n\n"
