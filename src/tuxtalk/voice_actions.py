@@ -7,11 +7,11 @@ the dictation (voice_commands.handle_navigation)."""
 from collections.abc import Callable
 
 from . import (command_phrases, delivery, desktop_actions, everyday_keys, focused_window,
-               keyboard_output, open_app, web_commands, window_actions)
+               keyboard_output, open_app, sound_control, web_commands, window_actions)
 from . import live_settings as live
 from .app_commands import OpenRequest
 from .command_phrases import (AddressRequest, DesktopRequest, KeyRequest, SearchRequest,
-                              WindowRequest)
+                              SoundRequest, WindowRequest)
 
 
 def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
@@ -39,6 +39,9 @@ def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
         acts = window_actions if isinstance(request, WindowRequest) else desktop_actions
         return _act(f"done ({request.action})", lambda: acts.run(request, where, beeps_on),
                     ongoing)
+    if isinstance(request, SoundRequest):
+        return _act(f"done ({request.action})",
+                    lambda: sound_control.run(request, beeps_on), ongoing)
     return None
 
 

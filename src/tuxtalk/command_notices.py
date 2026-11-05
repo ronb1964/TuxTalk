@@ -96,11 +96,19 @@ NOTES = {
         "The desktop didn't answer",
         "The desktop didn't answer in time, so nothing was done. Say it again in a "
         "moment."),
+    "no_sound_control": (
+        "Couldn't change the volume",
+        "TuxTalk couldn't reach the sound system (PipeWire or PulseAudio). Use your "
+        "desktop's volume control."),
 }
 
 # kind -> label, for a command that was done but whose result the user may
 # not see (the volume level, the player paused), filled as say()'s are.
-DONE: dict[str, str] = {}
+DONE: dict[str, str] = {
+    "volume": "Volume {percent}%",
+    "muted": "Sound muted",
+    "unmuted": "Sound on",
+}
 
 
 def say(kind: str, beeps_on: bool, **names) -> None:

@@ -10,10 +10,11 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# wpctl get-volume: "Volume: 0.90", or "Volume: 0.90 [MUTED]".
-_WPCTL_VOLUME = re.compile(r"Volume:\s*([\d.]+)")
+# wpctl get-volume: "Volume: 0.90", or "Volume: 0.90 [MUTED]". Shared with
+# sound_control, which reads the output the same way.
+WPCTL_VOLUME = re.compile(r"Volume:\s*([\d.]+)")
 # pactl get-source-volume: "Volume: mono: 43423 /  66% / -10.73 dB".
-_PACTL_PERCENT = re.compile(r"/\s*(\d+)%\s*/")
+PACTL_PERCENT = re.compile(r"/\s*(\d+)%\s*/")
 
 # The Input Volume slider's target when TuxTalk uses the system default mic.
 DEFAULT_SOURCE = "@DEFAULT_SOURCE@"
@@ -115,10 +116,10 @@ def get_volume(source=DEFAULT_SOURCE):
     to pactl."""
     if source == DEFAULT_SOURCE:
         out = run_sound_tool(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"])
-        if out and (found := _WPCTL_VOLUME.search(out)):
+        if out and (found := WPCTL_VOLUME.search(out)):
             return round(float(found.group(1)) * 100)
     out = run_sound_tool(["pactl", "get-source-volume", source])
-    if out and (found := _PACTL_PERCENT.search(out)):
+    if out and (found := PACTL_PERCENT.search(out)):
         return int(found.group(1))
     return None
 
