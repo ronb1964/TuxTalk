@@ -151,8 +151,12 @@ def test_help_says_a_fast_computer_can_beat_esc(monkeypatch):
 def test_help_says_auto_send_leaves_terminals_alone(monkeypatch):
     from tuxtalk import help_text
     monkeypatch.delenv("FLATPAK_ID", raising=False)
-    chatting = " ".join(dict(help_text.tabs())["Chatting"].split())
+    pages = dict(help_text.tabs())
+    chatting = " ".join(pages["Chatting"].split())
+    terminals = " ".join(pages["Terminals"].split())
     assert "In a terminal it never presses Enter either" in chatting
+    assert "presses Enter in a terminal too" not in terminals
+    assert "doesn't press Enter in a terminal" in terminals
 
 
 def _writing(monkeypatch, **settings):

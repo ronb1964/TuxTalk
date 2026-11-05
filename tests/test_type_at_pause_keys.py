@@ -123,6 +123,19 @@ def test_press_enter_after_each_dictation_when_it_ends_in_a_pause(enter, monkeyp
     assert typed == ["We meet", ".", "<ENTER>"]
 
 
+@pytest.mark.parametrize("window", ["org.kde.konsole", "org.kde.kwrite"])
+def test_no_automatic_enter_after_a_pause_in_a_terminal_or_editor(enter, monkeypatch, window):
+    """Type at pause made its own send decision and pressed Enter in Konsole,
+    running "git status" unread."""
+    texts, typed, _ = enter
+    monkeypatch.setattr(live, "press_enter_after", True)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: window)
+    texts.append("git status")
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=False)
+    type_chunk([], "last", auto_period=False)
+    assert "<ENTER>" not in typed
+
+
 def test_a_press_enter_misheard_alone_is_caught_by_the_context_pass(enter):
     """Alone, the short phrase came out "Press center.", heard
     with the end of the one before it was "... to say. Press enter."."""

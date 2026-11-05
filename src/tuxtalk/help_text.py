@@ -503,7 +503,8 @@ terminals and code editors.)
 
 <b>Running a command</b>
 Hold <b>{hold}</b>, say <b>git status, press enter</b>, let go: the command is typed and
-run. Send each dictation automatically presses Enter in a terminal too.
+run. Send each dictation automatically doesn't press Enter in a terminal, so nothing
+runs before you've read it: end with <b>press enter</b> when you want it to run.
 
 <b>Long commands</b>
 Snippets: say a short phrase and TuxTalk types the full text. Add one in

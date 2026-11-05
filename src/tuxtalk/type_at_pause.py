@@ -32,7 +32,7 @@ from .chunk_text import boundary_mark, engine_period, word_count, words_in_conte
 from .key_commands import log_held_back, split_key_command
 from .logger import setup_logger
 from .normalize import safe_to_lowercase_first_word
-from .window_classes import app_kind, is_document_window
+from .window_classes import app_kind, why_no_automatic_enter
 
 logger = setup_logger(__name__)
 
@@ -506,19 +506,22 @@ def _drop_unfinished_edit(message, beeps_on) -> bool:
 
 def _may_send(message) -> bool:
     """Whether an automatic Enter is set up after *message*: the setting on,
-    and all of it typed outside a text editor (send_automatically then
-    checks the window). Not whether it was cut off ("and")."""
+    and all of it typed where Enter sends (why_no_automatic_enter: not a
+    text editor or terminal; send_automatically then checks the window).
+    Not whether it was cut off ("and")."""
     return (live.press_enter_after and message.has_words and message.complete
-            and not is_document_window(focused_window.window_class()))
+            and not why_no_automatic_enter(focused_window.window_class()))
 
 
 def _cut_off(message) -> str:
     """The word *message* was cut off on as the key came up ("and"), with
-    "Send each dictation automatically" on, or "". Then it's held back with
-    no period, as a whole dictation is (key_commands.auto_send)."""
+    "Send each dictation automatically" on, or "". Then it gets no period,
+    as a whole dictation does (key_commands.auto_send), and the log says the
+    Enter was held back only where one would have gone."""
     cut_off = message.ends_on if live.press_enter_after else ""
     if cut_off:
-        log_held_back(cut_off)
+        if not why_no_automatic_enter(focused_window.window_class()):
+            log_held_back(cut_off)
         if message.held_mark is not None:
             message.held_mark["mark"] = ""
     return cut_off

@@ -98,20 +98,16 @@ def ends_unfinished(text: str) -> str:
     return last if last in _UNFINISHED else ""
 
 
-def auto_send(words: str, in_document: bool, in_terminal: bool = False) -> tuple[bool, str]:
+def auto_send(words: str, why_not: str) -> tuple[bool, str]:
     """For "Send each dictation automatically": (whether these words are
     sent, the word they were cut off on or "").
 
-    In a text editor Enter only starts a new line, so nothing is sent there,
-    but a cut-off dictation is still reported: it gets no period either. In
-    a terminal Enter would run the words as a command, unread: saying
-    "press enter" runs it on purpose."""
+    *why_not* is window_classes.why_no_automatic_enter's answer for the
+    window: where it gives a reason nothing is sent, but a cut-off dictation
+    is still reported, since it gets no period either."""
     cut_off = ends_unfinished(words)
-    if in_document:
-        logger.info("Not sending: Enter only starts a new line in this app")
-        return False, cut_off
-    if in_terminal:
-        logger.info("Not sending: in a terminal Enter would run it as a command")
+    if why_not:
+        logger.info(f"Not sending: {why_not}")
         return False, cut_off
     if cut_off:
         # The key came up mid-sentence: type it, but don't send half a

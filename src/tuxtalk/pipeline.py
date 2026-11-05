@@ -35,7 +35,7 @@ from .beeps import CANCEL_BEEP, READY_BEEP
 from .chunk_text import carry_question, engine_period, hold_back_boundary
 from .key_commands import auto_send, ends_unfinished, split_key_command
 from .logger import error_without_words, setup_logger
-from .window_classes import app_kind, is_document_window, is_terminal_class, pastes_broken
+from .window_classes import app_kind, pastes_broken, why_no_automatic_enter
 
 logger = setup_logger(__name__)
 
@@ -350,12 +350,10 @@ def _key_to_press(raw: str, said: str, job: _Job):
     phrase of Type at pause."""
     if said or not live.press_enter_after or job.chunk_role == "middle":
         return said, "", ""
-    window = focused_window.window_class()
-    in_document, in_terminal = is_document_window(window), is_terminal_class(window)
-    sending, cut_off = auto_send(raw, in_document, in_terminal)
+    why_not = why_no_automatic_enter(focused_window.window_class())
+    sending, cut_off = auto_send(raw, why_not)
     # Only where it would have sent does a cut-off say why it wasn't.
-    held_back = "" if in_document or in_terminal else cut_off
-    return ("ENTER" if sending else ""), cut_off, held_back
+    return ("ENTER" if sending else ""), cut_off, ("" if why_not else cut_off)
 
 
 def _shape_text(raw: str, said: str, key, job: _Job):

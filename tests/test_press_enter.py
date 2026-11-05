@@ -702,6 +702,19 @@ def test_no_automatic_send_in_a_terminal(monkeypatch):
     assert events == [("typed", "testing 1 2 3")]
 
 
+def test_a_cut_off_dictation_in_a_terminal_says_nothing_about_a_send(monkeypatch):
+    """Nothing would have been sent in a terminal, so "Not sent: it ended on
+    'and'" would be about a send that was never coming."""
+    from tuxtalk import send_countdown
+    monkeypatch.setattr(live, "press_enter_after", True)
+    held = []
+    monkeypatch.setattr(send_countdown, "say_held_back", lambda *a, **k: held.append(a))
+    events = _dictate(monkeypatch, "cd projects and", prepared=lambda r: r + " ",
+                      window="org.kde.konsole")
+    assert events == [("typed", "cd projects and ")]
+    assert held == []
+
+
 def test_saying_press_enter_still_runs_a_command_in_a_terminal(monkeypatch):
     monkeypatch.setattr(live, "press_enter_after", True)
     events = _dictate(monkeypatch, "git status press enter", prepared=lambda r: r,

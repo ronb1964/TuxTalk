@@ -88,6 +88,18 @@ def is_document_window(wm_class: str | None) -> bool:
     return wm_class.lower() in _DOCUMENT_CLASSES_LOWER or app_kind(wm_class) == "code"
 
 
+def why_no_automatic_enter(wm_class: str | None) -> str:
+    """Why "Send each dictation automatically" presses no Enter in this
+    window, or "" where it may. A text editor's Enter only starts a new
+    line; a terminal's would run the words as a command before they're
+    read. Saying "press enter" still presses it in both."""
+    if is_document_window(wm_class):
+        return "Enter only starts a new line in this app"
+    if is_terminal_class(wm_class):
+        return "in a terminal Enter would run it as a command"
+    return ""
+
+
 def app_kind(wm_class: str | None) -> str:
     """"terminal", "code" or "" for the focused window, for plain_for_app."""
     if not wm_class:
