@@ -120,3 +120,50 @@ say = "Open Meld."
 
 [open_calculator]
 say = "Open the calculator."
+
+# Windows, keys and addresses by voice (checks_voice_actions.py).
+[close_text_editor]
+say = "Close the text editor."
+
+[close_this_window]
+say = "Close this window."
+
+[switch_text_editor]
+say = "Switch to the text editor."
+
+[minimize_window]
+say = "Minimize window."
+
+[maximize_window]
+say = "Maximize window."
+
+[restore_window]
+say = "Restore window."
+
+[new_tab]
+say = "New tab."
+
+[go_back]
+say = "Go back."
+
+[go_to_example]
+say = "Go to example dot com."
+
+[web_search_tires]
+say = "Web search cheap tires."
+
+[scroll_down]
+say = "Scroll down."
+
+# Sentences that start like a command and must be typed as words.
+[sentence_new_tab]
+say = "I opened a new tab yesterday."
+
+[sentence_go_to]
+say = "Go to the store."
+
+[sentence_search]
+say = "Search for cheap tires."
+
+[sentence_copy]
+say = "Copy that."

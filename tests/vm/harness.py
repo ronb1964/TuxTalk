@@ -183,11 +183,14 @@ class Run:
 
     # The text window TuxTalk types into
 
-    def sink_ready(self, name="sink", title="TT Sink", fresh=False, password=False):
+    def sink_ready(self, name="sink", title="TT Sink", fresh=False, password=False, mode=None):
         """The test window open, empty and in front. *fresh* opens it anew,
         on top of every other window (two test windows are both maximised,
         so the click that focuses one lands on whichever is on top).
-        *password*: one password box instead of a text area."""
+        *password*: one password box instead of a text area. *mode*: "long"
+        (a tall text; its scroll position goes to <name>.txt.scroll) or "ask"
+        (a close is answered with a "Save changes?" question); see sink.py."""
+        mode = mode or ("password" if password else None)
         pid_file = f"~/{REMOTE}/{name}.txt.pid"
         if fresh:
             self.close_sink(name)
@@ -196,7 +199,7 @@ class Run:
             path = f"{self.vm.home}/{REMOTE}/{name}.txt"
             self.vm.ssh(f"rm -f {path} {path}.pid")
             self.vm.session_background(name, "python3", f"{self.vm.home}/{REMOTE}/sink.py",
-                                       path, title, *(["password"] if password else []))
+                                       path, title, *([mode] if mode else []))
             if self.vm.ui("find", "frame", title, timeout=20) is None:
                 raise Abort(f"the test window {title!r} didn't open")
             time.sleep(1)

@@ -36,6 +36,7 @@ import checks_send  # noqa: F401
 import checks_type_at_pause  # noqa: F401
 import checks_uninstall  # noqa: F401
 import checks_update  # noqa: F401
+import checks_voice_actions  # noqa: F401
 import report
 from harness import CHECKS, Abort, Result, Run
 from vmlib import GUEST_DIR, REMOTE, TOOLS, VM, VMS
@@ -44,7 +45,8 @@ RUNS = TOOLS / "runs"
 # First run must come before Preferences (its defaults), and Preferences
 # before dictation, which changes settings. Uninstall takes it all away: last.
 SECTION_ORDER = ["First run", "Preferences", "Dictation", "Words and numbers",
-                 "Type at pause", "Open apps by voice", "AI features", "Send automatically",
+                 "Type at pause", "Open apps by voice",
+                 "Windows, keys and addresses by voice", "AI features", "Send automatically",
                  "Sound and other windows",
                  "With the GNOME extension",
                  "Hotkeys and keyboard layouts", "Parakeet update", "Uninstall",

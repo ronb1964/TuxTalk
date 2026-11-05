@@ -4,7 +4,8 @@ interface screen readers use, so the VM tests find a button by its label
 instead of by where it happens to be drawn. Runs with the guest's own
 python3 inside the desktop session (session-run.sh). Prints JSON.
 
-  ui.py windows                      every app's top-level windows
+  ui.py windows                      every app's top-level windows, with their
+                                     states and size on screen (width, height)
   ui.py dump [WINDOW]                the widget tree, for writing new checks
   ui.py find ROLE NAME [WINDOW]      wait for a widget, print it
   ui.py click ROLE NAME [WINDOW]     wait for a widget and press it
@@ -66,6 +67,15 @@ def describe(obj):
     if text is not None:
         info["text"] = Atspi.Text.get_text(obj, 0, Atspi.Text.get_character_count(obj))
     return info
+
+
+def size(obj):
+    """[width, height] of *obj* on screen, None when it has no extents."""
+    try:
+        box = Atspi.Component.get_extents(obj, Atspi.CoordType.SCREEN)
+    except gi.repository.GLib.Error:
+        return None
+    return [box.width, box.height]
 
 
 def children(obj):
@@ -143,7 +153,8 @@ def main(argv):
             return 2
     command, args = argv[0], argv[1:]
     if command == "windows":
-        out = [{"app": app.get_name(), "title": win.get_name(), "states": states(win)}
+        out = [{"app": app.get_name(), "title": win.get_name(), "states": states(win),
+                "size": size(win)}
                for app, win in windows()]
     elif command == "dump":
         out = []
