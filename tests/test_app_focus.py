@@ -408,14 +408,19 @@ class FakeWindowManager:
         xcb_ctypes.free(reply)
         return atom
 
-    def window(self, instance, wm_class):
-        """A new window with WM_CLASS *instance*, *wm_class*."""
+    def window(self, instance, wm_class, **entry_ids):
+        """A new window with WM_CLASS *instance*, *wm_class*, and the menu
+        entry it names in *entry_ids*: _GTK_APPLICATION_ID=...,
+        _KDE_NET_WM_DESKTOP_FILE=..."""
         lib = self.lib
         window = lib.xcb_generate_id(self.conn)
         lib.xcb_create_window(self.conn, 0, window, self.root, 0, 0, 10, 10, 0, 1, 0, 0, None)
         raw = f"{instance}\0{wm_class}\0".encode()
         lib.xcb_change_property(self.conn, 0, window, _ATOM_WM_CLASS, _ATOM_STRING, 8,
                                 len(raw), raw)
+        for name, value in entry_ids.items():
+            lib.xcb_change_property(self.conn, 0, window, self.atom(name.encode()),
+                                    self.atom(b"UTF8_STRING"), 8, len(value), value.encode())
         return window
 
     def stack(self, windows):
@@ -495,6 +500,30 @@ def test_x11_finds_a_web_app_by_the_class_its_entry_names(window_manager):
     window_manager.stack([web_app_class, web_app])
     assert app_focus.focus_running(YOUTUBE_MUSIC_NAMED) is True
     assert window_manager.activations() == [(web_app_class, 2)]
+
+
+def test_x11_knows_a_gtk_window_by_its_application_id(window_manager):
+    """Mint's own apps (xed, GNOME Terminal) have reverse-DNS menu entries
+    and a class named after the program, which the entry doesn't name: GTK
+    puts the entry's id on the window."""
+    xed = _entry("org.x.editor.desktop", "Text Editor", "xed")
+    terminal = _entry("org.gnome.Terminal.desktop", "Terminal", "gnome-terminal")
+    editor = window_manager.window("xed", "Xed", _GTK_APPLICATION_ID="org.x.editor")
+    shell = window_manager.window("gnome-terminal-server", "Gnome-terminal",
+                                  _GTK_APPLICATION_ID="org.gnome.Terminal")
+    window_manager.stack([editor, shell])
+    assert app_focus.focus_running(xed) is True
+    assert app_focus.focus_running(terminal) is True
+    assert window_manager.activations() == [(editor, 2), (shell, 2)]
+
+
+def test_x11_knows_a_kde_window_by_its_desktop_file(window_manager):
+    entry = _entry("org.kde.filelight.desktop", "Filelight", "filelight-launcher")
+    window = window_manager.window("filelight", "filelight",
+                                   _KDE_NET_WM_DESKTOP_FILE="org.kde.filelight")
+    window_manager.stack([window])
+    assert app_focus.focus_running(entry) is True
+    assert window_manager.activations() == [(window, 2)]
 
 
 def test_x11_without_the_apps_window_says_launch(window_manager):

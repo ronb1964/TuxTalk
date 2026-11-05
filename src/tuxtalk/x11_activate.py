@@ -3,7 +3,10 @@ for "open Firefox" with Firefox already open (app_focus.py).
 
 The window manager lists the windows it manages on the root window
 (_NET_CLIENT_LIST_STACKING, bottom to top, or else _NET_CLIENT_LIST, oldest
-first), and WM_CLASS says whose each one is. To bring one forward a client
+first), and WM_CLASS says whose each one is; GTK and KDE apps also name
+their menu entry on the window (_GTK_APPLICATION_ID, _KDE_NET_WM_DESKTOP_FILE),
+which Mint's own apps need: xed's entry is org.x.editor, its class Xed.
+To bring one forward a client
 asks the window manager with a _NET_ACTIVE_WINDOW message to the root
 window, as a taskbar does (EWMH); the window manager switches desktops and
 unminimizes as it would for a click there. Through XCB (xcb_ctypes), like
@@ -25,6 +28,7 @@ _TO_THE_WINDOW_MANAGER = (1 << 19) | (1 << 20)     # SubstructureNotify | Redire
 # EWMH's source indication for a pager or taskbar: window managers that keep
 # apps from stealing the focus still obey it, as the user asked for it.
 _FROM_A_TASKBAR = 2
+_ENTRY_ID_PROPERTIES = (b"_GTK_APPLICATION_ID", b"_KDE_NET_WM_DESKTOP_FILE")
 
 
 def active_window_request(window: int, atom: int) -> bytes:
@@ -55,6 +59,18 @@ class _Display:
         """The class part of *window*'s WM_CLASS ("firefox"), "" when unset."""
         raw = get_property(self._lib, self._conn, window, XCB_ATOM_WM_CLASS)
         return (parse_wm_class(raw) if raw else None) or ""
+
+    def entry_atoms(self) -> list:
+        """The atoms of the properties naming a window's menu entry that the
+        X server has; one no window has set yet isn't there."""
+        atoms = (intern_atom(self._lib, self._conn, name) for name in _ENTRY_ID_PROPERTIES)
+        return [atom for atom in atoms if atom]
+
+    def entry_ids(self, window, atoms) -> set:
+        """The menu entries *window* says it belongs to, without case
+        ("org.x.editor")."""
+        raw = (get_property(self._lib, self._conn, window, atom) for atom in atoms)
+        return {r.decode("utf-8", "replace").strip("\0").casefold() for r in raw if r}
 
     def activate(self, window) -> None:
         """Ask the window manager to bring *window* forward. Raises OSError
@@ -89,16 +105,19 @@ def _open():
     return _Display(lib, conn, root)
 
 
-def activate(names) -> bool:
-    """Bring forward the window used last whose class, without case, is in
+def activate(desktop_file: str, names) -> bool:
+    """Bring forward the window used last that names the menu entry
+    *desktop_file* ("org.x.editor") or whose class, without case, is in
     *names* (app_focus.window_names). True when one was asked for."""
     display = _open()
     if display is None:
         log.info("No X server to ask about the open windows")
         return False
     try:
+        wanted, atoms = desktop_file.casefold(), display.entry_atoms()
         for window in reversed(display.windows()):
-            if display.wm_class(window).casefold() in names:
+            if (wanted in display.entry_ids(window, atoms)
+                    or display.wm_class(window).casefold() in names):
                 display.activate(window)
                 return True
         return False

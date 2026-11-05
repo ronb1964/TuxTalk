@@ -77,7 +77,7 @@ def _bring_forward(entry: AppEntry, timeout: float):
     if desktop == "gnome":
         return _ask_extension(entry.app_id, timeout)
     if desktop_detect.is_x11_session(os.environ):
-        return x11_activate.activate(window_names(entry))
+        return x11_activate.activate(_desktop_file(entry), window_names(entry))
     return None
 
 
