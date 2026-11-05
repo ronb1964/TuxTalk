@@ -7,8 +7,9 @@ act. Snapping and centring are _NET_MOVERESIZE_WINDOW requests against the
 monitor the window is on: EWMH's work area (_NET_WORKAREA, the screen less
 panels) spans every monitor as one rectangle, so it is intersected with that
 monitor's RandR rectangle, else a window snapped on the second screen would
-land across both. A maximized window ignores a move, so it is un-maximized
-first.
+land across both. A maximized or fullscreen window ignores a move, so it
+is taken out of those states first. The panels' own struts are subtracted
+too, since the work area misses a panel on a monitor smaller than the screen.
 
 Answers are the strings desktop_actions turns into a spoken-style note:
 "done", "no_window", "no_desktop", "one_desktop", "one_screen", "edge" and
@@ -83,8 +84,43 @@ def _work_area(display, screen):
     areas = display.cardinals(display.root, b"_NET_WORKAREA")
     start = _current_desktop(display) * 4
     if len(areas) >= start + 4:
-        return _overlap(screen, tuple(areas[start:start + 4])) or screen
-    return screen
+        screen = _overlap(screen, tuple(areas[start:start + 4])) or screen
+    return _less_panels(display, screen)
+
+
+def _less_panels(display, area):
+    """*area* less the panels on its monitor. _NET_WORKAREA is computed from
+    struts at the screen's edges, so a panel on a smaller monitor than the
+    screen's edge leaves it untouched; each panel's own strut says where it is."""
+    whole = display.geometry(display.root)
+    left, top, right, bottom = area[0], area[1], area[0] + area[2], area[1] + area[3]
+    for panel in display.docks():
+        strut = display.cardinals(panel, b"_NET_WM_STRUT_PARTIAL")
+        if len(strut) < 12 or whole is None:
+            continue
+        for side, (rect, edge) in enumerate(_strut_rects(strut, whole)):
+            if not edge or _overlap(area, rect) is None:
+                continue
+            if side == 0:
+                left = max(left, rect[0] + rect[2])
+            elif side == 1:
+                right = min(right, rect[0])
+            elif side == 2:
+                top = max(top, rect[1] + rect[3])
+            else:
+                bottom = min(bottom, rect[1])
+    return left, top, right - left, bottom - top
+
+
+def _strut_rects(strut, whole):
+    """For a _NET_WM_STRUT_PARTIAL, the (rectangle, thickness) it keeps clear
+    on the left, right, top and bottom of the screen *whole*."""
+    sw, sh = whole[2], whole[3]
+    left, right, top, bottom = strut[:4]
+    return [((0, strut[4], left, strut[5] - strut[4] + 1), left),
+            ((sw - right, strut[6], right, strut[7] - strut[6] + 1), right),
+            ((strut[8], 0, strut[9] - strut[8] + 1, top), top),
+            ((strut[10], sh - bottom, strut[11] - strut[10] + 1, bottom), bottom)]
 
 
 def _outer_rect(display, window):
@@ -99,10 +135,19 @@ def _outer_rect(display, window):
         (left, right, top, bottom)
 
 
-def _unmaximize(display, window):
+def _place(display, window, data: tuple):
+    """Ask for *window*'s move (*data*) after taking it out of the states that
+    make a window manager ignore one: maximized and fullscreen. The move's
+    atom is looked up first, so a window manager without it leaves the window
+    as it was."""
+    display.atom(b"_NET_MOVERESIZE_WINDOW")
+    source = x11_activate.FROM_A_TASKBAR
     display.ask_window_manager(window, b"_NET_WM_STATE", (
         _UNMAXIMIZE, display.atom(b"_NET_WM_STATE_MAXIMIZED_VERT"),
-        display.atom(b"_NET_WM_STATE_MAXIMIZED_HORZ"), x11_activate.FROM_A_TASKBAR))
+        display.atom(b"_NET_WM_STATE_MAXIMIZED_HORZ"), source))
+    display.ask_window_manager(window, b"_NET_WM_STATE", (
+        _UNMAXIMIZE, display.atom(b"_NET_WM_STATE_FULLSCREEN"), 0, source))
+    display.ask_window_manager(window, b"_NET_MOVERESIZE_WINDOW", data)
 
 
 def _snap(display, window, action: str) -> str:
@@ -120,16 +165,13 @@ def _snap(display, window, action: str) -> str:
     col0, col1, row0, row1 = _SNAP_PLACES[action]
     x, y = ax + aw * col0 // 2, ay + ah * row0 // 2
     width, height = ax + aw * col1 // 2 - x, ay + ah * row1 // 2 - y
-    _unmaximize(display, window)
-    display.ask_window_manager(window, b"_NET_MOVERESIZE_WINDOW", (
-        _MOVE_AND_SIZE, x, y, width - left - right, height - top - bottom))
+    _place(display, window, (_MOVE_AND_SIZE, x, y, width - left - right, height - top - bottom))
     return "done"
 
 
 def _move_to(display, window, x: int, y: int):
-    """Un-maximize *window* and put its frame's corner at (*x*, *y*)."""
-    _unmaximize(display, window)
-    display.ask_window_manager(window, b"_NET_MOVERESIZE_WINDOW", (_MOVE, x, y))
+    """Put *window*'s frame corner at (*x*, *y*)."""
+    _place(display, window, (_MOVE, x, y))
 
 
 def _centre(display, window) -> str:
@@ -144,6 +186,8 @@ def _centre(display, window) -> str:
 
 
 def _to_next_screen(display, window) -> str:
+    """Move *window* to the next monitor (the first after the last), keeping
+    its offset in the monitor but clamped to fit inside it."""
     outer = _outer_rect(display, window)
     screens = monitors(display)
     if outer is None:
@@ -151,8 +195,9 @@ def _to_next_screen(display, window) -> str:
     if len(screens) < 2:
         return "one_screen"
     rect = outer[0]
-    here = screens[_monitor_index(screens, rect)]
-    mx, my, mw, mh = screens[(_monitor_index(screens, rect) + 1) % len(screens)]
+    index = _monitor_index(screens, rect)
+    here = screens[index]
+    mx, my, mw, mh = screens[(index + 1) % len(screens)]
     x = min(max(mx + rect[0] - here[0], mx), max(mx, mx + mw - rect[2]))
     y = min(max(my + rect[1] - here[1], my), max(my, my + mh - rect[3]))
     _move_to(display, window, x, y)

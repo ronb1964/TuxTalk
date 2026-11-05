@@ -349,12 +349,18 @@ _CONFIG_X, _CONFIG_Y = 1, 2
 
 
 @pytest.fixture
-def x11(monkeypatch):
+def x11_flags():
+    """Extra Xvfb options; a test sets them with parametrize ("-extension", "RANDR")."""
+    return ()
+
+
+@pytest.fixture
+def x11(monkeypatch, x11_flags):
     """A private X server on an X11 Xfce session; DISPLAY points at it."""
     if not shutil.which("Xvfb"):
         pytest.skip("needs Xvfb")
     read, write = os.pipe()
-    server = subprocess.Popen(["Xvfb", "-displayfd", str(write), "-nolisten", "tcp"],
+    server = subprocess.Popen(["Xvfb", "-displayfd", str(write), "-nolisten", "tcp", *x11_flags],
                               pass_fds=(write,), stderr=subprocess.DEVNULL)
     os.close(write)
     with os.fdopen(read) as f:
@@ -373,7 +379,8 @@ _SUPPORTED = (b"_NET_ACTIVE_WINDOW", b"_NET_CLOSE_WINDOW", b"WM_CHANGE_STATE",
               b"_NET_WM_WINDOW_TYPE_DESKTOP", b"_NET_WM_WINDOW_TYPE_DOCK",
               b"_NET_MOVERESIZE_WINDOW", b"_NET_WORKAREA", b"_NET_FRAME_EXTENTS",
               b"_NET_CURRENT_DESKTOP", b"_NET_NUMBER_OF_DESKTOPS", b"_NET_WM_DESKTOP",
-              b"_NET_SHOWING_DESKTOP")
+              b"_NET_SHOWING_DESKTOP",
+              b"_NET_WM_STATE_FULLSCREEN", b"_NET_WM_STRUT_PARTIAL")
 
 
 class FakeWindowManager:

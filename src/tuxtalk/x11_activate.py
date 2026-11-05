@@ -43,6 +43,12 @@ def _client_message(window: int, atom: int, data: tuple) -> bytes:
     return struct.pack("=BBHII5I", _CLIENT_MESSAGE, 32, 0, window, atom, *words)
 
 
+def _words(raw) -> list:
+    """The 32-bit values of a window property's raw bytes ([] when unset)."""
+    raw = raw or b""
+    return list(struct.unpack(f"={len(raw) // 4}I", raw[:len(raw) // 4 * 4]))
+
+
 class Display:
     """One XCB connection to $DISPLAY and its first screen's root window."""
 
@@ -58,7 +64,7 @@ class Display:
         """The CARDINAL list property *name* of *window* ([] when unset)."""
         atom = intern_atom(self._lib, self._conn, name)
         raw = get_property(self._lib, self._conn, window, atom) if atom else None
-        return list(struct.unpack(f"={len(raw) // 4}I", raw[:len(raw) // 4 * 4])) if raw else []
+        return _words(raw)
 
     def geometry(self, window):
         """(x, y, width, height) of *window* in root coordinates, or None."""
@@ -83,7 +89,7 @@ class Display:
             atom = intern_atom(self._lib, self._conn, name)
             raw = get_property(self._lib, self._conn, self._root, atom) if atom else None
             if raw:
-                return list(struct.unpack(f"={len(raw) // 4}I", raw[:len(raw) // 4 * 4]))
+                return _words(raw)
         return []
 
     def active_window(self):
@@ -122,8 +128,15 @@ class Display:
         return [window for window in windows if not own & self._types(window, type_atom)]
 
     def _types(self, window, type_atom) -> set:
-        raw = get_property(self._lib, self._conn, window, type_atom) or b""
-        return set(struct.unpack(f"={len(raw) // 4}I", raw[:len(raw) // 4 * 4]))
+        return set(_words(get_property(self._lib, self._conn, window, type_atom)))
+
+    def docks(self) -> list:
+        """The panels (_NET_WM_WINDOW_TYPE_DOCK windows) the window manager lists."""
+        type_atom = intern_atom(self._lib, self._conn, b"_NET_WM_WINDOW_TYPE")
+        dock = intern_atom(self._lib, self._conn, b"_NET_WM_WINDOW_TYPE_DOCK")
+        if not type_atom or not dock:
+            return []
+        return [window for window in self.windows() if dock in self._types(window, type_atom)]
 
     def matching(self, desktop_file: str, names) -> list:
         """The windows that name the menu entry *desktop_file*

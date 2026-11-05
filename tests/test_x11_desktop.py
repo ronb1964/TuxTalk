@@ -134,3 +134,63 @@ def test_x11_monitors_come_from_randr(window_manager):
         assert x11_desktop.monitors(display) == [display.geometry(display.root)]   # Xvfb: one
     finally:
         display.close()
+
+
+@pytest.mark.parametrize("x11_flags", [("-extension", "RANDR")])
+def test_x11_without_randr_the_screen_is_the_one_monitor(desktops):
+    # The "-extension RANDR" server has none; asking would shut the connection.
+    display = x11_activate.open_display()
+    try:
+        assert x11_desktop.monitors(display) == [display.geometry(display.root)] != [None]
+    finally:
+        display.close()
+    w = _active_window(desktops)
+    assert x11_desktop.act("snap left", None) == "done"
+    assert desktops.requests(b"_NET_MOVERESIZE_WINDOW")[0][0] == w
+
+
+def _two_monitors_with_a_panel_on_the_first(wm, monkeypatch):
+    monkeypatch.setattr(x11_desktop, "monitors",
+                        lambda d: [(0, 0, 1280, 1024), (1280, 0, 1920, 1080)])
+    wm.set_cardinals(wm.root, b"_NET_WORKAREA", (0, 0, 3200, 1080))
+    panel = wm.window("panel", "panel", b"_NET_WM_WINDOW_TYPE_DOCK")
+    wm.set_cardinals(panel, b"_NET_WM_STRUT_PARTIAL",
+                     (0, 0, 0, 30, 0, 0, 0, 0, 0, 0, 0, 1279))
+    wm.stack([panel])
+
+
+def test_x11_snap_stays_above_a_panel_on_a_smaller_monitor(desktops, monkeypatch):
+    _two_monitors_with_a_panel_on_the_first(desktops, monkeypatch)
+    w = _active_window(desktops)
+    x11_desktop.act("snap left", None)
+    assert desktops.requests(b"_NET_MOVERESIZE_WINDOW") == [(w, (0x2F01, 0, 0, 640, 994))]
+
+
+def test_x11_a_panel_on_one_monitor_leaves_the_other_whole(desktops, monkeypatch):
+    _two_monitors_with_a_panel_on_the_first(desktops, monkeypatch)
+    w = _active_window(desktops)
+    desktops.move(w, 1500, 100)
+    x11_desktop.act("snap left", None)
+    assert desktops.requests(b"_NET_MOVERESIZE_WINDOW") == [(w, (0x2F01, 1280, 0, 960, 1080))]
+
+
+def test_x11_a_fullscreen_window_is_taken_out_of_fullscreen_first(desktops, one_monitor):
+    _active_window(desktops)
+    x11_desktop.act("snap left", None)
+    fullscreen = desktops.atom(b"_NET_WM_STATE_FULLSCREEN")
+    assert any(data[:2] == (0, fullscreen) for _w, data in desktops.requests(b"_NET_WM_STATE"))
+
+
+def test_x11_a_window_manager_without_move_requests_leaves_the_window_alone(
+        desktops, one_monitor, monkeypatch):
+    _active_window(desktops)
+    real = x11_activate.Display.atom
+
+    def atom(self, name):
+        if name == b"_NET_MOVERESIZE_WINDOW":
+            raise OSError("no window manager here takes it")
+        return real(self, name)
+    monkeypatch.setattr(x11_activate.Display, "atom", atom)
+    with pytest.raises(OSError):
+        x11_desktop.act("snap left", None)
+    assert desktops.requests(b"_NET_WM_STATE") == []

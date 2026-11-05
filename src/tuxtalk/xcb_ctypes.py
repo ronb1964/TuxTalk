@@ -100,6 +100,8 @@ def xcb_lib():
         lib.xcb_flush.argtypes = [P]
         lib.xcb_send_event_checked.restype = Cookie
         lib.xcb_send_event_checked.argtypes = [P, U8, U32, U32, ctypes.c_char_p]
+        lib.xcb_get_extension_data.restype = P
+        lib.xcb_get_extension_data.argtypes = [P, P]
         lib.xcb_get_geometry.restype = Cookie
         lib.xcb_get_geometry.argtypes = [P, U32]
         lib.xcb_get_geometry_reply.restype = ctypes.POINTER(_GeometryReply)
@@ -163,46 +165,60 @@ def get_property(lib, conn, window, atom):
 def geometry(lib, conn, window, root):
     """(x, y, width, height) of *window*, its position in root-window
     coordinates, or None when the X server has no such window."""
-    error = ctypes.c_void_p()
+    size_error, origin_error = ctypes.c_void_p(), ctypes.c_void_p()
     size = lib.xcb_get_geometry_reply(conn, lib.xcb_get_geometry(conn, window),
-                                      ctypes.byref(error))
+                                      ctypes.byref(size_error))
     origin = lib.xcb_translate_coordinates_reply(
-        conn, lib.xcb_translate_coordinates(conn, window, root, 0, 0), ctypes.byref(error))
+        conn, lib.xcb_translate_coordinates(conn, window, root, 0, 0),
+        ctypes.byref(origin_error))
     try:
         if not size or not origin:
             return None
         return (origin.contents.dst_x, origin.contents.dst_y,
                 size.contents.width, size.contents.height)
     finally:
-        for reply in (size, origin):
-            if reply:
-                free(reply)
-        if error.value:
-            free(error)
+        for pointer in (size, origin, size_error, origin_error):
+            if pointer:
+                free(pointer)
+
+
+_randr = None
 
 
 def _randr_lib():
-    """libxcb-randr with the monitor calls' signatures, None when it isn't installed."""
-    try:
-        lib = ctypes.CDLL("libxcb-randr.so.0")
-    except OSError:
-        return None
-    P, U32 = ctypes.c_void_p, ctypes.c_uint32
-    lib.xcb_randr_get_monitors.restype = Cookie
-    lib.xcb_randr_get_monitors.argtypes = [P, U32, ctypes.c_uint8]
-    lib.xcb_randr_get_monitors_reply.restype = P
-    lib.xcb_randr_get_monitors_reply.argtypes = [P, Cookie, ctypes.POINTER(P)]
-    lib.xcb_randr_get_monitors_monitors_iterator.restype = _MonitorIterator
-    lib.xcb_randr_get_monitors_monitors_iterator.argtypes = [P]
-    lib.xcb_randr_monitor_info_next.argtypes = [ctypes.POINTER(_MonitorIterator)]
-    return lib
+    """libxcb-randr with the monitor calls' signatures, loaded once; None
+    when it isn't installed."""
+    global _randr
+    if _randr is None:
+        try:
+            lib = ctypes.CDLL("libxcb-randr.so.0")
+        except OSError:
+            return None
+        P, U32 = ctypes.c_void_p, ctypes.c_uint32
+        lib.xcb_randr_get_monitors.restype = Cookie
+        lib.xcb_randr_get_monitors.argtypes = [P, U32, ctypes.c_uint8]
+        lib.xcb_randr_get_monitors_reply.restype = P
+        lib.xcb_randr_get_monitors_reply.argtypes = [P, Cookie, ctypes.POINTER(P)]
+        lib.xcb_randr_get_monitors_monitors_iterator.restype = _MonitorIterator
+        lib.xcb_randr_get_monitors_monitors_iterator.argtypes = [P]
+        lib.xcb_randr_monitor_info_next.argtypes = [ctypes.POINTER(_MonitorIterator)]
+        _randr = lib
+    return _randr
+
+
+def _has_randr(randr, conn) -> bool:
+    """Whether the X server has RandR. Asked first: libxcb shuts the whole
+    connection down when a request names an extension the server lacks."""
+    extension = ctypes.addressof(ctypes.c_char.in_dll(randr, "xcb_randr_id"))
+    reply = xcb_lib().xcb_get_extension_data(conn, extension)
+    return bool(reply and ctypes.c_uint8.from_address(reply + 8).value)   # .present
 
 
 def randr_monitors(conn, root):
     """(x, y, width, height) of each active monitor, as RandR 1.5 lists
     them; [] when libxcb-randr or the extension isn't there."""
     randr = _randr_lib()
-    if randr is None:
+    if randr is None or not _has_randr(randr, conn):
         return []
     error = ctypes.c_void_p()
     reply = randr.xcb_randr_get_monitors_reply(
