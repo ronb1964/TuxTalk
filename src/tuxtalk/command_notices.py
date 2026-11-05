@@ -46,6 +46,11 @@ NOTES = {
         "No web browser is set up",
         "TuxTalk found no web browser to search with. Set a default browser in your "
         "desktop's settings."),
+    "browser_copies_alike": (
+        "Two copies of your browser",
+        "Two copies of your default browser are installed, and TuxTalk can't tell their "
+        "windows apart, so nothing was searched. Bring the one you want to the front, "
+        "then say it again."),
     "browser_not_started": (
         "Your browser didn't start",
         "Your browser didn't start, so nothing was searched. Try opening it yourself."),

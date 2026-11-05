@@ -42,19 +42,34 @@ class _Browser(NamedTuple):
     # Other copies installed (the distro's Firefox and Flathub's): only a
     # window of this one counts, as app_match.find decides.
     exact: bool
-    classes: frozenset      # its windows' classes, without case
+    classes: frozenset      # its windows' classes, without case; never empty
+    # Another copy's windows have one of those classes too: no window can be
+    # told for this copy's.
+    alike: bool = False
+
+
+def _own_classes(entry: AppEntry) -> frozenset:
+    """The classes the entry itself says its windows have: its id (a
+    Wayland app's) and its StartupWMClass, without case."""
+    return frozenset({app_focus.desktop_file(entry).casefold(), entry.wm_class.casefold()}
+                     - {""})
 
 
 def _default_browser() -> _Browser | None:
-    """The default browser, or None when the desktop names none in the menu."""
+    """The default browser, or None when the desktop names none in the menu.
+    With other copies installed only the entry's own classes count, never
+    one guessed from its program's name, which the copies share."""
     entries = app_finder.installed_apps()
     browser_id = app_finder.default_apps().get("browser")
     entry = next((e for e in entries if e.app_id == browser_id), None)
     if entry is None:
         return None
-    exact = len(app_finder.copies(entry, entries)) > 1
-    classes = app_focus.window_names(entry, exact) | {app_focus.desktop_file(entry).casefold()}
-    return _Browser(entry, exact, classes)
+    copies = app_finder.copies(entry, entries)
+    if len(copies) == 1:
+        return _Browser(entry, False, app_focus.window_names(entry) | _own_classes(entry))
+    classes = _own_classes(entry)
+    alike = any(classes & _own_classes(other) for other in copies[1:])
+    return _Browser(entry, True, classes, alike)
 
 
 def _is_default(wm_class: str | None, browser: _Browser | None) -> bool:
@@ -129,10 +144,14 @@ def _into_address_bar(where, opener, text: str, what: str, beeps_on: bool) -> bo
 
 def _browser_in_front(browser: _Browser | None, beeps_on: bool):
     """The look of the default *browser*'s window, brought forward or
-    started for a search. None after a note (no browser, it didn't start, or
-    it didn't come forward) or after Esc."""
+    started for a search. None after a note (no browser, two copies whose
+    windows look alike, it didn't start, or it didn't come forward) or after
+    Esc."""
     if browser is None:
         command_notices.say("no_browser", beeps_on)
+        return None
+    if browser.alike:
+        command_notices.say("browser_copies_alike", beeps_on)
         return None
     if app_focus.focus_running(browser.entry, exact=browser.exact):
         wait_s = BROWSER_WAIT_S

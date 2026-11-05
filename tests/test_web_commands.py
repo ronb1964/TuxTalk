@@ -242,6 +242,53 @@ def test_go_to_in_a_default_browser_on_no_list_uses_its_bar(focus, vivaldi_defau
     assert keyboard.typed_keys()[:2] == CTRL_L
 
 
+# Firefox installed twice: Flathub's entry says its windows' class is
+# "firefox", the distro's own windows' class too.
+FLATPAK_FIREFOX = AppEntry("org.mozilla.firefox.desktop", "Firefox", "Firefox", "Web Browser",
+                           "firefox", "flatpak", wm_class="firefox")
+SNAP_FIREFOX = AppEntry("firefox_firefox.desktop", "Firefox", "Firefox", "Web Browser",
+                        "firefox", "snap", wm_class="firefox_firefox")
+
+
+def test_two_copies_whose_windows_look_alike_get_no_search(at_kwrite, browser, typed, keyboard,
+                                                          floated, monkeypatch):
+    """The distro's Firefox is the default and Flathub's is installed too:
+    a window of class "firefox" may be either, so the words never go into
+    one, and the note says so at once instead of after a wait."""
+    monkeypatch.setattr(app_finder, "installed_apps",
+                        lambda: [FIREFOX_ENTRY, FLATPAK_FIREFOX, KWRITE_ENTRY])
+    raised = []
+    monkeypatch.setattr(app_focus, "focus_running", lambda *a, **k: raised.append(1))
+    assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is False
+    assert typed == [] and keyboard.events == [] and raised == []
+    assert floated == ["Two copies of your browser"]
+
+
+def test_the_default_copys_own_window_class_is_waited_for(at_kwrite, browser, typed, keyboard,
+                                                         monkeypatch):
+    """Flathub's Firefox is the default, the Snap is installed too: on X11
+    the Flatpak's windows have the class its entry names, "firefox"."""
+    monkeypatch.setattr(app_finder, "installed_apps",
+                        lambda: [FLATPAK_FIREFOX, SNAP_FIREFOX, KWRITE_ENTRY])
+    monkeypatch.setattr(app_finder, "default_apps",
+                        lambda: {"browser": "org.mozilla.firefox.desktop"})
+    browser.arrives = [("firefox", ("x11", "7"))]
+    assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is True
+    assert typed == ["cheap tires"]
+
+
+def test_another_copys_window_isnt_the_default(at_kwrite, browser, typed, keyboard, floated,
+                                              monkeypatch):
+    """The Snap's window comes forward while the Flatpak is the default."""
+    monkeypatch.setattr(app_finder, "installed_apps",
+                        lambda: [FLATPAK_FIREFOX, SNAP_FIREFOX, KWRITE_ENTRY])
+    monkeypatch.setattr(app_finder, "default_apps",
+                        lambda: {"browser": "org.mozilla.firefox.desktop"})
+    browser.arrives = [("firefox_firefox", ("x11", "8"))]
+    assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is False
+    assert typed == [] and floated == ["The browser didn't come forward"]
+
+
 def test_esc_while_waiting_for_the_browser_types_nothing(at_kwrite, browser, typed, keyboard,
                                                         floated, monkeypatch, focus):
     browser.arrives = [KWRITE]
