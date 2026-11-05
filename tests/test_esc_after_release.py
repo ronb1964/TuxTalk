@@ -2,21 +2,14 @@
 being transcribed or typed: what isn't in yet stays out, and no Enter
 follows it. Once it's all in, Esc is the app's again."""
 import threading
-import types
 
-import numpy as np
-import pytest
 from evdev import ecodes
 
-from conftest import CHAT_WINDOW, next_recording
+from conftest import CHAT_WINDOW, esc
 from type_at_pause_rig import fake_pipeline, frames_of, speech, type_chunk
-from tuxtalk import (delivery, dictation_worker, engine, hotkeys, keyboard_output, pipeline,
-                     recording, send_countdown, tray_link, type_at_pause)
-from tuxtalk import live_settings as live
+from tuxtalk import (delivery, dictation_worker, keyboard_output, pipeline,
+                     send_countdown, type_at_pause)
 from tuxtalk import recording_state as rs
-
-CFG = types.SimpleNamespace(beeps=False, notify=False, smart_quotes=False, language=None,
-                            auto_space=True, auto_period=True, injection_mode="type")
 
 
 class QueuedWorker:
@@ -39,32 +32,6 @@ class QueuedWorker:
         self.thread = threading.current_thread()
         while self.jobs:
             self.jobs.pop(0)()
-
-
-def esc():
-    """Esc pressed, through the hotkey loop's handler."""
-    event = types.SimpleNamespace(type=ecodes.EV_KEY, code=ecodes.KEY_ESC, value=1)
-    hotkeys._handle_key_event(event, ecodes.KEY_F8, ecodes.KEY_F9, None, set(), [], CFG, 0)
-
-
-@pytest.fixture
-def let_go(monkeypatch):
-    """let_go(): a dictation's key comes up, and its audio goes to the
-    dictation worker. Returns its recording."""
-    monkeypatch.setattr(rs.state, "is_recording", False)
-    monkeypatch.setattr(recording, "indicator", None)
-    monkeypatch.setattr(recording, "stop_stream_safely", lambda rec: None)
-    monkeypatch.setattr(recording, "resume_media_players", lambda: None)
-    monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
-    monkeypatch.setattr(live, "chunk_pause_seconds", 0)
-
-    def stop():
-        rec = next_recording()
-        rec.frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-        rs.state.is_recording = True
-        pipeline.stop_recording(False, False, False)
-        return rec
-    return stop
 
 
 def test_esc_before_the_words_are_heard_types_nothing(chat, keyboard, let_go, monkeypatch):
