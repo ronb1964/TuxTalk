@@ -87,3 +87,25 @@ def test_no_x_server_does_nothing(monkeypatch):
     set_desktop(monkeypatch, "XFCE", "x11")
     monkeypatch.setenv("DISPLAY", ":9999")
     assert x11_windows.act("close", "", frozenset(), False) is False
+
+
+def test_x11_close_window_never_closes_the_desktop_itself(window_manager):
+    """The focus on the desktop's background (Xfce's xfdesktop): there is no
+    app window to close, so nothing is asked, as KWin leaves it alone too."""
+    background = window_manager.window("xfdesktop", "Xfdesktop",
+                                       window_type=b"_NET_WM_WINDOW_TYPE_DESKTOP")
+    window_manager.stack([background])
+    window_manager.set_active(background)
+    assert x11_windows.act("close", "", frozenset(), False) is False
+    assert window_manager.requests(b"_NET_CLOSE_WINDOW") == []
+
+
+def test_x11_close_all_skips_a_panel_of_the_app(window_manager):
+    """A panel has its program's class too, but isn't a window to close."""
+    names = frozenset({"xfce4-panel"})
+    panel = window_manager.window("xfce4-panel", "Xfce4-panel",
+                                  window_type=b"_NET_WM_WINDOW_TYPE_DOCK")
+    settings = window_manager.window("xfce4-panel", "Xfce4-panel")
+    window_manager.stack([settings, panel])
+    assert x11_windows.act("close", "xfce4-panel", names, True) is True
+    assert [w for w, _ in window_manager.requests(b"_NET_CLOSE_WINDOW")] == [settings]

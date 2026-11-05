@@ -30,6 +30,9 @@ _TO_THE_WINDOW_MANAGER = (1 << 19) | (1 << 20)     # SubstructureNotify | Redire
 # apps from stealing the focus still obey it, as the user asked for it.
 FROM_A_TASKBAR = 2
 _ENTRY_ID_PROPERTIES = (b"_GTK_APPLICATION_ID", b"_KDE_NET_WM_DESKTOP_FILE")
+# The desktop's own windows, its background and panels: no voice command means
+# one, as KWin's normalWindow leaves them out.
+_DESKTOPS_OWN_TYPES = (b"_NET_WM_WINDOW_TYPE_DESKTOP", b"_NET_WM_WINDOW_TYPE_DOCK")
 
 
 def _client_message(window: int, atom: int, data: tuple) -> bytes:
@@ -88,12 +91,27 @@ class Display:
         raw = (get_property(self._lib, self._conn, window, atom) for atom in atoms)
         return {r.decode("utf-8", "replace").strip("\0").casefold() for r in raw if r}
 
+    def app_windows(self, windows) -> list:
+        """*windows* without the desktop's own (_NET_WM_WINDOW_TYPE _DESKTOP
+        or _DOCK), in the same order."""
+        type_atom = intern_atom(self._lib, self._conn, b"_NET_WM_WINDOW_TYPE")
+        own = {atom for atom in (intern_atom(self._lib, self._conn, name)
+                                 for name in _DESKTOPS_OWN_TYPES) if atom}
+        if not type_atom or not own:
+            return list(windows)
+        return [window for window in windows if not own & self._types(window, type_atom)]
+
+    def _types(self, window, type_atom) -> set:
+        raw = get_property(self._lib, self._conn, window, type_atom) or b""
+        return set(struct.unpack(f"={len(raw) // 4}I", raw[:len(raw) // 4 * 4]))
+
     def matching(self, desktop_file: str, names) -> list:
         """The windows that name the menu entry *desktop_file*
         ("org.x.editor") or whose class, without case, is in *names*
-        (app_focus.window_names): the one used last first."""
+        (app_focus.window_names): the one used last first, never the
+        desktop's own (app_windows)."""
         wanted, atoms = desktop_file.casefold(), self.entry_atoms()
-        return [window for window in reversed(self.windows())
+        return [window for window in self.app_windows(reversed(self.windows()))
                 if wanted in self.entry_ids(window, atoms)
                 or self.wm_class(window).casefold() in names]
 

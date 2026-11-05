@@ -75,15 +75,22 @@ def call_extension(method: str, signature: str, args: tuple, timeout: float):
                              signature, args, timeout=timeout)
 
 
-def can_bring_forward() -> bool:
-    """Whether this desktop lets TuxTalk bring a window forward or act on
-    one: KDE, GNOME (through the extension) and X11 sessions."""
-    return (desktop_detect.get_desktop_environment() in ("kde", "gnome")
-            or desktop_detect.is_x11_session(os.environ))
+def extension_running(timeout: float) -> bool:
+    """Whether GNOME Shell serves TuxTalk's extension, of any version. A
+    call to a method the extension lacks fails the same way with an
+    extension from before that method as with none at all (UnknownMethod);
+    the object's own description tells them apart. Raises a D-Bus error
+    when GNOME Shell can't be asked."""
+    import dbus
+    bus = dbus.SessionBus()
+    xml = bus.call_blocking(GNOME_SHELL, EXTENSION_PATH, "org.freedesktop.DBus.Introspectable",
+                            "Introspect", "", (), timeout=timeout)
+    return f'"{EXTENSION_INTERFACE}"' in str(xml)
 
 
-def _bring_forward(entry: AppEntry, timeout: float, exact: bool):
-    """This desktop's answer (True or False), or None where nothing can be asked.
+def bring_forward(entry: AppEntry, timeout: float, exact: bool):
+    """This desktop's answer (True or False), or None where nothing can be
+    asked. Raises the desktop's error: focus_running takes any as "start it".
     GNOME Shell decides by itself which entry a window belongs to (a
     Flatpak's windows by their sandbox's id), so *exact* changes nothing there."""
     desktop = desktop_detect.get_desktop_environment()
@@ -102,7 +109,7 @@ def focus_running(entry: AppEntry, timeout: float = 1.0, exact: bool = False) ->
     was brought forward; False means the caller starts the app. *exact*:
     only a window naming *entry*'s menu entry counts (window_names)."""
     try:
-        found = _bring_forward(entry, timeout, exact)
+        found = bring_forward(entry, timeout, exact)
     except Exception as e:      # a desktop's many ways to fail all mean "start it"
         log.info("Couldn't bring %s forward, starting it instead: %s", entry.app_id, e)
         return False

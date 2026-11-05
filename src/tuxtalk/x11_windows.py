@@ -32,11 +32,11 @@ def _requests(display, action: str):
 
 
 def _targets(display, desktop_file: str, names, every: bool) -> list:
-    """The windows to act on: with no *desktop_file* and no *names*, the
-    focused one; else the app's used last, or all of them with *every*."""
+    """The windows to act on, never the desktop's own: with no *desktop_file*
+    and no *names*, the focused one; else the app's used last, or all of them with *every*."""
     if not desktop_file and not names:
         active = display.active_window()
-        return [active] if active else []
+        return display.app_windows([active]) if active else []
     found = display.matching(desktop_file, names)
     return found if every else found[:1]
 

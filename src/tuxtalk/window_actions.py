@@ -16,8 +16,8 @@ worker: each desktop may take up to TIMEOUT_S to answer.
 """
 import os
 
-from . import (app_focus, beeps, command_notices, desktop_detect, kwin_windows, notices,
-               open_app, x11_windows)
+from . import (app_focus, app_match, beeps, command_notices, desktop_detect, kwin_windows,
+               x11_windows)
 from .beeps import READY_BEEP
 from .command_phrases import WindowRequest
 from .logger import setup_logger
@@ -25,8 +25,15 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 TIMEOUT_S = 1.0
+NOTHING_DONE = "Nothing was done."
 
 _UNKNOWN_METHOD = "org.freedesktop.DBus.Error.UnknownMethod"
+# The note for an action this desktop can't do; the others change a window's size.
+_CANT = {"close": "cant_close_here", "switch": "cant_switch_here"}
+
+
+def _cant(action: str) -> str:
+    return _CANT.get(action, "cant_size_here")
 
 
 def run(request: WindowRequest, beeps_on: bool) -> bool | None:
@@ -35,50 +42,49 @@ def run(request: WindowRequest, beeps_on: bool) -> bool | None:
     if request.app is None:
         logger.info(f"Voice command: {request.action} the focused window")
         return _act(request, None, False, beeps_on)
-    matched = open_app.matched_app(request.app, request.action, beeps_on)
-    if not matched:
-        return matched
-    entry, exact = matched
-    logger.info(f"Voice command: {request.action} {entry.app_id}")
-    if request.action == "switch":
-        return _switch(entry, exact, beeps_on)
-    return _act(request, entry, exact, beeps_on)
-
-
-def _switch(entry, exact: bool, beeps_on: bool) -> bool:
-    """Bring *entry*'s app forward. Never starts it: "switch to" said for an
-    app that isn't open gets a note instead."""
-    if not app_focus.can_bring_forward():
-        command_notices.say("cant_switch_here", beeps_on)
+    found = app_match.find(request.app)
+    if found.kind == "none":
+        # As for "open": a sentence lost is worse than one typed. The log
+        # keeps the user's words out.
+        logger.info("Window command: no app matched; typed as words")
+        return None
+    if found.kind == "tie":
+        app_match.say_tie(found, request.action, NOTHING_DONE, beeps_on)
         return False
-    if not app_focus.focus_running(entry, timeout=TIMEOUT_S, exact=exact):
-        command_notices.say("not_running", beeps_on, app=entry.name)
-        return False
-    beeps.beep(beeps_on, *READY_BEEP)
-    return True
+    logger.info(f"Voice command: {request.action} {found.entry.app_id}")
+    return _act(request, found.entry, found.exact, beeps_on)
 
 
 def _act(request: WindowRequest, entry, exact: bool, beeps_on: bool) -> bool:
-    """Close, minimize or maximize *entry*'s windows, or the focused window
-    with no *entry*, and say what came of it."""
+    """Do *request* to *entry*'s windows, or the focused window with no
+    *entry*, and say what came of it."""
     try:
-        acted = _ask_desktop(request, entry, exact)
+        if request.action == "switch":
+            # Never starts the app: "switch to" one that isn't open gets a note.
+            acted = app_focus.bring_forward(entry, TIMEOUT_S, exact)
+        else:
+            acted = _ask_desktop(request, entry, exact)
     except Exception as e:      # each desktop fails its own way
         logger.info(f"Window command {request.action} not done: {e}")
-        _say_failed(e, beeps_on)
+        command_notices.say(_refusal(request.action, e), beeps_on)
         return False
     if acted is None:
-        kind = "cant_close_here" if request.action == "close" else "cant_size_here"
-        command_notices.say(kind, beeps_on)
-        return False
-    if not acted:
-        if entry is None:
-            command_notices.say("no_focused_window", beeps_on)
-        else:
-            command_notices.say("no_window", beeps_on, app=entry.name)
-        return False
-    beeps.beep(beeps_on, *READY_BEEP)
-    return True
+        command_notices.say(_cant(request.action), beeps_on)
+    elif not acted:
+        _say_nothing_to_act_on(request.action, entry, beeps_on)
+    else:
+        beeps.beep(beeps_on, *READY_BEEP)
+    return bool(acted)
+
+
+def _say_nothing_to_act_on(action: str, entry, beeps_on: bool) -> None:
+    """The desktop found no window to do *action* to."""
+    if entry is None:
+        command_notices.say("no_focused_window", beeps_on)
+    elif action == "switch":
+        command_notices.say("not_running", beeps_on, app=entry.name)
+    else:
+        command_notices.say("no_window", beeps_on, app=entry.name)
 
 
 def _ask_desktop(request: WindowRequest, entry, exact: bool):
@@ -103,11 +109,19 @@ def _ask_desktop(request: WindowRequest, entry, exact: bool):
     return None
 
 
-def _say_failed(error: Exception, beeps_on: bool) -> None:
-    """Tell the user the desktop couldn't be asked. The GNOME extension
-    still running from before an update has no WindowAction until the user
-    logs out and back in, which the note says."""
-    if getattr(error, "get_dbus_name", lambda: None)() == _UNKNOWN_METHOD:
-        command_notices.say("gnome_relogin", beeps_on)
-    else:
-        notices.edit_problem("shortcut_failed", beeps_on)
+def _refusal(action: str, error: Exception) -> str:
+    """The note for a desktop that couldn't be asked to do *action*: this
+    desktop can't do it, unless GNOME Shell still runs the TuxTalk extension
+    from before an update, which has the method only after the user logs
+    out and back in. No extension at all fails the same way (UnknownMethod),
+    so the extension's object is looked for, never the error's wording,
+    which is translated."""
+    cant = _cant(action)
+    if getattr(error, "get_dbus_name", lambda: None)() != _UNKNOWN_METHOD:
+        return cant
+    try:
+        old = app_focus.extension_running(TIMEOUT_S)
+    except Exception as e:      # GNOME Shell gone meanwhile: no extension to log out for
+        logger.info(f"Couldn't look for the GNOME extension: {e}")
+        return cant
+    return "gnome_relogin" if old else cant

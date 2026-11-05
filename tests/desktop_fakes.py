@@ -206,7 +206,7 @@ def fake_extension():
 _CLIENT_MESSAGE = 33
 _SUBSTRUCTURE_REDIRECT = 1 << 20
 _CW_EVENT_MASK = 1 << 11
-_ATOM_WINDOW, _ATOM_STRING, _ATOM_WM_CLASS = 33, 31, 67
+_ATOM_ATOM, _ATOM_WINDOW, _ATOM_STRING, _ATOM_WM_CLASS = 4, 33, 31, 67
 
 
 @pytest.fixture
@@ -230,7 +230,8 @@ def x11(monkeypatch):
 # atoms from its start; TuxTalk asks only for atoms the X server already has.
 _SUPPORTED = (b"_NET_ACTIVE_WINDOW", b"_NET_CLOSE_WINDOW", b"WM_CHANGE_STATE",
               b"_NET_WM_STATE", b"_NET_WM_STATE_MAXIMIZED_VERT",
-              b"_NET_WM_STATE_MAXIMIZED_HORZ")
+              b"_NET_WM_STATE_MAXIMIZED_HORZ", b"_NET_WM_WINDOW_TYPE",
+              b"_NET_WM_WINDOW_TYPE_DESKTOP", b"_NET_WM_WINDOW_TYPE_DOCK")
 
 
 class FakeWindowManager:
@@ -272,16 +273,20 @@ class FakeWindowManager:
         xcb_ctypes.free(reply)
         return atom
 
-    def window(self, instance, wm_class, **entry_ids):
-        """A new window with WM_CLASS *instance*, *wm_class*, and the menu
-        entry it names in *entry_ids*: _GTK_APPLICATION_ID=...,
-        _KDE_NET_WM_DESKTOP_FILE=..."""
+    def window(self, instance, wm_class, window_type=None, **entry_ids):
+        """A new window with WM_CLASS *instance*, *wm_class*, the
+        _NET_WM_WINDOW_TYPE *window_type* (b"_NET_WM_WINDOW_TYPE_DOCK") if
+        given, and the menu entry it names in *entry_ids*:
+        _GTK_APPLICATION_ID=..., _KDE_NET_WM_DESKTOP_FILE=..."""
         lib = self.lib
         window = lib.xcb_generate_id(self.conn)
         lib.xcb_create_window(self.conn, 0, window, self.root, 0, 0, 10, 10, 0, 1, 0, 0, None)
         raw = f"{instance}\0{wm_class}\0".encode()
         lib.xcb_change_property(self.conn, 0, window, _ATOM_WM_CLASS, _ATOM_STRING, 8,
                                 len(raw), raw)
+        if window_type:
+            lib.xcb_change_property(self.conn, 0, window, self.atom(b"_NET_WM_WINDOW_TYPE"),
+                                    _ATOM_ATOM, 32, 1, struct.pack("=I", self.atom(window_type)))
         for name, value in entry_ids.items():
             lib.xcb_change_property(self.conn, 0, window, self.atom(name.encode()),
                                     self.atom(b"UTF8_STRING"), 8, len(value), value.encode())
