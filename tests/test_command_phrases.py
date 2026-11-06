@@ -160,6 +160,9 @@ def test_literal_types_the_words():
     ("snap the window to the top left", DesktopRequest("snap top left")),
     ("Move window to the bottom right.", DesktopRequest("snap bottom right")),
     ("move this window to the left", DesktopRequest("snap left")),
+    ("Snap window to top.", DesktopRequest("snap top")),
+    ("snap to left", DesktopRequest("snap left")),
+    ("Move window to left.", DesktopRequest("snap left")),
     ("Centre window.", DesktopRequest("center")),
     ("center the window", DesktopRequest("center")),
     ("Show desktop.", DesktopRequest("show desktop")),
@@ -206,6 +209,10 @@ def test_switch_to_desktop_with_another_number_is_never_an_app(said):
     "Next song is mine.", "Pause the movie.", "Lock the door.", "Play some music."])
 def test_near_miss_sentences_stay_dictation(said):
     assert P(said) is None
+
+@pytest.mark.parametrize("said", ["Go to desktop.com.", "go to desktop dot com"])
+def test_an_address_that_starts_with_desktop_is_an_address(said):
+    assert P(said) == AddressRequest("https://desktop.com")
 
 def test_select_and_move_keeps_its_go_to_phrases():
     assert isinstance(P("go to the top"), voice_navigation.Command)

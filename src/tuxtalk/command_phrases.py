@@ -78,6 +78,8 @@ class SearchRequest:
     words: str           # as said, case kept
 
 
+# A word like "copy", "paste" or "save" alone is an answer in a chat, so each key
+# phrase needs a noun and the bare word is typed ("copy that" means "understood").
 KEY_PHRASES = {
     **dict.fromkeys(("new tab", "open new tab", "open a new tab"), "new tab"),
     **dict.fromkeys(("close tab", "close the tab", "close this tab"), "close tab"),
@@ -100,8 +102,6 @@ KEY_PHRASES = {
     **dict.fromkeys(("paste it", "paste that", "paste the clipboard"), "paste"),
     "press escape": "escape",
 }
-# A word like "copy", "paste" or "save" alone is an answer in a chat, so each key
-# phrase needs a noun and the bare word is typed ("copy that" means "understood").
 
 _SCROLL = re.compile(r"scroll (up|down)(?: (\d+|" + "|".join(NUMBER_WORDS) + "))?")
 
@@ -125,8 +125,9 @@ _COUNT = r"\d+|" + "|".join(w for w in NUMBER_WORDS if w not in ("a", "an"))
 # Whole-recording phrases that name one request; the first group, when there is
 # one, is the place, the direction or the desktop number.
 _DESKTOP_PHRASES = (
-    (rf"snap(?: {_THIS})?(?: to the)? ({_PLACE})", lambda m: DesktopRequest(f"snap {m[1]}")),
-    (rf"move {_THIS} to the ({_PLACE})", lambda m: DesktopRequest(f"snap {m[1]}")),
+    (rf"snap(?: {_THIS})?(?: to(?: the)?)? ({_PLACE})",
+     lambda m: DesktopRequest(f"snap {m[1]}")),
+    (rf"move {_THIS} to (?:the )?({_PLACE})", lambda m: DesktopRequest(f"snap {m[1]}")),
     (rf"cent(?:er|re) {_THIS}", lambda m: DesktopRequest("center")),
     (rf"move {_THIS} to the cent(?:er|re)", lambda m: DesktopRequest("center")),
     (r"show (?:the )?desktop", lambda m: DesktopRequest("show desktop")),
@@ -160,7 +161,7 @@ _FIXED = tuple((re.compile(pattern), build) for pattern, build in
                _DESKTOP_PHRASES + _SOUND_PHRASES + _OTHER_PHRASES)
 # Whatever follows "switch to desktop" that isn't 1 to 9 ("ten", "eleven") names no
 # desktop, and must not fall through to "switch to <app>" and look for an app
-# called "desktop eleven".
+# called "desktop eleven"; an address ("go to desktop dot com") still is one.
 _NO_SUCH_DESKTOP = re.compile(
     rf"(?:(?:switch|go) to|move {_THIS} to) (?:the )?desktop(?: .*)?")
 
@@ -279,7 +280,7 @@ def parse(text: str, *, navigation: bool, actions: bool) -> (
     if fixed := _fixed(said):
         return fixed
     if _NO_SUCH_DESKTOP.fullmatch(said):
-        return None
+        return _address_request(text)
     return _window(said) or _address_request(text) or parse_open(text)
 
 
