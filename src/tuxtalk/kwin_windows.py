@@ -85,6 +85,6 @@ def act(action: str, desktop_file: str, classes, every: bool, timeout: float) ->
     """Do *action* to the app's windows or the active one (build_script
     says which). True when KWin acted on a window within *timeout*
     seconds. Raises when KWin refuses the script or it fails."""
-    return kwin_activate.ask(
+    return bool(kwin_activate.ask(
         lambda reply_to: build_script(action, desktop_file, classes, every, reply_to),
-        SCRIPT_PLUGIN_NAME, kwin_activate.script_path("tuxtalk-windows.js"), timeout)
+        SCRIPT_PLUGIN_NAME, kwin_activate.script_path("tuxtalk-windows.js"), timeout))

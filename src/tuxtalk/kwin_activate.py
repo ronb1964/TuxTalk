@@ -161,10 +161,10 @@ def _unload(bus, plugin_name: str) -> None:
         log.info("Could not unload the KWin script %s: %s", plugin_name, e)
 
 
-def ask(build, plugin_name: str, path: str, timeout: float) -> bool:
-    """Run a KWin script and return what it answers: True when it said yes
-    within *timeout* seconds of starting; each D-Bus call to KWin has
-    kwin_focus.DBUS_TIMEOUT_S besides. *build* makes the script from the
+def ask(build, plugin_name: str, path: str, timeout: float) -> bool | None:
+    """Run a KWin script and return what it answers within *timeout* seconds
+    of starting: True or False, or None when it didn't answer in time; each
+    D-Bus call to KWin has kwin_focus.DBUS_TIMEOUT_S besides. *build* makes the script from the
     name of the connection to answer to; it is written to *path* and loaded
     as *plugin_name*, and taken out of KWin afterwards. Raises when KWin
     refuses the script, or RuntimeError when the script says it failed."""
@@ -183,6 +183,7 @@ def ask(build, plugin_name: str, path: str, timeout: float) -> bool:
             raise RuntimeError(f"KWin's {plugin_name} script failed: {answer.error}")
         if had_window is None:
             log.info("KWin didn't answer the %s script in time", plugin_name)
+            return None
         return bool(had_window)
     finally:
         _unload(bus, plugin_name)
@@ -193,5 +194,5 @@ def activate(desktop_file: str, classes, timeout: float) -> bool:
     """Bring forward the app's window (build_script says which). True when
     KWin said it had one within *timeout* seconds of starting the script.
     Raises when KWin refuses the script."""
-    return ask(lambda reply_to: build_script(desktop_file, classes, reply_to),
-               SCRIPT_PLUGIN_NAME, script_path("tuxtalk-activate.js"), timeout)
+    return bool(ask(lambda reply_to: build_script(desktop_file, classes, reply_to),
+                    SCRIPT_PLUGIN_NAME, script_path("tuxtalk-activate.js"), timeout))

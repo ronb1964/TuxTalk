@@ -103,22 +103,17 @@ def _screens_script(expression: str):
     return build
 
 
-def _ask_screens(expression: str, timeout: float) -> bool:
-    return kwin_activate.ask(_screens_script(expression), _SCREENS_PLUGIN,
-                             kwin_activate.script_path("tuxtalk-screens.js"), timeout)
-
-
 def has_other_screen(timeout: float) -> bool:
-    """Whether there is a second screen, asked of a KWin script. ask() gives
-    False both for "no" and for no answer in time, so a "no" is checked by
-    asking a script that always says yes: a user with two screens must
+    """Whether there is a second screen, asked of a look-only KWin script.
+    No answer in time is never taken for "no": a user with two screens must
     never be told there is one. Raises TimeoutError when KWin doesn't
-    answer, and the error when KWin refuses a script or one fails."""
-    if _ask_screens("workspace.screens.length > 1", timeout):
-        return True
-    if not _ask_screens("true", timeout):
+    answer, and the error when KWin refuses the script or it fails."""
+    answer = kwin_activate.ask(_screens_script("workspace.screens.length > 1"),
+                               _SCREENS_PLUGIN, kwin_activate.script_path("tuxtalk-screens.js"),
+                               timeout)
+    if answer is None:
         raise TimeoutError("KWin didn't answer in time")
-    return False
+    return answer
 
 
 def _show_desktop(timeout: float) -> str:
@@ -144,7 +139,8 @@ def act(action: str, number: int | None, timeout: float,
     """Do *action* ("snap left", "center", "overview", "to next screen",
     "show desktop", "desktop" or "to desktop" with *number*, "next desktop",
     ...) and answer as the module's docstring says. *timeout* bounds each
-    D-Bus call, and a command makes up to three. *still_wanted*, if given,
+    D-Bus call (a next or previous desktop makes four, the most) and the
+    screens script's wait. *still_wanted*, if given,
     is asked right before a shortcut is invoked. Raises the D-Bus error
     when KWin or kglobalaccel can't be reached, TimeoutError when the
     screens script isn't answered."""

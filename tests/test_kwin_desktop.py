@@ -104,6 +104,28 @@ def test_a_silent_kwin_is_not_taken_for_one_screen(fake_kde, fake_kwin):
     assert not _invoked(fake_kde)
 
 
+def test_a_lost_screens_answer_is_not_taken_for_one_screen(fake_kde, fake_kwin, monkeypatch):
+    """KWin missed the question once and answers the next script: the
+    user with two screens must not hear there is one."""
+    real = fake_kwin.call
+
+    def first_one_lost(method, *args):
+        answer = real(method, *args)
+        if method == "start":
+            fake_kwin.silent = False
+        return answer
+    fake_kwin.silent = True
+    monkeypatch.setattr(fake_kwin, "call", first_one_lost)
+    with pytest.raises(TimeoutError):
+        kwin_desktop.act("to next screen", None, 0.3)
+    assert not _invoked(fake_kde)
+
+
+def test_one_screen_is_known_from_one_question(fake_kde, fake_kwin):
+    assert kwin_desktop.act("to next screen", None, 1.0) == "one_screen"
+    assert len(fake_kwin.scripts) == 1
+
+
 def test_the_screens_script_carries_the_reply_name_as_json(fake_kde, fake_kwin):
     kwin_desktop.act("to next screen", None, 1.0)
     reply = re.search(r'callDBus\((".*?"), ', fake_kwin.scripts[0]).group(1)
