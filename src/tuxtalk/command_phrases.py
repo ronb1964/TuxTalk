@@ -120,7 +120,8 @@ _PUNCTUATION = {"quote", "unquote", "paren", "parenthesis", "parentheses", "brac
                 "brackets", "brace", "braces"}
 
 _PLACE = "|".join(sorted(SNAP_PLACES, key=len, reverse=True))
-_DIGIT = r"[1-9]|one|two|three|four|five|six|seven|eight|nine"
+# "too": Parakeet often writes a "two" said alone that way.
+_DIGIT = r"[1-9]|one|two|too|three|four|five|six|seven|eight|nine"
 _COUNT = r"\d+|" + "|".join(w for w in NUMBER_WORDS if w not in ("a", "an"))
 # Whole-recording phrases that name one request; the first group, when there is
 # one, is the place, the direction or the desktop number.
@@ -209,6 +210,8 @@ def _key(said: str) -> KeyRequest | None:
 
 
 def _number(word: str) -> int:
+    if word == "too":
+        return 2
     return int(word) if word.isdigit() else NUMBER_WORDS[word]
 
 

@@ -218,6 +218,12 @@ def test_select_and_move_keeps_its_go_to_phrases():
     assert isinstance(P("go to the top"), voice_navigation.Command)
     assert P("go to desktop two") == DesktopRequest("desktop", 2)
 
+
+def test_desktop_too_is_desktop_two():
+    """Parakeet often writes a "two" said alone as "too" (heard in every VM)."""
+    assert P("go to desktop too") == DesktopRequest("desktop", 2)
+    assert P("move window to desktop too") == DesktopRequest("to desktop", 2)
+
 def test_every_desktop_action_the_parser_makes_is_listed():
     made = {P(s).action for s in ("snap left", "snap top right", "centre window", "show desktop",
             "show all windows", "next desktop", "previous desktop", "switch to desktop 2",
