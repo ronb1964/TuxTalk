@@ -5,6 +5,7 @@ import subprocess
 
 import pytest
 
+from conftest import esc
 from sound_fakes import FakePactl
 from tuxtalk import audio_duck, sound_control
 from tuxtalk.command_phrases import SoundRequest
@@ -94,6 +95,12 @@ def test_volume_up_stops_at_full(pactl, tools):
     assert ["pactl", "set-sink-volume", SINK, "100%"] in tools.commands
 
 
+def test_volume_up_stops_at_full_with_wpctl(wpctl, tools):
+    tools.percent = 98
+    sound_control.run(SoundRequest("volume up"), False)
+    assert ["wpctl", "set-volume", AUDIO_SINK, "1.00"] in tools.commands
+
+
 def test_volume_up_never_lowers_a_boosted_volume(pactl, tools):
     tools.percent = 120
     sound_control.run(SoundRequest("volume up"), False)
@@ -117,7 +124,20 @@ def test_pactl_reads_and_mutes_the_output_where_wpctl_is_missing(pactl, tools):
     tools.percent = 40
     sound_control.run(SoundRequest("mute"), False)
     assert tools.muted is True
-    assert sound_control.output_volume() == (40, True)
+    sound_control.run(SoundRequest("volume down"), False)
+    assert tools.percent == 35
+
+
+@pytest.mark.parametrize("action", ["mute", "unmute"])
+def test_muting_reads_nothing_first(wpctl, tools, action):
+    """Only a volume change needs the level: one program less to wait for or fail."""
+    assert sound_control.run(SoundRequest(action), False) is True
+    assert [c[1] for c in tools.commands] == ["set-mute"]
+
+
+def test_a_volume_change_reads_only_the_level(pactl, tools):
+    sound_control.run(SoundRequest("volume down"), False)
+    assert [c[1] for c in tools.commands] == ["get-sink-volume", "set-sink-volume"]
 
 
 def test_the_new_level_floats_over_the_window(wpctl, tools, actions_on):
@@ -155,6 +175,21 @@ def test_putting_sounds_back_leaves_a_volume_command_alone(pactl, tools, tmp_pat
     assert not [c for c in after if SINK in c]
     assert any("set-sink-input-volume" in c for c in after)     # the stream did come back
     assert tools.percent == 55 and tools.muted is True
+
+
+def test_esc_while_the_volume_is_read_changes_nothing(actions_on, chat, say, wpctl, tools,
+                                                      monkeypatch):
+    read = tools.__call__
+
+    def read_then_esc(cmd, **kw):
+        if cmd[1] == "get-volume":
+            esc()
+        return read(cmd, **kw)
+    monkeypatch.setattr(subprocess, "run", read_then_esc)
+    tools.percent = 50
+    say("Volume down.")
+    assert tools.percent == 50 and chat[2] == []
+    assert not [c for c in tools.commands if c[1] == "set-volume"]
 
 
 def test_volume_down_said_alone_types_nothing(actions_on, chat, say, wpctl, tools):
