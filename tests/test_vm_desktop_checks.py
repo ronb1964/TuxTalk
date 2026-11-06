@@ -87,6 +87,8 @@ def test_a_screenshot_passes_only_as_one_saved_picture(files, sizes, log, proble
 
 @pytest.mark.parametrize("log, settled", [
     ("Voice command: take a screenshot (saved, with spectacle)", True),
+    ("Voice command: take a screenshot of the window (saved, with gnome-screenshot)", True),
+    ("Voice command: take a screenshot of the window (unconfirmed)", False),
     ("Voice command not done: no_screenshot_tool", True),
     ("Text injected", True),
     ("Voice command: take a screenshot (unconfirmed)\n"

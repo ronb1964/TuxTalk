@@ -49,9 +49,12 @@ CINNAMON_SCREENSAVER = ("gdbus", "call", "--session", "--dest", "org.cinnamon.Sc
 # SetActive(false) unlocks it (the manager's unlock()): a lock asked of the
 # screensaver may not be one logind's unlock reaches.
 CINNAMON_UNLOCK = (*CINNAMON_SCREENSAVER[:-1], "org.cinnamon.ScreenSaver.SetActive", "false")
-# TuxTalk waits up to 30 s for the portal and 10 s for its call; then the files
-# are looked for one last time.
+# TuxTalk waits up to 30 s for the portal (90 s for its picker, which the
+# window check closes itself) and 10 s for its call; then the files are
+# looked for one last time.
 SCREENSHOT_WAIT_S = 50
+# TuxTalk's log line for either screenshot command and what came of it.
+SCREENSHOT_LINE = r"Voice command: take a screenshot(?: of the window)? \("
 SCREENSHOTS = "~/Pictures"
 
 # A window's place: x and y are None where the desktop doesn't tell an app.
@@ -130,7 +133,7 @@ def screenshot_problem(files, sizes, log):
     not saying it saved one, two pictures (a second shot after the first may
     have been taken), or an empty one. None when it is exactly one saved
     picture."""
-    if not files or "Voice command: take a screenshot (saved" not in log:
+    if not files or not re.search(SCREENSHOT_LINE + "saved", log):
         said = [line for line in log.splitlines() if "screenshot" in line.lower()]
         return f"no new picture was saved; log: {said}"
     if len(files) > 1:
@@ -988,10 +991,10 @@ def screenshot_settled(log):
     """Whether "take a screenshot" can't save anything more: TuxTalk said it
     saved one, or gave a note, or typed the words. Not "not confirmed": the
     portal's request is still open then, and a picture can come later."""
-    if "screenshot_unconfirmed" in log or "take a screenshot (unconfirmed)" in log:
+    if "screenshot_unconfirmed" in log or re.search(SCREENSHOT_LINE + "unconfirmed", log):
         return False
-    return any(line in log for line in ("Voice command: take a screenshot (",
-                                        "Voice command not done", "Text injected"))
+    return bool(re.search(SCREENSHOT_LINE, log)) or any(
+        line in log for line in ("Voice command not done", "Text injected"))
 
 
 # The portal's permission for unsandboxed apps whose app id it can't tell,
@@ -1084,6 +1087,9 @@ def window_screenshot(run):
         _allow_screenshots(run)
         run.sink_ready(fresh=True)
         box = _sink_box(run)
+        if box is None:
+            return Outcome("skip", "the test window's size can't be read here, so a picture "
+                           "of it can't be told from another")
         files, sizes, dimensions, log, shot = _pictures_from(run, "take_window_screenshot",
                                                              "window-screenshot")
     if bad := _not_a_command(run, "take_window_screenshot", log, heard_in(log)):
@@ -1094,8 +1100,7 @@ def window_screenshot(run):
     if size is None or size == screen:
         return Outcome("fail", f"the picture is {size}, the whole screen is {screen}",
                        screenshot=shot)
-    if box and (abs(size[0] - box.width) > WINDOW_FRAME_PX
-                or abs(size[1] - box.height) > WINDOW_FRAME_PX):
+    if abs(size[0] - box.width) > WINDOW_FRAME_PX or abs(size[1] - box.height) > WINDOW_FRAME_PX:
         return Outcome("fail", f"the picture is {size}, the test window "
                        f"{(box.width, box.height)}", screenshot=shot)
     return Outcome("pass", f"One picture of the window ({size[0]}x{size[1]}, the screen is "
@@ -1105,32 +1110,39 @@ def window_screenshot(run):
 def _window_picker(run):
     """GNOME's and COSMIC's portals can't take one window by themselves:
     TuxTalk opens the desktop's screenshot picker. Escape there must end in
-    TuxTalk's "cancelled" note with nothing saved. Choosing a window in it
-    is Ron's check."""
+    TuxTalk's "cancelled" note with nothing saved. Whether the picker showed
+    is seen in the report's screenshot; choosing a window in it is Ron's
+    check."""
     with _open_apps_on(run):
         _allow_screenshots(run)
         run.sink_ready(fresh=True)
         marker = f"~/{REMOTE}/shot.marker"
         run.vm.ssh(f"touch {marker}")
+        cancelled, shot = None, None
         try:
             _typed, _heard, mark = run.say("take_window_screenshot", wait=False)
-            time.sleep(5)       # the picker opening
+            run.wait_log(mark, "asked the desktop's picker", "Voice command not done",
+                         "Text injected", timeout=30)
+            time.sleep(4)       # the picker opening
             shot = run.shot("window-picker")
             run.vm.tap("esc")
-            cancelled = _until(15, lambda: "take a screenshot (cancelled)" in run.log_since(mark))
+            cancelled = _until(15, lambda: "of the window (cancelled)" in run.log_since(mark))
             files, log = _new_screenshots(run, marker), run.log_since(mark)
         finally:
+            if not cancelled:
+                run.vm.tap("esc")       # a picker still open would hold the keyboard
             for file in _new_screenshots(run, marker):
                 run.vm.ssh(f"rm -f {shlex.quote(file)}", check=False)
             run.vm.ssh(f"rm -f {marker}", check=False)
     if bad := _not_a_command(run, "take_window_screenshot", log, heard_in(log)):
         return bad
-    if not cancelled or files:
+    noted = "Voice command not done: screenshot_cancelled" in log
+    if not cancelled or not noted or files:
         said = [line for line in log.splitlines() if "screenshot" in line.lower()]
-        return Outcome("fail", f"Escape in the picker: cancelled {bool(cancelled)}, "
-                       f"{len(files)} picture(s) saved; log: {said}", screenshot=shot)
-    return Outcome("pass", "The desktop's picker opened; Escape there saved nothing and "
-                   "TuxTalk said it was cancelled", screenshot=shot)
+        return Outcome("fail", f"Escape in the picker: cancelled {bool(cancelled)}, the note "
+                       f"{noted}, {len(files)} picture(s) saved; log: {said}", screenshot=shot)
+    return Outcome("pass", "TuxTalk asked the desktop's picker; Escape ended it as cancelled, "
+                   "with the note and nothing saved", screenshot=shot)
 
 
 @check(SECTION, "what_can_i_say", "“what can I say” opens the Voice Commands window")
