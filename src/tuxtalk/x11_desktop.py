@@ -306,6 +306,22 @@ def _desktops(display, action: str, number: int | None, window) -> str:
     return "done"
 
 
+def front_window_open() -> bool:
+    """Whether an app window has the focus (not the desktop, a panel or
+    nothing at all); False where there's no X server to ask."""
+    try:
+        display = x11_activate.open_display()
+        if display is None:
+            return False
+        try:
+            return _front_window(display) is not None
+        finally:
+            display.close()
+    except OSError as e:
+        log.info(f"Couldn't ask which window has the focus: {e}")
+        return False
+
+
 def _front_window(display):
     active = display.active_window()
     found = display.app_windows([active]) if active else []

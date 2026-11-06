@@ -74,9 +74,9 @@ before 0.15.0, so older entries use that name.
   screen", "take a screenshot" and "what can I say", which opens the Voice
   Commands window. It is still off until you tick it.
 - "Take a screenshot of this window" saves just the window you're working
-  in. On KDE, Linux Mint and Xfce it's taken straight away; on GNOME and
-  Pop!_OS the desktop's own screenshot tool opens so you can click the
-  window.
+  in. On KDE, Cinnamon (Linux Mint) and Xfce it's taken straight away; on
+  GNOME and Pop!_OS the desktop's own screenshot tool opens, where you
+  choose Window and click it. Elsewhere TuxTalk says it can't.
 - After "lock screen" TuxTalk checks that the computer says it's locked.
   The ready beep means it is; otherwise a note says the lock isn't
   confirmed, so you know to check the screen before you walk away. On

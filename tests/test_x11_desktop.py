@@ -341,3 +341,15 @@ def test_on_cinnamon_an_error_asking_is_logged_and_shows_the_popups(monkeypatch,
     with caplog.at_level(logging.INFO):
         assert x11_desktop.popup_ends_show_desktop() is False
     assert "ValueError" in caplog.text and "in time" not in caplog.text
+
+
+def test_an_app_window_in_front_is_seen(window_manager):
+    """A window's screenshot needs one: the tools take the whole desktop
+    when no app window has the focus."""
+    assert x11_desktop.front_window_open() is False
+    desktop_icons = window_manager.window("desktop", "Nemo-desktop",
+                                          window_type=b"_NET_WM_WINDOW_TYPE_DESKTOP")
+    window_manager.set_active(desktop_icons)
+    assert x11_desktop.front_window_open() is False
+    window_manager.set_active(window_manager.window("kwrite", "kwrite"))
+    assert x11_desktop.front_window_open() is True

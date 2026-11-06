@@ -136,6 +136,13 @@ NOTES = {
     "screenshot_cancelled": (
         "Screenshot cancelled",
         "The screenshot was cancelled, so nothing was saved."),
+    "screenshot_picker_open": (
+        "Screenshot tool already open",
+        "Choose the window in the screenshot tool that's open, or press Escape there."),
+    "cant_window_screenshot_here": (
+        "Can't take just the window here",
+        "This desktop can't take a screenshot of one window. Say \"take a screenshot\" "
+        "for the whole screen."),
 }
 
 # kind -> label, for a command that was done but whose result the user may

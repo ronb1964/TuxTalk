@@ -258,4 +258,6 @@ def run(request: SystemRequest, beeps_on: bool) -> bool:
         beeps.beep(beeps_on, *beeps.READY_BEEP)
         logger.info("Voice command: what can I say")
         return True
-    return screenshot.take(beeps_on, window=request.action == "window screenshot")
+    if request.action in ("screenshot", "window screenshot"):
+        return screenshot.take(beeps_on, window=request.action == "window screenshot")
+    raise ValueError(f"Unknown system command: {request.action}")

@@ -519,11 +519,12 @@ Hold <b>{hold}</b>, say <b>lock screen</b>, let go. Your desktop's own lock come
 need your password to come back. TuxTalk then checks that the computer says it's locked:
 the ready beep means it is. If that can't be confirmed, a note says so: check the screen.
 Hold <b>{hold}</b>, say <b>take a screenshot</b>, let go. On KDE it is saved in
-Pictures/Screenshots; elsewhere, where your desktop keeps them. GNOME may ask once. In a
-hands-free or Type at pause recording, the recording indicator may show in the picture.
+Pictures/Screenshots; elsewhere, where your desktop keeps them. GNOME may ask once.
 Hold <b>{hold}</b>, say <b>take a screenshot of this window</b>, let go. Just the window
 you're working in is saved. On GNOME and Pop!_OS your desktop's screenshot tool opens
-instead: click the window there.
+instead: choose Window in it (on GNOME, press W), click the window, then press Enter.
+In a hands-free or Type at pause recording, the recording indicator may show in either
+picture.
 Hold <b>{hold}</b>, say <b>what can I say</b>, let go. The Voice Commands window opens with
 this list.
 

@@ -1,23 +1,29 @@
-""""Take a screenshot" by voice (TuxTalk Labs): the whole screen, saved where
+""""Take a screenshot" by voice (TuxTalk Labs): the whole screen, or with
+"take a screenshot of this window" the window with the focus, saved where
 the desktop keeps screenshots, with a note saying it was saved.
 
-KDE uses Spectacle in the background. Elsewhere the screenshot portal is
-asked first (GNOME may show its own dialog the first time), then
-gnome-screenshot or xfce4-screenshooter. A portal's picture left in a
-temporary folder (COSMIC's) is moved in with the others. Nothing is
-uploaded. Programs run with a timeout and no shell, and the log names the
-tool, never a path: a path holds the user's name. The wait is on the
-dictation worker, never GTK's thread."""
+KDE uses Spectacle in the background, for either. Elsewhere the whole
+screen comes from the screenshot portal (GNOME may show its own dialog the
+first time), then gnome-screenshot or xfce4-screenshooter. A window comes
+from those tools on X11, and from the desktop's own picker on GNOME and
+COSMIC, whose portals can't take one window by themselves; elsewhere
+TuxTalk says it can't. A portal's picture left in a folder emptied at
+logout or restart (COSMIC's /tmp, Hyprland's runtime folder) is moved in
+with the others. Nothing is uploaded. Programs run with a timeout and no
+shell, and the log names the tool, never a path: a path holds the user's
+name. The waits are on the dictation worker, the picker's on a thread of
+its own, never GTK's."""
 import os
 import shutil
 import stat
 import subprocess
 import tempfile
+import threading
 from datetime import datetime
 
 from gi.repository import Gio, GLib
 
-from . import command_notices, desktop_detect, portal_common
+from . import command_notices, desktop_detect, portal_common, x11_desktop
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -37,6 +43,15 @@ _PORTAL_SAVED, _PORTAL_CANCELLED = 0, 1
 # the focus, the file to write coming last.
 _SCREEN_TOOLS = [["gnome-screenshot", "-f"], ["xfce4-screenshooter", "-f", "-s"]]
 _WINDOW_TOOLS = [["gnome-screenshot", "-w", "-f"], ["xfce4-screenshooter", "-w", "-s"]]
+
+# The desktops whose portal opens a picker in which a window can be chosen.
+# Sway's and Hyprland's choose an area, or take the whole screen.
+_PICKER_DESKTOPS = ("gnome", "cosmic")
+# Under XDG_RUNTIME_DIR, the document portal's view of files kept elsewhere.
+_DOCUMENT_PORTAL = "doc"
+# The picker still being waited for: one at a time.
+_picker = None
+_picker_lock = threading.Lock()
 
 # A call that ended with one of these may still have reached the portal.
 _NO_REPLY = frozenset(f"org.freedesktop.DBus.Error.{name}"
@@ -123,8 +138,9 @@ def _ask_portal(interactive: bool = False) -> tuple[str, str]:
     and, for "saved", the file: "saved", "cancelled" (the user said no),
     "failed" (the portal answered it couldn't), "unavailable" (no portal, or
     one that refused the call) or "unconfirmed": one may have been saved all
-    the same (no answer in PORTAL_WAIT_S, with the request still open for a
-    late Allow; a call that timed out; or done without a file it can read).
+    the same (no answer in PORTAL_WAIT_S, or PICKER_WAIT_S for the picker,
+    with the request still open for a late answer; a call that timed out;
+    or done without a file it can read).
     The response is waited for on a main context of its own, so GTK's loop
     is never involved."""
     context = GLib.MainContext()
@@ -197,44 +213,93 @@ def _may_have_reached(error: GLib.Error) -> bool:
 def take(beeps_on: bool, window: bool = False) -> bool:
     """Take a screenshot of the whole screen, or of the window with the
     focus, and say where it was saved. False: nothing saved, or not known
-    to be, with a note saying why. Once a screenshot may have been taken (a
-    tool ran, or the portal was asked and was slow) no other way is tried,
-    so there is never a second one.
-
-    KDE's Spectacle and X11's tools take the window by themselves. GNOME's
-    and COSMIC's portals can't: they open their own picker, where the
-    person chooses the window."""
-    if desktop_detect.get_desktop_environment() == "kde" and shutil.which("spectacle"):
+    to be, with a note saying why; True for the picker once it is asked
+    for, its outcome said when it comes. Once a screenshot may have been
+    taken (a tool ran, or the portal was asked and was slow) no other way
+    is tried, so there is never a second one."""
+    what = "a screenshot of the window" if window else "a screenshot"
+    desktop = desktop_detect.get_desktop_environment()
+    if desktop == "kde" and shutil.which("spectacle"):
         # KDE's portal is Spectacle again, so there is nothing else to ask.
-        return _with_spectacle("--activewindow" if window else "--fullscreen", beeps_on)
-    tools = _WINDOW_TOOLS if window else _SCREEN_TOOLS
-    if window and desktop_detect.is_x11_session(os.environ) and any(
-            shutil.which(command[0]) for command in tools):
-        return _with_tool(tools, beeps_on)
-    outcome, file = _ask_portal(interactive=window)
+        return _with_spectacle("--activewindow" if window else "--fullscreen", what, beeps_on)
+    if not window:
+        return _from_portal(False, _SCREEN_TOOLS, what, beeps_on)
+    if desktop_detect.is_x11_session(os.environ) and any(
+            shutil.which(command[0]) for command in _WINDOW_TOOLS):
+        return _window_with_tool(what, beeps_on)
+    if desktop in _PICKER_DESKTOPS:
+        return _open_picker(what, beeps_on)
+    logger.info(f"Voice command: take {what} (no way to take one window here)")
+    command_notices.say("cant_window_screenshot_here", beeps_on)
+    return False
+
+
+def _with_spectacle(mode: str, what: str, beeps_on: bool) -> bool:
+    """Spectacle in the background, *mode* (--fullscreen or --activewindow)."""
+    path = _path_for_tool()
+    if path and _run_tool(["spectacle", "--background", mode, "--nonotify", "--output", path]):
+        return _saved("spectacle", folder(), what, beeps_on)
+    return _nothing_saved(what, beeps_on)
+
+
+def _window_with_tool(what: str, beeps_on: bool) -> bool:
+    """The window with the focus, by an X11 tool; only with an app window in
+    front, since both take the whole desktop when there is none."""
+    if not x11_desktop.front_window_open():
+        logger.info(f"Voice command: take {what} (no app window in front)")
+        command_notices.say("no_focused_window", beeps_on)
+        return False
+    return _with_tool(_WINDOW_TOOLS, what, beeps_on)
+
+
+def _with_tool(commands: list[list[str]], what: str, beeps_on: bool) -> bool:
+    """The first installed of the desktop tools *commands*, said as saved or not."""
+    tool = _first_tool(commands)
+    return _saved(tool, folder(), what, beeps_on) if tool else _nothing_saved(what, beeps_on)
+
+
+def _from_portal(interactive: bool, tools: list[list[str]], what: str, beeps_on: bool) -> bool:
+    """Ask the portal (its picker with *interactive*), then, only when it
+    answered that it can't or isn't there, the first installed of *tools*."""
+    outcome, file = _ask_portal(interactive)
     if outcome == "saved":
         # The portal said so; not seeing the file (a sandbox) doesn't change that.
-        return _saved("the portal", _keep(file) if os.path.exists(file) else None, beeps_on)
+        return _saved("the portal", _keep(file) if os.path.exists(file) else None, what,
+                      beeps_on)
     if outcome in ("cancelled", "unconfirmed"):
-        logger.info(f"Voice command: take a screenshot ({outcome})")
+        logger.info(f"Voice command: take {what} ({outcome})")
         command_notices.say("screenshot_cancelled" if outcome == "cancelled"
                             else "screenshot_unconfirmed", beeps_on)
         return False
-    return _with_tool(tools, beeps_on)
+    return _with_tool(tools, what, beeps_on) if tools else _nothing_saved(what, beeps_on)
 
 
-def _with_spectacle(what: str, beeps_on: bool) -> bool:
-    """Spectacle in the background, *what* (--fullscreen or --activewindow)."""
-    path = _path_for_tool()
-    if path and _run_tool(["spectacle", "--background", what, "--nonotify", "--output", path]):
-        return _saved("spectacle", folder(), beeps_on)
-    return _nothing_saved(beeps_on)
+def _open_picker(what: str, beeps_on: bool) -> bool:
+    """Open the desktop's screenshot picker, its outcome waited for on a
+    thread of its own: the person may take as long as PICKER_WAIT_S, and on
+    the dictation worker every dictation said meanwhile waited, and a quit
+    lost them. One picker at a time."""
+    global _picker
+    with _picker_lock:
+        if _picker is not None and _picker.is_alive():
+            logger.info(f"Voice command: take {what} (the picker is already open)")
+            command_notices.say("screenshot_picker_open", beeps_on)
+            return False
+        _picker = threading.Thread(target=_picked, args=(what, beeps_on), daemon=True,
+                                   name="screenshot-picker")
+        _picker.start()
+    logger.info(f"Voice command: take {what} (asked the desktop's picker)")
+    return True
 
 
-def _with_tool(commands: list[list[str]], beeps_on: bool) -> bool:
-    """The first installed of the desktop tools *commands*, said as saved or not."""
-    tool = _first_tool(commands)
-    return _saved(tool, folder(), beeps_on) if tool else _nothing_saved(beeps_on)
+def _picked(what: str, beeps_on: bool):
+    """The picker's outcome, said when it comes. The window tools see no
+    window on these desktops, so none is tried after it. An error is logged
+    here, at the thread's end, or it would reach only stderr."""
+    try:
+        _from_portal(True, [], what, beeps_on)
+    except Exception as e:
+        logger.warning(f"Screenshot picker failed: {type(e).__name__}")
 
 
 def _inside(file: str, folder: str) -> bool:
@@ -244,17 +309,19 @@ def _inside(file: str, folder: str) -> bool:
 
 def _keep(file: str) -> str:
     """Keep the portal's screenshot *file* and give the folder it is in.
-    COSMIC's portal answers with a file in /tmp, which is moved into
-    folder() with the others; XDG_RUNTIME_DIR doesn't count, the document
-    portal shows files kept elsewhere there. Only a file of this user's is
-    moved, never a link: another user could have put one in /tmp. A file
-    left where it is keeps its folder as named, links and all."""
+    COSMIC's portal answers with a file in /tmp and Hyprland's with one in
+    XDG_RUNTIME_DIR (emptied at logout, and replaced by its next one):
+    those are moved into folder() with the others. Not the document
+    portal's, which shows a file kept elsewhere. Only a file of this user's
+    is moved, never a link: another user could have put one in /tmp. A
+    file left where it is keeps its folder as named, links and all."""
     named = "/" + file.lstrip("/")          # COSMIC's is named //tmp/...
     where = os.path.dirname(named)
     real = os.path.join(os.path.realpath(where), os.path.basename(named))
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
     kept = tuple(filter(None, (os.path.expanduser("~"), os.path.dirname(folder()),
-                               os.environ.get("XDG_RUNTIME_DIR"))))
-    temporary = (tempfile.gettempdir(), "/tmp", "/var/tmp")
+                               runtime and os.path.join(runtime, _DOCUMENT_PORTAL))))
+    temporary = tuple(filter(None, (tempfile.gettempdir(), "/tmp", "/var/tmp", runtime)))
     if any(_inside(real, root) for root in kept) or not any(
             _inside(real, root) for root in temporary):
         return where
@@ -278,17 +345,17 @@ def _keep(file: str) -> str:
     return os.path.dirname(path)
 
 
-def _nothing_saved(beeps_on: bool) -> bool:
+def _nothing_saved(what: str, beeps_on: bool) -> bool:
     """Say that no screenshot was taken."""
-    logger.info("Voice command: take a screenshot (no way to take one)")
+    logger.info(f"Voice command: take {what} (no way to take one)")
     command_notices.say("no_screenshot_tool", beeps_on)
     return False
 
 
-def _saved(tool: str, directory: str | None, beeps_on: bool) -> bool:
-    """Log and say that the screenshot was saved in *directory* (None: where
-    isn't known)."""
-    logger.info(f"Voice command: take a screenshot (saved, with {tool})")
+def _saved(tool: str, directory: str | None, what: str, beeps_on: bool) -> bool:
+    """Log and say that the screenshot (*what*) was saved in *directory*
+    (None: where isn't known)."""
+    logger.info(f"Voice command: take {what} (saved, with {tool})")
     if directory is None:
         command_notices.tell("screenshot_saved_unseen", beeps_on)
     else:

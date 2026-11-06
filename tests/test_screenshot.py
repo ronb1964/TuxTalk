@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from desktop_fakes import set_desktop
 from tuxtalk import screen_message, screenshot, ui_style
 
 
@@ -105,12 +106,26 @@ def test_a_portal_shot_in_a_kept_folder_stays_where_it_is(gnome, fake_portal, to
     if where == "pictures":
         monkeypatch.setattr(screenshot.GLib, "get_user_special_dir", lambda _which: root)
     else:
-        monkeypatch.setenv("XDG_RUNTIME_DIR", root)
+        monkeypatch.setenv("XDG_RUNTIME_DIR", str(fake_portal.temporary.parent))
+        monkeypatch.setattr(screenshot, "_DOCUMENT_PORTAL", fake_portal.temporary.name)
     monkeypatch.setattr(screenshot.tempfile, "gettempdir",
                         lambda: root if where == "pictures" else "/nonexistent-tmp")
     fake_portal.saved = "temporary"
     assert screenshot.take(False) is True
     assert [p.name for p in fake_portal.temporary.iterdir()] == ["Screenshot from the portal.png"]
+
+
+def test_hyprlands_shot_in_the_runtime_folder_is_kept_with_the_others(
+        fake_portal, tools, home, actions_on, monkeypatch):
+    """Hyprland's portal answers with a file in XDG_RUNTIME_DIR, emptied at
+    logout and replaced by its next screenshot."""
+    set_desktop(monkeypatch, "Hyprland", "wayland")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(fake_portal.temporary.parent))
+    monkeypatch.setattr(screenshot.tempfile, "gettempdir", lambda: "/nonexistent-tmp")
+    fake_portal.saved = "temporary"
+    assert screenshot.take(False) is True
+    assert len(list((home / "Pictures" / "Screenshots").glob("Screenshot_*.png"))) == 1
+    assert actions_on == ["Screenshot saved in ~/Pictures/Screenshots"]
 
 
 def test_a_link_left_in_a_temporary_folder_is_never_moved(cosmic, fake_portal, tools, home,
@@ -356,6 +371,17 @@ def test_take_a_screenshot_said_alone_types_nothing(actions_on, chat, say, kde, 
 
 # "Take a screenshot of this window": the window being dictated into.
 
+@pytest.fixture
+def app_window(monkeypatch):
+    """An app window has the focus on X11."""
+    monkeypatch.setattr(screenshot.x11_desktop, "front_window_open", lambda: True)
+
+
+def _picked():
+    """The window picker's outcome: it is waited for on a thread of its own."""
+    screenshot._picker.join(10)
+
+
 def test_kde_takes_the_active_window_with_spectacle(kde, tools, home, actions_on):
     assert screenshot.take(False, window=True) is True
     assert tools.commands[0][:5] == ["spectacle", "--background", "--activewindow", "--nonotify",
@@ -364,7 +390,7 @@ def test_kde_takes_the_active_window_with_spectacle(kde, tools, home, actions_on
 
 
 def test_on_x11_the_window_is_taken_by_the_desktops_tool_with_no_portal(
-        x11_session, fake_portal, tools, home, actions_on):
+        x11_session, app_window, fake_portal, tools, home, actions_on):
     """Silent there: no picker to click."""
     assert screenshot.take(False, window=True) is True
     assert tools.commands[0][:3] == ["gnome-screenshot", "-w", "-f"]
@@ -372,15 +398,40 @@ def test_on_x11_the_window_is_taken_by_the_desktops_tool_with_no_portal(
     assert actions_on == ["Screenshot saved in ~/Pictures/Screenshots"]
 
 
-def test_on_xfce_the_window_is_taken_by_its_screenshooter(x11_session, fake_portal, monkeypatch,
-                                                          home, actions_on):
+def test_on_xfce_the_window_is_taken_by_its_screenshooter(x11_session, app_window, fake_portal,
+                                                          monkeypatch, home, actions_on):
     tools = install(monkeypatch, "xfce4-screenshooter")
     assert screenshot.take(False, window=True) is True
     assert tools.commands[0][:3] == ["xfce4-screenshooter", "-w", "-s"]
+    assert actions_on == ["Screenshot saved in ~/Pictures/Screenshots"]
 
 
-def test_a_window_tool_that_failed_is_not_followed_by_the_portal(x11_session, fake_portal, tools,
-                                                                 home, actions_on):
+def test_on_x11_without_a_window_tool_it_says_it_cant(x11_session, app_window, fake_portal,
+                                                      no_tools, home, actions_on):
+    """MATE has neither tool, and its portal opens no window picker."""
+    assert screenshot.take(False, window=True) is False
+    assert fake_portal.calls == []
+    assert actions_on == ["Can't take just the window here"]
+
+
+def test_the_log_says_which_screenshot_it_was(kde, tools, home, caplog):
+    import logging
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        screenshot.take(False, window=True)
+    assert "take a screenshot of the window (saved" in caplog.text
+
+
+def test_on_x11_with_no_app_window_in_front_nothing_is_taken(x11_session, fake_portal, tools,
+                                                             home, actions_on, monkeypatch):
+    """Both tools take the whole desktop then, other windows included."""
+    monkeypatch.setattr(screenshot.x11_desktop, "front_window_open", lambda: False)
+    assert screenshot.take(False, window=True) is False
+    assert tools.commands == [] and fake_portal.calls == []
+    assert actions_on == ["Couldn't tell which window"]
+
+
+def test_a_window_tool_that_failed_is_not_followed_by_the_portal(
+        x11_session, app_window, fake_portal, tools, home, actions_on):
     """It may have taken one all the same: never a second screenshot."""
     tools.exit_code = 1
     assert screenshot.take(False, window=True) is False
@@ -388,21 +439,53 @@ def test_a_window_tool_that_failed_is_not_followed_by_the_portal(x11_session, fa
     assert actions_on == ["Couldn't take a screenshot"]
 
 
-def test_on_gnome_the_window_is_picked_in_the_desktops_own_screenshot_tool(
-        gnome, fake_portal, tools, home, actions_on):
-    """GNOME's portal can't take one window by itself: it opens its picker."""
+@pytest.mark.parametrize("desktop", ["gnome", "cosmic"])
+def test_there_the_window_is_picked_in_the_desktops_own_screenshot_tool(
+        request, desktop, fake_portal, tools, home, actions_on):
+    """GNOME's and COSMIC's portals can't take one window by themselves:
+    they open their picker."""
+    request.getfixturevalue(desktop)
     assert screenshot.take(False, window=True) is True
+    _picked()
     assert fake_portal.calls[0]["interactive"] is True
     assert tools.commands == []
-    assert actions_on == ["Screenshot saved in ~/Pictures"]
+    assert actions_on[-1].startswith("Screenshot saved in ")
+
+
+def test_dictation_isnt_held_up_while_the_picker_is_open(gnome, fake_portal, tools, home,
+                                                         actions_on, monkeypatch):
+    """The picker may stay open for as long as the person takes: waiting
+    for it on the dictation worker held every dictation said meanwhile, and
+    quitting lost them."""
+    monkeypatch.setattr(screenshot, "PICKER_WAIT_S", 0.5)
+    fake_portal.code = None             # the person hasn't chosen yet
+    assert screenshot.take(False, window=True) is True
+    assert screenshot._picker.is_alive()
+    # Asked again meanwhile: no second picker.
+    assert screenshot.take(False, window=True) is False
+    assert actions_on == ["Screenshot tool already open"]
+    _picked()
+    assert len(fake_portal.calls) == 1
+    assert actions_on[-1] == "Screenshot not confirmed"
 
 
 def test_a_window_screenshot_cancelled_in_the_picker_saves_nothing(gnome, fake_portal, tools,
                                                                     home, actions_on):
     fake_portal.code = 1
-    assert screenshot.take(False, window=True) is False
+    screenshot.take(False, window=True)
+    _picked()
     assert actions_on == ["Screenshot cancelled"]
     assert tools.commands == []
+
+
+def test_where_no_picker_takes_one_window_it_says_so(fake_portal, tools, home, actions_on,
+                                                    monkeypatch):
+    """Sway's and Hyprland's portals choose an area, or take the whole
+    screen: neither is "just this window"."""
+    set_desktop(monkeypatch, "sway", "wayland")
+    assert screenshot.take(False, window=True) is False
+    assert fake_portal.calls == [] and tools.commands == []
+    assert actions_on == ["Can't take just the window here"]
 
 
 def test_the_picker_gets_longer_than_a_permission_question(gnome, fake_portal, tools, home,
@@ -413,5 +496,7 @@ def test_the_picker_gets_longer_than_a_permission_question(gnome, fake_portal, t
     monkeypatch.setattr(screenshot.GLib, "timeout_source_new",
                         lambda ms: waits.append(ms) or real(ms))
     screenshot.take(False, window=True)
+    _picked()
     screenshot.take(False)
-    assert waits[0] > waits[1] == screenshot.PORTAL_WAIT_S * 1000
+    assert waits == [screenshot.PICKER_WAIT_S * 1000, screenshot.PORTAL_WAIT_S * 1000]
+    assert screenshot.PICKER_WAIT_S >= 60
