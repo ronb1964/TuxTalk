@@ -127,6 +127,17 @@ def test_show_desktop_twice_gives_the_focus_back_to_the_window_that_had_it():
     assert answer == [5]
 
 
+def test_show_desktop_twice_doesnt_follow_a_window_moved_to_another_workspace():
+    """Focusing it would switch to its workspace, away from the one whose
+    windows the person asked back."""
+    answer, _logs = run(ENABLED + FOCUSED + """
+        ask('show desktop');
+        t.shell.workspaceWindows = t.shell.workspaceWindows.filter(w => w !== kwrite);
+        t.report([ask('show desktop'), t.shell.activated]);
+    """)
+    assert answer == ["done", []]
+
+
 def test_show_desktop_twice_focuses_nothing_that_was_closed_meanwhile():
     answer, _logs = run(ENABLED + FOCUSED + """
         ask('show desktop');

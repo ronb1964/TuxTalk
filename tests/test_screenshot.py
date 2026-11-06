@@ -81,14 +81,42 @@ def test_a_portal_shot_left_in_a_temporary_folder_is_kept_with_the_others(
         cosmic, fake_portal, tools, home, actions_on, monkeypatch):
     """COSMIC's portal answers with a file in /tmp: TuxTalk said "Screenshot
     saved in //tmp" (Pop!_OS VM), a folder emptied at the next start."""
-    monkeypatch.setattr(screenshot, "_temporary_folders",
-                        lambda: (str(fake_portal.temporary),))
+    monkeypatch.setattr(screenshot.tempfile, "gettempdir", lambda: str(fake_portal.temporary))
     fake_portal.saved = "temporary"
     assert screenshot.take(False) is True
     kept = list((home / "Pictures" / "Screenshots").glob("Screenshot_*.png"))
     assert [shot.read_bytes() for shot in kept] == [b"png"]
     assert not any(fake_portal.temporary.iterdir())
     assert actions_on == ["Screenshot saved in ~/Pictures/Screenshots"]
+    assert tools.commands == []
+
+
+@pytest.mark.parametrize("where", ["pictures", "documents"])
+def test_a_portal_shot_in_a_kept_folder_stays_where_it_is(gnome, fake_portal, tools, home,
+                                                          actions_on, monkeypatch, where):
+    """A Pictures folder that is itself under /tmp keeps its files; and the
+    document portal's folder (in XDG_RUNTIME_DIR) shows a file kept
+    elsewhere, so moving from it would take that file away."""
+    root = str(fake_portal.temporary)
+    if where == "pictures":
+        monkeypatch.setattr(screenshot.GLib, "get_user_special_dir", lambda _which: root)
+    else:
+        monkeypatch.setenv("XDG_RUNTIME_DIR", root)
+    monkeypatch.setattr(screenshot.tempfile, "gettempdir",
+                        lambda: root if where == "pictures" else "/nonexistent-tmp")
+    fake_portal.saved = "temporary"
+    assert screenshot.take(False) is True
+    assert [p.name for p in fake_portal.temporary.iterdir()] == ["Screenshot from the portal.png"]
+
+
+def test_a_portal_answer_with_a_malformed_address_is_unconfirmed_and_logs_no_path(
+        gnome, fake_portal, tools, home, actions_on, caplog):
+    """GLib's error for a malformed address quotes it, and with it the path."""
+    fake_portal.saved = "malformed"
+    with caplog.at_level(logging.DEBUG, logger="tuxtalk"):
+        assert screenshot.take(False) is False
+    assert actions_on == ["Screenshot not confirmed"]
+    assert "private-name" not in caplog.text
     assert tools.commands == []
 
 

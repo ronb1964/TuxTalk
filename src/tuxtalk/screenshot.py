@@ -125,8 +125,12 @@ def _ask_portal() -> tuple[str, str]:
     def on_response(code, results):
         if code == _PORTAL_SAVED:
             if results.get("uri"):
-                answer.update(outcome="saved",
-                              file=GLib.filename_from_uri(results["uri"])[0])
+                try:
+                    answer.update(outcome="saved",
+                                  file=GLib.filename_from_uri(results["uri"])[0])
+                except GLib.Error:
+                    # Its message quotes the address, and with it the path.
+                    logger.info("Screenshot portal answered with an address it can't read")
         else:
             answer["outcome"] = "cancelled" if code == _PORTAL_CANCELLED else "failed"
         loop.quit()
@@ -205,21 +209,22 @@ def take(beeps_on: bool) -> bool:
     return _nothing_saved(beeps_on)
 
 
-def _temporary_folders() -> tuple[str, ...]:
-    """The folders emptied at the next start or logout."""
-    return tuple(filter(None, (tempfile.gettempdir(), "/var/tmp",
-                               os.environ.get("XDG_RUNTIME_DIR"))))
+def _inside(file: str, folder: str) -> bool:
+    """Whether *file* (a real path) lies in *folder*, links resolved."""
+    return file.startswith(os.path.realpath(folder) + os.sep)
 
 
 def _kept(file: str) -> str:
     """The folder of the portal's screenshot *file*, once it is somewhere
     kept: COSMIC's portal answers with a file in /tmp, which is moved into
-    folder() with the others. Where it can't be moved, its own folder."""
+    folder() with the others. Not XDG_RUNTIME_DIR: the document portal
+    shows files kept elsewhere there. Where it can't be moved, its own
+    folder."""
     file = os.path.realpath(file)       # COSMIC's is named //tmp/...
-    home = os.path.realpath(os.path.expanduser("~"))
-    temporary = any(file.startswith(os.path.realpath(root) + os.sep)
-                    for root in _temporary_folders())
-    if file.startswith(home + os.sep) or not temporary:
+    kept = (os.path.expanduser("~"), os.path.dirname(folder()))
+    temporary = (tempfile.gettempdir(), "/var/tmp")
+    if any(_inside(file, root) for root in kept) or not any(
+            _inside(file, root) for root in temporary):
         return os.path.dirname(file)
     path = _path_for_tool()
     if path is None:

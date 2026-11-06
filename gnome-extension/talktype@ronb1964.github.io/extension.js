@@ -255,7 +255,10 @@ function showDesktop() {
     hiddenByShowDesktop.delete(workspace);
     if (hidden.length > 0) {
         hidden.forEach(unminimize);
-        if (hidden.includes(focused) && !focused.minimized)
+        // Not one moved to another workspace meanwhile: focusing it would
+        // switch there, away from the windows the person asked back.
+        if (hidden.includes(focused) && !focused.minimized
+                && workspace.list_windows().includes(focused))
             Main.activateWindow(focused);
         return 'done';
     }

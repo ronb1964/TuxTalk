@@ -157,12 +157,12 @@ class RecordingIndicator(Gtk.Window):
         placed at *position* plus the offsets, or near the window being
         dictated into with *follow_window*."""
         # A popup (override-redirect) window: no window manager manages it,
-        # so it never takes the focus and never counts as a window that
-        # appears. A managed one did both: COSMIC focused it, and the app
-        # being dictated into lost the keyboard for the whole recording; and
-        # with the desktop shown, its appearing ended "show desktop" (KWin
-        # brought the windows back, Cinnamon minimized them), so "show
-        # desktop" said again hid them once more. The floating labels in
+        # so it never takes the focus. A managed one did: COSMIC focused it,
+        # and the app being dictated into lost the keyboard for the whole
+        # recording; and with the desktop shown, KWin took its appearing as
+        # the end of "show desktop", so "show desktop" said again hid the
+        # windows once more. Cinnamon ends it for a popup too, so there it
+        # isn't shown at all then (show_at_position). The floating labels in
         # screen_message are popups for the same reason.
         super().__init__(title="TuxTalk Recording", type=Gtk.WindowType.POPUP)
         # TuxTalk Labs: show near the bottom of the window being dictated
@@ -250,12 +250,6 @@ class RecordingIndicator(Gtk.Window):
             """Place the window, show it without taking the focus and start the
             animation, on GTK's thread."""
             try:
-                if x11_desktop.showing_desktop():
-                    # Any window appearing, a popup too, ends Cinnamon's
-                    # "show desktop" and brings the windows back: saying
-                    # "show desktop" again found them back and hid them.
-                    logger.info("Recording indicator not shown: the desktop is shown")
-                    return False
                 # Window dimensions — same expression used to size the window,
                 # so the maths and the real window cannot disagree.
                 window_width = int(BASE_WIDTH * self.scale)
@@ -286,6 +280,13 @@ class RecordingIndicator(Gtk.Window):
                 logger.exception("Error showing indicator")
             return False  # Don't repeat
 
+        # Any window appearing, a popup too, ends Cinnamon's "show desktop"
+        # and brings the windows back: saying "show desktop" again found
+        # them back and hid them. Asked on the caller's thread (the
+        # recording's), so an X server slow to answer never holds up GTK's.
+        if x11_desktop.showing_desktop():
+            logger.info("Recording indicator not shown: the desktop is shown")
+            return
         GLib.idle_add(_do_show)
 
     def _follow_target(self, width, height):

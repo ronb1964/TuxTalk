@@ -548,7 +548,8 @@ class FakePortal(_BusService):
     *temporary*, outside the home folder, named with a doubled slash as
     COSMIC's portal names its own in /tmp; "unseen", a file TuxTalk can't
     see (a sandbox's); "unreadable", a uri that names no local file;
-    "nothing", no uri at all. With *replies* off
+    "malformed", a uri GLib can't read, naming a private folder; "nothing",
+    no uri at all. With *replies* off
     the method call itself is never answered. *calls* keeps each call's
     options."""
 
@@ -589,8 +590,9 @@ class FakePortal(_BusService):
                     f.write(b"png")
             if self.saved == "temporary":
                 shot = "/" + shot
-            uri = ("https://example.invalid/shot.png" if self.saved == "unreadable"
-                   else GLib.filename_to_uri(shot))
+            uri = {"unreadable": "https://example.invalid/shot.png",
+                   "malformed": "file://%zz/home/private-name/shot.png"}.get(
+                self.saved) or GLib.filename_to_uri(shot)
             results = {"uri": GLib.Variant("s", uri)}
         bus.emit_signal(sender, request, "org.freedesktop.portal.Request", "Response",
                         GLib.Variant("(ua{sv})", (self.code, results)))
