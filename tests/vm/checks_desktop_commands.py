@@ -27,7 +27,7 @@ from collections import namedtuple
 import voices
 from checks_open_apps import opened_by_voice
 from checks_send import PLAYER_LOG
-from checks_type_at_pause import _say_with_pauses
+from checks_type_at_pause import PAUSE_S
 from checks_voice_actions import (
     _action_blocker, _kwin_windows, _no_editor, _open_apps_on, _sink, _sink_state, _until,
     _wayland)
@@ -858,6 +858,28 @@ def _pause_problem(calls, status):
     return None
 
 
+def _pause_music_at_a_pause(run):
+    """Hold F8 and say a sentence, then "pause music", each followed by a
+    pause, and let go only once "pause music" was acted on: (typed, log).
+    A phrase said right before the key comes up is the recording's last,
+    read after the music came back with the key, and then paused again (the
+    hold key's accepted blip); one cut at a pause is acted on during the
+    recording, where TuxTalk must forget it was going to resume the player."""
+    run.sink_ready(fresh=True)
+    mark = run.log_mark()
+    run.vm.key_down("f8")
+    try:
+        time.sleep(0.4)
+        run.play("basic")
+        time.sleep(PAUSE_S)
+        run.play("pause_music")
+        run.wait_log(mark, "Voice command: pause music", "Voice command not done", timeout=15)
+    finally:
+        run.vm.key_up("f8")
+    typed = run.wait_dictation(mark)
+    return typed or "", run.log_since(mark)
+
+
 @check(SECTION, "music_commands", "“pause music”, “play music” and “next track” reach the player")
 def music_commands(run):
     names = _session_tool(run, "gdbus", "call", "--session", "--dest", "org.freedesktop.DBus",
@@ -882,7 +904,7 @@ def music_commands(run):
                 seen.append(saw)
         with _fake_player(run, "Playing"), run.settings_put_back("chunked_dictation"):
             run.set_config(chunked_dictation=True)
-            typed, log = _say_with_pauses(run, ["basic", "pause_music"])
+            typed, log = _pause_music_at_a_pause(run)
             time.sleep(3)
             status = _player_status(run)
         if "Voice command: pause music" not in log:
