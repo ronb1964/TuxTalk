@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Visual recording indicator for TuxTalk
-Shows an animated orb with satellites near the cursor during dictation
+Shows the recording, drawn in the chosen style, at a fixed place on the
+screen or near the window being dictated into, while the hotkey is held
 """
 
 import gi
@@ -192,9 +193,9 @@ class RecordingIndicator(Gtk.Window):
 
         self.scale = _scale_for_size(size)
 
-        # Unmanaged, it stays above and out of the taskbar with no hints for
-        # a window manager; the type has the compositor draw it as a tooltip,
-        # with no window shadow or animation.
+        # Unmanaged, it is in no taskbar and needs no hints for a window
+        # manager; the type has the compositor draw it as a tooltip, with no
+        # window shadow or animation.
         self.set_can_focus(False)
         self.set_type_hint(Gdk.WindowTypeHint.TOOLTIP)
         # Room for the orb, its satellites at full extension and the timer
@@ -243,8 +244,8 @@ class RecordingIndicator(Gtk.Window):
             self.animation_timeout_id = None
 
     def show_at_position(self):
-        """Show the indicator at the configured position"""
-        # Must be called from GTK main thread
+        """Show the indicator at the configured position. Safe from any
+        thread: the work is queued on GTK's."""
         def _do_show():
             """Place the window, show it without taking the focus and start the
             animation, on GTK's thread."""
