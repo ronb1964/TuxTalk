@@ -264,17 +264,11 @@ class RecordingIndicator(Gtk.Window):
                         self.position, window_width, window_height,
                         _main_monitor_rect(), self.offset_x, self.offset_y)
 
-                self.show_all()
-                # Don't call present() - it might steal focus from the text entry field
-
-                # Move AFTER showing (Wayland may ignore this, but try anyway)
+                # Moved before it's shown: no window manager places a popup,
+                # so it appears exactly there. Shown first, it appeared in
+                # the screen's top-left corner and jumped a frame later.
                 self.move(window_x, window_y)
-
-                # Try moving again after a tiny delay to work around compositor repositioning
-                def try_move_again():
-                    self.move(window_x, window_y)
-                    return False
-                GLib.timeout_add(50, try_move_again)
+                self.show_all()
 
                 # Start animation
                 self._color_cache = None

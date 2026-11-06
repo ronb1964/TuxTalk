@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import indicator_styles
-from tuxtalk.recording_indicator import RecordingIndicator
+from tuxtalk.recording_indicator import RecordingIndicator, _main_monitor_rect, fixed_position
 
 
 def _apply(indicator, *args, **kwargs):
@@ -161,6 +161,35 @@ def test_the_indicator_is_never_a_window_the_desktop_manages(monkeypatch, deskto
         assert ind.get_property("type") == Gtk.WindowType.POPUP
     finally:
         ind.destroy()
+
+
+@pytest.mark.parametrize("position", ["bottom-right", "top-left", "center"])
+def test_the_indicator_appears_where_it_belongs_not_in_the_corner_first(position):
+    """No window manager places a popup: shown before it was moved, it
+    appeared at the screen's top-left corner and jumped into place a frame
+    later."""
+    from gi.repository import Gtk
+    ind = RecordingIndicator(position=position, size="medium")
+    mapped_at = []
+    ind.connect("map", lambda w: mapped_at.append(tuple(w.get_window().get_position())))
+    try:
+        ind.show_at_position()
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+        width, height = ind.get_default_size()
+        assert mapped_at == [fixed_position(position, width, height, _main_monitor_rect())]
+
+        # The next dictation, after Preferences moved it, appears in the new place.
+        ind.hide()
+        _apply(ind, "top-right", "medium", 0, 0)
+        ind.show_at_position()
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+        assert mapped_at[1] == fixed_position("top-right", width, height, _main_monitor_rect())
+    finally:
+        ind.destroy()
+        while Gtk.events_pending():
+            Gtk.main_iteration()
 
 
 # What each style's renderer is handed: the fed data it draws, and the
