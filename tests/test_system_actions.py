@@ -11,10 +11,12 @@ from tuxtalk.command_phrases import SystemRequest
 
 class Loginctl:
     """loginctl as the tests need it: records each command, answers
-    show-session from *hint*, and refuses lock-session when *refuses*."""
+    show-session from *hints* in turn and then *hint*, and refuses
+    lock-session when *refuses*."""
 
     def __init__(self):
         self.commands = []
+        self.hints = []
         self.hint = "yes"
         self.refuses = False
 
@@ -22,8 +24,13 @@ class Loginctl:
         self.commands.append(list(cmd))
         if cmd[1] == "lock-session" and self.refuses:
             return subprocess.CompletedProcess(cmd, 1, "", "denied")
-        out = self.hint + "\n" if cmd[1] == "show-session" else ""
+        out = ""
+        if cmd[1] == "show-session":
+            out = (self.hints.pop(0) if self.hints else self.hint) + "\n"
         return subprocess.CompletedProcess(cmd, 0, out, "")
+
+    def looks(self):
+        return [c for c in self.commands if c[1] == "show-session"]
 
 
 @pytest.fixture
@@ -64,10 +71,10 @@ def test_elsewhere_an_unconfirmed_lock_says_so(loginctl, cosmic, actions_on):
     assert actions_on == ["Lock not confirmed"]
 
 
-def test_on_kde_an_unconfirmed_lock_gives_no_note(loginctl, kde, actions_on):
+def test_on_kde_too_an_unconfirmed_lock_says_so(loginctl, kde, actions_on):
     loginctl.hint = "no"
     system_actions.lock(False, sleep=no_wait)
-    assert actions_on == []
+    assert actions_on == ["Lock not confirmed"]
 
 
 def test_a_lock_logind_refuses_says_so(loginctl, kde, actions_on):
@@ -81,8 +88,31 @@ def test_the_check_waits_for_the_locker(loginctl, kde):
     order = []
     system_actions.lock(
         False, sleep=lambda s: order.append(("sleep", s, len(loginctl.commands))))
-    assert order == [("sleep", system_actions.LOCK_CHECK_S, 1)]
+    assert order[0][2] == 1
     assert loginctl.commands[1][1] == "show-session"
+
+
+def test_a_locker_that_answers_after_a_moment_sounds_done(loginctl, gnome, actions_on, beeped):
+    loginctl.hints = ["no", "no"]
+    system_actions.lock(True, sleep=no_wait)
+    assert beeped == [beeps.READY_BEEP]
+    assert actions_on == []
+    assert len(loginctl.looks()) == 3
+
+
+def test_a_locker_that_never_answers_is_given_about_three_seconds(loginctl, kde, actions_on):
+    waited = []
+    loginctl.hint = "no"
+    system_actions.lock(False, sleep=waited.append)
+    assert 2.5 <= sum(waited) <= 3.5
+    assert actions_on == ["Lock not confirmed"]
+
+
+def test_a_locked_state_it_cant_read_is_not_asked_again(loginctl, kde, actions_on):
+    loginctl.hint = "maybe"
+    system_actions.lock(False, sleep=no_wait)
+    assert len(loginctl.looks()) == 1
+    assert actions_on == ["Lock not confirmed"]
 
 
 def test_without_a_session_id_it_locks_the_callers_session(loginctl, kde, monkeypatch):
@@ -133,10 +163,10 @@ def test_a_confirmed_lock_sounds_done_even_elsewhere(loginctl, cosmic, actions_o
     assert beeped == [beeps.READY_BEEP]
 
 
-def test_on_kde_a_lock_sounds_done_even_unconfirmed(loginctl, kde, actions_on, beeped):
+def test_on_kde_an_unconfirmed_lock_never_sounds_done(loginctl, kde, actions_on, beeped):
     loginctl.hint = "no"
     system_actions.lock(True, sleep=no_wait)
-    assert beeped == [beeps.READY_BEEP]
+    assert beeps.READY_BEEP not in beeped
 
 
 def test_a_slow_session_query_means_not_confirmed(loginctl, cosmic, actions_on, monkeypatch):

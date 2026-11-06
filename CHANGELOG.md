@@ -46,14 +46,14 @@ before 0.15.0, so older entries use that name.
   "close Firefox", "close all Firefox", "close window", "switch to Firefox",
   "minimize window", "maximize window" and "restore window"; "new tab", "close
   tab", "next tab", "previous tab", "reopen tab", "go back", "go forward",
-  "reload the page", "scroll down" (or "scroll down 5"), "page up", "go to the
-  top", "find on page", "save the file", "select all", "copy the selection",
-  "paste it" and "press escape"; "go to
-  youtube.com", which uses your browser's address bar or opens your default
-  browser; and "web search cheap tires", which uses your browser's own search
-  engine. In a terminal the keys are the terminal's own, and select all, save,
-  find on page, reopen tab, go back, go forward and reload the page don't
-  apply there.
+  "reload the page", "scroll down" (or "scroll down 5", which scrolls what is
+  under the mouse pointer), "page up", "go to the top", "find on page", "save
+  the file", "select all", "copy the selection", "paste it" and "press
+  escape"; "go to youtube.com", which uses your browser's address bar or opens
+  your default browser; and "web search cheap tires", which uses your
+  browser's own search engine. In a terminal the keys are the terminal's
+  own, and select all, save, find on page, reopen tab, go back, go forward
+  and reload the page don't apply there.
   "literal" before any of them types the words. "close Firefox" closes the
   Firefox window you used last, and one word of an open app's name is
   enough ("close Chrome"); a sentence that only sounds like an app's name
@@ -72,15 +72,16 @@ before 0.15.0, so older entries use that name.
   "play music", "next track", "previous track", for the player that is
   playing. Also "lock screen", "take a screenshot" and "what can I say",
   which opens the Voice Commands window. It is still off until you tick it.
+- After "lock screen" TuxTalk checks that the computer says it's locked.
+  The ready beep means it is; otherwise a note says the lock isn't
+  confirmed, so you know to check the screen before you walk away.
 - One word alone (copy, pause, next) is typed as a word, and "literal"
   before any command types the words.
 - Where it works: KDE has all of it. GNOME has it with the TuxTalk extension
   (log out and back in once after updating). X11 desktops like Cinnamon and
   Xfce have all but "show all windows". On COSMIC, Sway and Hyprland windows
-  and desktops can't be done and TuxTalk says so; sound, music and screenshots
-  work, and "lock screen" needs a screen locker that answers (TuxTalk says
-  when it couldn't confirm the lock). "scroll down" scrolls what is under the mouse pointer. The command
-  words are English.
+  and desktops can't be done and TuxTalk says so; sound, music, the lock and
+  screenshots work. The command words are English.
 - With "Send each dictation automatically" on, TuxTalk doesn't press Enter
   in a terminal any more. It ran whatever you said as a command, so
   "testing 1, 2, 3" came back "command not found". Say "press enter" at the

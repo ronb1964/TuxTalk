@@ -516,8 +516,8 @@ Hold <b>{hold}</b>, say <b>volume up</b>, let go.
 
 <b>Lock, screenshot and help</b>
 Hold <b>{hold}</b>, say <b>lock screen</b>, let go. Your desktop's own lock comes up, so you
-need your password to come back. It needs a screen locker that answers; if TuxTalk
-couldn't confirm the lock, a note says so.
+need your password to come back. TuxTalk then checks that the computer says it's locked:
+the ready beep means it is. If that can't be confirmed, a note says so: check the screen.
 Hold <b>{hold}</b>, say <b>take a screenshot</b>, let go. On KDE it is saved in
 Pictures/Screenshots; elsewhere, where your desktop keeps them. GNOME may ask once. In a
 hands-free or Type at pause recording, the recording indicator may show in the picture.
@@ -556,7 +556,7 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
     <b>show all windows</b>. On COSMIC, Sway and Hyprland, windows and desktops can't be
     done (TuxTalk says so; use the window's own buttons), and an open app is started
     again, which most then answer by showing the window they already have. Sound, music
-    and screenshots work there; the lock needs a locker that answers.
+    screenshots and the lock work there.
   • In a hands-free or Type at pause recording, a command ends the recording.
   • One word alone (copy, paste, save, pause, next...) is typed as a word: people say those
     as answers in chats.

@@ -2,27 +2,25 @@
 screenshots (screenshot.py).
 
 The lock goes through logind (`loginctl lock-session`), so the desktop's own
-lock screen and password apply and TuxTalk never handles either. Some
-lockers never tell logind they locked, so a few seconds later the session's
-LockedHint is read: a lock that didn't confirm is never reported as done.
-Only desktops whose lockers are known to answer are trusted without the
-flag; elsewhere an unconfirmed lock gets a plain note. Programs are run with
-a timeout and no shell; the wait is on the dictation worker, never GTK's
-thread."""
+lock screen and password apply and TuxTalk never handles either. Asking is
+not locking: a stopped or broken locker leaves the screen open, and some
+lockers never tell logind they locked. So the session's LockedHint is read
+for a few seconds, on every desktop, and only a lock it confirms gets the
+ready beep; any other gets a plain note to check the screen. Programs are
+run with a timeout and no shell; the wait is on the dictation worker, never
+GTK's thread."""
 import os
 import subprocess
 import time
 
-from . import beeps, command_notices, desktop_detect, screenshot, tray_link
+from . import beeps, command_notices, screenshot, tray_link
 from .command_phrases import SystemRequest
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-LOCK_CHECK_S = 2.0      # how long the locker gets to tell logind before it is asked
-# Desktops whose lockers set LockedHint; a lock that doesn't confirm there is
-# not worth a warning.
-LOCKERS_THAT_ANSWER = frozenset({"kde", "gnome", "cinnamon", "xfce", "mate"})
+LOCK_CHECK_S = 3.0      # how long the locker gets to tell logind it locked
+_LOCK_LOOK_EVERY_S = 0.5
 _LOCK_TIMEOUT_S = 5
 _QUERY_TIMEOUT_S = 2
 
@@ -62,24 +60,30 @@ def _ask_to_lock(session: str) -> bool:
     return True
 
 
+def _confirmed(session: str, sleep) -> bool:
+    """Whether logind says *session* is locked within LOCK_CHECK_S. A state
+    it can't read isn't asked again: that query could be slow each time."""
+    for _ in range(round(LOCK_CHECK_S / _LOCK_LOOK_EVERY_S)):
+        sleep(_LOCK_LOOK_EVERY_S)
+        answer = locked(session)
+        if answer is not False:
+            return bool(answer)
+    return False
+
+
 def lock(beeps_on: bool, sleep=time.sleep) -> bool:
     """Lock the screen. False: logind refused, said with a note. True once
-    it was asked; if the session then doesn't say it is locked, that is
-    logged, and said too on a desktop whose locker isn't known to answer."""
+    it was asked; the ready beep only when the session then says it is
+    locked, and otherwise a note saying the lock isn't confirmed."""
     session = session_id()
     if not _ask_to_lock(session):
         command_notices.say("lock_failed", beeps_on)
         return False
-    sleep(LOCK_CHECK_S)
-    confirmed = locked(session)
-    trusted = desktop_detect.get_desktop_environment() in LOCKERS_THAT_ANSWER
-    if confirmed:
+    if _confirmed(session, sleep):
         logger.info("Voice command: lock screen; the session says it is locked")
-    else:
-        logger.info("Voice command: lock screen asked; the session doesn't say it is locked")
-    if confirmed or trusted:
         beeps.beep(beeps_on, *beeps.READY_BEEP)
     else:
+        logger.info("Voice command: lock screen asked; the session doesn't say it is locked")
         # Only the note sounds: a ready beep then a cancel beep would say both.
         command_notices.say("lock_unconfirmed", beeps_on)
     return True
