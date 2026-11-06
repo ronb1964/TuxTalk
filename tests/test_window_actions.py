@@ -161,14 +161,16 @@ def test_close_window_with_no_focused_window_says_so(kde, kwin_calls, actions_on
     assert actions_on == ["Couldn't tell which window"]
 
 
-def test_a_kwin_error_says_it_cant_and_is_logged(kde, apps, actions_on, monkeypatch, caplog):
-    def refused(*_args):
-        raise RuntimeError("KWin refused the script")
-    monkeypatch.setattr(kwin_windows, "act", refused)
+def test_a_failing_kwin_script_never_says_kde_cant(kde, apps, actions_on, monkeypatch, caplog):
+    """KDE can maximize: a script that failed once is a desktop that didn't
+    do it this time, as for the desktop commands."""
+    def failed(*_args):
+        raise RuntimeError("KWin's tuxtalk-windows script failed: TypeError")
+    monkeypatch.setattr(kwin_windows, "act", failed)
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
         assert window_actions.run(WindowRequest("maximize"), CHAT_WINDOW, False) is False
-    assert actions_on == ["Can't minimize or maximize here"]
-    assert "maximize" in caplog.text and "KWin refused the script" in caplog.text
+    assert actions_on == ["The desktop didn't answer"]
+    assert "maximize" in caplog.text and "script failed: TypeError" in caplog.text
 
 
 @pytest.mark.parametrize("error", [TimeoutError("KWin didn't answer in time"),

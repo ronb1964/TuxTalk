@@ -166,15 +166,16 @@ def _ask_desktop(request: WindowRequest, entry, exact: bool):
 
 def refusal(cant: str, error: Exception) -> str:
     """The note for a desktop that couldn't be asked: "desktop_no_answer"
-    when it can do it but didn't answer in time (KWin's TimeoutError, or the
-    NoReply of a D-Bus call to KWin or GNOME Shell that timed out), else
-    *cant*, the note that this desktop can't do it, unless GNOME Shell still runs the TuxTalk
-    extension from before an update, which has the method only after the
-    user logs out and back in. No extension at all fails the same way, so
-    GNOME Shell is asked whether TuxTalk's is enabled, never the error's
-    wording, which is translated."""
+    when it can do it but didn't, this time (KWin's TimeoutError, a KWin
+    script that failed with RuntimeError, or the NoReply of a D-Bus call to
+    KWin or GNOME Shell that timed out), else *cant*, the note that this
+    desktop can't do it, unless GNOME Shell still runs the TuxTalk extension
+    from before an update, which has the method only after the user logs
+    out and back in. No extension at all fails the same way, so GNOME Shell
+    is asked whether TuxTalk's is enabled, never the error's wording, which
+    is translated."""
     dbus_name = getattr(error, "get_dbus_name", lambda: None)()
-    if isinstance(error, TimeoutError) or dbus_name == _NO_REPLY:
+    if isinstance(error, (TimeoutError, RuntimeError)) or dbus_name == _NO_REPLY:
         return "desktop_no_answer"
     if dbus_name not in _NOTHING_THERE:
         return cant

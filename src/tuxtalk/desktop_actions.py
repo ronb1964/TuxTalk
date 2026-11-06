@@ -27,7 +27,6 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 TIMEOUT_S = window_actions.TIMEOUT_S
-# What dbus-python raises when a call isn't answered within its timeout.
 
 # A desktop's answer -> the note saying why nothing was done.
 _NOTES = {"no_window": "no_focused_window", "no_desktop": "no_such_desktop",
@@ -50,7 +49,9 @@ def run(request: DesktopRequest, where, beeps_on: bool) -> bool:
         answer = _ask_desktop(action, number, still_wanted if on_window else None)
     except Exception as e:      # each desktop fails its own way
         logger.info(f"Voice command {action} not done: {e}")
-        command_notices.say(_refusal(action, e), beeps_on)
+        # A slow or failing desktop can do it, so never "can't here", nor,
+        # to a user with two screens, that there is one.
+        command_notices.say(window_actions.refusal(_cant(action), e), beeps_on)
         return False
     if answer == "stopped":     # still_wanted said why
         return False
@@ -84,13 +85,3 @@ def _cant(action: str) -> str:
     if action == "overview":
         return "no_overview_here"
     return "cant_place_here" if action in FRONT_WINDOW_ACTIONS else "cant_desktops_here"
-
-
-def _refusal(action: str, error: Exception) -> str:
-    """The note for a desktop that failed to do *action*. A script of KWin's
-    that fails raises RuntimeError, and a slow desktop is told as one by
-    window_actions.refusal: the desktop can do it, it just didn't answer,
-    and a user with two screens must never be told there is one."""
-    if isinstance(error, RuntimeError):
-        return "desktop_no_answer"
-    return window_actions.refusal(_cant(action), error)
