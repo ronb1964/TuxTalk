@@ -184,14 +184,33 @@ def _save_question(run, app, before, document):
     return None
 
 
+# A save question's button that throws the change away, by the words editors use.
+DISCARD_BUTTONS = ("~iscard", "~on't save", "~on\u2019t save", "~without sav")
+
+
+def _question_inside(run, app, document=None):
+    """The title of *app*'s window showing a save question inside it, None
+    when none does: libadwaita's dialogs (GNOME Text Editor's "Save
+    Changes?") are drawn in the window, not as windows of their own. With
+    *document*, only a question whose text names it."""
+    for name, title, _focused in _windows(run):
+        if name != app or not any(run.vm.ui("find", "button", button, title, timeout=1, app=app)
+                                  for button in DISCARD_BUTTONS):
+            continue
+        texts = run.vm.ui("texts", title, timeout=3, app=app) or []
+        if document is None or document in " ".join([title or "", *texts]):
+            return title
+    return None
+
+
 def _discard(run, app, question):
-    """Answer the save question titled *question* with its discard button, as
-    a person would, looked for in that dialog only: never a button of another
-    window, the editor's other documents included. The editor itself is
-    ended with the processes it started (opened_by_voice)."""
-    names = ("~iscard", "~on't save", "~on\u2019t save", "~without sav")
+    """Answer the save question in the window titled *question* with its
+    discard button, as a person would, looked for there only: never a
+    button of another window, the editor's other documents included. The
+    editor itself is ended with the processes it started (opened_by_voice)."""
     if question is not None and any(
-            run.vm.ui("click", "button", name, question, timeout=2, app=app) for name in names):
+            run.vm.ui("click", "button", name, question, timeout=2, app=app)
+            for name in DISCARD_BUTTONS):
         time.sleep(1.5)
 
 
@@ -252,8 +271,10 @@ def close_asks_to_save(run):
             document = _document_name(next((t for t, focused in mine if focused), ""))
             _typed, _heard, mark = run.say("close_text_editor", wait=False)
             run.wait_log(mark, "Voice command: close", "Voice command not done", timeout=30)
-            asked = _until(10, lambda: _new_window(run, app, titles))
-            question = _save_question(run, app, titles, document) if asked else None
+            asked = _until(10, lambda: _new_window(run, app, titles)
+                           or _question_inside(run, app))
+            question = (_save_question(run, app, titles, document)
+                        or _question_inside(run, app, document)) if asked else None
             log = run.log_since(mark)
             running = not run.vm.ssh(f"pgrep -f {_running(opened.program)}",
                                      check=False).returncode
