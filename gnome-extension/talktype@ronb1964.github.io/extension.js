@@ -255,9 +255,12 @@ function showDesktop() {
     hiddenByShowDesktop.delete(workspace);
     if (hidden.length > 0) {
         hidden.forEach(unminimize);
-        // Not one moved to another workspace meanwhile: focusing it would
-        // switch there, away from the windows the person asked back.
-        if (hidden.includes(focused) && !focused.minimized
+        // Not while the person works in another window opened meanwhile,
+        // and not one moved to another workspace: focusing it would switch
+        // there, away from the windows the person asked back.
+        const now = global.display.focus_window;
+        const busy = now && isAppWindow(now) && !now.skip_taskbar;
+        if (!busy && hidden.includes(focused) && !focused.minimized
                 && workspace.list_windows().includes(focused))
             Main.activateWindow(focused);
         return 'done';

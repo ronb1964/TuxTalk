@@ -201,17 +201,29 @@ def test_the_indicator_appears_where_it_belongs_not_in_the_corner_first(position
         _settle(0)
 
 
-@pytest.mark.parametrize("shown, appears", [(1, False), (0, True)])
-def test_the_indicator_stays_away_while_the_desktop_is_shown(window_manager, shown, appears):
+@pytest.mark.parametrize("desktop, shown, appears", [
+    ("X-Cinnamon", 1, False), ("X-Cinnamon", 0, True), ("KDE", 1, True), ("XFCE", 1, True)])
+def test_on_cinnamon_the_indicator_stays_away_while_the_desktop_is_shown(
+        window_manager, monkeypatch, desktop, shown, appears):
     """On Cinnamon any window appearing, a popup too, ends "show desktop"
     and brings the windows back (Mint VM), so holding F8 to say "show
-    desktop" again found them back and hid them once more."""
+    desktop" again found them back and hid them once more. KWin and the
+    others keep it: their indicator shows."""
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
     window_manager.set_cardinals(window_manager.root, b"_NET_SHOWING_DESKTOP", (shown,))
     ind = RecordingIndicator(position="center", size="medium")
     try:
         ind.show_at_position()
         _settle()
         assert ind.get_mapped() is appears
+        assert (ind.animation_timeout_id is not None) is appears
+        # The next dictation, with the windows back, shows it again.
+        ind.hide_indicator()
+        window_manager.set_cardinals(window_manager.root, b"_NET_SHOWING_DESKTOP", (0,))
+        _settle()
+        ind.show_at_position()
+        _settle()
+        assert ind.get_mapped()
     finally:
         ind.destroy()
         _settle(0)

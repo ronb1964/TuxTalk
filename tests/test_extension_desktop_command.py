@@ -119,12 +119,27 @@ def test_show_desktop_twice_gives_the_focus_back_to_the_window_that_had_it():
     """Unminimized, the windows came back with none focused (Ubuntu VM), so
     what the person typed next went nowhere; KDE and Cinnamon give it back."""
     answer, _logs = run(ENABLED + FOCUSED + """
+        t.focus(t.shell.workspaceWindows[1]);
         ask('show desktop');
         t.focus(null);
         ask('show desktop');
         t.report(t.shell.activated);
     """)
-    assert answer == [5]
+    assert answer == [8]
+
+
+def test_show_desktop_twice_leaves_the_focus_where_the_person_put_it_meanwhile():
+    """Working in a terminal opened after the desktop was shown, the person
+    keeps the keyboard there when the other windows come back."""
+    answer, _logs = run(ENABLED + FOCUSED + """
+        ask('show desktop');
+        const terminal = new t.Window('org.gnome.Ptyxis', 12);
+        t.shell.workspaceWindows.push(terminal);
+        t.focus(terminal);
+        ask('show desktop');
+        t.report(t.shell.activated);
+    """)
+    assert answer == []
 
 
 def test_show_desktop_twice_doesnt_follow_a_window_moved_to_another_workspace():

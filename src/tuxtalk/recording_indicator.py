@@ -280,12 +280,10 @@ class RecordingIndicator(Gtk.Window):
                 logger.exception("Error showing indicator")
             return False  # Don't repeat
 
-        # Any window appearing, a popup too, ends Cinnamon's "show desktop"
-        # and brings the windows back: saying "show desktop" again found
-        # them back and hid them. Asked on the caller's thread (the
-        # recording's), so an X server slow to answer never holds up GTK's.
-        if x11_desktop.showing_desktop():
-            logger.info("Recording indicator not shown: the desktop is shown")
+        # Asked on the caller's thread (the recording's), so an X server
+        # slow to answer never holds up GTK's.
+        if x11_desktop.popup_ends_show_desktop():
+            logger.info("Recording indicator not shown: it would end show desktop")
             return
         GLib.idle_add(_do_show)
 

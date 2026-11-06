@@ -5,11 +5,12 @@ KDE uses Spectacle in the background. Elsewhere the screenshot portal is
 asked first (GNOME may show its own dialog the first time), then
 gnome-screenshot or xfce4-screenshooter. A portal's picture left in a
 temporary folder (COSMIC's) is moved in with the others. Nothing is
-uploaded or copied anywhere. Programs run with a timeout and no shell, and the log names the
+uploaded. Programs run with a timeout and no shell, and the log names the
 tool, never a path: a path holds the user's name. The wait is on the
 dictation worker, never GTK's thread."""
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
 from datetime import datetime
@@ -197,7 +198,7 @@ def take(beeps_on: bool) -> bool:
     outcome, file = _ask_portal()
     if outcome == "saved":
         # The portal said so; not seeing the file (a sandbox) doesn't change that.
-        return _saved("the portal", _kept(file) if os.path.exists(file) else None, beeps_on)
+        return _saved("the portal", _keep(file) if os.path.exists(file) else None, beeps_on)
     if outcome in ("cancelled", "unconfirmed"):
         logger.info(f"Voice command: take a screenshot ({outcome})")
         command_notices.say("screenshot_cancelled" if outcome == "cancelled"
@@ -210,31 +211,43 @@ def take(beeps_on: bool) -> bool:
 
 
 def _inside(file: str, folder: str) -> bool:
-    """Whether *file* (a real path) lies in *folder*, links resolved."""
+    """Whether *file* (its folder's links resolved) lies in *folder*."""
     return file.startswith(os.path.realpath(folder) + os.sep)
 
 
-def _kept(file: str) -> str:
-    """The folder of the portal's screenshot *file*, once it is somewhere
-    kept: COSMIC's portal answers with a file in /tmp, which is moved into
-    folder() with the others. Not XDG_RUNTIME_DIR: the document portal
-    shows files kept elsewhere there. Where it can't be moved, its own
-    folder."""
-    file = os.path.realpath(file)       # COSMIC's is named //tmp/...
-    kept = (os.path.expanduser("~"), os.path.dirname(folder()))
-    temporary = (tempfile.gettempdir(), "/var/tmp")
-    if any(_inside(file, root) for root in kept) or not any(
-            _inside(file, root) for root in temporary):
-        return os.path.dirname(file)
+def _keep(file: str) -> str:
+    """Keep the portal's screenshot *file* and give the folder it is in.
+    COSMIC's portal answers with a file in /tmp, which is moved into
+    folder() with the others; XDG_RUNTIME_DIR doesn't count, the document
+    portal shows files kept elsewhere there. Only a file of this user's is
+    moved, never a link: another user could have put one in /tmp. A file
+    left where it is keeps its folder as named, links and all."""
+    named = "/" + file.lstrip("/")          # COSMIC's is named //tmp/...
+    where = os.path.dirname(named)
+    real = os.path.join(os.path.realpath(where), os.path.basename(named))
+    kept = tuple(filter(None, (os.path.expanduser("~"), os.path.dirname(folder()),
+                               os.environ.get("XDG_RUNTIME_DIR"))))
+    temporary = (tempfile.gettempdir(), "/tmp", "/var/tmp")
+    if any(_inside(real, root) for root in kept) or not any(
+            _inside(real, root) for root in temporary):
+        return where
+    try:
+        info = os.lstat(real)
+    except OSError as e:
+        logger.warning(f"Screenshot from the portal can't be looked at: {type(e).__name__}")
+        return where
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+        logger.warning("Screenshot left where the portal put it: not a file of this user's")
+        return where
     path = _path_for_tool()
     if path is None:
-        return os.path.dirname(file)
+        return where
     try:
-        shutil.move(file, path)
+        shutil.move(real, path)
     except OSError as e:
         logger.warning(f"Screenshot couldn't be moved out of the portal's folder: "
                        f"{type(e).__name__}")
-        return os.path.dirname(file)
+        return where
     return os.path.dirname(path)
 
 

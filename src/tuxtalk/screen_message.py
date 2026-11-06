@@ -57,7 +57,19 @@ def show(text, center=None):
     """Show *text* centred on *center* (None: the middle of the main screen).
     Safe from any thread; never raises."""
     from gi.repository import GLib
+    if _ends_show_desktop():
+        return
     GLib.idle_add(_show_now, text, center)
+
+
+def _ends_show_desktop():
+    """Whether a label appearing now would end the desktop's "show desktop"
+    (x11_desktop.popup_ends_show_desktop); asked on the caller's thread."""
+    from . import x11_desktop
+    if x11_desktop.popup_ends_show_desktop():
+        logger.info("Not showing a message: it would end show desktop")
+        return True
+    return False
 
 
 def show_over_active_window(text, seconds=None, warning=True, tag=None, low=False):
@@ -70,6 +82,8 @@ def show_over_active_window(text, seconds=None, warning=True, tag=None, low=Fals
     try:
         from gi.repository import GLib
         from . import window_geometry
+        if _ends_show_desktop():
+            return
         GLib.idle_add(_show_over_window_now, text, window_geometry.active_window_report(),
                       seconds, warning, tag, low)
     except Exception as e:      # a notice mustn't break the dictation that gives it

@@ -13,6 +13,9 @@ when it was, and centred at the size it comes back to, read again after a
 moment. The panels' own struts are subtracted too, since the work area
 misses a panel on a monitor smaller than the screen.
 
+popup_ends_show_desktop() tells the recording indicator and the floating
+labels to stay away while Cinnamon shows the desktop.
+
 Answers are the strings desktop_actions turns into a spoken-style note:
 "done", "no_window", "no_desktop", "one_desktop", "one_screen", "edge" and
 "unknown"; None for "overview", which X11 desktops don't have.
@@ -20,7 +23,7 @@ Answers are the strings desktop_actions turns into a spoken-style note:
 import logging
 import time
 
-from . import x11_activate
+from . import desktop_detect, x11_activate
 
 log = logging.getLogger(__name__)
 
@@ -258,10 +261,15 @@ def _to_next_screen(display, window) -> str:
     return "done"
 
 
+def _showing(display) -> bool:
+    """Whether the window manager is showing the desktop instead of the windows."""
+    shown = display.cardinals(display.root, b"_NET_SHOWING_DESKTOP")
+    return bool(shown and shown[0])
+
+
 def _show_desktop(display) -> str:
-    showing = display.cardinals(display.root, b"_NET_SHOWING_DESKTOP")
     display.ask_window_manager(display.root, b"_NET_SHOWING_DESKTOP",
-                               (0 if showing and showing[0] else 1,))
+                               (0 if _showing(display) else 1,))
     return "done"
 
 
@@ -310,21 +318,25 @@ def _on_window(display, action: str, number: int | None) -> str:
     return _desktops(display, action, number, window)
 
 
-def showing_desktop() -> bool:
-    """Whether the window manager is showing the desktop instead of the
-    windows (_NET_SHOWING_DESKTOP). False where nobody says, or on error."""
+def popup_ends_show_desktop() -> bool:
+    """Whether a popup appearing now would end "show desktop": on Cinnamon,
+    any window mapped, an override-redirect one too, ends it and brings the
+    windows back (tried in the Mint VM; KWin, Mutter and xfwm4 keep it). So
+    TuxTalk's indicator and floating labels stay away while the desktop is
+    shown there. False where it can't be told."""
+    if desktop_detect.get_desktop_environment() != "cinnamon":
+        return False
     try:
         display = x11_activate.open_display()
         if display is None:
             return False
         try:
-            shown = display.cardinals(display.root, b"_NET_SHOWING_DESKTOP")
+            return _showing(display)
         finally:
             display.close()
     except OSError as e:
         log.info(f"Couldn't ask whether the desktop is shown: {e}")
         return False
-    return bool(shown and shown[0])
 
 
 def act(action: str, number: int | None):

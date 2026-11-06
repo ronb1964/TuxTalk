@@ -546,7 +546,8 @@ class FakePortal(_BusService):
     done, 1 cancelled, 2 failed, None never answers), and for 0 the *saved*
     result: "file", one it writes in *folder*; "temporary", one it writes in
     *temporary*, outside the home folder, named with a doubled slash as
-    COSMIC's portal names its own in /tmp; "unseen", a file TuxTalk can't
+    COSMIC's portal names its own in /tmp; "link", a link there to another
+    file in *temporary*, as another user could plant; "unseen", a file TuxTalk can't
     see (a sandbox's); "unreadable", a uri that names no local file;
     "malformed", a uri GLib can't read, naming a private folder; "nothing",
     no uri at all. With *replies* off
@@ -582,13 +583,20 @@ class FakePortal(_BusService):
             return
         results = {}
         if self.code == 0 and self.saved != "nothing":
-            folder = self.temporary if self.saved == "temporary" else self._folder
+            elsewhere = self.saved in ("temporary", "link")
+            folder = self.temporary if elsewhere else self._folder
             shot = os.path.join(folder, "Screenshot from the portal.png")
             if self.saved in ("file", "temporary"):
                 os.makedirs(folder, exist_ok=True)
                 with open(shot, "wb") as f:
                     f.write(b"png")
-            if self.saved == "temporary":
+            if self.saved == "link":
+                os.makedirs(folder, exist_ok=True)
+                target = os.path.join(folder, "someone else's.png")
+                with open(target, "wb") as f:
+                    f.write(b"theirs")
+                os.symlink(target, shot)
+            if elsewhere:
                 shot = "/" + shot
             uri = {"unreadable": "https://example.invalid/shot.png",
                    "malformed": "file://%zz/home/private-name/shot.png"}.get(

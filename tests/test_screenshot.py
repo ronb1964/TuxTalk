@@ -77,11 +77,14 @@ def test_gnome_asks_the_portal_and_says_where_it_saved(gnome, fake_portal, tools
     assert tools.commands == []
 
 
+@pytest.mark.parametrize("own_tmpdir", [False, True])
 def test_a_portal_shot_left_in_a_temporary_folder_is_kept_with_the_others(
-        cosmic, fake_portal, tools, home, actions_on, monkeypatch):
+        cosmic, fake_portal, tools, home, actions_on, monkeypatch, own_tmpdir):
     """COSMIC's portal answers with a file in /tmp: TuxTalk said "Screenshot
-    saved in //tmp" (Pop!_OS VM), a folder emptied at the next start."""
-    monkeypatch.setattr(screenshot.tempfile, "gettempdir", lambda: str(fake_portal.temporary))
+    saved in //tmp" (Pop!_OS VM), a folder emptied at the next start. With
+    TuxTalk's own TMPDIR elsewhere (pam_tmpdir), /tmp still counts."""
+    monkeypatch.setattr(screenshot.tempfile, "gettempdir",
+                        lambda: str(home / "tmp") if own_tmpdir else str(fake_portal.temporary))
     fake_portal.saved = "temporary"
     assert screenshot.take(False) is True
     kept = list((home / "Pictures" / "Screenshots").glob("Screenshot_*.png"))
@@ -107,6 +110,26 @@ def test_a_portal_shot_in_a_kept_folder_stays_where_it_is(gnome, fake_portal, to
     fake_portal.saved = "temporary"
     assert screenshot.take(False) is True
     assert [p.name for p in fake_portal.temporary.iterdir()] == ["Screenshot from the portal.png"]
+
+
+def test_a_link_left_in_a_temporary_folder_is_never_moved(cosmic, fake_portal, tools, home,
+                                                          actions_on):
+    """In /tmp another user could plant a link where the portal's file was
+    to be; moving it would bring that user's file in among the pictures."""
+    fake_portal.saved = "link"
+    screenshot.take(False)
+    assert not list((home / "Pictures").glob("**/*.png"))
+    assert (fake_portal.temporary / "Screenshot from the portal.png").is_symlink()
+    assert (fake_portal.temporary / "someone else's.png").read_bytes() == b"theirs"
+
+
+def test_a_pictures_folder_reached_through_a_link_is_named_as_the_user_knows_it(
+        gnome, fake_portal, tools, home, actions_on, tmp_path_factory):
+    """The note said the link's target ("/mnt/data/Pictures"), not ~/Pictures."""
+    elsewhere = tmp_path_factory.mktemp("data-drive")
+    (home / "Pictures").symlink_to(elsewhere)
+    assert screenshot.take(False) is True
+    assert actions_on == ["Screenshot saved in ~/Pictures"]
 
 
 def test_a_portal_answer_with_a_malformed_address_is_unconfirmed_and_logs_no_path(
