@@ -543,7 +543,8 @@ class FakePortal(_BusService):
     with the Response signal on the request path it was given: *code* (0
     done, 1 cancelled, 2 failed, None never answers), and for 0 the *saved*
     result: "file", one it writes in *folder*; "unseen", a file TuxTalk
-    can't see (a sandbox's); "nothing", no uri at all. With *replies* off
+    can't see (a sandbox's); "unreadable", a uri that names no local file;
+    "nothing", no uri at all. With *replies* off
     the method call itself is never answered. *calls* keeps each call's
     options."""
 
@@ -580,7 +581,9 @@ class FakePortal(_BusService):
                 os.makedirs(self._folder, exist_ok=True)
                 with open(shot, "wb") as f:
                     f.write(b"png")
-            results = {"uri": GLib.Variant("s", GLib.filename_to_uri(shot))}
+            uri = ("https://example.invalid/shot.png" if self.saved == "unreadable"
+                   else GLib.filename_to_uri(shot))
+            results = {"uri": GLib.Variant("s", uri)}
         bus.emit_signal(sender, request, "org.freedesktop.portal.Request", "Response",
                         GLib.Variant("(ua{sv})", (self.code, results)))
 

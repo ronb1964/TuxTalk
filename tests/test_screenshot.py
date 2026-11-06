@@ -163,6 +163,15 @@ def test_a_portal_done_without_a_file_is_unconfirmed_and_no_tool_runs(gnome, fak
     assert tools.commands == []
 
 
+def test_a_portal_done_with_a_file_name_it_cant_read_is_unconfirmed(gnome, fake_portal, tools,
+                                                                    home, actions_on):
+    """The portal said done: a picture may be saved, so no tool takes another."""
+    fake_portal.saved = "unreadable"
+    assert screenshot.take(False) is False
+    assert actions_on == ["Screenshot not confirmed"]
+    assert tools.commands == []
+
+
 def test_a_portal_call_that_times_out_is_unconfirmed_and_no_tool_runs(gnome, fake_portal,
                                                                       tools, home, actions_on,
                                                                       monkeypatch):

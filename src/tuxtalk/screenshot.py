@@ -113,7 +113,7 @@ def _ask_portal() -> tuple[str, str]:
     "failed" (the portal answered it couldn't), "unavailable" (no portal, or
     one that refused the call) or "unconfirmed": one may have been saved all
     the same (no answer in PORTAL_WAIT_S, with the request still open for a
-    late Allow; a call that timed out; or done without saying which file).
+    late Allow; a call that timed out; or done without a file it can read).
     The response is waited for on a main context of its own, so GTK's loop
     is never involved."""
     context = GLib.MainContext()
@@ -130,7 +130,9 @@ def _ask_portal() -> tuple[str, str]:
         loop.quit()
 
     def on_error(_error):
-        answer["outcome"] = "failed"
+        # A response came but couldn't be read (a uri naming no local file):
+        # the portal may have saved one, so no tool may take another.
+        answer["outcome"] = "unconfirmed"
         loop.quit()
 
     def out_of_time(*_):
