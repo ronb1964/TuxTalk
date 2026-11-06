@@ -606,15 +606,17 @@ _SCREENSAVER_XML = """<node><interface name="{name}">
 class FakeScreenSaver(_BusService):
     """The screensaver that locks Cinnamon, MATE or Xfce, on the test's
     session bus as *name* (org.cinnamon.ScreenSaver ...); Cinnamon's Lock
-    takes a message, the others' nothing. Lock is kept in *locks* and comes
-    up after *locks_after* GetActive questions (None: never); with
-    *answers* off neither method is ever answered."""
+    takes a message, the others' nothing. It is *active* from the start or
+    not; each Lock is kept in *locks*, and the screensaver comes on
+    *locks_after* GetActive questions later (None: never). Lock is answered
+    only with *replies_to_lock*, as MATE's never is."""
 
     def __init__(self, name):
         self.names = (name,)
-        self.locks, self.looks = [], 0
+        self.active = False
+        self.locks, self._looks_since_lock = [], 0
         self.locks_after = 0
-        self.answers = True
+        self.replies_to_lock = True
         self._unanswered = []
         self._start()
 
@@ -627,16 +629,18 @@ class FakeScreenSaver(_BusService):
         register(path, interface, self._on_call, None, None)
 
     def _on_call(self, _bus, _sender, _path, _interface, method, parameters, invocation):
-        if not self.answers:
-            self._unanswered.append(invocation)     # kept, so GDBus doesn't answer for it
-            return
         if method == "Lock":
             self.locks.append(parameters.unpack())
-            invocation.return_value(None)
+            if self.replies_to_lock:
+                invocation.return_value(None)
+            else:
+                self._unanswered.append(invocation)     # kept, so GDBus doesn't answer for it
             return
-        self.looks += 1
-        up = bool(self.locks) and self.locks_after is not None and self.looks > self.locks_after
-        invocation.return_value(GLib.Variant("(b)", (up,)))
+        if self.locks:
+            self._looks_since_lock += 1
+            if self.locks_after is not None and self._looks_since_lock > self.locks_after:
+                self.active = True
+        invocation.return_value(GLib.Variant("(b)", (self.active,)))
 
 
 @pytest.fixture

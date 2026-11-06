@@ -1,7 +1,13 @@
 """Lock the screen and "what can I say" by voice (system_actions.py). A
-stand-in for loginctl replaces every program run: no test locks the session."""
+stand-in for loginctl replaces every program run, and a stand-in
+screensaver on the test's own session bus answers for Cinnamon, MATE and
+Xfce: no test locks the session."""
 import logging
+import os
+import pwd
 import subprocess
+import time
+import types
 
 import pytest
 
@@ -209,9 +215,86 @@ def test_there_the_screensaver_locks_and_says_so(loginctl, screensaver, desktop,
 @_ON_EACH
 def test_a_lock_the_screensaver_never_shows_is_not_called_locked(
         loginctl, screensaver, desktop, monkeypatch, actions_on, beeped):
+    """MATE and Xfce don't come on for Lock when locking is turned off."""
     set_desktop(monkeypatch, desktop, "x11")
     screensaver.locks_after = None
     system_actions.lock(True, sleep=no_wait)
+    assert beeps.READY_BEEP not in beeped
+    assert actions_on == ["Lock not confirmed"]
+
+
+def _seen_lock(screensaver):
+    """Whether *screensaver* got one Lock. It is sent with no answer
+    awaited, so the stand-in may read it a moment after lock() returns."""
+    end = time.monotonic() + 2
+    while not screensaver.locks and time.monotonic() < end:
+        time.sleep(0.01)
+    return len(screensaver.locks) == 1
+
+
+@_ON_EACH
+def test_a_screensaver_already_on_proves_nothing(loginctl, screensaver, desktop, monkeypatch,
+                                                 actions_on, beeped):
+    """On before the request, its answer can't show the request locked
+    anything: a screen blanked with locking turned off answers the same."""
+    set_desktop(monkeypatch, desktop, "x11")
+    screensaver.active = True
+    system_actions.lock(True, sleep=no_wait)
+    assert _seen_lock(screensaver)
+    assert beeps.READY_BEEP not in beeped
+    assert actions_on == ["Lock not confirmed"]
+
+
+@pytest.mark.parametrize("screensaver", ["org.mate.ScreenSaver"], indirect=True)
+def test_a_lock_request_never_answered_is_still_confirmed_at_once(
+        loginctl, screensaver, monkeypatch, actions_on, beeped):
+    """mate-screensaver never answers Lock: waiting for the answer held
+    every lock up until the call timed out."""
+    set_desktop(monkeypatch, "MATE", "x11")
+    screensaver.replies_to_lock = False
+    screensaver.locks_after = 1
+    started = time.monotonic()
+    system_actions.lock(True, sleep=no_wait)
+    assert time.monotonic() - started < 1
+    assert (beeped, actions_on) == ([beeps.READY_BEEP], [])
+
+
+def _nopasswdlogin_member(monkeypatch, tmp_path):
+    user = pwd.getpwuid(os.getuid()).pw_name
+    monkeypatch.setattr(system_actions.grp, "getgrnam",
+                        lambda name: types.SimpleNamespace(gr_mem=[user]))
+
+
+def _live_session(monkeypatch, tmp_path):
+    cmdline = tmp_path / "cmdline"
+    cmdline.write_text("BOOT_IMAGE=/casper/vmlinuz boot=casper quiet splash\n")
+    monkeypatch.setattr(system_actions, "_KERNEL_COMMAND_LINE", str(cmdline))
+
+
+def _guest_session(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", "/tmp/guest-x1y2z3")
+
+
+def _started_without_locking(monkeypatch, tmp_path):
+    cmdline = tmp_path / "screensaver-cmdline"
+    cmdline.write_bytes(b"/usr/bin/python3\0/usr/bin/cinnamon-screensaver\0--disable-locking\0")
+    monkeypatch.setattr(system_actions, "_PROCESS_COMMAND_LINE", str(cmdline))
+
+
+@pytest.mark.parametrize("no_lock_here", [_nopasswdlogin_member, _live_session, _guest_session,
+                                          _started_without_locking])
+@pytest.mark.parametrize("screensaver", ["org.cinnamon.ScreenSaver"], indirect=True)
+def test_where_cinnamon_only_blanks_the_screen_it_is_not_called_locked(
+        loginctl, screensaver, monkeypatch, tmp_path, actions_on, beeped, no_lock_here):
+    """cinnamon-screensaver comes on for every Lock but locks only for a
+    user who can lock (its user_can_lock): not one who logs in without a
+    password, nor in a live or guest session. The screen there is blank
+    and opens with a key press."""
+    set_desktop(monkeypatch, "X-Cinnamon", "x11")
+    screensaver.locks_after = 0
+    no_lock_here(monkeypatch, tmp_path)
+    system_actions.lock(True, sleep=no_wait)
+    assert _seen_lock(screensaver)
     assert beeps.READY_BEEP not in beeped
     assert actions_on == ["Lock not confirmed"]
 
@@ -225,17 +308,3 @@ def test_without_its_screensaver_the_lock_goes_through_logind(loginctl, desktop,
     assert system_actions.lock(False, sleep=no_wait) is True
     assert loginctl.commands[0][:2] == ["loginctl", "lock-session"]
     assert actions_on == []
-
-
-@pytest.mark.parametrize("screensaver", ["org.cinnamon.ScreenSaver"], indirect=True)
-def test_a_screensaver_that_doesnt_answer_is_not_asked_twice(loginctl, screensaver, monkeypatch,
-                                                             actions_on):
-    """It may still be locking: a second request through logind is no
-    better, and the user is told to check the screen."""
-    set_desktop(monkeypatch, "X-Cinnamon", "x11")
-    monkeypatch.setattr(system_actions, "_LOCK_TIMEOUT_S", 0.2)
-    monkeypatch.setattr(system_actions, "_QUERY_TIMEOUT_S", 0.2)
-    screensaver.answers = False
-    assert system_actions.lock(False, sleep=no_wait) is True
-    assert not [c for c in loginctl.commands if c[1] == "lock-session"]
-    assert actions_on == ["Lock not confirmed"]
