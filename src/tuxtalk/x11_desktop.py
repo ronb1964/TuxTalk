@@ -43,7 +43,8 @@ _SIZED_BY_STATE = (*_MAXIMIZED, b"_NET_WM_STATE_FULLSCREEN")
 _RESTORE_WAIT_S = 0.5
 _RESTORE_LOOK_S = 0.05
 # How long the X server gets to say whether the desktop is shown, and the
-# question still being asked: one at most, however long the server hangs.
+# question still being asked (its thread, and its answer once given): one at
+# most, however long the server hangs.
 _ASK_WAIT_S = 0.5
 _asking = None
 _asking_lock = threading.Lock()
@@ -330,20 +331,21 @@ def popup_ends_show_desktop() -> bool:
     windows back (tried in the Mint VM; KWin, Mutter and xfwm4 keep it). So
     TuxTalk's indicator and floating labels stay away while the desktop is
     shown there. Asked as a recording starts, on the thread that also reads
-    the keys, so an X server that doesn't answer within _ASK_WAIT_S counts as
-    "it would": the key's release and Esc are read all the same."""
+    the keys, and before a label floats: an X server that doesn't answer
+    within _ASK_WAIT_S counts as "it would", so the key's release and Esc
+    are read all the same. A question still running is waited for, not
+    asked again."""
     global _asking
     if desktop_detect.get_desktop_environment() != "cinnamon":
         return False
     with _asking_lock:
-        if _asking is not None and _asking.is_alive():
-            # The last question still hangs: no second one to hang as well.
-            return True
-        answer = []
-        _asking = threading.Thread(target=lambda: answer.append(_desktop_shown()),
-                                   daemon=True, name="show-desktop-question")
-        _asking.start()
-        asking = _asking
+        if _asking is None or not _asking[0].is_alive():
+            answer = []
+            asking = threading.Thread(target=lambda: answer.append(_desktop_shown()),
+                                      daemon=True, name="show-desktop-question")
+            asking.start()
+            _asking = (asking, answer)
+        asking, answer = _asking
     asking.join(_ASK_WAIT_S)
     if not answer:
         log.info("The X server didn't say in time whether the desktop is shown")
@@ -352,7 +354,9 @@ def popup_ends_show_desktop() -> bool:
 
 
 def _desktop_shown() -> bool:
-    """_showing() on a connection of its own; False where it can't be told."""
+    """_showing() on a connection of its own; False where it can't be told.
+    It runs on a thread of its own, so any error is logged here: uncaught,
+    it would only reach stderr, and the log would blame a slow X server."""
     try:
         display = x11_activate.open_display()
         if display is None:
@@ -361,8 +365,8 @@ def _desktop_shown() -> bool:
             return _showing(display)
         finally:
             display.close()
-    except OSError as e:
-        log.info(f"Couldn't ask whether the desktop is shown: {e}")
+    except Exception as e:
+        log.warning(f"Couldn't ask whether the desktop is shown: {type(e).__name__}: {e}")
         return False
 
 

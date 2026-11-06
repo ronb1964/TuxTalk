@@ -224,6 +224,14 @@ def test_desktop_too_is_desktop_two():
     assert P("go to desktop too") == DesktopRequest("desktop", 2)
     assert P("move window to desktop too") == DesktopRequest("to desktop", 2)
 
+
+@pytest.mark.parametrize("said", [
+    "I want to go to desktop too", "move the window to the desktop too", "I like that too",
+    "go to desktop too and stay there", "volume up too", "scroll down too"])
+def test_too_in_a_sentence_stays_words(said):
+    assert P(said) is None
+
+
 def test_every_desktop_action_the_parser_makes_is_listed():
     made = {P(s).action for s in ("snap left", "snap top right", "centre window", "show desktop",
             "show all windows", "next desktop", "previous desktop", "switch to desktop 2",

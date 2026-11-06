@@ -1,6 +1,9 @@
 """Snap, centre, show desktop and desktops on X11 (x11_desktop), against the
 stand-in window manager of desktop_fakes.py: what it is asked is what a
 Cinnamon, Xfce or MATE user would see happen."""
+import threading
+import time
+
 import pytest
 
 from tuxtalk import x11_activate, x11_desktop
@@ -305,9 +308,6 @@ def test_on_cinnamon_an_x_server_that_doesnt_answer_keeps_popups_away_without_wa
     waiting for a server that never answers would leave the key's release
     and Esc unread, and the recording running. Asked again meanwhile, it
     starts no second question that could hang as well."""
-    import threading
-    import time
-    from tuxtalk import x11_activate
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", "X-Cinnamon")
     release = threading.Event()
     asked = []
@@ -320,9 +320,24 @@ def test_on_cinnamon_an_x_server_that_doesnt_answer_keeps_popups_away_without_wa
     started = time.monotonic()
     try:
         assert [x11_desktop.popup_ends_show_desktop() for _ in range(3)] == [True] * 3
-        assert time.monotonic() - started < 2
+        assert time.monotonic() - started < 3
         assert len(asked) == 1
     finally:
         release.set()
-        x11_desktop._asking.join(5)
+        x11_desktop._asking[0].join(5)
     assert x11_desktop.popup_ends_show_desktop() is False      # answered again
+
+
+def test_on_cinnamon_an_error_asking_is_logged_and_shows_the_popups(monkeypatch, caplog):
+    """Uncaught on the question's thread, it reached only stderr, and the log
+    blamed a slow X server while every popup stayed away."""
+    import logging
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "X-Cinnamon")
+
+    def broken():
+        raise ValueError("a bug in the read")
+
+    monkeypatch.setattr(x11_activate, "open_display", broken)
+    with caplog.at_level(logging.INFO):
+        assert x11_desktop.popup_ends_show_desktop() is False
+    assert "ValueError" in caplog.text and "in time" not in caplog.text
