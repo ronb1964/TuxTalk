@@ -725,12 +725,15 @@ def volume_commands(run):
                 ("volume_up_three", "volume up", 60, False),
                 ("mute_sound", "mute", 60, True),
                 ("unmute_sound", "unmute", 60, False)):
-            log, heard = _said(run, phrase_id, f"Voice command: {line} (")
+            # A volume change's log line names the new level, "Voice
+            # command: volume down (45%)"; mute's and unmute's don't.
+            marker = f"Voice command: {line}" + (" (" if line.startswith("volume") else "")
+            log, heard = _said(run, phrase_id, marker)
             if bad := _not_a_command(run, phrase_id, log, heard):
                 return bad
             reached = _until(5, lambda p=percent, m=muted: _close_to(run, p, m))
             typed = run.sink_text().strip()
-            if f"Voice command: {line} (" not in log or typed or not reached:
+            if marker not in log or typed or not reached:
                 return Outcome("fail", f"“{line}”: the output is {_output(run)}, expected "
                                f"{(percent, muted)}; typed {typed[:40]!r}", typed=typed,
                                screenshot=run.shot(phrase_id.replace("_", "-")))
