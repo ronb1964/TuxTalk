@@ -370,7 +370,9 @@ def show_desktop_toggles(run):
             problems.append("no “Voice command: show desktop” in the log")
         if not hidden:
             problems.append("the windows were still showing after “show desktop”")
-        if "Voice command: show desktop" not in log_again or not back:
+        if "Voice command: show desktop" not in log_again:
+            problems.append("said again, no “Voice command: show desktop” in the log")
+        elif not back:
             problems.append("the windows didn't come back when it was said again")
         if problems:
             return Outcome("fail", "; ".join(problems), screenshot=shot)
