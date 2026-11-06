@@ -7,6 +7,8 @@ from collections import namedtuple
 import pytest
 from conftest import import_vm_tool
 
+from tuxtalk import command_phrases
+
 pytest.importorskip("tomllib", reason="the VM harness needs Python 3.11 or newer")
 desktop = import_vm_tool("checks_desktop_commands")
 run = import_vm_tool("run")
@@ -111,12 +113,28 @@ def test_every_desktop_command_phrase_has_its_entry():
     ids = set(desktop.voices.load_phrases())
     used = {c.id for c in run.CHECKS if c.section == desktop.SECTION}
     assert len(used) == 14
-    assert {"snap_left", "snap_top_right", "centre_window", "show_desktop",
-            "switch_desktop_two", "switch_desktop_one", "move_to_desktop_two",
-            "move_to_desktop_one", "other_screen", "show_all_windows", "volume_down",
-            "volume_up_two", "mute_sound", "unmute_sound", "pause_music", "play_music",
-            "next_track", "lock_screen", "take_screenshot", "what_can_i_say",
-            "minimize_text_editor", "restore_text_editor", "bare_pause", "bare_next",
-            "bare_mute", "bare_copy", "sentence_lock_it", "sentence_show_me_desktop",
-            "sentence_volume_loud"} <= ids
+    assert set(COMMANDS) | {"minimize_text_editor", "restore_text_editor"} <= ids
     assert {phrase for phrase, _said in desktop.SENTENCES} <= ids
+
+
+# The phrases the checks say as desktop commands, each worded so the
+# computer voice is heard right ("Snap left." came out "Snap lift.").
+COMMANDS = ("snap_left", "snap_top_right", "centre_window", "show_desktop",
+            "go_to_desktop_two", "go_to_desktop_one", "move_to_desktop_two",
+            "move_to_desktop_one", "other_screen", "show_all_windows", "volume_down",
+            "volume_up_three", "mute_sound", "unmute_sound", "pause_music", "play_music",
+            "next_track", "lock_screen", "take_screenshot", "what_can_i_say")
+
+
+@pytest.mark.parametrize("phrase", COMMANDS)
+def test_each_command_the_checks_say_is_one_tuxtalk_takes(phrase):
+    """A rewording for the computer voice must still be a command, or the
+    check would fail on TuxTalk typing it."""
+    said = desktop.voices.load_phrases()[phrase]["say"]
+    assert command_phrases.parse(said, navigation=False, actions=True) is not None
+
+
+@pytest.mark.parametrize("phrase", [phrase for phrase, _said in desktop.SENTENCES])
+def test_each_sentence_the_checks_say_is_typed_as_words(phrase):
+    said = desktop.voices.load_phrases()[phrase]["say"]
+    assert command_phrases.parse(said, navigation=False, actions=True) is None

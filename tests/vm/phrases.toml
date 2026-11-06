@@ -180,8 +180,9 @@ say = "Switch to decaf."
 say = "He said quote hello close quote."
 
 # Desktop commands by voice (checks_desktop_commands.py).
+# "Snap left." alone was heard as "Snap lift."
 [snap_left]
-say = "Snap left."
+say = "Snap window to the left."
 
 [snap_top_right]
 say = "Snap top right."
@@ -192,11 +193,12 @@ say = "Centre window."
 [show_desktop]
 say = "Show desktop."
 
-[switch_desktop_two]
-say = "Switch to desktop two."
+# "Switch to desktop two." was heard as "Twitch to desktop too."
+[go_to_desktop_two]
+say = "Go to desktop two."
 
-[switch_desktop_one]
-say = "Switch to desktop one."
+[go_to_desktop_one]
+say = "Go to desktop one."
 
 [move_to_desktop_two]
 say = "Move window to desktop two."
@@ -213,8 +215,9 @@ say = "Show all windows."
 [volume_down]
 say = "Volume down."
 
-[volume_up_two]
-say = "Volume up two."
+# "two" at the end was heard as "too".
+[volume_up_three]
+say = "Volume up three."
 
 [mute_sound]
 say = "Mute sound."
@@ -225,8 +228,9 @@ say = "Unmute sound."
 [pause_music]
 say = "Pause music."
 
+# "Play music." alone was heard as Russian.
 [play_music]
-say = "Play music."
+say = "Resume the music."
 
 [next_track]
 say = "Next track."

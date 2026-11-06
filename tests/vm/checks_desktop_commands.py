@@ -1,5 +1,5 @@
 """Desktop voice commands (TuxTalk Labs, the one "Open apps" tickbox): "snap
-left", "centre window", "show desktop", "switch to desktop two", "move
+left", "centre window", "show desktop", "go to desktop two", "move
 window to desktop two", "show all windows", "volume down", "mute sound",
 "pause music", "lock screen", "take a screenshot", "what can I say" and
 "minimize the text editor". Only a real desktop can say whether a window
@@ -457,7 +457,7 @@ def _back_to_first_desktop(run):
     if "kde" in run.vm.spec.tags:
         _kwin_call(run, "/KWin", "org.kde.KWin.setCurrentDesktop", "1")
         return
-    _said(run, "switch_desktop_one", "Voice command: desktop 1")
+    _said(run, "go_to_desktop_one", "Voice command: desktop 1")
     if _current_desktop(run) not in (None, 1):
         _session_tool(run, "sh", "-c", "wmctrl -s 0 || xdotool set_desktop 0")
         time.sleep(1)
@@ -534,20 +534,20 @@ def _desktop_step(run, phrase_id, line, current, on):
     return None, f"{line}: desktop {current} in use, window on {on}"
 
 
-@check(SECTION, "switch_desktops", "“switch to desktop two” and “one” change the desktop")
+@check(SECTION, "switch_desktops", "“go to desktop two” and “one” change the desktop")
 def switch_desktops(run):
     if why := run.window_blind():
         return Outcome("skip", why)
     with _open_apps_on(run):
         if "cosmic" in run.vm.spec.tags:
-            return _refused_with(run, "switch_desktop_two", "cant_desktops_here")
+            return _refused_with(run, "go_to_desktop_two", "cant_desktops_here")
         with _two_desktops(run) as why:
             if why:
                 return Outcome("skip", why)
             run.sink_ready(fresh=True)
             seen = []
-            for phrase_id, line, current in (("switch_desktop_two", "desktop 2", 2),
-                                             ("switch_desktop_one", "desktop 1", 1)):
+            for phrase_id, line, current in (("go_to_desktop_two", "desktop 2", 2),
+                                             ("go_to_desktop_one", "desktop 1", 1)):
                 bad, saw = _desktop_step(run, phrase_id, line, current, 1)
                 if bad:
                     return bad
@@ -570,9 +570,9 @@ def move_window_to_desktop(run):
             seen = []
             for phrase_id, line, current, on in (
                     ("move_to_desktop_two", "to desktop 2", 1, 2),
-                    ("switch_desktop_two", "desktop 2", 2, 2),
+                    ("go_to_desktop_two", "desktop 2", 2, 2),
                     ("move_to_desktop_one", "to desktop 1", 2, 1),
-                    ("switch_desktop_one", "desktop 1", 1, 1)):
+                    ("go_to_desktop_one", "desktop 1", 1, 1)):
                 if phrase_id == "move_to_desktop_one":
                     run.vm.click_centre()       # the window must have the focus to move
                     time.sleep(0.5)
@@ -702,7 +702,7 @@ def _close_to(run, percent, muted):
 
 
 @check(SECTION, "volume_commands",
-       "“volume down”, “volume up two”, “mute sound” and “unmute sound” change the output")
+       "“volume down”, “volume up three”, “mute sound” and “unmute sound” change the output")
 def volume_commands(run):
     with _open_apps_on(run), _output_restored(run) as readable:
         if not readable:
@@ -711,9 +711,9 @@ def volume_commands(run):
         seen = []
         for phrase_id, line, percent, muted in (
                 ("volume_down", "volume down", 45, False),
-                ("volume_up_two", "volume up", 55, False),
-                ("mute_sound", "mute", 55, True),
-                ("unmute_sound", "unmute", 55, False)):
+                ("volume_up_three", "volume up", 60, False),
+                ("mute_sound", "mute", 60, True),
+                ("unmute_sound", "unmute", 60, False)):
             log, heard = _said(run, phrase_id, f"Voice command: {line} (")
             if bad := _not_a_command(run, phrase_id, log, heard):
                 return bad
