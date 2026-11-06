@@ -3,13 +3,12 @@ stand-in for loginctl replaces every program run, and a stand-in
 screensaver on the test's own session bus answers for Cinnamon, MATE and
 Xfce: no test locks the session."""
 import logging
-import os
-import pwd
 import subprocess
 import time
 import types
 
 import pytest
+from gi.repository import GLib
 
 from desktop_fakes import set_desktop
 from tuxtalk import beeps, system_actions, tray_link
@@ -196,6 +195,23 @@ _ON_EACH = pytest.mark.parametrize("desktop, screensaver", SCREENSAVERS,
                                    indirect=["screensaver"])
 
 
+@pytest.fixture(autouse=True)
+def an_ordinary_session(monkeypatch, tmp_path):
+    """Where Cinnamon locks: the user isn't in nopasswdlogin, nor in a live
+    or guest session, and the screensaver wasn't started with
+    --disable-locking, whatever the machine running the tests is."""
+    def no_such_group(name):
+        raise KeyError(name)
+    monkeypatch.setattr(system_actions.grp, "getgrnam", no_such_group)
+    boot = tmp_path / "ordinary-cmdline"
+    boot.write_text("BOOT_IMAGE=/vmlinuz root=UUID=1234 ro quiet splash\n")
+    monkeypatch.setattr(system_actions, "_KERNEL_COMMAND_LINE", str(boot))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    started = tmp_path / "ordinary-screensaver-cmdline"
+    started.write_bytes(b"/usr/bin/python3\0/usr/bin/cinnamon-screensaver\0")
+    monkeypatch.setattr(system_actions, "_PROCESS_COMMAND_LINE", str(started))
+
+
 @_ON_EACH
 def test_there_the_screensaver_locks_and_says_so(loginctl, screensaver, desktop, monkeypatch,
                                                   actions_on, beeped, caplog):
@@ -260,7 +276,7 @@ def test_a_lock_request_never_answered_is_still_confirmed_at_once(
 
 
 def _nopasswdlogin_member(monkeypatch, tmp_path):
-    user = pwd.getpwuid(os.getuid()).pw_name
+    user = GLib.get_user_name()
     monkeypatch.setattr(system_actions.grp, "getgrnam",
                         lambda name: types.SimpleNamespace(gr_mem=[user]))
 

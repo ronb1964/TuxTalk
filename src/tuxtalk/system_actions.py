@@ -13,7 +13,6 @@ timeout and no shell; the wait is on the dictation worker, never GTK's
 thread."""
 import grp
 import os
-import pwd
 import subprocess
 import time
 from collections.abc import Callable
@@ -59,7 +58,7 @@ def _cinnamon_locks_this_user(saver) -> bool:
     a user in the nopasswdlogin group, nor in a live or guest session. It
     comes on for every Lock all the same, so its coming on shows the lock
     only where this holds. What can't be read counts against it."""
-    user = pwd.getpwuid(os.getuid()).pw_name
+    user = GLib.get_user_name()
     try:
         if user in grp.getgrnam("nopasswdlogin").gr_mem:
             return False
@@ -200,7 +199,8 @@ def lock(beeps_on: bool, sleep=time.sleep) -> bool:
     then shows it locked, and otherwise a note saying the lock isn't
     confirmed."""
     saver = _SCREENSAVERS.get(desktop_detect.get_desktop_environment())
-    who, confirmed = "the screensaver", saver and _screensaver_lock(saver, sleep)
+    confirmed = _screensaver_lock(saver, sleep) if saver else None
+    who = "the screensaver"
     if confirmed is None:
         session = session_id()
         if not _ask_to_lock(session):
