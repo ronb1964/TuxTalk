@@ -2,7 +2,8 @@
 Firefox", "close window", "switch to Firefox", "minimize window",
 "maximize window" and "restore window"; and by app name, "minimize Firefox",
 "maximize Firefox" and "restore Firefox" (which also brings a minimized
-window back), with the same app-name rules as "close Firefox".
+window back), with the same app-name rules as "close Firefox" and one more:
+those three act only on an app with a window open, else the words are typed.
 
 Each desktop does it its own way, as for bringing a window forward
 (app_focus): KDE through a KWin script (kwin_windows), GNOME through
@@ -35,6 +36,9 @@ _NOTHING_THERE = frozenset(f"org.freedesktop.DBus.Error.{name}"
                            for name in ("UnknownMethod", "UnknownObject", "UnknownInterface"))
 # The note for an action this desktop can't do; the others change a window's size.
 _CANT = {"close": "cant_close_here", "switch": "cant_switch_here"}
+# Words people say of other things ("Restore the files.", "Maximize the
+# music."): even a full app name counts only for an app with a window open.
+_ONLY_WHEN_OPEN = frozenset({"minimize", "maximize", "restore"})
 
 
 def _cant(action: str) -> str:
@@ -54,7 +58,9 @@ def run(request: WindowRequest, where, beeps_on: bool) -> bool | None:
     # note about another app.
     found = app_match.find(request.app, strict=True)
     if found.partial:
-        found = _open_ones(found)
+        found = _open_ones(found.partial)
+    elif found.kind == "one" and request.action in _ONLY_WHEN_OPEN:
+        found = _open_ones(((found.entry, found.exact),))
     if found.kind == "none":
         # As for "open": a sentence lost is worse than one typed. The log
         # keeps the user's words out.
@@ -67,13 +73,14 @@ def run(request: WindowRequest, where, beeps_on: bool) -> bool | None:
     return _act(request, found.entry, found.exact, where, beeps_on)
 
 
-def _open_ones(found: app_match.Match) -> app_match.Match:
-    """Of the apps that some words of their menu name fit ("close Chrome"),
-    the ones with a window open: "Close Writer." means the LibreOffice
-    Writer that's open, not Fedora Media Writer, and an app that isn't open
-    wasn't meant. Where the desktop can't tell, none are."""
+def _open_ones(candidates: tuple) -> app_match.Match:
+    """Of *candidates*, (entry, exact) for each app the words fit only in
+    part ("close Chrome") or by a name that is also a word ("restore the
+    files"), the ones with a window open: "Close Writer." means the
+    LibreOffice Writer that's open, not Fedora Media Writer, and an app that
+    isn't open wasn't meant. Where the desktop can't tell, none are."""
     try:
-        open_ones = [(entry, exact) for entry, exact in found.partial
+        open_ones = [(entry, exact) for entry, exact in candidates
                      if _ask_desktop(WindowRequest("find"), entry, exact)]
     except Exception as e:      # each desktop fails its own way: none known to be open
         # Once, with no app named: the apps the words fit hint at the words,

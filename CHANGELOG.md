@@ -65,8 +65,8 @@ before 0.15.0, so older entries use that name.
 - The same Labs tickbox now runs your desktop too. Hold your dictation key,
   say it, let go, and nothing is typed. Windows: "snap left", "snap top
   right", "center window", "move window to desktop two", "move window to the
-  other screen", "minimize Firefox", "maximize Firefox", "restore Firefox".
-  Desktops: "show desktop" (again brings the windows back), "show all
+  other screen", "minimize Firefox", "maximize Firefox", "restore Firefox"
+  (for an app that's open: "Restore the files." is typed). Desktops: "show desktop" (again brings the windows back), "show all
   windows", "next desktop", "switch to desktop two". Sound: "volume up",
   "volume down" (add a number for more), "mute sound". Music: "pause music",
   "play music", "next track", "previous track", for the player that is

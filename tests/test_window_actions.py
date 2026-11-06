@@ -373,7 +373,7 @@ def test_no_app_returns_none_with_no_note(kde, apps, actions_on, kwin_calls, cap
 def test_minimize_firefox_on_kde_asks_kwin_for_its_window(kde, apps, kwin_calls, actions_on):
     assert window_actions.run(WindowRequest("minimize", OpenRequest("firefox")),
                               CHAT_WINDOW, False) is True
-    assert kwin_calls == [("minimize", "firefox", frozenset({"firefox"}), False)]
+    assert kwin_calls[-1] == ("minimize", "firefox", frozenset({"firefox"}), False)
     assert actions_on == []
 
 
@@ -381,6 +381,33 @@ def test_minimize_firefox_on_kde_asks_kwin_for_its_window(kde, apps, kwin_calls,
 def test_a_name_that_fits_no_app_is_typed(actions_on, chat, say, kde, apps, said):
     say(said)
     assert [text for text, _ in chat[2]] == [said] and actions_on == []
+
+
+GNOME_FILES = AppEntry("org.gnome.Nautilus.desktop", "Files", "Files", "File Manager",
+                       "nautilus", "")
+GNOME_SETTINGS = AppEntry("org.gnome.Settings.desktop", "Settings", "Settings", "",
+                          "gnome-control-center", "")
+BACKUPS = AppEntry("org.gnome.DejaDup.desktop", "Backups", "Backups", "", "deja-dup", "")
+
+
+@pytest.mark.parametrize("said", ["Restore the files.", "Restore the settings.",
+                                  "Restore the backups.", "Maximize the files."])
+def test_resizing_an_installed_app_with_no_window_is_typed(actions_on, chat, say, kde, apps,
+                                                           open_windows, said):
+    """People restore files and settings: a full app name counts for
+    minimize, maximize and restore only when that app has a window open."""
+    apps[:] = [GNOME_FILES, GNOME_SETTINGS, BACKUPS]
+    say(said)
+    assert [text for text, _ in chat[2]] == [said] and actions_on == []
+    assert open_windows.done == []
+
+
+def test_restore_an_open_app_by_its_name_restores_it(actions_on, chat, say, kde, apps,
+                                                     open_windows):
+    apps[:] = [GNOME_FILES, GNOME_SETTINGS]
+    open_windows.open = {app_focus.desktop_file(GNOME_FILES)}
+    say("Restore the files.")
+    assert chat[2] == [] and open_windows.done == [("restore", "org.gnome.Nautilus")]
 
 
 # --- through the dictation pipeline ---------------------------------------------------------
