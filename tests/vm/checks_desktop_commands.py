@@ -477,15 +477,22 @@ def _back_to_first_desktop(run):
                         "on this VM, and the voice command wasn't heard)")
 
 
+def _gnome_desktop_command(run, action, number):
+    """The TuxTalk extension's answer to DesktopCommand(*action*, *number*),
+    asked directly, as TuxTalk asks it."""
+    return _session_tool(run, "gdbus", "call", "--session", "--dest", "org.gnome.Shell",
+                         "--object-path", "/io/github/ronb1964/TuxTalk/Extension",
+                         "--method", "io.github.ronb1964.TuxTalk.Extension.DesktopCommand",
+                         action, str(number))
+
+
 def _gnome_first_workspace(run):
     """GNOME: the first workspace in use, asked of the TuxTalk extension
-    directly (GNOME tells an app no workspace number). An open test window
-    is on it, so it shows with the focus again once there; Abort when it
-    doesn't, as every later check would run on the wrong workspace."""
-    answer = _session_tool(run, "gdbus", "call", "--session", "--dest", "org.gnome.Shell",
-                           "--object-path", "/io/github/ronb1964/TuxTalk/Extension",
-                           "--method", "io.github.ronb1964.TuxTalk.Extension.DesktopCommand",
-                           "desktop", "1")
+    directly (GNOME tells an app no workspace number), with the test window
+    on it showing with the focus. A check that stopped after moving the
+    window to the second one left it there: it is fetched back. Abort when
+    it doesn't show, as every later check would run on the wrong workspace."""
+    answer = _gnome_desktop_command(run, "desktop", 1)
     if extension_absent(answer):
         return      # no extension, so no command can have switched the workspace
     if _sink(run) is None:
@@ -493,6 +500,14 @@ def _gnome_first_workspace(run):
             return  # switched, with no test window to look at
         raise Abort(f"the first GNOME workspace couldn't be asked for: {answer.strip()[:120]}")
     run.vm.click_centre()
+    if _until(8, lambda: _sink_state(_sink(run)) is None):
+        return
+    _gnome_desktop_command(run, "desktop", 2)
+    run.vm.click_centre()
+    if _until(5, lambda: _sink_state(_sink(run)) is None):
+        _gnome_desktop_command(run, "to desktop", 1)
+        _gnome_desktop_command(run, "desktop", 1)
+        run.vm.click_centre()
     if not _until(8, lambda: _sink_state(_sink(run)) is None):
         raise Abort("the first GNOME workspace could not be brought back: the test window "
                     "doesn't show with the focus")
