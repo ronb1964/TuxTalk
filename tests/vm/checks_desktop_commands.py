@@ -955,12 +955,32 @@ def screenshot_settled(log):
                                         "Voice command not done", "Text injected"))
 
 
+# The portal's permission for unsandboxed apps whose app id it can't tell,
+# TuxTalk included ("Allow Apps to Take Screenshots?"): table, id, app.
+SCREENSHOT_PERMISSION = ("screenshot", "screenshot", "")
+PERMISSION_STORE = ("gdbus", "call", "--session", "--dest", "org.freedesktop.impl.portal."
+                    "PermissionStore", "--object-path", "/org/freedesktop/impl/portal/"
+                    "PermissionStore", "--method")
+
+
+def _allow_screenshots(run):
+    """Answer the screenshot portal's one-time question ahead, as Allow
+    would: GNOME's and COSMIC's dialog held the keyboard for every check
+    after it (the dictation service didn't start again under GNOME's; COSMIC's
+    took "Pause." and kept the test window from the front), and nothing
+    in the VM can click it. Whether the question shows is Ron's check."""
+    table, permission_id, app = SCREENSHOT_PERMISSION
+    _session_tool(run, *PERMISSION_STORE, "org.freedesktop.impl.portal.PermissionStore."
+                  "SetPermission", table, "true", permission_id, repr(app), "['yes']")
+
+
 @check(SECTION, "screenshot_saved", "“take a screenshot” saves exactly one picture")
 def screenshot_saved(run):
     marker = f"~/{REMOTE}/shot.marker"
     folder_existed = not run.vm.ssh(f"test -d {SCREENSHOTS}/Screenshots", check=False).returncode
-    files, allowed = [], False
+    files = []
     with _open_apps_on(run):
+        _allow_screenshots(run)
         run.sink_ready(fresh=True)
         run.vm.ssh(f"touch {marker}")
         try:
@@ -968,10 +988,11 @@ def screenshot_saved(run):
             # One deadline, never moved: TuxTalk's own waits end within it.
             deadline = time.monotonic() + SCREENSHOT_WAIT_S
             while time.monotonic() < deadline and not screenshot_settled(run.log_since(mark)):
-                # GNOME's portal asks once whether TuxTalk may take screenshots.
-                if not allowed and "gnome" in run.vm.spec.tags:
-                    allowed = bool(run.vm.ui("click", "button", "~Allow", timeout=2))
                 time.sleep(1)
+            if not screenshot_settled(run.log_since(mark)):
+                # A question the portal still shows would hold the keyboard
+                # for the checks after this one; Escape closes it.
+                run.vm.tap("esc")
             time.sleep(2)       # a file still being written
             files = _new_screenshots(run, marker)
             log, shot = run.log_since(mark), run.shot("screenshot")
@@ -988,9 +1009,7 @@ def screenshot_saved(run):
         return bad
     if problem := screenshot_problem(files, sizes, log):
         return Outcome("fail", problem, screenshot=shot)
-    return Outcome("pass", "One picture saved and removed again"
-                   + ("; GNOME's permission dialog was answered with Allow" if allowed else ""),
-                   screenshot=shot)
+    return Outcome("pass", "One picture saved and removed again", screenshot=shot)
 
 
 @check(SECTION, "what_can_i_say", "“what can I say” opens the Voice Commands window")
