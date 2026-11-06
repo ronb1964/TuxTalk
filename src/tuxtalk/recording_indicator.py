@@ -19,7 +19,7 @@ import math
 import os
 import time
 
-from . import desktop_detect, indicator_styles, ui_style
+from . import indicator_styles, ui_style
 from .indicator_styles import RadialGain
 from .logger import setup_logger
 
@@ -145,21 +145,6 @@ def settings_in(cfg) -> dict:
             "follow_window": cfg.indicator_follow_window}
 
 
-def window_type():
-    """A popup on COSMIC, an ordinary window elsewhere.
-
-    COSMIC's X11 window manager focuses the indicator when it appears, even
-    though it asks for no focus below (seen on Pop!_OS): the app
-    being dictated into lost the keyboard for the whole recording, and a
-    space typed during it went nowhere. A popup (override-redirect) is never
-    managed, so never focused, as the floating labels in screen_message are.
-    The ordinary window stays where it was proven, on GNOME, KDE and X11.
-    """
-    if desktop_detect.get_desktop_environment() == "cosmic":
-        return Gtk.WindowType.POPUP
-    return Gtk.WindowType.TOPLEVEL
-
-
 class RecordingIndicator(Gtk.Window):
     """Floating recording indicator window with configurable position"""
 
@@ -170,7 +155,15 @@ class RecordingIndicator(Gtk.Window):
         everything and never taking the focus, drawn in *style* at *size*,
         placed at *position* plus the offsets, or near the window being
         dictated into with *follow_window*."""
-        super().__init__(title="TuxTalk Recording", type=window_type())
+        # A popup (override-redirect) window: no window manager manages it,
+        # so it never takes the focus and never counts as a window that
+        # appears. A managed one did both: COSMIC focused it, and the app
+        # being dictated into lost the keyboard for the whole recording; and
+        # with the desktop shown, its appearing ended "show desktop" (KWin
+        # brought the windows back, Cinnamon minimized them), so "show
+        # desktop" said again hid them once more. The floating labels in
+        # screen_message are popups for the same reason.
+        super().__init__(title="TuxTalk Recording", type=Gtk.WindowType.POPUP)
         # TuxTalk Labs: show near the bottom of the window being dictated
         # into, instead of the fixed position (_follow_target).
         self.follow_window = follow_window
@@ -199,15 +192,11 @@ class RecordingIndicator(Gtk.Window):
 
         self.scale = _scale_for_size(size)
 
-        # Window setup - transparent, always on top, no decorations
-        self.set_decorated(False)
-        self.set_keep_above(True)
-        self.set_accept_focus(False)
+        # Unmanaged, it stays above and out of the taskbar with no hints for
+        # a window manager; the type has the compositor draw it as a tooltip,
+        # with no window shadow or animation.
         self.set_can_focus(False)
-        self.set_focus_on_map(False)
-        self.set_type_hint(Gdk.WindowTypeHint.TOOLTIP)  # stays above, never takes focus
-        self.set_skip_taskbar_hint(True)
-        self.set_skip_pager_hint(True)
+        self.set_type_hint(Gdk.WindowTypeHint.TOOLTIP)
         # Room for the orb, its satellites at full extension and the timer
         self.set_default_size(int(BASE_WIDTH * self.scale), int(BASE_HEIGHT * self.scale))
 

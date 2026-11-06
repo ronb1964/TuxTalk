@@ -146,16 +146,19 @@ def test_the_settings_change_on_the_gtk_thread_only(indicator, monkeypatch):
         pytest.approx(1.4), int(15 * 1.4), "top-left", "bars")
 
 
-@pytest.mark.parametrize("desktop, popup", [("COSMIC", True), ("KDE", False), ("GNOME", False)])
-def test_the_indicator_never_takes_the_focus_on_cosmic(monkeypatch, desktop, popup):
-    """COSMIC focused the ordinary indicator window, and the dictation's
-    target lost the keyboard while it showed (Pop!_OS VM)."""
+@pytest.mark.parametrize("desktop", ["KDE", "X-Cinnamon", "GNOME", "COSMIC", "XFCE"])
+def test_the_indicator_is_never_a_window_the_desktop_manages(monkeypatch, desktop):
+    """A window the desktop manages appearing while the desktop is shown
+    ends "show desktop" (KWin brings the windows back, Cinnamon minimizes
+    them), so saying "show desktop" again hid them once more (KDE and Mint
+    VMs); COSMIC also focused it and the dictation's target lost the
+    keyboard (Pop!_OS VM). A popup is never managed."""
     from gi.repository import Gtk
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
     monkeypatch.delenv("DESKTOP_SESSION", raising=False)
     ind = RecordingIndicator(position="center", size="medium")
     try:
-        assert (ind.get_property("type") == Gtk.WindowType.POPUP) is popup
+        assert ind.get_property("type") == Gtk.WindowType.POPUP
     finally:
         ind.destroy()
 
