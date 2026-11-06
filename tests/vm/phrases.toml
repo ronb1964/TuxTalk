@@ -178,3 +178,92 @@ say = "Switch to decaf."
 
 [sentence_close_quote]
 say = "He said quote hello close quote."
+
+# Desktop commands by voice (checks_desktop_commands.py).
+[snap_left]
+say = "Snap left."
+
+[snap_top_right]
+say = "Snap top right."
+
+[centre_window]
+say = "Centre window."
+
+[show_desktop]
+say = "Show desktop."
+
+[switch_desktop_two]
+say = "Switch to desktop two."
+
+[switch_desktop_one]
+say = "Switch to desktop one."
+
+[move_to_desktop_two]
+say = "Move window to desktop two."
+
+[move_to_desktop_one]
+say = "Move window to desktop one."
+
+[other_screen]
+say = "Move window to the other screen."
+
+[show_all_windows]
+say = "Show all windows."
+
+[volume_down]
+say = "Volume down."
+
+[volume_up_two]
+say = "Volume up two."
+
+[mute_sound]
+say = "Mute sound."
+
+[unmute_sound]
+say = "Unmute sound."
+
+[pause_music]
+say = "Pause music."
+
+[play_music]
+say = "Play music."
+
+[next_track]
+say = "Next track."
+
+[lock_screen]
+say = "Lock screen."
+
+[take_screenshot]
+say = "Take a screenshot."
+
+[what_can_i_say]
+say = "What can I say?"
+
+[minimize_text_editor]
+say = "Minimize the text editor."
+
+[restore_text_editor]
+say = "Restore the text editor."
+
+# One word, or a sentence that starts like a command: typed as words.
+[bare_pause]
+say = "Pause."
+
+[bare_next]
+say = "Next."
+
+[bare_mute]
+say = "Mute."
+
+[bare_copy]
+say = "Copy."
+
+[sentence_lock_it]
+say = "Lock it."
+
+[sentence_show_me_desktop]
+say = "Show me the desktop."
+
+[sentence_volume_loud]
+say = "Volume is too loud."

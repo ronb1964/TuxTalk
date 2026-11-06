@@ -1,0 +1,987 @@
+"""Desktop voice commands (TuxTalk Labs, the one "Open apps" tickbox): "snap
+left", "centre window", "show desktop", "switch to desktop two", "move
+window to desktop two", "show all windows", "volume down", "mute sound",
+"pause music", "lock screen", "take a screenshot", "what can I say" and
+"minimize the text editor". Only a real desktop can say whether a window
+landed where it was told, a desktop was reached, the volume moved, a lock
+screen came up or a screenshot was saved.
+
+Each check judges an effect it can see (the window's size and place, KWin's
+or the X server's own answer, the sound server's volume, the pretend
+player's calls, logind's LockedHint, a new file) and never the absence of
+one. A desktop that can't do a command says so with a note in the log:
+COSMIC can't place windows or switch desktops, X11 desktops have no overview,
+a one-screen VM has no other screen. Those are checked as the note, and
+GNOME without the TuxTalk extension (which can't tell which window has the
+focus) is skipped until the extension is there (checks_extension.AGAIN).
+What the VM can't judge is Ron's part: how the commands feel on his own
+desktop and screens.
+"""
+import contextlib
+import json
+import re
+import time
+from collections import namedtuple
+
+import voices
+from checks_open_apps import opened_by_voice
+from checks_send import PLAYER_LOG
+from checks_type_at_pause import _say_with_pauses
+from checks_voice_actions import (
+    _action_blocker, _kwin_windows, _no_editor, _open_apps_on, _sink, _sink_state, _until,
+    _wayland)
+from harness import Abort, Outcome, check, heard_in, squash
+from vmlib import REMOTE
+
+SECTION = "Desktop commands by voice"
+SINK = "TT Sink"
+# What the lock screen's check needs from each desktop: these desktops' lockers
+# tell logind they locked (the same list TuxTalk trusts without the flag).
+LOCK_ANSWERS = ("kde", "gnome", "cinnamon")
+SCREENSHOTS = "~/Pictures"
+
+# A window's place: x and y are None where the desktop doesn't tell an app.
+Box = namedtuple("Box", "x y width height")
+
+
+def parse_numbers(text, pattern):
+    """The first group of *pattern* in *text* as an int, None when it isn't there."""
+    found = re.search(pattern, text or "")
+    return int(found.group(1)) if found else None
+
+
+def within(value, total, low, high):
+    """Whether *value* is between *low* and *high* of *total*."""
+    return low <= value / total <= high
+
+
+def parse_x11_desktops(text):
+    """{window name: desktop number from 1} of `xprop -id ... _NET_WM_NAME
+    _NET_WM_DESKTOP` blocks run one after the other. A window on all
+    desktops (0xFFFFFFFF) is left out."""
+    found, name = {}, None
+    for line in text.splitlines():
+        if line.startswith("_NET_WM_NAME"):
+            name = line.partition("=")[2].strip().strip('"')
+        elif line.startswith("_NET_WM_DESKTOP") and name is not None:
+            number = parse_numbers(line, r"=\s*(\d+)")
+            if number is not None and number < 0xFFFF:
+                found[name] = number + 1
+            name = None
+    return found
+
+
+def parse_output_volume(volume, muted=None):
+    """(percent, muted) from `wpctl get-volume` ("Volume: 0.50 [MUTED]"), or
+    from `pactl get-sink-volume` and `pactl get-sink-mute` ("... / 50% / ...",
+    "Mute: yes") when *muted* is given. None when it isn't readable."""
+    if muted is None:
+        found = re.search(r"Volume:\s*([\d.]+)", volume)
+        return (round(float(found[1]) * 100), "[MUTED]" in volume) if found else None
+    found = re.search(r"/\s*(\d+)%\s*/", volume)
+    return (int(found[1]), "yes" in muted) if found else None
+
+
+# --- what the checks read and say ---------------------------------------------
+
+
+def _said(run, phrase_id, *done, timeout=30):
+    """Say *phrase_id*, wait for the log to show one of *done*, a refusal or
+    the words typed instead, and give (the log since, what Parakeet heard).
+    The window in front is the caller's business."""
+    _typed, _heard, mark = run.say(phrase_id, wait=False)
+    run.wait_log(mark, *done, "Voice command not done", "Text injected", timeout=timeout)
+    time.sleep(1.5)
+    log = run.log_since(mark)
+    return log, heard_in(log)
+
+
+def _not_a_command(run, phrase_id, log, heard):
+    """An Outcome when *log* shows no voice command for *phrase_id* at all:
+    "misheard" when Parakeet heard other words (the computer voice's fault),
+    else a fail. None when a command was heard, done or not."""
+    if "Voice command" in log:
+        return None
+    said = voices.load_phrases()[phrase_id]["say"]
+    typed = run.sink_text().strip()
+    if heard is not None and squash(heard) != squash(said):
+        return Outcome("misheard", f"the computer voice's “{said}” was heard as another "
+                       "sentence", typed=typed, heard=heard)
+    return Outcome("fail", f"“{said}” was heard but not taken as a command", typed=typed,
+                   heard=heard)
+
+
+def _refused_with(run, phrase_id, note):
+    """The Outcome of *phrase_id* said where the desktop can't do it: the
+    log must hold the note *note* and nothing may be typed."""
+    run.sink_ready(fresh=True)
+    log, heard = _said(run, phrase_id, f"Voice command not done: {note}")
+    if bad := _not_a_command(run, phrase_id, log, heard):
+        return bad
+    typed = run.sink_text().strip()
+    shot = run.shot(f"{phrase_id}-note")
+    if f"Voice command not done: {note}" not in log or typed:
+        return Outcome("fail", f"expected the note “{note}” and nothing typed", typed=typed,
+                       screenshot=shot)
+    return Outcome("pass", f"This desktop can't do it, and TuxTalk said so (“{note}”); "
+                   "nothing was typed", screenshot=shot)
+
+
+def _session_tool(run, *command):
+    """The standard output of *command* run inside the desktop session."""
+    return run.vm.session(*command, check=False).stdout
+
+
+# --- where windows are -------------------------------------------------------
+
+
+def _sink_box(run):
+    """The test window's Box: KWin's own on KDE (Wayland tells an app nothing
+    of where its window is), else AT-SPI's, whose place is only known on X11.
+    None when no size can be read."""
+    if found := _kwin_windows(run, SINK):
+        x, y, width, height = found[0]["geometry"]
+        return Box(x, y, width, height)
+    window = _sink(run)
+    if not window or not window.get("size") or not all(window["size"]):
+        return None
+    x, y = window["position"] if "x11" in run.vm.spec.tags and window.get("position") \
+        else (None, None)
+    return Box(x, y, *window["size"])
+
+
+def _focus_sink(run):
+    """Give the test window the focus again after a command moved it, with a
+    click inside the window itself: the middle of the screen can lie outside
+    a snapped window. Where the window's place isn't known nothing is done."""
+    window = _sink(run)
+    if window is None or "active" in window["states"]:
+        return
+    box = _sink_box(run)
+    if box and box.x is not None:
+        run.vm.click(box.x + box.width // 2, box.y + box.height // 2)
+        time.sleep(0.5)
+
+
+def _grown_to(run, fits):
+    """The test window's Box once *fits*(box) holds, within 8 seconds."""
+    return _until(8, lambda: (box := _sink_box(run)) and fits(box) and box)
+
+
+def _snap_step(run, phrase_id, line, wide, tall):
+    """Say a snap and wait for the test window to reach the width and height
+    ratios *wide* and *tall* (low, high) of the screen. (Outcome that stops
+    the check or None, what it saw)."""
+    spec = run.vm.spec
+    log, heard = _said(run, phrase_id, f"Voice command: {line}")
+    if bad := _not_a_command(run, phrase_id, log, heard):
+        return bad, None
+    box = _grown_to(run, lambda b: within(b.width, spec.width, *wide)
+                    and within(b.height, spec.height, *tall))
+    typed = run.sink_text().strip()
+    now = _sink_box(run)
+    shot = run.shot(phrase_id.replace("_", "-"))
+    done = f"Voice command: {line}" in log
+    if not done or typed or not box:
+        size = f"{now.width} x {now.height}" if now else "unknown"
+        return Outcome("fail", f"“{line}”: the window is {size} px on a {spec.width} x "
+                       f"{spec.height} screen; typed {typed[:40]!r}; log: "
+                       f"{'done' if done else 'not done'}", typed=typed,
+                       screenshot=shot), None
+    return None, f"{line}: {box.width} x {box.height}"
+
+
+def _centred(box, spec):
+    """Whether *box* sits in the middle of the screen, panels allowed for."""
+    middle_x, middle_y = box.x + box.width / 2, box.y + box.height / 2
+    return abs(middle_x - spec.width / 2) <= 0.08 * spec.width \
+        and abs(middle_y - spec.height / 2) <= 0.12 * spec.height
+
+
+def _centre_step(run, kept):
+    """Say "centre window" and judge the result: the size is the *kept* Box's
+    and, where the desktop tells the window's place, it is in the middle.
+    (Outcome that stops the check or None, what it saw)."""
+    spec = run.vm.spec
+    log, heard = _said(run, "centre_window", "Voice command: center")
+    if bad := _not_a_command(run, "centre_window", log, heard):
+        return bad, None
+    placed = kept.x is not None
+
+    def fits(box):
+        same = abs(box.width - kept.width) <= 0.05 * kept.width \
+            and abs(box.height - kept.height) <= 0.05 * kept.height
+        return same and (not placed or _centred(box, spec))
+    box = _grown_to(run, fits)
+    now = _sink_box(run)
+    shot = run.shot("centre-window")
+    if "Voice command: center" not in log or not box:
+        return Outcome("fail", f"“centre window”: the window was {kept} and is now {now}",
+                       screenshot=shot), None
+    return None, ("center: size kept, in the middle" if placed else
+                  "center: size kept (its place can't be read on this desktop)")
+
+
+@check(SECTION, "snap_and_centre", "“snap left”, “snap top right” and “centre window” place the window")
+def snap_and_centre(run):
+    if why := run.window_blind():
+        return Outcome("skip", why)
+    with _open_apps_on(run):
+        if "cosmic" in run.vm.spec.tags:
+            return _refused_with(run, "snap_left", "cant_place_here")
+        run.sink_ready(fresh=True)
+        if _sink_box(run) is None:
+            return Outcome("skip", "this desktop reports no window sizes through AT-SPI")
+        seen = []
+        for phrase_id, line, wide, tall in (("snap_left", "snap left", (0.4, 0.6), (0.8, 1.02)),
+                                            ("snap_top_right", "snap top right", (0.4, 0.6),
+                                             (0.35, 0.6))):
+            _focus_sink(run)
+            bad, saw = _snap_step(run, phrase_id, line, wide, tall)
+            if bad:
+                return bad
+            seen.append(saw)
+        _focus_sink(run)
+        bad, saw = _centre_step(run, _sink_box(run))
+        if bad:
+            return bad
+        return Outcome("pass", "; ".join([*seen, saw]) + "; nothing typed")
+
+
+# --- the desktop itself: show it, switch desktops --------------------------------
+
+GDBUS_KWIN = ("gdbus", "call", "--session", "--dest", "org.kde.KWin", "--object-path")
+KWIN_MANAGER = "org.kde.KWin.VirtualDesktopManager"
+UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+
+
+def _kwin_call(run, path, method, *args):
+    """KWin's answer to *method* of *path*, as gdbus prints it."""
+    return _session_tool(run, *GDBUS_KWIN, path, "--method", method, *args)
+
+
+def _x11_root(run, atom):
+    """The number xprop reads from the X root window's *atom*, None when not."""
+    return parse_numbers(_session_tool(run, "xprop", "-root", atom), r"=\s*(\d+)")
+
+
+def _windows_hidden(run):
+    """Whether the desktop is shown instead of the windows: KDE's
+    showingDesktop, X11's _NET_SHOWING_DESKTOP, else the test window not
+    showing with the focus (the most GNOME's Wayland tells an app)."""
+    tags = run.vm.spec.tags
+    if "kde" in tags:
+        answer = _kwin_call(run, "/KWin", "org.freedesktop.DBus.Properties.Get",
+                            "org.kde.KWin", "showingDesktop")
+        return "true" in answer
+    if "x11" in tags:
+        return bool(_x11_root(run, "_NET_SHOWING_DESKTOP"))
+    return bool(_sink_state(_sink(run)))
+
+
+def _show_desktop_again(run):
+    """Put the windows back: KDE directly, elsewhere with the same voice
+    command."""
+    if "kde" in run.vm.spec.tags:
+        _kwin_call(run, "/KWin", "org.kde.KWin.showDesktop", "false")
+    else:
+        _said(run, "show_desktop", "Voice command: show desktop")
+
+
+@check(SECTION, "show_desktop_toggles", "“show desktop” hides the windows, said again brings them back")
+def show_desktop_toggles(run):
+    if why := run.window_blind():
+        return Outcome("skip", why)
+    with _open_apps_on(run):
+        if "cosmic" in run.vm.spec.tags:
+            return _refused_with(run, "show_desktop", "cant_desktops_here")
+        run.sink_ready(fresh=True)
+        if _windows_hidden(run):
+            return Outcome("skip", "the desktop was already shown before the check began")
+        try:
+            log, heard = _said(run, "show_desktop", "Voice command: show desktop")
+            if bad := _not_a_command(run, "show_desktop", log, heard):
+                return bad
+            hidden = _until(8, lambda: _windows_hidden(run))
+            shot = run.shot("show-desktop")
+            log_again, _heard = _said(run, "show_desktop", "Voice command: show desktop")
+            back = _until(8, lambda: not _windows_hidden(run))
+        finally:
+            if _windows_hidden(run):
+                _show_desktop_again(run)
+        problems = []
+        if "Voice command: show desktop" not in log:
+            problems.append("no “Voice command: show desktop” in the log")
+        if not hidden:
+            problems.append("the windows were still showing after “show desktop”")
+        if "Voice command: show desktop" not in log_again or not back:
+            problems.append("the windows didn't come back when it was said again")
+        if problems:
+            return Outcome("fail", "; ".join(problems), screenshot=shot)
+        return Outcome("pass", "The windows were hidden, then back after saying it again",
+                       screenshot=shot)
+
+
+def _current_desktop(run):
+    """The number from 1 of the desktop in use on KDE and X11; None on GNOME,
+    where an app can't ask."""
+    tags = run.vm.spec.tags
+    if "kde" in tags:
+        return parse_numbers(_kwin_call(run, "/KWin", "org.kde.KWin.currentDesktop"),
+                             r"\((\d+),")
+    if "x11" in tags:
+        index = _x11_root(run, "_NET_CURRENT_DESKTOP")
+        return None if index is None else index + 1
+    return None
+
+
+def _desktop_count(run):
+    """How many desktops there are (KDE, X11); None on GNOME, which always
+    keeps an empty one beyond the last in use."""
+    if "kde" in run.vm.spec.tags:
+        return parse_numbers(_kwin_call(run, "/VirtualDesktopManager",
+                                        "org.freedesktop.DBus.Properties.Get", KWIN_MANAGER,
+                                        "count"), r"uint32 (\d+)")
+    if "x11" in run.vm.spec.tags:
+        return _x11_root(run, "_NET_NUMBER_OF_DESKTOPS")
+    return None
+
+
+def _kwin_desktop_ids(run):
+    """The ids of KDE's virtual desktops."""
+    return set(re.findall(UUID, _kwin_call(run, "/VirtualDesktopManager",
+                                           "org.freedesktop.DBus.Properties.Get",
+                                           KWIN_MANAGER, "desktops")))
+
+
+@contextlib.contextmanager
+def _two_desktops(run):
+    """Yields None once there are two desktops and the first is in use, else
+    the reason why not (a str). KDE gets a second desktop made for the
+    block, which is removed afterwards; X11 desktops can't be added from
+    here. Afterwards the first desktop is in use again."""
+    made = None
+    count = _desktop_count(run)
+    if count == 1 and "kde" in run.vm.spec.tags:
+        before = _kwin_desktop_ids(run)
+        _kwin_call(run, "/VirtualDesktopManager", f"{KWIN_MANAGER}.createDesktop", "1",
+                   "'TT Two'")
+        time.sleep(1)
+        made = next(iter(_kwin_desktop_ids(run) - before), None)
+        count = _desktop_count(run)
+    try:
+        if count is None and "gnome" not in run.vm.spec.tags:
+            yield "the number of desktops couldn't be read"
+        elif count is not None and count < 2:
+            yield "this desktop has one desktop and none can be added from here"
+        else:
+            if _current_desktop(run) not in (None, 1):
+                _kwin_call(run, "/KWin", "org.kde.KWin.setCurrentDesktop", "1")
+            yield None
+    finally:
+        _back_to_first_desktop(run)
+        if made:
+            _kwin_call(run, "/VirtualDesktopManager", f"{KWIN_MANAGER}.removeDesktop", f"'{made}'")
+
+
+def _back_to_first_desktop(run):
+    """The first desktop in use again: KDE directly, X11 by voice, as the
+    window manager is only asked through TuxTalk here."""
+    if _current_desktop(run) in (None, 1):
+        return
+    if "kde" in run.vm.spec.tags:
+        _kwin_call(run, "/KWin", "org.kde.KWin.setCurrentDesktop", "1")
+    else:
+        _said(run, "switch_desktop_one", "Voice command: desktop 1")
+
+
+def _sink_desktop(run):
+    """The number from 1 of the desktop the test window is on: KWin's answer
+    on KDE, the window manager's on X11; None on GNOME."""
+    tags = run.vm.spec.tags
+    if "kde" in tags:
+        found = _kwin_windows(run, SINK)
+        return found[0]["desktop"] if found else None
+    if "x11" in tags:
+        script = ('for id in $(xprop -root _NET_CLIENT_LIST | grep -o "0x[0-9a-fA-F]*"); do '
+                  'xprop -id "$id" _NET_WM_NAME _NET_WM_DESKTOP; done')
+        return parse_x11_desktops(_session_tool(run, "sh", "-c", script)).get(SINK)
+    return None
+
+
+def _arranged(run, current, on):
+    """Whether the desktop in use is *current* and the test window is on
+    desktop *on*. On GNOME, which tells an app neither, the window being the
+    active one stands for "it is on the desktop in use"."""
+    now = _current_desktop(run)
+    if now is None:
+        active = "active" in ((_sink(run) or {}).get("states") or [])
+        return active == (current == on)
+    return now == current and _sink_desktop(run) == on
+
+
+def _desktop_step(run, phrase_id, line, current, on):
+    """Say *phrase_id* and wait for desktop *current* in use with the test
+    window on *on*. (Outcome that stops the check or None, what it saw)."""
+    log, heard = _said(run, phrase_id, f"Voice command: {line}")
+    if bad := _not_a_command(run, phrase_id, log, heard):
+        return bad, None
+    reached = _until(8, lambda: _arranged(run, current, on))
+    typed = run.sink_text().strip()
+    shot = run.shot(phrase_id.replace("_", "-"))
+    done = f"Voice command: {line}" in log
+    if not done or typed or not reached:
+        return Outcome("fail", f"“{line}”: desktop {_current_desktop(run)} in use, the window "
+                       f"on {_sink_desktop(run)}, expected {current} and {on}; typed "
+                       f"{typed[:40]!r}; log: {'done' if done else 'not done'}",
+                       typed=typed, screenshot=shot), None
+    return None, f"{line}: desktop {current} in use, window on {on}"
+
+
+@check(SECTION, "switch_desktops", "“switch to desktop two” and “one” change the desktop")
+def switch_desktops(run):
+    if why := run.window_blind():
+        return Outcome("skip", why)
+    with _open_apps_on(run):
+        if "cosmic" in run.vm.spec.tags:
+            return _refused_with(run, "switch_desktop_two", "cant_desktops_here")
+        with _two_desktops(run) as why:
+            if why:
+                return Outcome("skip", why)
+            run.sink_ready(fresh=True)
+            seen = []
+            for phrase_id, line, current in (("switch_desktop_two", "desktop 2", 2),
+                                             ("switch_desktop_one", "desktop 1", 1)):
+                bad, saw = _desktop_step(run, phrase_id, line, current, 1)
+                if bad:
+                    return bad
+                seen.append(saw)
+            return Outcome("pass", "; ".join(seen) + "; nothing typed")
+
+
+@check(SECTION, "move_window_to_desktop", "“move window to desktop two” sends the window there and back")
+def move_window_to_desktop(run):
+    if why := run.window_blind():
+        return Outcome("skip", why)
+    with _open_apps_on(run):
+        if "cosmic" in run.vm.spec.tags:
+            return _refused_with(run, "move_to_desktop_two", "cant_place_here")
+        with _two_desktops(run) as why:
+            if why:
+                return Outcome("skip", why)
+            run.sink_ready(fresh=True)
+            seen = []
+            for phrase_id, line, current, on in (
+                    ("move_to_desktop_two", "to desktop 2", 1, 2),
+                    ("switch_desktop_two", "desktop 2", 2, 2),
+                    ("move_to_desktop_one", "to desktop 1", 2, 1),
+                    ("switch_desktop_one", "desktop 1", 1, 1)):
+                if phrase_id == "move_to_desktop_one":
+                    run.vm.click_centre()       # the window must have the focus to move
+                    time.sleep(0.5)
+                bad, saw = _desktop_step(run, phrase_id, line, current, on)
+                if bad:
+                    return bad
+                seen.append(saw)
+            return Outcome("pass", "; ".join(seen) + "; nothing typed")
+
+
+@check(SECTION, "one_screen_note", "“move window to the other screen” on one screen says so")
+def one_screen_note(run):
+    if why := run.window_blind():
+        return Outcome("skip", why)
+    with _open_apps_on(run):
+        if "cosmic" in run.vm.spec.tags:
+            return _refused_with(run, "other_screen", "cant_place_here")
+        run.sink_ready(fresh=True)
+        log, heard = _said(run, "other_screen", "Voice command: to next screen",
+                           "Voice command not done: one_screen")
+        if bad := _not_a_command(run, "other_screen", log, heard):
+            return bad
+        typed = run.sink_text().strip()
+        shot = run.shot("one-screen")
+        if "Voice command: to next screen" in log:
+            return Outcome("skip", "this VM has more than one screen; the window was moved",
+                           screenshot=shot)
+        if "Voice command not done: one_screen" not in log or typed:
+            return Outcome("fail", "expected the note “one_screen” and nothing typed",
+                           typed=typed, screenshot=shot)
+        return Outcome("pass", "TuxTalk said there is only one screen; nothing was typed",
+                       screenshot=shot)
+
+
+@check(SECTION, "overview", "“show all windows” opens the overview (not on X11 or COSMIC)")
+def overview(run):
+    if why := run.window_blind():
+        return Outcome("skip", why)
+    with _open_apps_on(run):
+        if "cosmic" in run.vm.spec.tags or "x11" in run.vm.spec.tags:
+            return _refused_with(run, "show_all_windows", "no_overview_here")
+        run.sink_ready(fresh=True)
+        log, heard = _said(run, "show_all_windows", "Voice command: overview")
+        if bad := _not_a_command(run, "show_all_windows", log, heard):
+            return bad
+        time.sleep(1)
+        shot = run.shot("overview")
+        run.vm.tap("esc")
+        time.sleep(1)
+        typed = run.sink_text().strip()
+        if "Voice command: overview" not in log or typed:
+            return Outcome("fail", "expected “Voice command: overview” and nothing typed",
+                           typed=typed, screenshot=shot)
+        return Outcome("pass", "TuxTalk opened the overview (the screenshot shows it); Esc "
+                       "closed it", screenshot=shot)
+
+
+# --- sound and music ---------------------------------------------------------
+
+
+def _has(run, program):
+    """Whether *program* is installed on the VM."""
+    return not run.vm.ssh(f"command -v {program}", check=False).returncode
+
+
+def _output(run):
+    """(percent, muted) of the default output, read as TuxTalk reads it (wpctl,
+    else pactl), None when neither can say."""
+    if _has(run, "wpctl"):
+        return parse_output_volume(
+            run.vm.ssh("wpctl get-volume @DEFAULT_AUDIO_SINK@", check=False).stdout)
+    return parse_output_volume(
+        run.vm.ssh("pactl get-sink-volume @DEFAULT_SINK@", check=False).stdout,
+        run.vm.ssh("pactl get-sink-mute @DEFAULT_SINK@", check=False).stdout)
+
+
+def _set_output(run, percent, muted):
+    """Set the default output's volume and mute."""
+    if _has(run, "wpctl"):
+        run.vm.ssh(f"wpctl set-volume @DEFAULT_AUDIO_SINK@ {percent / 100:.2f} && "
+                   f"wpctl set-mute @DEFAULT_AUDIO_SINK@ {int(muted)}", check=False)
+    else:
+        run.vm.ssh(f"pactl set-sink-volume @DEFAULT_SINK@ {percent}% && "
+                   f"pactl set-sink-mute @DEFAULT_SINK@ {int(muted)}", check=False)
+
+
+@contextlib.contextmanager
+def _output_restored(run):
+    """The default output at 50 percent and not muted for the block, as it was
+    afterwards. Yields False when its volume can't be read."""
+    start = _output(run)
+    if start is None:
+        yield False
+        return
+    _set_output(run, 50, False)
+    try:
+        yield True
+    finally:
+        _set_output(run, *start)
+
+
+def _close_to(run, percent, muted):
+    """Whether the default output is at *percent* (one off is rounding)
+    and muted or not as *muted* says."""
+    now = _output(run)
+    return now is not None and abs(now[0] - percent) <= 1 and now[1] == muted
+
+
+@check(SECTION, "volume_commands", "“volume down”, “volume up two”, “mute sound” and “unmute sound” change the output")
+def volume_commands(run):
+    with _open_apps_on(run), _output_restored(run) as readable:
+        if not readable:
+            return Outcome("skip", "neither wpctl nor pactl can read the output's volume here")
+        run.sink_ready(fresh=True)
+        seen = []
+        for phrase_id, line, percent, muted in (
+                ("volume_down", "volume down", 45, False),
+                ("volume_up_two", "volume up", 55, False),
+                ("mute_sound", "mute", 55, True),
+                ("unmute_sound", "unmute", 55, False)):
+            log, heard = _said(run, phrase_id, f"Voice command: {line} (")
+            if bad := _not_a_command(run, phrase_id, log, heard):
+                return bad
+            reached = _until(5, lambda p=percent, m=muted: _close_to(run, p, m))
+            typed = run.sink_text().strip()
+            if f"Voice command: {line} (" not in log or typed or not reached:
+                return Outcome("fail", f"“{line}”: the output is {_output(run)}, expected "
+                               f"{(percent, muted)}; typed {typed[:40]!r}", typed=typed,
+                               screenshot=run.shot(phrase_id.replace("_", "-")))
+            seen.append(f"{line} -> {percent}%{' muted' if muted else ''}")
+        return Outcome("pass", "; ".join(seen) + "; the volume was put back afterwards")
+
+
+def _sink_inputs(run):
+    """The playback streams pactl lists, as its JSON gives them; [] when it
+    can't (pactl before 16 has no JSON output)."""
+    out = run.vm.ssh("pactl -f json list sink-inputs", check=False).stdout
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError:
+        return []
+
+
+def _stream_percent(stream):
+    """A playback stream's volume in percent, None when it reports none."""
+    channels = list((stream.get("volume") or {}).values())
+    return parse_numbers(channels[0]["value_percent"], r"(\d+)") if channels else None
+
+
+def _tone_stream(run):
+    """(index, percent) of the tone's playback stream, None when not found."""
+    for stream in _sink_inputs(run):
+        if any("pw-play" in str(value) for value in stream.get("properties", {}).values()):
+            return stream["index"], _stream_percent(stream)
+    return None
+
+
+def _stream_now(run, index):
+    """The volume in percent of the playback stream *index* now, None when
+    it has ended."""
+    stream = next((s for s in _sink_inputs(run) if s["index"] == index), None)
+    return None if stream is None else _stream_percent(stream)
+
+
+@check(SECTION, "volume_kept_after_sounds_come_back", "“volume down” sticks when the other sounds come back up")
+def volume_kept_after_sounds_come_back(run):
+    with _open_apps_on(run), run.settings_put_back("duck_audio"), _output_restored(run) as ok:
+        if not ok:
+            return Outcome("skip", "neither wpctl nor pactl can read the output's volume here")
+        run.set_config(duck_audio=True)
+        run.sink_ready(fresh=True)
+        run.vm.ssh(f"setsid -f timeout 25 pw-play ~/{REMOTE}/tone.wav "
+                   "> /dev/null 2>&1 < /dev/null")
+        time.sleep(1.5)
+        try:
+            stream = _tone_stream(run)
+            if stream is None:
+                return Outcome("skip", "the playing tone's stream couldn't be read (pactl's "
+                               "JSON output)")
+            index, start = stream
+            _typed, _heard, mark = run.say("volume_down", wait=False)
+            run.wait_log(mark, "Put 1 sound(s) back", timeout=30)
+            time.sleep(2)
+            log = run.log_since(mark)
+            output, back = _output(run), _stream_now(run, index)
+        finally:
+            run.vm.ssh("pkill -x pw-play", check=False)
+    if bad := _not_a_command(run, "volume_down", log, heard_in(log)):
+        return bad
+    problems = []
+    if "Turned 1 other sound(s) down" not in log:
+        problems.append("the playing sound was never turned down")
+    if "Voice command: volume down" not in log:
+        problems.append("no “Voice command: volume down” in the log")
+    if output is None or abs(output[0] - 45) > 1:
+        problems.append(f"the output is {output}, expected 45% (it was put back up)")
+    if back is None or abs(back - start) > 2:
+        problems.append(f"the stream's own volume is {back}%, it started at {start}%")
+    if problems:
+        return Outcome("fail", "; ".join(problems))
+    return Outcome("pass", f"The output stayed at {output[0]}% and the stream is back at "
+                   f"{back}% (it started at {start}%)")
+
+
+PLAYER_BUS = ("gdbus", "call", "--session", "--dest", "org.mpris.MediaPlayer2.ttplayer",
+              "--object-path", "/org/mpris/MediaPlayer2", "--method")
+
+
+@contextlib.contextmanager
+def _fake_player(run, status):
+    """The pretend player (guest/fake_player.py) on the session bus in *status*
+    for the block, its calls in PLAYER_LOG; ended afterwards."""
+    run.vm.ssh(f"rm -f {PLAYER_LOG}")
+    run.vm.session_background("player", "python3", f"{run.vm.home}/{REMOTE}/fake_player.py",
+                              f"{run.vm.home}/{REMOTE}/player.txt", status)
+    time.sleep(2)
+    try:
+        yield
+    finally:
+        run.vm.ssh("kill $(pgrep -f '[f]ake_player.py')", check=False)
+
+
+def _player_status(run):
+    """"Playing" or "Paused", as the pretend player says."""
+    out = _session_tool(run, *PLAYER_BUS, "org.freedesktop.DBus.Properties.Get",
+                        "org.mpris.MediaPlayer2.Player", "PlaybackStatus")
+    found = re.search(r"'(\w+)'", out)
+    return found[1] if found else None
+
+
+def _player_calls(run):
+    """Every call the pretend player has had so far."""
+    return run.vm.read(PLAYER_LOG).split()
+
+
+def _music_step(run, phrase_id, line, judge):
+    """Say a music command and judge it by the calls the player had since
+    (*judge*(calls, status) -> a problem str or None), after the 3 seconds
+    TuxTalk would take to undo it. (Outcome that stops the check or None,
+    what it saw)."""
+    before = len(_player_calls(run))
+    run.sink_ready(fresh=True)
+    log, heard = _said(run, phrase_id, f"Voice command: {line}")
+    if bad := _not_a_command(run, phrase_id, log, heard):
+        return bad, None
+    time.sleep(3)
+    calls, status = _player_calls(run)[before:], _player_status(run)
+    problem = judge(calls, status) or (
+        None if f"Voice command: {line}" in log else "no line for it in the log")
+    if problem:
+        return Outcome("fail", f"“{line}”: {problem} (calls {calls}, status {status})",
+                       screenshot=run.shot(phrase_id.replace("_", "-"))), None
+    return None, f"{line}: {calls}, {status}"
+
+
+def _pause_problem(calls, status):
+    """What is wrong with the player's calls after "pause music": it must
+    end Paused with at most the hold key's Pause, Play, Pause."""
+    if calls not in (["Pause"], ["Pause", "Play", "Pause"]) or status != "Paused":
+        return "it should end Paused after one Pause (or Pause, Play, Pause)"
+    return None
+
+
+@check(SECTION, "music_commands", "“pause music”, “play music” and “next track” reach the player")
+def music_commands(run):
+    with _open_apps_on(run):
+        with _fake_player(run, "Playing"):
+            seen = []
+            for phrase_id, line, judge in (
+                    ("pause_music", "pause music", _pause_problem),
+                    ("play_music", "play music",
+                     lambda calls, status: None if status == "Playing" and "Play" in calls
+                     else "it should be Playing after a Play"),
+                    ("next_track", "next music",
+                     lambda calls, _status: None if "Next" in calls else "no Next call")):
+                bad, saw = _music_step(run, phrase_id, line, judge)
+                if bad:
+                    return bad
+                seen.append(saw)
+        with _fake_player(run, "Playing"), run.settings_put_back("chunked_dictation"):
+            run.set_config(chunked_dictation=True)
+            typed, log = _say_with_pauses(run, ["basic", "pause_music"])
+            time.sleep(3)
+            status = _player_status(run)
+        if "Voice command: pause music" not in log:
+            return Outcome("fail", "as a phrase of a Type at pause recording “pause music” "
+                           "was not taken as a command", typed=typed)
+        if status != "Paused" or "Resumed" in log:
+            return Outcome("fail", f"after the Type at pause recording the player is {status}"
+                           f"{', and TuxTalk resumed it' if 'Resumed' in log else ''}")
+        seen.append("pause music in a Type at pause recording: Paused, never resumed")
+        return Outcome("pass", "; ".join(seen))
+
+
+# --- the system: lock, screenshot, the list of commands ---------------------
+
+
+def _session_id(run):
+    """This login session's id: the one the desktop's own programs run in."""
+    sid = _session_tool(run, "printenv", "XDG_SESSION_ID").strip()
+    return sid or run.vm.ssh("loginctl list-sessions --no-legend | "
+                             "awk -v u=$(id -un) '$3==u{print $1; exit}'",
+                             check=False).stdout.strip()
+
+
+def _locked(run, session):
+    """What logind says of the session's LockedHint: "yes", "no" or ""."""
+    return run.vm.ssh(f"loginctl show-session {session} -p LockedHint --value",
+                      check=False).stdout.strip()
+
+
+def _unlock(run, session):
+    """Unlock the VM's session; True once logind says it is unlocked."""
+    for command in ("loginctl unlock-session", "sudo -n loginctl unlock-session"):
+        run.vm.ssh(f"{command} {session}", check=False)
+        if _until(15, lambda: _locked(run, session) == "no"):
+            return True
+    return False
+
+
+@check(SECTION, "lock_screen", "“lock screen” locks the session")
+def lock_screen(run):
+    session = _session_id(run)
+    if not session:
+        return Outcome("skip", "the desktop session's id couldn't be found")
+    if _locked(run, session) == "yes":
+        return Outcome("skip", "the VM's session was already locked")
+    strict = bool(set(LOCK_ANSWERS) & set(run.vm.spec.tags))
+    with _open_apps_on(run):
+        run.sink_ready(fresh=True)
+        try:
+            log, heard = _said(run, "lock_screen", "Voice command: lock screen", timeout=40)
+            locked = bool(_until(5, lambda: _locked(run, session) == "yes"))
+            shot = run.shot("lock-screen")
+        finally:
+            unlocked = _locked(run, session) != "yes" or _unlock(run, session)
+        if not unlocked:
+            raise Abort("the VM's session stayed locked after “lock screen” and could not "
+                        "be unlocked with loginctl")
+    if bad := _not_a_command(run, "lock_screen", log, heard):
+        return bad
+    unconfirmed = "Voice command not done: lock_unconfirmed" in log
+    said = f"locked: {'yes' if locked else 'no'}; the note lock_unconfirmed: " \
+           f"{'yes' if unconfirmed else 'no'}"
+    if locked or (not strict and unconfirmed):
+        return Outcome("pass", f"{said}; the VM's session was unlocked again", screenshot=shot)
+    return Outcome("fail", f"the session didn't lock within 5 seconds ({said})", screenshot=shot)
+
+
+def _new_screenshots(run, marker):
+    """The screenshot files made in the home folder since *marker* was touched
+    (Spectacle and GNOME both name theirs Screenshot...)."""
+    out = run.vm.ssh(f"find ~ -maxdepth 4 -type f -newer {marker} -iname 'screenshot*' "
+                     "\\( -iname '*.png' -o -iname '*.jpg' \\) -not -path '*/.*' "
+                     "2>/dev/null", check=False)
+    return [line for line in out.stdout.splitlines() if line]
+
+
+@check(SECTION, "screenshot_saved", "“take a screenshot” saves a picture")
+def screenshot_saved(run):
+    marker = f"~/{REMOTE}/shot.marker"
+    folder_existed = not run.vm.ssh(f"test -d {SCREENSHOTS}/Screenshots", check=False).returncode
+    files, allowed = [], False
+    with _open_apps_on(run):
+        run.sink_ready(fresh=True)
+        run.vm.ssh(f"touch {marker}")
+        try:
+            _typed, _heard, mark = run.say("take_screenshot", wait=False)
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                files = _new_screenshots(run, marker)
+                log = run.log_since(mark)
+                if files or "Voice command not done" in log or "Text injected" in log:
+                    break
+                # GNOME's portal asks once whether TuxTalk may take screenshots.
+                if "gnome" in run.vm.spec.tags and run.vm.ui("click", "button", "~Allow",
+                                                             timeout=2):
+                    allowed = True
+                    deadline += 10
+                time.sleep(1)
+            time.sleep(1)
+            log, shot = run.log_since(mark), run.shot("screenshot")
+            sizes = [run.vm.ssh(f"stat -c %s {f}", check=False).stdout.strip() for f in files]
+        finally:
+            for file in files:
+                run.vm.ssh(f"rm -f {file}", check=False)
+            if not folder_existed:
+                run.vm.ssh(f"rmdir {SCREENSHOTS}/Screenshots", check=False)
+            run.vm.ssh(f"rm -f {marker}", check=False)
+    if bad := _not_a_command(run, "take_screenshot", log, heard_in(log)):
+        return bad
+    if not files or "Voice command: take a screenshot (saved" not in log:
+        return Outcome("fail", f"no new picture was saved within 15 seconds; log: "
+                       f"{[line for line in log.splitlines() if 'screenshot' in line.lower()]}",
+                       screenshot=shot)
+    if not all(size and int(size) > 0 for size in sizes):
+        return Outcome("fail", "the saved picture is empty", screenshot=shot)
+    return Outcome("pass", f"{len(files)} picture(s) saved and removed again"
+                   + ("; GNOME's permission dialog was answered with Allow" if allowed else ""),
+                   screenshot=shot)
+
+
+@check(SECTION, "what_can_i_say", "“what can I say” opens the Voice Commands window")
+def what_can_i_say(run):
+    def window():
+        return next((w for w in run.vm.ui("windows") or [] if "Voice Commands" in w["title"]),
+                    None)
+    with _open_apps_on(run):
+        run.sink_ready(fresh=True)
+        log, heard = _said(run, "what_can_i_say", "Voice command: what can I say")
+        if bad := _not_a_command(run, "what_can_i_say", log, heard):
+            return bad
+        shown = _until(15, window)
+        shot = run.shot("what-can-i-say")
+        if shown:
+            run.vm.ui("click", "button", "Close", "~Voice Commands", timeout=5)
+        closed = shown and _until(8, lambda: not window())
+        if shown and not closed:
+            run.vm.tap("esc")
+            closed = _until(5, lambda: not window())
+    if "Voice command: what can I say" not in log or not shown:
+        return Outcome("fail", "the “Voice Commands” window never appeared", screenshot=shot)
+    if not closed:
+        return Outcome("fail", "the “Voice Commands” window could not be closed",
+                       screenshot=shot)
+    return Outcome("pass", "The Voice Commands window opened and was closed again",
+                   screenshot=shot)
+
+
+# --- windows by name ----------------------------------------------------------
+
+
+def _editor_state(run, app, program):
+    """How the editor's window looks from outside: "minimized (KWin)" or
+    "shown (KWin)" (with the focus) or "unfocused (KWin)" where KWin says,
+    else the window's own AT-SPI state as checks_voice_actions._sink_state
+    reads it ("iconified", "gone", "unfocused", or None while it shows with
+    the focus)."""
+    found = _kwin_windows(run, f"~{program}")
+    if found:
+        if all(w["minimized"] for w in found):
+            return "minimized (KWin)"
+        return "shown (KWin)" if any(w["active"] for w in found) else "unfocused (KWin)"
+    window = next((w for w in run.vm.ui("windows") or [] if w["app"] == app), None)
+    return _sink_state(window)
+
+
+# _editor_state answers that mean the window is not minimized.
+SHOWING = (None, "shown (KWin)", "unfocused (KWin)")
+
+
+@check(SECTION, "restore_by_name", "“minimize the text editor” and “restore the text editor” by name")
+def restore_by_name(run):
+    if why := _action_blocker(run):
+        return Outcome("skip", why)
+    with _open_apps_on(run), opened_by_voice(run, "open_text_editor") as opened:
+        if why := _no_editor(opened):
+            return Outcome("skip", why)
+        app, program = opened.app, opened.program
+        log, heard = _said(run, "minimize_text_editor", "Voice command: minimize")
+        if bad := _not_a_command(run, "minimize_text_editor", log, heard):
+            return bad
+        gone = _until(8, lambda: _editor_state(run, app, program) not in SHOWING)
+        state = _editor_state(run, app, program)
+        shot = run.shot("minimize-editor")
+        if "Voice command: minimize" not in log or not gone:
+            return Outcome("fail", f"“minimize the text editor”: the editor is {state or 'shown'}",
+                           screenshot=shot)
+        if state == "unfocused" and not _wayland(run):
+            return Outcome("fail", "the editor lost the focus but doesn't say it is minimized, "
+                           "which only a Wayland session can't tell it", screenshot=shot)
+        log, heard = _said(run, "restore_text_editor", "Voice command: restore")
+        if bad := _not_a_command(run, "restore_text_editor", log, heard):
+            return bad
+        back = _until(10, lambda: _editor_state(run, app, program) in (None, "shown (KWin)"))
+        shot = run.shot("restore-editor")
+        if "Voice command: restore" not in log or not back:
+            return Outcome("fail", f"“restore the text editor”: the editor is "
+                           f"{_editor_state(run, app, program)}", screenshot=shot)
+        return Outcome("pass", f"Minimized ({state}), then shown with the focus again",
+                       screenshot=shot)
+
+
+# --- words that only look like commands --------------------------------------
+
+SENTENCES = (("bare_pause", "Pause."), ("bare_next", "Next."), ("bare_mute", "Mute."),
+             ("bare_copy", "Copy."), ("sentence_lock_it", "Lock it."),
+             ("sentence_show_me_desktop", "Show me the desktop."),
+             ("sentence_volume_loud", "Volume is too loud."))
+
+
+@check(SECTION, "bare_words_and_sentences_typed", "One word or a sentence that only sounds like a command is typed")
+def bare_words_and_sentences_typed(run):
+    with _open_apps_on(run):
+        start = _output(run)
+        for phrase_id, expected in SENTENCES:
+            run.sink_ready(fresh=True)
+            typed, heard, log = run.say(phrase_id)
+            outcome = run.expect_typed(phrase_id, expected, typed, heard)
+            if outcome.status != "pass":
+                outcome.detail = outcome.detail or f"“{expected}” was not typed as said"
+                outcome.screenshot = run.shot(f"words-{phrase_id}")
+                return outcome
+            if "Voice command" in log:
+                return Outcome("fail", f"“{expected}” was taken as a command", typed=typed)
+        if start is not None and _output(run) != start:
+            return Outcome("fail", f"the volume changed from {start} to {_output(run)}")
+        return Outcome("pass", f"All {len(SENTENCES)} were typed as said; no command ran and "
+                       "the volume stayed as it was")

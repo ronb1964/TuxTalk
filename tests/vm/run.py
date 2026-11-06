@@ -25,6 +25,7 @@ from datetime import datetime
 from pathlib import Path
 
 import checks_ai  # noqa: F401
+import checks_desktop_commands  # noqa: F401
 import checks_dictation  # noqa: F401  (each module registers its checks in import order)
 import checks_extension  # noqa: F401
 import checks_firstrun  # noqa: F401
@@ -46,7 +47,8 @@ RUNS = TOOLS / "runs"
 # before dictation, which changes settings. Uninstall takes it all away: last.
 SECTION_ORDER = ["First run", "Preferences", "Dictation", "Words and numbers",
                  "Type at pause", "Open apps by voice",
-                 "Windows, keys and addresses by voice", "AI features", "Send automatically",
+                 "Windows, keys and addresses by voice", "Desktop commands by voice",
+                 "AI features", "Send automatically",
                  "Sound and other windows",
                  "With the GNOME extension",
                  "Hotkeys and keyboard layouts", "Parakeet update", "Uninstall",

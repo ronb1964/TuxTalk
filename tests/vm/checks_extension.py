@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 import checks_open_apps  # noqa: F401  (registers the checks AGAIN repeats)
+import checks_desktop_commands  # noqa: F401
 import checks_voice_actions  # noqa: F401
 from checks_dictation import type_in_terminal
 from checks_prefs import open_fold
@@ -114,7 +115,9 @@ def ext_send_switch(run):
 # Skipped on GNOME until the extension is there ("Checked again with the
 # extension"): each runs again here as ext_<id>.
 AGAIN = ("open_again_focuses", "close_asks_to_save", "close_this_window", "switch_to",
-         "minimize_maximize", "go_to_in_browser", "web_search")
+         "minimize_maximize", "go_to_in_browser", "web_search", "snap_and_centre",
+         "show_desktop_toggles", "switch_desktops", "move_window_to_desktop", "one_screen_note",
+         "overview", "restore_by_name")
 for _chk in [c for c in CHECKS if c.id in AGAIN]:
     check(SECTION, f"ext_{_chk.id}", f"{_chk.name} (with the extension)",
           desktops=("gnome",))(_chk.func)
