@@ -120,7 +120,8 @@ EVERY_COMMAND = ["new tab", "close tab", "next tab", "previous tab", "reopen tab
     "go to youtube dot com", "web search cheap tires", "open Firefox",
     "snap left", "centre window", "show desktop", "next desktop", "switch to desktop two",
     "move window to the other screen", "volume up", "mute sound", "pause music",
-    "next track", "lock screen", "take a screenshot", "what can I say"]
+    "next track", "lock screen", "take a screenshot", "take a screenshot of this window",
+    "what can I say"]
 
 @pytest.mark.parametrize("phrase", EVERY_COMMAND)
 def test_every_command_inside_a_sentence_is_dictation(phrase):
@@ -191,6 +192,10 @@ def test_literal_types_the_words():
     ("lock the computer", SystemRequest("lock")),
     ("Take a screenshot.", SystemRequest("screenshot")),
     ("take screen shot", SystemRequest("screenshot")),
+    ("Take a screenshot of this window.", SystemRequest("window screenshot")),
+    ("take a screenshot of the window", SystemRequest("window screenshot")),
+    ("Screenshot this window.", SystemRequest("window screenshot")),
+    ("take a window screenshot", SystemRequest("window screenshot")),
     ("What can I say?", SystemRequest("commands")),
     ("show voice commands", SystemRequest("commands"))])
 def test_desktop_sound_music_and_system_phrases(said, request_):

@@ -395,3 +395,12 @@ def test_without_its_screensaver_the_lock_goes_through_logind(loginctl, desktop,
     assert system_actions.lock(False, sleep=no_wait) is True
     assert loginctl.commands[0][:2] == ["loginctl", "lock-session"]
     assert actions_on == []
+
+
+@pytest.mark.parametrize("action, window", [("screenshot", False), ("window screenshot", True)])
+def test_a_screenshot_request_takes_the_screen_or_the_window(monkeypatch, action, window):
+    taken = []
+    monkeypatch.setattr(system_actions.screenshot, "take",
+                        lambda beeps_on, window=False: taken.append(window) or True)
+    assert system_actions.run(SystemRequest(action), False) is True
+    assert taken == [window]

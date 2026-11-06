@@ -23,14 +23,21 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 # The portal may be waiting for the user to allow screenshots the first
-# time, which takes as long as a person takes to read and click.
+# time, which takes as long as a person takes to read and click; with its
+# picker open (a window's screenshot), as long as they take to choose.
 PORTAL_WAIT_S = 30.0
+PICKER_WAIT_S = 90.0
 # The call only hands the request over; the answer comes later, as a signal.
 PORTAL_CALL_TIMEOUT_MS = 10_000
 TOOL_TIMEOUT_S = 10.0
 
 _PORTAL_IFACE = "org.freedesktop.portal.Screenshot"
 _PORTAL_SAVED, _PORTAL_CANCELLED = 0, 1
+# Each desktop tool's command for the whole screen and for the window with
+# the focus, the file to write coming last.
+_SCREEN_TOOLS = [["gnome-screenshot", "-f"], ["xfce4-screenshooter", "-f", "-s"]]
+_WINDOW_TOOLS = [["gnome-screenshot", "-w", "-f"], ["xfce4-screenshooter", "-w", "-s"]]
+
 # A call that ended with one of these may still have reached the portal.
 _NO_REPLY = frozenset(f"org.freedesktop.DBus.Error.{name}"
                       for name in ("NoReply", "Timeout", "TimedOut"))
@@ -110,8 +117,9 @@ def _first_tool(commands: list[list[str]]) -> str | None:
     return None
 
 
-def _ask_portal() -> tuple[str, str]:
-    """Ask the screenshot portal for the whole screen. Returns the outcome
+def _ask_portal(interactive: bool = False) -> tuple[str, str]:
+    """Ask the screenshot portal for the whole screen, or with *interactive*
+    to open the desktop's own screenshot picker. Returns the outcome
     and, for "saved", the file: "saved", "cancelled" (the user said no),
     "failed" (the portal answered it couldn't), "unavailable" (no portal, or
     one that refused the call) or "unconfirmed": one may have been saved all
@@ -148,9 +156,10 @@ def _ask_portal() -> tuple[str, str]:
 
     def options(token):
         return GLib.Variant("(sa{sv})", ("", {"handle_token": GLib.Variant("s", token),
-                                              "interactive": GLib.Variant("b", False)}))
+                                              "interactive": GLib.Variant("b", interactive)}))
 
-    timeout = GLib.timeout_source_new(int(PORTAL_WAIT_S * 1000))
+    timeout = GLib.timeout_source_new(int((PICKER_WAIT_S if interactive else PORTAL_WAIT_S)
+                                          * 1000))
     timeout.set_callback(out_of_time)
     context.push_thread_default()
     unsubscribe = None
@@ -185,19 +194,24 @@ def _may_have_reached(error: GLib.Error) -> bool:
     return Gio.DBusError.get_remote_error(error) in _NO_REPLY
 
 
-def take(beeps_on: bool) -> bool:
-    """Take a screenshot of the whole screen and say where it was saved.
-    False: nothing saved, or not known to be, with a note saying why. Once
-    a screenshot may have been taken (Spectacle ran, or the portal was asked
-    and was slow) no other way is tried, so there is never a second one."""
+def take(beeps_on: bool, window: bool = False) -> bool:
+    """Take a screenshot of the whole screen, or of the window with the
+    focus, and say where it was saved. False: nothing saved, or not known
+    to be, with a note saying why. Once a screenshot may have been taken (a
+    tool ran, or the portal was asked and was slow) no other way is tried,
+    so there is never a second one.
+
+    KDE's Spectacle and X11's tools take the window by themselves. GNOME's
+    and COSMIC's portals can't: they open their own picker, where the
+    person chooses the window."""
     if desktop_detect.get_desktop_environment() == "kde" and shutil.which("spectacle"):
         # KDE's portal is Spectacle again, so there is nothing else to ask.
-        path = _path_for_tool()
-        if path and _run_tool(["spectacle", "--background", "--fullscreen", "--nonotify",
-                               "--output", path]):
-            return _saved("spectacle", folder(), beeps_on)
-        return _nothing_saved(beeps_on)
-    outcome, file = _ask_portal()
+        return _with_spectacle("--activewindow" if window else "--fullscreen", beeps_on)
+    tools = _WINDOW_TOOLS if window else _SCREEN_TOOLS
+    if window and desktop_detect.is_x11_session(os.environ) and any(
+            shutil.which(command[0]) for command in tools):
+        return _with_tool(tools, beeps_on)
+    outcome, file = _ask_portal(interactive=window)
     if outcome == "saved":
         # The portal said so; not seeing the file (a sandbox) doesn't change that.
         return _saved("the portal", _keep(file) if os.path.exists(file) else None, beeps_on)
@@ -206,10 +220,21 @@ def take(beeps_on: bool) -> bool:
         command_notices.say("screenshot_cancelled" if outcome == "cancelled"
                             else "screenshot_unconfirmed", beeps_on)
         return False
-    tool = _first_tool([["gnome-screenshot", "-f"], ["xfce4-screenshooter", "-f", "-s"]])
-    if tool:
-        return _saved(tool, folder(), beeps_on)
+    return _with_tool(tools, beeps_on)
+
+
+def _with_spectacle(what: str, beeps_on: bool) -> bool:
+    """Spectacle in the background, *what* (--fullscreen or --activewindow)."""
+    path = _path_for_tool()
+    if path and _run_tool(["spectacle", "--background", what, "--nonotify", "--output", path]):
+        return _saved("spectacle", folder(), beeps_on)
     return _nothing_saved(beeps_on)
+
+
+def _with_tool(commands: list[list[str]], beeps_on: bool) -> bool:
+    """The first installed of the desktop tools *commands*, said as saved or not."""
+    tool = _first_tool(commands)
+    return _saved(tool, folder(), beeps_on) if tool else _nothing_saved(beeps_on)
 
 
 def _inside(file: str, folder: str) -> bool:

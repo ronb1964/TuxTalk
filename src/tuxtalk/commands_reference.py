@@ -152,6 +152,7 @@ SECTIONS = (
                 "sound and music", "action"),
         Command(("lock screen", "take a screenshot", "what can I say"),
                 "lock, screenshot, this list", "action"),
+        Command(("take a screenshot of this window",), "just the window", "action"),
     ), note="One word alone (copy, pause, next) is typed. <b>literal</b> before a command "
             "types the words. <b>centre window</b> works too."),
     Section("Literal Words",

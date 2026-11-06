@@ -521,6 +521,9 @@ the ready beep means it is. If that can't be confirmed, a note says so: check th
 Hold <b>{hold}</b>, say <b>take a screenshot</b>, let go. On KDE it is saved in
 Pictures/Screenshots; elsewhere, where your desktop keeps them. GNOME may ask once. In a
 hands-free or Type at pause recording, the recording indicator may show in the picture.
+Hold <b>{hold}</b>, say <b>take a screenshot of this window</b>, let go. Just the window
+you're working in is saved. On GNOME and Pop!_OS your desktop's screenshot tool opens
+instead: click the window there.
 Hold <b>{hold}</b>, say <b>what can I say</b>, let go. The Voice Commands window opens with
 this list.
 

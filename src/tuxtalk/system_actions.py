@@ -249,8 +249,8 @@ def lock(beeps_on: bool, sleep=time.sleep) -> bool:
 
 
 def run(request: SystemRequest, beeps_on: bool) -> bool:
-    """Do the system command *request* is (lock, commands or screenshot).
-    True: done; False: refused with a note."""
+    """Do the system command *request* is (lock, commands, or a screenshot of
+    the screen or the window). True: done; False: refused with a note."""
     if request.action == "lock":
         return lock(beeps_on)
     if request.action == "commands":
@@ -258,4 +258,4 @@ def run(request: SystemRequest, beeps_on: bool) -> bool:
         beeps.beep(beeps_on, *beeps.READY_BEEP)
         logger.info("Voice command: what can I say")
         return True
-    return screenshot.take(beeps_on)
+    return screenshot.take(beeps_on, window=request.action == "window screenshot")

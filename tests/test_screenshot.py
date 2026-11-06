@@ -352,3 +352,66 @@ def test_take_a_screenshot_said_alone_types_nothing(actions_on, chat, say, kde, 
     assert chat[2] == []
     assert tools.commands[0][0] == "spectacle"
     assert actions_on == ["Screenshot saved in ~/Pictures/Screenshots"]
+
+
+# "Take a screenshot of this window": the window being dictated into.
+
+def test_kde_takes_the_active_window_with_spectacle(kde, tools, home, actions_on):
+    assert screenshot.take(False, window=True) is True
+    assert tools.commands[0][:5] == ["spectacle", "--background", "--activewindow", "--nonotify",
+                                     "--output"]
+    assert actions_on == ["Screenshot saved in ~/Pictures/Screenshots"]
+
+
+def test_on_x11_the_window_is_taken_by_the_desktops_tool_with_no_portal(
+        x11_session, fake_portal, tools, home, actions_on):
+    """Silent there: no picker to click."""
+    assert screenshot.take(False, window=True) is True
+    assert tools.commands[0][:3] == ["gnome-screenshot", "-w", "-f"]
+    assert fake_portal.calls == []
+    assert actions_on == ["Screenshot saved in ~/Pictures/Screenshots"]
+
+
+def test_on_xfce_the_window_is_taken_by_its_screenshooter(x11_session, fake_portal, monkeypatch,
+                                                          home, actions_on):
+    tools = install(monkeypatch, "xfce4-screenshooter")
+    assert screenshot.take(False, window=True) is True
+    assert tools.commands[0][:3] == ["xfce4-screenshooter", "-w", "-s"]
+
+
+def test_a_window_tool_that_failed_is_not_followed_by_the_portal(x11_session, fake_portal, tools,
+                                                                 home, actions_on):
+    """It may have taken one all the same: never a second screenshot."""
+    tools.exit_code = 1
+    assert screenshot.take(False, window=True) is False
+    assert fake_portal.calls == [] and len(tools.commands) == 1
+    assert actions_on == ["Couldn't take a screenshot"]
+
+
+def test_on_gnome_the_window_is_picked_in_the_desktops_own_screenshot_tool(
+        gnome, fake_portal, tools, home, actions_on):
+    """GNOME's portal can't take one window by itself: it opens its picker."""
+    assert screenshot.take(False, window=True) is True
+    assert fake_portal.calls[0]["interactive"] is True
+    assert tools.commands == []
+    assert actions_on == ["Screenshot saved in ~/Pictures"]
+
+
+def test_a_window_screenshot_cancelled_in_the_picker_saves_nothing(gnome, fake_portal, tools,
+                                                                    home, actions_on):
+    fake_portal.code = 1
+    assert screenshot.take(False, window=True) is False
+    assert actions_on == ["Screenshot cancelled"]
+    assert tools.commands == []
+
+
+def test_the_picker_gets_longer_than_a_permission_question(gnome, fake_portal, tools, home,
+                                                          monkeypatch):
+    """Choosing a window takes as long as a person takes to choose."""
+    waits = []
+    real = screenshot.GLib.timeout_source_new
+    monkeypatch.setattr(screenshot.GLib, "timeout_source_new",
+                        lambda ms: waits.append(ms) or real(ms))
+    screenshot.take(False, window=True)
+    screenshot.take(False)
+    assert waits[0] > waits[1] == screenshot.PORTAL_WAIT_S * 1000

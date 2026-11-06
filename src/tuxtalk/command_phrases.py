@@ -65,7 +65,7 @@ class MusicRequest:
 
 @dataclass(frozen=True)
 class SystemRequest:
-    action: str          # "lock", "screenshot", "commands"
+    action: str          # "lock", "screenshot", "window screenshot", "commands"
 
 
 @dataclass(frozen=True)
@@ -156,6 +156,8 @@ _OTHER_PHRASES = (
     (r"(next|previous) (?:track|song)", lambda m: MusicRequest(m[1])),
     (r"lock (?:the )?(?:screen|computer)", lambda m: SystemRequest("lock")),
     (r"take (?:a )?screen ?shot", lambda m: SystemRequest("screenshot")),
+    (r"(?:take (?:a )?screen ?shot of|screen ?shot) (?:this|the) window"
+     r"|take (?:a )?window screen ?shot", lambda m: SystemRequest("window screenshot")),
     (r"what can i say|show (?:the )?voice commands", lambda m: SystemRequest("commands")),
 )
 _FIXED = tuple((re.compile(pattern), build) for pattern, build in
