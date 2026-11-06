@@ -1175,6 +1175,13 @@ def lock_screen(run):
         try:
             log, heard = _said(run, "lock_screen", "Voice command: lock screen", timeout=40)
             locked = bool(_until(5, lambda: _screen_locked(run, session)))
+            if locked and "cinnamon" in run.vm.spec.tags:
+                # Its GetActive says only that it is on, and so does
+                # TuxTalk's check: a lock stays on at a key press (the
+                # password box comes up), a screen only blanked goes away.
+                run.vm.tap("shift")
+                time.sleep(2)
+                locked = _screen_locked(run, session)
             shot = run.shot("lock-screen")
         finally:
             unlocked = _unlock(run, session)
