@@ -115,6 +115,27 @@ def test_show_desktop_twice_brings_back_only_what_it_minimized():
     assert answer == ["done", [5, 8], "done", [5, 8], [False, False, True]]
 
 
+def test_show_desktop_twice_gives_the_focus_back_to_the_window_that_had_it():
+    """Unminimized, the windows came back with none focused (Ubuntu VM), so
+    what the person typed next went nowhere; KDE and Cinnamon give it back."""
+    answer, _logs = run(ENABLED + FOCUSED + """
+        ask('show desktop');
+        t.focus(null);
+        ask('show desktop');
+        t.report(t.shell.activated);
+    """)
+    assert answer == [5]
+
+
+def test_show_desktop_twice_focuses_nothing_that_was_closed_meanwhile():
+    answer, _logs = run(ENABLED + FOCUSED + """
+        ask('show desktop');
+        kwrite.managed = false;
+        t.report([ask('show desktop'), t.shell.activated]);
+    """)
+    assert answer == ["done", []]
+
+
 def test_show_desktop_leaves_splash_screens_and_panels_alone():
     answer, _logs = run(ENABLED + FOCUSED + """
         const splash = new t.Window('firefox', 7);

@@ -224,9 +224,10 @@ function sendTo(w, target) {
 }
 
 // The windows "show desktop" minimized on each workspace, to bring back with
-// the next "show desktop" there. GNOME has no show-desktop action of its own,
-// so it is done by minimizing the normal windows and remembering them:
-// windows the person minimized earlier must stay minimized when they come back.
+// the next "show desktop" there, and the one of them that had the focus.
+// GNOME has no show-desktop action of its own, so it is done by minimizing
+// the normal windows and remembering them: windows the person minimized
+// earlier must stay minimized when they come back.
 const hiddenByShowDesktop = new Map();
 
 // Whether GNOME Shell still manages *w*: a window closed while the desktop was
@@ -244,19 +245,26 @@ function unminimize(w) {
     }
 }
 
+// Unminimized, the windows come back with none focused, and what the person
+// types next goes nowhere: the one that had the focus gets it back, as on KDE
+// and Cinnamon.
 function showDesktop() {
     const workspace = global.workspace_manager.get_active_workspace();
-    const hidden = (hiddenByShowDesktop.get(workspace) ?? [])
-        .filter(w => stillOpen(w) && w.minimized);
+    const {windows = [], focused = null} = hiddenByShowDesktop.get(workspace) ?? {};
+    const hidden = windows.filter(w => stillOpen(w) && w.minimized);
     hiddenByShowDesktop.delete(workspace);
     if (hidden.length > 0) {
         hidden.forEach(unminimize);
+        if (hidden.includes(focused) && !focused.minimized)
+            Main.activateWindow(focused);
         return 'done';
     }
     const shown = workspace.list_windows()
         .filter(w => isAppWindow(w) && !w.minimized && !w.skip_taskbar);
+    const front = global.display.focus_window;
     shown.forEach(w => w.minimize());
-    hiddenByShowDesktop.set(workspace, shown);
+    hiddenByShowDesktop.set(workspace,
+        {windows: shown, focused: shown.includes(front) ? front : null});
     return 'done';
 }
 
