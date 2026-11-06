@@ -62,7 +62,7 @@ def test_a_lock_the_session_never_confirms_is_not_called_locked(loginctl, kde, c
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
         system_actions.lock(False, sleep=no_wait)
     assert "says it is locked" not in caplog.text
-    assert "doesn't say it is locked" in caplog.text
+    assert "the lock wasn't seen" in caplog.text
 
 
 def test_a_confirmed_lock_is_logged_as_locked(loginctl, kde, caplog):
@@ -247,7 +247,7 @@ def test_there_the_screensaver_locks_and_says_so(loginctl, screensaver, desktop,
     assert len(screensaver.locks) == 1
     assert not [c for c in loginctl.commands if c[1] == "lock-session"]
     assert (beeped, actions_on) == ([beeps.READY_BEEP], [])
-    assert "the screensaver says it is locked" in caplog.text
+    assert "the screensaver came on for it" in caplog.text
 
 
 @_ON_EACH
@@ -359,6 +359,31 @@ def test_on_xfce_the_lock_is_confirmed_only_with_locking_on(
     system_actions.lock(True, sleep=no_wait)
     assert (beeps.READY_BEEP in beeped) == confirmed
     assert actions_on == ([] if confirmed else ["Lock not confirmed"])
+
+
+@pytest.mark.parametrize("screensaver", ["org.mate.ScreenSaver"], indirect=True)
+def test_mate_settings_it_cant_read_mean_not_confirmed(loginctl, screensaver, monkeypatch,
+                                                       actions_on, beeped):
+    """No settings schemas to read: whether the lock screen is disabled
+    can't be told, so its coming on isn't taken for the lock."""
+    set_desktop(monkeypatch, "MATE", "x11")
+    monkeypatch.setattr(Gio.SettingsSchemaSource, "get_default", staticmethod(lambda: None))
+    screensaver.locks_after = 0
+    system_actions.lock(True, sleep=no_wait)
+    assert beeps.READY_BEEP not in beeped
+    assert actions_on == ["Lock not confirmed"]
+
+
+@pytest.mark.parametrize("screensaver", ["org.xfce.ScreenSaver"], indirect=True)
+def test_xfce_with_no_screensaver_settings_yet_locks_as_by_default(
+        loginctl, screensaver, an_ordinary_session, monkeypatch, actions_on, beeped):
+    """Xfconf answers ChannelNotFound until a setting of the screensaver is
+    changed: locking is on then, xfce4-screensaver's default."""
+    set_desktop(monkeypatch, "XFCE", "x11")
+    an_ordinary_session.channel_missing = True
+    screensaver.locks_after = 0
+    system_actions.lock(True, sleep=no_wait)
+    assert (beeped, actions_on) == ([beeps.READY_BEEP], [])
 
 
 @pytest.mark.parametrize("desktop", ["X-Cinnamon", "MATE", "XFCE"])

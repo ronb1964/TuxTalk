@@ -653,12 +653,14 @@ _XFCONF_XML = """<node><interface name="org.xfce.Xfconf">
 class FakeXfconf(_BusService):
     """Xfce's settings store on the test's session bus: GetProperty answers
     from *values*, {(channel, property): GLib.Variant}, and with Xfconf's
-    PropertyNotFound for anything never set."""
+    PropertyNotFound for anything never set, or ChannelNotFound for
+    everything with *channel_missing*."""
 
     names = ("org.xfce.Xfconf",)
 
     def __init__(self):
         self.values = {}
+        self.channel_missing = False
         self._start()
 
     def _register(self, _bus, register):
@@ -666,6 +668,10 @@ class FakeXfconf(_BusService):
         register("/org/xfce/Xfconf", interface, self._on_call, None, None)
 
     def _on_call(self, _bus, _sender, _path, _interface, _method, parameters, invocation):
+        if self.channel_missing:
+            invocation.return_dbus_error("org.xfce.Xfconf.Error.ChannelNotFound",
+                                         "Channel does not exist")
+            return
         value = self.values.get(parameters.unpack())
         if value is None:
             invocation.return_dbus_error("org.xfce.Xfconf.Error.PropertyNotFound",

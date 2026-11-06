@@ -6,11 +6,15 @@ applies and TuxTalk never handles one: through logind
 (`loginctl lock-session`), or on Cinnamon, MATE and Xfce through their
 screensaver, which locks those desktops and never tells logind it did.
 Asking is not locking: a stopped or broken locker leaves the screen open.
-So the lock is looked for a few seconds, in the session's LockedHint or in
-the screensaver coming on, and only a lock seen there gets the ready beep;
-any other gets a plain note to check the screen. Programs are run with a
-timeout and no shell; the wait is on the dictation worker, never GTK's
-thread."""
+So the lock is looked for a few seconds, and only one seen gets the ready
+beep; any other gets a plain note to check the screen. logind's
+LockedHint says the lock screen is up. These screensavers can only say
+they are on, so the lock is taken as seen when one that was off comes on
+after the request, where it locks when asked. That can't rule out a
+screensaver started by hand with --disable-locking, nor a session bus
+whose policy refuses Lock while the screen blanks for idleness at that
+moment. Programs are run with a timeout and no shell; the wait is on the
+dictation worker, never GTK's thread."""
 import grp
 import os
 import subprocess
@@ -171,7 +175,7 @@ def _send_lock(bus: Gio.DBusConnection, saver: _Screensaver):
     """Ask *saver* to lock, with no answer awaited: mate-screensaver never
     answers Lock. The bus daemon's answer to a ping sent after it shows the
     request has gone out: a message still queued when the last hold on the
-    shared connection goes is never sent."""
+    shared connection goes may be dropped."""
     message = Gio.DBusMessage.new_method_call(saver.name, saver.path, saver.name, "Lock")
     if saver.lock_args is not None:
         message.set_body(saver.lock_args)
@@ -186,9 +190,9 @@ def _send_lock(bus: Gio.DBusConnection, saver: _Screensaver):
 
 
 def _screensaver_lock(saver: _Screensaver, sleep) -> bool | None:
-    """Lock through *saver*: whether its coming on showed the lock within
-    LOCK_CHECK_S, or None when it isn't there to ask (an Xfce with
-    light-locker, say), for logind to be asked instead."""
+    """Lock through *saver*: whether it came on within LOCK_CHECK_S, having
+    been off and locking when asked, or None when it isn't there to ask (an
+    Xfce with light-locker, say), for logind to be asked instead."""
     try:
         bus = _session_bus()
     except GLib.Error as e:
@@ -226,18 +230,19 @@ def lock(beeps_on: bool, sleep=time.sleep) -> bool:
     confirmed."""
     saver = _SCREENSAVERS.get(desktop_detect.get_desktop_environment())
     confirmed = _screensaver_lock(saver, sleep) if saver else None
-    who = "the screensaver"
+    seen = "the screensaver came on for it"
     if confirmed is None:
         session = session_id()
         if not _ask_to_lock(session):
             command_notices.say("lock_failed", beeps_on)
             return False
-        who, confirmed = "the session", _confirmed(lambda: locked(session), sleep)
+        seen, confirmed = "the session says it is locked", _confirmed(
+            lambda: locked(session), sleep)
     if confirmed:
-        logger.info(f"Voice command: lock screen; {who} says it is locked")
+        logger.info(f"Voice command: lock screen; {seen}")
         beeps.beep(beeps_on, *beeps.READY_BEEP)
     else:
-        logger.info(f"Voice command: lock screen asked; {who} doesn't say it is locked")
+        logger.info("Voice command: lock screen asked; the lock wasn't seen")
         # Only the note sounds: a ready beep then a cancel beep would say both.
         command_notices.say("lock_unconfirmed", beeps_on)
     return True
