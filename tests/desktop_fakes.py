@@ -70,6 +70,52 @@ def _private_bus():
         | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION, None, None)
 
 
+def _own(bus, name):
+    """Whether *bus* became *name*'s owner. Not queued: a fake a test left
+    behind that still owns it would answer in this test's place."""
+    reply = bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                          "org.freedesktop.DBus", "RequestName", GLib.Variant("(su)", (name, 4)),
+                          GLib.VariantType("(u)"), Gio.DBusCallFlags.NONE, 5000, None)
+    return reply.unpack()[0] == 1
+
+
+class _BusService:
+    """A desktop service on the test's session bus, served from a thread
+    and main context of its own, owning *names*. Starting returns once it
+    owns them all; stop() returns once its connection is closed and the
+    names are free for the next test's fake, and fails the test otherwise.
+    Each fake registers its objects in _register(bus, register)."""
+
+    names = ()
+
+    def _start(self):
+        self._context = GLib.MainContext()
+        self._loop = GLib.MainLoop(self._context)
+        self._owns = False
+        ready = threading.Event()
+        self._thread = threading.Thread(target=self._serve, args=(ready,), daemon=True)
+        self._thread.start()
+        assert ready.wait(10), f"{type(self).__name__} didn't start"
+        assert self._owns, f"something else already owns one of {self.names}"
+
+    def _serve(self, ready):
+        self._context.push_thread_default()
+        bus = _private_bus()
+        self._register(bus, getattr(bus, "register_object_with_closures2", bus.register_object))
+        self._owns = all(_own(bus, name) for name in self.names)
+        ready.set()
+        if self._owns:
+            self._loop.run()
+        bus.close_sync(None)
+
+    def stop(self):
+        # Quit from the serving thread: a quit() sent before run() has
+        # started is lost, and the loop would then serve forever.
+        self._context.invoke_full(GLib.PRIORITY_DEFAULT, self._loop.quit)
+        self._thread.join(10)
+        assert not self._thread.is_alive(), f"{type(self).__name__} didn't stop"
+
+
 class FakeKWin:
     """KWin's Scripting interface, as kwin_focus.session_bus() gives it:
     each started script runs under Node with *windows* open (JavaScript
@@ -164,39 +210,26 @@ _KDE_XML = """<node>
 </node>"""
 
 
-class FakeKDE:
-    """KDE Plasma 6's kglobalaccel and KWin on the test's session bus,
-    served from a thread of its own: the shortcut, desktop and show-desktop
-    calls kwin_desktop makes. *desktops* exist, the user is on *current*
-    (1-based), *showing* the desktop; with *wraps* the last desktop's next
-    is the first. Every call is kept in *calls* as (method, *args)."""
+class FakeKDE(_BusService):
+    """KDE Plasma 6's kglobalaccel and KWin on the test's session bus: the
+    shortcut, desktop and show-desktop calls kwin_desktop makes. *desktops*
+    exist, the user is on *current* (1-based), *showing* the desktop; with
+    *wraps* the last desktop's next is the first. Every call is kept in
+    *calls* as (method, *args)."""
+
+    names = ("org.kde.kglobalaccel", "org.kde.KWin")
 
     def __init__(self):
         self.desktops, self.current, self.showing, self.wraps = 2, 1, False, False
         self.calls = []
-        self._context = GLib.MainContext()
-        self._loop = GLib.MainLoop(self._context)
-        ready = threading.Event()
-        self._thread = threading.Thread(target=self._serve, args=(ready,), daemon=True)
-        self._thread.start()
-        assert ready.wait(10)
+        self._start()
 
-    def _serve(self, ready):
-        self._context.push_thread_default()
-        bus = _private_bus()
-        register = getattr(bus, "register_object_with_closures2", bus.register_object)
+    def _register(self, _bus, register):
         interfaces = Gio.DBusNodeInfo.new_for_xml(_KDE_XML).interfaces
         register("/component/kwin", interfaces[0], self._on_call, None, None)
         for path in ("/KWin", "/VirtualDesktopManager"):
             register(path, interfaces[1], self._on_call, None, None)
             register(path, interfaces[2], self._on_call, None, None)
-        for name in ("org.kde.kglobalaccel", "org.kde.KWin"):
-            bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus",
-                          "org.freedesktop.DBus", "RequestName", GLib.Variant("(su)", (name, 4)),
-                          None, Gio.DBusCallFlags.NONE, 5000, None)
-        ready.set()
-        self._loop.run()
-        bus.close_sync(None)
 
     def _on_call(self, _bus, _sender, _path, _interface, method, parameters, invocation):
         args = parameters.unpack()
@@ -226,10 +259,6 @@ class FakeKDE:
             self.current = wanted
         elif self.wraps:
             self.current = 1 if direction > 0 else self.desktops
-
-    def stop(self):
-        self._loop.quit()
-        self._thread.join(10)
 
 
 @pytest.fixture
@@ -267,9 +296,8 @@ _SHELL_EXTENSIONS_XML = """<node><interface name="org.gnome.Shell.Extensions">
 </interface></node>"""
 
 
-class FakeShell:
-    """GNOME Shell on the test's session bus, served from a thread of its
-    own. With *extension*, TuxTalk's extension answers ActivateApp with
+class FakeShell(_BusService):
+    """GNOME Shell on the test's session bus. With *extension*, TuxTalk's extension answers ActivateApp with
     *answer*, keeping each app id it's asked about in *called*, and
     WindowAction with *window_answer*, keeping (action, app_id, every) in
     *window_calls*, and DesktopCommand with *desktop_answer*, keeping
@@ -278,33 +306,22 @@ class FakeShell:
     user logs out after an update; False: TuxTalk's extension isn't enabled
     at all."""
 
+    names = (app_focus.GNOME_SHELL,)
+
     def __init__(self, extension=True):
         self.answer = self.window_answer = True
         self.desktop_answer = "done"
         self.called, self.window_calls, self.desktop_calls = [], [], []
-        self._context = GLib.MainContext()
-        self._loop = GLib.MainLoop(self._context)
-        ready = threading.Event()
-        self._thread = threading.Thread(target=self._serve, args=(extension, ready),
-                                        daemon=True)
-        self._thread.start()
-        assert ready.wait(10)
+        self._extension = extension
+        self._start()
 
-    def _serve(self, extension, ready):
-        self._context.push_thread_default()
-        bus = _private_bus()
-        register = getattr(bus, "register_object_with_closures2", bus.register_object)
-        if extension is True:
+    def _register(self, _bus, register):
+        if self._extension is True:
             interface = Gio.DBusNodeInfo.new_for_xml(_EXTENSION_XML).interfaces[0]
             register(app_focus.EXTENSION_PATH, interface, self._on_call, None, None)
         shell = Gio.DBusNodeInfo.new_for_xml(_SHELL_EXTENSIONS_XML).interfaces[0]
-        register("/org/gnome/Shell", shell, self._extension_info(bool(extension)), None, None)
-        bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
-                      "RequestName", GLib.Variant("(su)", (app_focus.GNOME_SHELL, 4)), None,
-                      Gio.DBusCallFlags.NONE, 5000, None)
-        ready.set()
-        self._loop.run()
-        bus.close_sync(None)
+        register("/org/gnome/Shell", shell, self._extension_info(bool(self._extension)),
+                 None, None)
 
     def _on_call(self, _bus, _sender, _path, _interface, method, parameters, invocation):
         if method == "WindowAction":
@@ -328,10 +345,6 @@ class FakeShell:
             known = enabled and parameters.unpack()[0] == extension_helper.EXTENSION_UUID
             invocation.return_value(GLib.Variant("(a{sv})", (info if known else {},)))
         return on_call
-
-    def stop(self):
-        self._loop.quit()
-        self._thread.join(10)
 
 
 @pytest.fixture
@@ -513,35 +526,23 @@ _PORTAL_XML = """<node><interface name="org.freedesktop.portal.Screenshot">
 </interface></node>"""
 
 
-class FakePortal:
-    """The screenshot portal on the test's session bus, served from a thread
-    of its own. Screenshot answers with the Response signal on the request
-    path it was given: *code* (0 done, 1 cancelled, 2 failed, None never
-    answers), and for 0 a file it writes in *folder*. *calls* keeps each call's options."""
+class FakePortal(_BusService):
+    """The screenshot portal on the test's session bus. Screenshot answers
+    with the Response signal on the request path it was given: *code* (0
+    done, 1 cancelled, 2 failed, None never answers), and for 0 a file it
+    writes in *folder*. *calls* keeps each call's options."""
+
+    names = ("org.freedesktop.portal.Desktop",)
 
     def __init__(self, folder):
         self.code = 0
         self.calls = []
         self._folder = folder
-        self._context = GLib.MainContext()
-        self._loop = GLib.MainLoop(self._context)
-        ready = threading.Event()
-        self._thread = threading.Thread(target=self._serve, args=(ready,), daemon=True)
-        self._thread.start()
-        assert ready.wait(10)
+        self._start()
 
-    def _serve(self, ready):
-        self._context.push_thread_default()
-        bus = _private_bus()
-        register = getattr(bus, "register_object_with_closures2", bus.register_object)
+    def _register(self, _bus, register):
         interface = Gio.DBusNodeInfo.new_for_xml(_PORTAL_XML).interfaces[0]
         register("/org/freedesktop/portal/desktop", interface, self._on_call, None, None)
-        bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
-                      "RequestName", GLib.Variant("(su)", ("org.freedesktop.portal.Desktop", 4)),
-                      None, Gio.DBusCallFlags.NONE, 5000, None)
-        ready.set()
-        self._loop.run()
-        bus.close_sync(None)
 
     def _on_call(self, bus, sender, _path, _interface, _method, parameters, invocation):
         options = parameters.unpack()[1]
@@ -560,10 +561,6 @@ class FakePortal:
             results = {"uri": GLib.Variant("s", GLib.filename_to_uri(shot))}
         bus.emit_signal(sender, request, "org.freedesktop.portal.Request", "Response",
                         GLib.Variant("(ua{sv})", (self.code, results)))
-
-    def stop(self):
-        self._loop.quit()
-        self._thread.join(10)
 
 
 @pytest.fixture
