@@ -255,11 +255,14 @@ function showDesktop() {
     hiddenByShowDesktop.delete(workspace);
     if (hidden.length > 0) {
         hidden.forEach(unminimize);
-        // Not while the person works in another window opened meanwhile,
+        // Not while the person works in another window opened meanwhile
+        // (a dialog too: GNOME keeps those out of the taskbar, as it does
+        // Ubuntu's desktop icons, which have the focus once all is hidden),
         // and not one moved to another workspace: focusing it would switch
         // there, away from the windows the person asked back.
         const now = global.display.focus_window;
-        const busy = now && isAppWindow(now) && !now.skip_taskbar;
+        const busy = now && isAppWindow(now)
+            && (!now.skip_taskbar || now.get_window_type() !== Meta.WindowType.NORMAL);
         if (!busy && hidden.includes(focused) && !focused.minimized
                 && workspace.list_windows().includes(focused))
             Main.activateWindow(focused);

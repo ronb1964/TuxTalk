@@ -297,3 +297,22 @@ def test_x11_a_window_manager_without_move_requests_leaves_the_window_alone(
     with pytest.raises(OSError):
         x11_desktop.act("snap left", None)
     assert desktops.requests(b"_NET_WM_STATE") == []
+
+
+def test_on_cinnamon_an_x_server_that_doesnt_answer_keeps_popups_away_without_waiting(
+        monkeypatch):
+    """Asked as a recording starts, on the thread that also reads the keys:
+    waiting for a server that never answers would leave the key's release
+    and Esc unread, and the recording running."""
+    import threading
+    import time
+    from tuxtalk import x11_activate
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "X-Cinnamon")
+    release = threading.Event()
+    monkeypatch.setattr(x11_activate, "open_display", lambda: release.wait(10))
+    started = time.monotonic()
+    try:
+        assert x11_desktop.popup_ends_show_desktop() is True
+        assert time.monotonic() - started < 2
+    finally:
+        release.set()

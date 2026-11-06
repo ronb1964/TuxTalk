@@ -21,6 +21,7 @@ Answers are the strings desktop_actions turns into a spoken-style note:
 "unknown"; None for "overview", which X11 desktops don't have.
 """
 import logging
+import threading
 import time
 
 from . import desktop_detect, x11_activate
@@ -41,6 +42,8 @@ _SIZED_BY_STATE = (*_MAXIMIZED, b"_NET_WM_STATE_FULLSCREEN")
 # it is centred; then how often its frame is looked at.
 _RESTORE_WAIT_S = 0.5
 _RESTORE_LOOK_S = 0.05
+# How long the X server gets to say whether the desktop is shown.
+_ASK_WAIT_S = 0.5
 _NO_FRAME = (0, 0, 0, 0)
 
 # Where each snap goes, in halves of the monitor: first column, last column,
@@ -323,9 +326,24 @@ def popup_ends_show_desktop() -> bool:
     any window mapped, an override-redirect one too, ends it and brings the
     windows back (tried in the Mint VM; KWin, Mutter and xfwm4 keep it). So
     TuxTalk's indicator and floating labels stay away while the desktop is
-    shown there. False where it can't be told."""
+    shown there. Asked as a recording starts, on the thread that also reads
+    the keys, so an X server that doesn't answer within _ASK_WAIT_S counts as
+    "it would": the key's release and Esc are read all the same."""
     if desktop_detect.get_desktop_environment() != "cinnamon":
         return False
+    answer = []
+    asking = threading.Thread(target=lambda: answer.append(_desktop_shown()), daemon=True,
+                              name="show-desktop-question")
+    asking.start()
+    asking.join(_ASK_WAIT_S)
+    if not answer:
+        log.info("The X server didn't say in time whether the desktop is shown")
+        return True
+    return answer[0]
+
+
+def _desktop_shown() -> bool:
+    """_showing() on a connection of its own; False where it can't be told."""
     try:
         display = x11_activate.open_display()
         if display is None:

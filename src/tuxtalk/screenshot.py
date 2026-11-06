@@ -161,10 +161,12 @@ def _ask_portal() -> tuple[str, str]:
         timeout.attach(context)
         loop.run()
     except GLib.Error as e:
+        # The error's name, not its message, which could quote a path.
+        name = Gio.DBusError.get_remote_error(e) or f"{e.domain} {e.code}"
         if _may_have_reached(e):
-            logger.info(f"Screenshot portal didn't answer the call: {e.message}")
+            logger.info(f"Screenshot portal didn't answer the call ({name})")
         else:
-            logger.info(f"Screenshot portal not available: {e.message}")
+            logger.info(f"Screenshot portal not available ({name})")
             answer["outcome"] = "unavailable"
     finally:
         timeout.destroy()

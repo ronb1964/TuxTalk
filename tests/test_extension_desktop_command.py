@@ -147,10 +147,39 @@ def test_show_desktop_twice_doesnt_follow_a_window_moved_to_another_workspace():
     windows the person asked back."""
     answer, _logs = run(ENABLED + FOCUSED + """
         ask('show desktop');
+        t.focus(null);
         t.shell.workspaceWindows = t.shell.workspaceWindows.filter(w => w !== kwrite);
         t.report([ask('show desktop'), t.shell.activated]);
     """)
     assert answer == ["done", []]
+
+
+def test_show_desktop_twice_leaves_a_focused_dialog_alone():
+    """GNOME keeps a dialog out of the taskbar; the person still works in it."""
+    answer, _logs = run(ENABLED + FOCUSED + """
+        ask('show desktop');
+        const dialog = new t.Window('org.gnome.Nautilus', 13);
+        dialog.type = t.Meta.WindowType.DIALOG;
+        dialog.skip_taskbar = true;
+        t.focus(dialog);
+        ask('show desktop');
+        t.report(t.shell.activated);
+    """)
+    assert answer == []
+
+
+def test_show_desktop_twice_focuses_past_the_desktop_icons():
+    """Ubuntu's desktop icons are a normal window kept out of the taskbar,
+    and it has the focus once the windows are hidden."""
+    answer, _logs = run(ENABLED + FOCUSED + """
+        ask('show desktop');
+        const icons = new t.Window('com.desktop.ding', 14);
+        icons.skip_taskbar = true;
+        t.focus(icons);
+        ask('show desktop');
+        t.report(t.shell.activated);
+    """)
+    assert answer == [5]
 
 
 def test_show_desktop_twice_focuses_nothing_that_was_closed_meanwhile():
