@@ -262,15 +262,17 @@ def _from_portal(interactive: bool, tools: list[list[str]], what: str, beeps_on:
     """Ask the portal (its picker with *interactive*), then, only when it
     answered that it can't or isn't there, the first installed of *tools*."""
     outcome, file = _ask_portal(interactive)
+    answered = ""
     if interactive and outcome == "failed":
-        # GNOME's answer when its picker is closed with Escape.
-        outcome = "cancelled"
+        # A picker closed with Escape answers "failed" on GNOME; a real
+        # failure looks the same, so the log keeps the portal's answer.
+        outcome, answered = "cancelled", ", the portal said failed"
     if outcome == "saved":
         # The portal said so; not seeing the file (a sandbox) doesn't change that.
         return _saved("the portal", _keep(file) if os.path.exists(file) else None, what,
                       beeps_on)
     if outcome in ("cancelled", "unconfirmed"):
-        logger.info(f"Voice command: take {what} ({outcome})")
+        logger.info(f"Voice command: take {what} ({outcome}{answered})")
         command_notices.say("screenshot_cancelled" if outcome == "cancelled"
                             else "screenshot_unconfirmed", beeps_on)
         return False
@@ -288,10 +290,10 @@ def _open_picker(what: str, beeps_on: bool) -> bool:
             logger.info(f"Voice command: take {what} (the picker is already open)")
             command_notices.say("screenshot_picker_open", beeps_on)
             return False
+        logger.info(f"Voice command: take {what} (asked the desktop's picker)")
         _picker = threading.Thread(target=_picked, args=(what, beeps_on), daemon=True,
                                    name="screenshot-picker")
         _picker.start()
-    logger.info(f"Voice command: take {what} (asked the desktop's picker)")
     return True
 
 

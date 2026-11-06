@@ -382,6 +382,13 @@ def _picked():
     screenshot._picker.join(10)
 
 
+@pytest.fixture(autouse=True)
+def no_picker_left_open(monkeypatch):
+    """A picker test that fails midway leaves no picker "open" for the next."""
+    yield
+    monkeypatch.setattr(screenshot, "_picker", None)
+
+
 def test_kde_takes_the_active_window_with_spectacle(kde, tools, home, actions_on):
     assert screenshot.take(False, window=True) is True
     assert tools.commands[0][:5] == ["spectacle", "--background", "--activewindow", "--nonotify",
@@ -479,13 +486,15 @@ def test_a_window_screenshot_cancelled_in_the_picker_saves_nothing(gnome, fake_p
 
 
 def test_a_picker_closed_with_escape_on_gnome_is_cancelled_not_impossible(
-        gnome, fake_portal, tools, home, actions_on):
+        gnome, fake_portal, tools, home, actions_on, caplog):
     """GNOME answers "failed" when its picker is closed with Escape (Ubuntu
     VM): TuxTalk said it found no way to take a screenshot."""
     fake_portal.code = 2
-    screenshot.take(False, window=True)
-    _picked()
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        screenshot.take(False, window=True)
+        _picked()
     assert actions_on == ["Screenshot cancelled"]
+    assert "(cancelled, the portal said failed)" in caplog.text
     assert tools.commands == []
 
 

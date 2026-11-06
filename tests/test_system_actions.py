@@ -404,3 +404,8 @@ def test_a_screenshot_request_takes_the_screen_or_the_window(monkeypatch, action
                         lambda beeps_on, window=False: taken.append(window) or True)
     assert system_actions.run(SystemRequest(action), False) is True
     assert taken == [window]
+
+
+def test_an_unknown_system_command_is_a_bug_not_a_screenshot():
+    with pytest.raises(ValueError):
+        system_actions.run(SystemRequest("reboot"), False)

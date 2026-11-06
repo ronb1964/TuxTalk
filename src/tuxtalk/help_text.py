@@ -523,6 +523,7 @@ Pictures/Screenshots; elsewhere, where your desktop keeps them. GNOME may ask on
 Hold <b>{hold}</b>, say <b>take a screenshot of this window</b>, let go. Just the window
 you're working in is saved. On GNOME and Pop!_OS your desktop's screenshot tool opens
 instead: choose Window in it (on GNOME, press W), click the window, then press Enter.
+Where a desktop can't take just one window, a note says so.
 In a hands-free or Type at pause recording, the recording indicator may show in either
 picture.
 Hold <b>{hold}</b>, say <b>what can I say</b>, let go. The Voice Commands window opens with
@@ -559,8 +560,8 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
     back in once after updating). X11 desktops like Cinnamon and Xfce have all but
     <b>show all windows</b>. On COSMIC, Sway and Hyprland, windows and desktops can't be
     done (TuxTalk says so; use the window's own buttons), and an open app is started
-    again, which most then answer by showing the window they already have. Sound, music
-    screenshots and the lock work there.
+    again, which most then answer by showing the window they already have. Sound, music,
+    screenshots and the lock work there; a screenshot of just the window only on COSMIC.
   • In a hands-free or Type at pause recording, a command ends the recording.
   • One word alone (copy, paste, save, pause, next...) is typed as a word: people say those
     as answers in chats.

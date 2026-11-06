@@ -1126,7 +1126,7 @@ def _window_picker(run):
             time.sleep(4)       # the picker opening
             shot = run.shot("window-picker")
             run.vm.tap("esc")
-            cancelled = _until(15, lambda: "of the window (cancelled)" in run.log_since(mark))
+            cancelled = _until(15, lambda: "of the window (cancelled" in run.log_since(mark))
             files, log = _new_screenshots(run, marker), run.log_since(mark)
         finally:
             if not cancelled:
@@ -1137,10 +1137,14 @@ def _window_picker(run):
     if bad := _not_a_command(run, "take_window_screenshot", log, heard_in(log)):
         return bad
     noted = "Voice command not done: screenshot_cancelled" in log
-    if not cancelled or not noted or files:
-        said = [line for line in log.splitlines() if "screenshot" in line.lower()]
+    # The Escape is for the picker: the dictation was over by then.
+    dictation_cancelled = "Recording cancelled" in log
+    if not cancelled or not noted or files or dictation_cancelled:
+        said = [line for line in log.splitlines()
+                if "screenshot" in line.lower() or "Recording cancelled" in line]
         return Outcome("fail", f"Escape in the picker: cancelled {bool(cancelled)}, the note "
-                       f"{noted}, {len(files)} picture(s) saved; log: {said}", screenshot=shot)
+                       f"{noted}, {len(files)} picture(s) saved, the dictation cancelled "
+                       f"{dictation_cancelled}; log: {said}", screenshot=shot)
     return Outcome("pass", "TuxTalk asked the desktop's picker; Escape ended it as cancelled, "
                    "with the note and nothing saved", screenshot=shot)
 
