@@ -8,14 +8,14 @@ screen came up or a screenshot was saved.
 
 Each check judges an effect it can see (the window's size and place, KWin's
 or the X server's own answer, the sound server's volume, the pretend
-player's calls, logind's LockedHint, a new file) and never the absence of
-one. A desktop that can't do a command says so with a note in the log:
-COSMIC can't place windows or switch desktops, X11 desktops have no overview,
-a one-screen VM has no other screen. Those are checked as the note, and
-GNOME without the TuxTalk extension (which can't tell which window has the
-focus) is skipped until the extension is there (checks_extension.AGAIN).
-What the VM can't judge is Ron's part: how the commands feel on his own
-desktop and screens.
+player's calls, logind's LockedHint or Cinnamon's screensaver, a new file)
+and never the absence of one. A desktop that can't do a command says so
+with a note in the log: COSMIC can't place windows or switch desktops, X11
+desktops have no overview, a one-screen VM has no other screen. Those are
+checked as the note, and GNOME without the TuxTalk extension (which can't
+tell which window has the focus) is skipped until the extension is there
+(checks_extension.AGAIN). What the VM can't judge is Ron's part: how the
+commands feel on his own desktop and screens.
 """
 import contextlib
 import json
@@ -38,8 +38,13 @@ SECTION = "Desktop commands by voice"
 SINK = "TT Sink"
 # The desktops whose lockers are known to tell logind they locked: there the
 # check needs the lock confirmed; elsewhere TuxTalk's "not confirmed" note is
-# the right answer to a lock logind isn't told of.
-LOCK_ANSWERS = ("kde", "gnome", "cinnamon")
+# the right answer to a lock logind isn't told of. Cinnamon's locker never
+# sets LockedHint (cinnamon-screensaver has no SetLockedHint call), so there
+# the check asks the screensaver itself whether the lock screen is up.
+LOCK_ANSWERS = ("kde", "gnome")
+CINNAMON_SCREENSAVER = ("gdbus", "call", "--session", "--dest", "org.cinnamon.ScreenSaver",
+                        "--object-path", "/org/cinnamon/ScreenSaver", "--method",
+                        "org.cinnamon.ScreenSaver.GetActive")
 # TuxTalk waits up to 30 s for the portal and 10 s for its call; then the files
 # are looked for one last time.
 SCREENSHOT_WAIT_S = 50
@@ -936,6 +941,14 @@ def _locked(run, session):
                       check=False).stdout.strip()
 
 
+def _screen_locked(run, session):
+    """Whether the lock screen is up: logind's LockedHint, or on Cinnamon,
+    whose locker never sets it, the screensaver's own answer."""
+    if "cinnamon" in run.vm.spec.tags:
+        return "(true,)" in _session_tool(run, *CINNAMON_SCREENSAVER)
+    return _locked(run, session) == "yes"
+
+
 def _new_screenshots(run, marker):
     """The screenshot files made in the home folder since *marker* was touched
     (Spectacle and GNOME both name theirs Screenshot...)."""
@@ -1127,13 +1140,15 @@ def bare_words_and_sentences_typed(run):
 def _unlock(run, session):
     """Unlock the session whatever logind says (COSMIC's locker never tells
     it), through loginctl and through sudo, and look again: True only when
-    logind says "no" and the test window shows with the focus, which a lock
-    screen in front of it would take. Unknown is not unlocked."""
+    logind says "no", the lock screen is down (_screen_locked) and the test
+    window shows with the focus, which a lock screen in front of it would
+    take. Unknown is not unlocked."""
     for command in ("loginctl unlock-session", "sudo -n loginctl unlock-session"):
         run.vm.ssh(f"{command} {session}", check=False)
     time.sleep(5)      # a lock that landed late is undone by this
     run.vm.click_centre()
     return bool(_until(10, lambda: _locked(run, session) == "no"
+                       and not _screen_locked(run, session)
                        and _sink_state(_sink(run)) is None))
 
 
@@ -1142,14 +1157,17 @@ def lock_screen(run):
     session = _session_id(run)
     if not session:
         return Outcome("skip", "the desktop session's id couldn't be found")
-    if _locked(run, session) == "yes":
+    if _screen_locked(run, session):
         return Outcome("skip", "the VM's session was already locked")
-    strict = bool(set(LOCK_ANSWERS) & set(run.vm.spec.tags))
+    # Where the lock screen can be seen (logind is told, or Cinnamon's
+    # screensaver is asked), it must come up; elsewhere TuxTalk's "not
+    # confirmed" note is the answer.
+    seen = bool({*LOCK_ANSWERS, "cinnamon"} & set(run.vm.spec.tags))
     with _open_apps_on(run):
         run.sink_ready(fresh=True)
         try:
             log, heard = _said(run, "lock_screen", "Voice command: lock screen", timeout=40)
-            locked = bool(_until(5, lambda: _locked(run, session) == "yes"))
+            locked = bool(_until(5, lambda: _screen_locked(run, session)))
             shot = run.shot("lock-screen")
         finally:
             unlocked = _unlock(run, session)
@@ -1161,7 +1179,7 @@ def lock_screen(run):
     unconfirmed = "Voice command not done: lock_unconfirmed" in log
     said = f"locked: {'yes' if locked else 'no'}; the note lock_unconfirmed: " \
            f"{'yes' if unconfirmed else 'no'}"
-    if locked or (not strict and unconfirmed):
+    if locked or (not seen and unconfirmed):
         unverified = "" if locked else ("; whether it really locked can't be verified on this "
                                         "desktop (the lock isn't reported to logind)")
         return Outcome("pass", f"{said}{unverified}; the VM's session was unlocked again",
