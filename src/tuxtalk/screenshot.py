@@ -52,6 +52,9 @@ _DOCUMENT_PORTAL = "doc"
 # The picker still being waited for: one at a time.
 _picker = None
 _picker_lock = threading.Lock()
+# Every file name new_path() has handed out, one per screenshot taken.
+_handed_out = set()
+_names_lock = threading.Lock()
 
 # A call that ended with one of these may still have reached the portal.
 _NO_REPLY = frozenset(f"org.freedesktop.DBus.Error.{name}"
@@ -68,14 +71,18 @@ def folder() -> str:
 
 def new_path() -> str:
     """A file in folder() named as Spectacle names its own, folder made.
-    Never an existing file's name, even for two in the same second, so a
-    file found there afterwards is this screenshot."""
+    Never an existing file's name, nor one handed out already whose file
+    isn't written yet (the picker's picture can be moved in while another
+    is taken), even for two in the same second, so a file found there
+    afterwards is this screenshot."""
     os.makedirs(folder(), exist_ok=True)
     stem = os.path.join(folder(), datetime.now().strftime("Screenshot_%Y%m%d_%H%M%S"))
-    path, number = stem + ".png", 1
-    while os.path.exists(path):
-        number += 1
-        path = f"{stem}-{number}.png"
+    with _names_lock:
+        path, number = stem + ".png", 1
+        while os.path.exists(path) or path in _handed_out:
+            number += 1
+            path = f"{stem}-{number}.png"
+        _handed_out.add(path)
     return path
 
 
@@ -167,6 +174,7 @@ def _ask_portal(interactive: bool = False) -> tuple[str, str]:
         loop.quit()
 
     def out_of_time(*_):
+        answer["out_of_time"] = True
         loop.quit()
         return GLib.SOURCE_REMOVE
 
@@ -176,13 +184,14 @@ def _ask_portal(interactive: bool = False) -> tuple[str, str]:
 
     timeout = GLib.timeout_source_new(int((PICKER_WAIT_S if interactive else PORTAL_WAIT_S)
                                           * 1000))
+    bus, token = portal_common.session_bus(), portal_common.new_request_token()
     timeout.set_callback(out_of_time)
     context.push_thread_default()
     unsubscribe = None
     try:
         unsubscribe = portal_common.call_portal(
-            portal_common.session_bus(), _PORTAL_IFACE, "Screenshot", options,
-            on_response, on_error, PORTAL_CALL_TIMEOUT_MS)
+            bus, _PORTAL_IFACE, "Screenshot", options, on_response, on_error,
+            PORTAL_CALL_TIMEOUT_MS, token=token)
         timeout.attach(context)
         loop.run()
     except GLib.Error as e:
@@ -198,6 +207,10 @@ def _ask_portal(interactive: bool = False) -> tuple[str, str]:
         if unsubscribe:
             unsubscribe()
         context.pop_thread_default()
+    if interactive and answer.get("out_of_time"):
+        # Left open, the next "take a screenshot of this window" would open
+        # a second picker beside it.
+        portal_common.close_request(bus, portal_common.request_path(bus, token))
     return answer["outcome"], answer["file"]
 
 

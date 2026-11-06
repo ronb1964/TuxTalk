@@ -34,12 +34,29 @@ def _sender_prefix(bus) -> str:
     return bus.get_unique_name().lstrip(":").replace(".", "_")
 
 
+def request_path(bus, token: str) -> str:
+    """The object path of the portal's Request made with *token* on *bus*."""
+    return f"/org/freedesktop/portal/desktop/request/{_sender_prefix(bus)}/{token}"
+
+
+def close_request(bus, path: str):
+    """Ask the portal to close its Request at *path* (a dialog it still shows);
+    an error is logged: the request may already be gone."""
+    try:
+        bus.call_sync(BUS_NAME, path, "org.freedesktop.portal.Request", "Close", None, None,
+                      Gio.DBusCallFlags.NONE, 2000, None)
+    except Exception as e:
+        logger.info("Portal request couldn't be closed: %s", e)
+
+
 def call_portal(bus, iface, method, param_builder, on_response, on_error=None,
-                timeout_ms=-1):
+                timeout_ms=-1, token=None):
     """Issue a portal request and invoke on_response(code:int, results:dict) when
     its Response signal arrives. param_builder(handle_token) returns the method's
     IN args as a GLib.Variant, embedding handle_token in the options a{sv}.
-    *timeout_ms* bounds the method call itself (-1: GDBus's 25 s).
+    *timeout_ms* bounds the method call itself (-1: GDBus's 25 s). *token*,
+    from new_request_token(), lets the caller name the Request (to close it);
+    by default a new one is taken.
 
     An exception inside on_response goes to on_error(exc). PyGObject would
     otherwise print and swallow it, and a caller waiting on a main loop for
@@ -49,9 +66,8 @@ def call_portal(bus, iface, method, param_builder, on_response, on_error=None,
     itself once the response arrives, and calling it again does nothing.
     This keeps finished requests from piling up subscriptions on the shared bus.
     """
-    token = new_request_token()
-    request_path = (f"/org/freedesktop/portal/desktop/request/"
-                    f"{_sender_prefix(bus)}/{token}")
+    token = token or new_request_token()
+    path = request_path(bus, token)
     sub_id = None
 
     def unsubscribe():
@@ -71,7 +87,7 @@ def call_portal(bus, iface, method, param_builder, on_response, on_error=None,
                 on_error(e)
 
     sub_id = bus.signal_subscribe(BUS_NAME, "org.freedesktop.portal.Request", "Response",
-                                  request_path, None, Gio.DBusSignalFlags.NONE, _on_signal)
+                                  path, None, Gio.DBusSignalFlags.NONE, _on_signal)
     try:
         bus.call_sync(BUS_NAME, OBJ_PATH, iface, method, param_builder(token),
                       None, Gio.DBusCallFlags.NONE, timeout_ms, None)

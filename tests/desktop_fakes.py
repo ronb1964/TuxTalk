@@ -552,7 +552,7 @@ class FakePortal(_BusService):
     "malformed", a uri GLib can't read, naming a private folder; "nothing",
     no uri at all. With *replies* off
     the method call itself is never answered. *calls* keeps each call's
-    options."""
+    options, and *closed* each request closed while left unanswered."""
 
     names = ("org.freedesktop.portal.Desktop",)
 
@@ -561,6 +561,7 @@ class FakePortal(_BusService):
         self.saved = "file"
         self.replies = True
         self.calls = []
+        self.closed = []
         self._unanswered = []
         self._folder = folder
         self.temporary = temporary
@@ -580,6 +581,10 @@ class FakePortal(_BusService):
                    f"{sender.lstrip(':').replace('.', '_')}/{options['handle_token']}")
         invocation.return_value(GLib.Variant("(o)", (request,)))
         if self.code is None:
+            # Still open: the request can be closed, as a person's dialog can.
+            interface = Gio.DBusNodeInfo.new_for_xml(_REQUEST_XML).interfaces[0]
+            bus.register_object(request, interface,
+                                lambda *call: self._on_close(request, call[-1]), None, None)
             return
         results = {}
         if self.code == 0 and self.saved != "nothing":
@@ -604,6 +609,16 @@ class FakePortal(_BusService):
             results = {"uri": GLib.Variant("s", uri)}
         bus.emit_signal(sender, request, "org.freedesktop.portal.Request", "Response",
                         GLib.Variant("(ua{sv})", (self.code, results)))
+
+
+    def _on_close(self, request, invocation):
+        self.closed.append(request)
+        invocation.return_value(None)
+
+
+_REQUEST_XML = """<node><interface name="org.freedesktop.portal.Request">
+  <method name="Close"/>
+</interface></node>"""
 
 
 @pytest.fixture

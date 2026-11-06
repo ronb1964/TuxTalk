@@ -485,6 +485,23 @@ def test_a_window_screenshot_cancelled_in_the_picker_saves_nothing(gnome, fake_p
     assert tools.commands == []
 
 
+def test_a_picker_not_answered_in_time_is_closed(gnome, fake_portal, tools, home, actions_on,
+                                                 monkeypatch):
+    """Left open, a second request could open a second picker beside it."""
+    monkeypatch.setattr(screenshot, "PICKER_WAIT_S", 0.3)
+    fake_portal.code = None
+    screenshot.take(False, window=True)
+    _picked()
+    assert len(fake_portal.closed) == 1
+    assert actions_on == ["Screenshot not confirmed"]
+
+
+def test_two_screenshots_in_one_second_get_two_names(home):
+    """The picker's picture can be moved in while another is being taken:
+    a name handed out isn't handed out again before its file is written."""
+    assert screenshot.new_path() != screenshot.new_path()
+
+
 def test_a_picker_closed_with_escape_on_gnome_is_cancelled_not_impossible(
         gnome, fake_portal, tools, home, actions_on, caplog):
     """GNOME answers "failed" when its picker is closed with Escape (Ubuntu
