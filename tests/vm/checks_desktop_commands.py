@@ -1013,42 +1013,124 @@ def _allow_screenshots(run):
                   "SetPermission", table, "true", permission_id, repr(app), "['yes']")
 
 
-@check(SECTION, "screenshot_saved", "“take a screenshot” saves exactly one picture")
-def screenshot_saved(run):
+def _png_size(run, path):
+    """(width, height) of the PNG at *path* in the VM, None when unreadable."""
+    reader = ("import struct, sys; head = open(sys.argv[1], 'rb').read(24); "
+              "print(*struct.unpack('>II', head[16:24]))")
+    out = run.vm.ssh(f"python3 -c {shlex.quote(reader)} {shlex.quote(path)}",
+                     check=False).stdout.split()
+    return (int(out[0]), int(out[1])) if len(out) == 2 else None
+
+
+def _pictures_from(run, phrase_id, shot_name):
+    """Say *phrase_id* and wait until TuxTalk can save nothing more (Escape
+    at the deadline, for a question still showing). (the new pictures'
+    files, their sizes in bytes, their (width, height), the log since, the
+    report's screenshot); the pictures are removed again."""
     marker = f"~/{REMOTE}/shot.marker"
     folder_existed = not run.vm.ssh(f"test -d {SCREENSHOTS}/Screenshots", check=False).returncode
     files = []
+    try:
+        run.vm.ssh(f"touch {marker}")
+        _typed, _heard, mark = run.say(phrase_id, wait=False)
+        # One deadline, never moved: TuxTalk's own waits end within it.
+        deadline = time.monotonic() + SCREENSHOT_WAIT_S
+        while time.monotonic() < deadline and not screenshot_settled(run.log_since(mark)):
+            time.sleep(1)
+        if not screenshot_settled(run.log_since(mark)):
+            # A question the portal still shows would hold the keyboard
+            # for the checks after this one; Escape closes it.
+            run.vm.tap("esc")
+        time.sleep(2)       # a file still being written
+        files = _new_screenshots(run, marker)
+        log, shot = run.log_since(mark), run.shot(shot_name)
+        sizes = [run.vm.ssh(f"stat -c %s {shlex.quote(f)}", check=False).stdout.strip()
+                 for f in files]
+        dimensions = [_png_size(run, f) for f in files]
+    finally:
+        # One last look, so a picture saved late is removed too.
+        for file in {*files, *_new_screenshots(run, marker)}:
+            run.vm.ssh(f"rm -f {shlex.quote(file)}", check=False)
+        if not folder_existed:
+            run.vm.ssh(f"rmdir {SCREENSHOTS}/Screenshots", check=False)
+        run.vm.ssh(f"rm -f {marker}", check=False)
+    return files, sizes, dimensions, log, shot
+
+
+@check(SECTION, "screenshot_saved", "“take a screenshot” saves exactly one picture")
+def screenshot_saved(run):
     with _open_apps_on(run):
         _allow_screenshots(run)
         run.sink_ready(fresh=True)
-        run.vm.ssh(f"touch {marker}")
-        try:
-            _typed, _heard, mark = run.say("take_screenshot", wait=False)
-            # One deadline, never moved: TuxTalk's own waits end within it.
-            deadline = time.monotonic() + SCREENSHOT_WAIT_S
-            while time.monotonic() < deadline and not screenshot_settled(run.log_since(mark)):
-                time.sleep(1)
-            if not screenshot_settled(run.log_since(mark)):
-                # A question the portal still shows would hold the keyboard
-                # for the checks after this one; Escape closes it.
-                run.vm.tap("esc")
-            time.sleep(2)       # a file still being written
-            files = _new_screenshots(run, marker)
-            log, shot = run.log_since(mark), run.shot("screenshot")
-            sizes = [run.vm.ssh(f"stat -c %s {shlex.quote(f)}", check=False).stdout.strip()
-                     for f in files]
-        finally:
-            # One last look, so a picture saved late is removed too.
-            for file in {*files, *_new_screenshots(run, marker)}:
-                run.vm.ssh(f"rm -f {shlex.quote(file)}", check=False)
-            if not folder_existed:
-                run.vm.ssh(f"rmdir {SCREENSHOTS}/Screenshots", check=False)
-            run.vm.ssh(f"rm -f {marker}", check=False)
+        files, sizes, _dimensions, log, shot = _pictures_from(run, "take_screenshot", "screenshot")
     if bad := _not_a_command(run, "take_screenshot", log, heard_in(log)):
         return bad
     if problem := screenshot_problem(files, sizes, log):
         return Outcome("fail", problem, screenshot=shot)
     return Outcome("pass", "One picture saved and removed again", screenshot=shot)
+
+
+# A window's picture may carry its frame and shadow, beyond the size KWin or
+# AT-SPI gives for it.
+WINDOW_FRAME_PX = 120
+
+
+@check(SECTION, "window_screenshot",
+       "“take a screenshot of this window” saves the window, or opens the desktop's picker")
+def window_screenshot(run):
+    if {"gnome", "cosmic"} & set(run.vm.spec.tags):
+        return _window_picker(run)
+    with _open_apps_on(run):
+        _allow_screenshots(run)
+        run.sink_ready(fresh=True)
+        box = _sink_box(run)
+        files, sizes, dimensions, log, shot = _pictures_from(run, "take_window_screenshot",
+                                                             "window-screenshot")
+    if bad := _not_a_command(run, "take_window_screenshot", log, heard_in(log)):
+        return bad
+    if problem := screenshot_problem(files, sizes, log):
+        return Outcome("fail", problem, screenshot=shot)
+    size, screen = dimensions[0], (run.vm.spec.width, run.vm.spec.height)
+    if size is None or size == screen:
+        return Outcome("fail", f"the picture is {size}, the whole screen is {screen}",
+                       screenshot=shot)
+    if box and (abs(size[0] - box.width) > WINDOW_FRAME_PX
+                or abs(size[1] - box.height) > WINDOW_FRAME_PX):
+        return Outcome("fail", f"the picture is {size}, the test window "
+                       f"{(box.width, box.height)}", screenshot=shot)
+    return Outcome("pass", f"One picture of the window ({size[0]}x{size[1]}, the screen is "
+                   f"{screen[0]}x{screen[1]}), removed again", screenshot=shot)
+
+
+def _window_picker(run):
+    """GNOME's and COSMIC's portals can't take one window by themselves:
+    TuxTalk opens the desktop's screenshot picker. Escape there must end in
+    TuxTalk's "cancelled" note with nothing saved. Choosing a window in it
+    is Ron's check."""
+    with _open_apps_on(run):
+        _allow_screenshots(run)
+        run.sink_ready(fresh=True)
+        marker = f"~/{REMOTE}/shot.marker"
+        run.vm.ssh(f"touch {marker}")
+        try:
+            _typed, _heard, mark = run.say("take_window_screenshot", wait=False)
+            time.sleep(5)       # the picker opening
+            shot = run.shot("window-picker")
+            run.vm.tap("esc")
+            cancelled = _until(15, lambda: "take a screenshot (cancelled)" in run.log_since(mark))
+            files, log = _new_screenshots(run, marker), run.log_since(mark)
+        finally:
+            for file in _new_screenshots(run, marker):
+                run.vm.ssh(f"rm -f {shlex.quote(file)}", check=False)
+            run.vm.ssh(f"rm -f {marker}", check=False)
+    if bad := _not_a_command(run, "take_window_screenshot", log, heard_in(log)):
+        return bad
+    if not cancelled or files:
+        said = [line for line in log.splitlines() if "screenshot" in line.lower()]
+        return Outcome("fail", f"Escape in the picker: cancelled {bool(cancelled)}, "
+                       f"{len(files)} picture(s) saved; log: {said}", screenshot=shot)
+    return Outcome("pass", "The desktop's picker opened; Escape there saved nothing and "
+                   "TuxTalk said it was cancelled", screenshot=shot)
 
 
 @check(SECTION, "what_can_i_say", "“what can I say” opens the Voice Commands window")

@@ -112,7 +112,7 @@ def test_every_desktop_command_phrase_has_its_entry():
     """A check names its phrase by id; without an entry the run stops."""
     ids = set(desktop.voices.load_phrases())
     used = {c.id for c in run.CHECKS if c.section == desktop.SECTION}
-    assert len(used) == 14
+    assert len(used) == 15
     assert set(COMMANDS) | {"minimize_text_editor", "restore_text_editor"} <= ids
     assert {phrase for phrase, _said in desktop.SENTENCES} <= ids
 
@@ -123,7 +123,8 @@ COMMANDS = ("snap_left", "snap_top_right", "centre_window", "show_desktop",
             "go_to_desktop_two", "go_to_desktop_one", "move_to_desktop_two",
             "move_to_desktop_one", "other_screen", "show_all_windows", "volume_down",
             "volume_up_three", "mute_sound", "unmute_sound", "pause_music", "play_music",
-            "next_track", "lock_screen", "take_screenshot", "what_can_i_say")
+            "next_track", "lock_screen", "take_screenshot", "take_window_screenshot",
+            "what_can_i_say")
 
 
 @pytest.mark.parametrize("phrase", COMMANDS)

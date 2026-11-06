@@ -241,6 +241,9 @@ say = "Lock screen."
 [take_screenshot]
 say = "Take a screenshot."
 
+[take_window_screenshot]
+say = "Take a screenshot of this window."
+
 [what_can_i_say]
 say = "What can I say?"
 
