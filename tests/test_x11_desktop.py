@@ -42,10 +42,39 @@ def test_x11_snap_bottom_right_takes_the_quarter(desktops, one_monitor):
     assert desktops.requests(b"_NET_MOVERESIZE_WINDOW") == [(w, (0x2F01, 640, 500, 638, 475))]
 
 
+# _NET_MOVERESIZE_WINDOW's first word for a move by the window's centre.
+CENTRE_MOVE = 0x2305
+MAXIMIZED = (b"_NET_WM_STATE_MAXIMIZED_VERT", b"_NET_WM_STATE_MAXIMIZED_HORZ")
+
+
 def test_x11_centre_moves_without_resizing(desktops, one_monitor):
     w = _active_window(desktops)
     assert x11_desktop.act("center", None) == "done"
-    assert desktops.requests(b"_NET_MOVERESIZE_WINDOW") == [(w, (0x2301, 635, 495, 0, 0))]
+    assert desktops.requests(b"_NET_MOVERESIZE_WINDOW") == [(w, (CENTRE_MOVE, 640, 500, 0, 0))]
+
+
+def test_x11_centre_a_maximized_window_centres_it_at_its_restored_size(desktops, one_monitor):
+    """Maximized, its frame is the whole work area: centring that frame put
+    the restored window in the top left corner. By its centre, the window
+    manager places it at whatever size it comes back to."""
+    w = _active_window(desktops)
+    desktops.move(w, 0, 0, 1280, 1000)
+    desktops.set_states(w, *MAXIMIZED)
+    assert x11_desktop.act("center", None) == "done"
+    assert desktops.requests(b"_NET_WM_STATE")[0][1][0] == 0        # unmaximized first
+    assert desktops.requests(b"_NET_MOVERESIZE_WINDOW") == [(w, (CENTRE_MOVE, 640, 500, 0, 0))]
+
+
+def test_x11_a_move_left_of_the_screen_reaches_the_window_manager(desktops):
+    """X11 coordinates are signed: a window partly off the left edge is at a
+    negative x, which a window manager reads back as such."""
+    w = _active_window(desktops)
+    display = x11_activate.open_display()
+    try:
+        display.ask_window_manager(w, b"_NET_MOVERESIZE_WINDOW", (0x2301, -160, 10))
+    finally:
+        display.close()
+    assert desktops.requests(b"_NET_MOVERESIZE_WINDOW") == [(w, (0x2301, 2**32 - 160, 10, 0, 0))]
 
 
 def test_x11_snap_uses_the_monitor_the_window_is_on(desktops, monkeypatch):
@@ -117,6 +146,28 @@ def test_x11_window_moves_to_the_next_monitor_at_the_same_offset(desktops, monke
     desktops.move(w, 100, 50)
     assert x11_desktop.act("to next screen", None) == "done"
     assert desktops.requests(b"_NET_MOVERESIZE_WINDOW") == [(w, (0x2301, 1380, 50, 0, 0))]
+
+
+def test_x11_a_maximized_window_moved_to_the_other_screen_stays_maximized(desktops,
+                                                                         monkeypatch):
+    monkeypatch.setattr(x11_desktop, "monitors",
+                        lambda d: [(0, 0, 1280, 1024), (1280, 0, 1920, 1080)])
+    w = _active_window(desktops)
+    desktops.move(w, 0, 0, 1280, 1000)
+    desktops.set_states(w, *MAXIMIZED)
+    assert x11_desktop.act("to next screen", None) == "done"
+    assert desktops.requests(b"_NET_MOVERESIZE_WINDOW") == [(w, (0x2301, 1280, 0, 0, 0))]
+    vert, horz = (desktops.atom(state) for state in MAXIMIZED)
+    assert desktops.requests(b"_NET_WM_STATE")[-1] == (w, (1, vert, horz, 2, 0))
+
+
+def test_x11_a_window_that_wasnt_maximized_isnt_maximized_on_the_other_screen(desktops,
+                                                                             monkeypatch):
+    monkeypatch.setattr(x11_desktop, "monitors",
+                        lambda d: [(0, 0, 1280, 1024), (1280, 0, 1920, 1080)])
+    _active_window(desktops)
+    x11_desktop.act("to next screen", None)
+    assert all(data[0] == 0 for _w, data in desktops.requests(b"_NET_WM_STATE"))
 
 
 def test_x11_has_no_overview(desktops):

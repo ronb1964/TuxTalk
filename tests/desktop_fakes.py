@@ -358,7 +358,7 @@ _CLIENT_MESSAGE = 33
 _SUBSTRUCTURE_REDIRECT = 1 << 20
 _CW_EVENT_MASK = 1 << 11
 _ATOM_ATOM, _ATOM_CARDINAL, _ATOM_WINDOW, _ATOM_STRING, _ATOM_WM_CLASS = 4, 6, 33, 31, 67
-_CONFIG_X, _CONFIG_Y = 1, 2
+_CONFIG_X, _CONFIG_Y, _CONFIG_WIDTH, _CONFIG_HEIGHT = 1, 2, 4, 8
 
 
 @pytest.fixture
@@ -472,10 +472,22 @@ class FakeWindowManager:
                                      len(values), data)
         self.round_trip()
 
-    def move(self, window, x, y):
-        """Put *window* at (*x*, *y*) on the screen, as a user dragging it would."""
-        values = (ctypes.c_int32 * 2)(x, y)
-        self.lib.xcb_configure_window(self.conn, window, _CONFIG_X | _CONFIG_Y, values)
+    def move(self, window, x, y, width=None, height=None):
+        """Put *window* at (*x*, *y*) on the screen, as a user dragging it
+        would, and make it *width* by *height* when given."""
+        mask, values = _CONFIG_X | _CONFIG_Y, [x, y]
+        if width is not None:
+            mask, values = mask | _CONFIG_WIDTH | _CONFIG_HEIGHT, values + [width, height]
+        self.lib.xcb_configure_window(self.conn, window, mask,
+                                      (ctypes.c_int32 * len(values))(*values))
+        self.round_trip()
+
+    def set_states(self, window, *states):
+        """Set *window*'s _NET_WM_STATE to *states* (b"_NET_WM_STATE_MAXIMIZED_VERT"...)."""
+        atoms = [self.atom(state) for state in states]
+        self.lib.xcb_change_property(self.conn, 0, window, self.atom(b"_NET_WM_STATE"),
+                                     _ATOM_ATOM, 32, len(atoms),
+                                     struct.pack(f"={len(atoms)}I", *atoms))
         self.round_trip()
 
     def round_trip(self):

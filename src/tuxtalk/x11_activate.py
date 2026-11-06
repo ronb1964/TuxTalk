@@ -38,8 +38,10 @@ _DESKTOPS_OWN_TYPES = (b"_NET_WM_WINDOW_TYPE_DESKTOP", b"_NET_WM_WINDOW_TYPE_DOC
 
 def _client_message(window: int, atom: int, data: tuple) -> bytes:
     """The 32-byte ClientMessage *atom* about *window*, its *data* (up to
-    five 32-bit words) padded with 0."""
-    words = tuple(data) + (0,) * (5 - len(data))
+    five 32-bit words) padded with 0. A negative word (a window left of the
+    screen's edge) goes as the two's complement the window manager reads
+    back as signed."""
+    words = tuple(word & 0xFFFFFFFF for word in data) + (0,) * (5 - len(data))
     return struct.pack("=BBHII5I", _CLIENT_MESSAGE, 32, 0, window, atom, *words)
 
 
@@ -153,7 +155,17 @@ class Display:
         *window* (an EWMH or ICCCM ClientMessage to the root window, as a
         taskbar sends), with *data*. Raises OSError when there's no window
         manager to ask or the X server refuses."""
-        message = _client_message(window, self.atom(message_type), data)
+        self.send(self.request(window, message_type, data))
+
+    def request(self, window: int, message_type: bytes, data: tuple) -> bytes:
+        """The request ask_window_manager sends, made without sending it, so
+        that several can all be made before the first goes. Raises OSError
+        when no window manager here takes *message_type*."""
+        return _client_message(window, self.atom(message_type), data)
+
+    def send(self, message: bytes) -> None:
+        """Send *message*, a request(), to the window manager. Raises
+        OSError when the X server refuses."""
         error = self._lib.xcb_request_check(self._conn, self._lib.xcb_send_event_checked(
             self._conn, 0, self._root, _TO_THE_WINDOW_MANAGER, message))
         if error:

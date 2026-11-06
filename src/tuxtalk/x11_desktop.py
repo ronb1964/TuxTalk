@@ -8,7 +8,8 @@ monitor the window is on: EWMH's work area (_NET_WORKAREA, the screen less
 panels) spans every monitor as one rectangle, so it is intersected with that
 monitor's RandR rectangle, else a window snapped on the second screen would
 land across both. A maximized or fullscreen window ignores a move, so it
-is taken out of those states first. The panels' own struts are subtracted
+is taken out of those states first (and maximized again on the other
+screen when it was). The panels' own struts are subtracted
 too, since the work area misses a panel on a monitor smaller than the screen.
 
 Answers are the strings desktop_actions turns into a spoken-style note:
@@ -21,13 +22,17 @@ from . import x11_activate
 
 log = logging.getLogger(__name__)
 
-# _NET_MOVERESIZE_WINDOW's first word: gravity NorthWest (1), which of x, y,
-# width and height are given (bits 8 to 11), the source indication in bits 12+.
-_GRAVITY_NORTH_WEST = 1
+# _NET_MOVERESIZE_WINDOW's first word: the gravity, which says what point of
+# the frame x and y place (NorthWest: its corner; Center: its middle), which
+# of x, y, width and height are given (bits 8 to 11), the source indication
+# in bits 12+.
+_GRAVITY_NORTH_WEST, _GRAVITY_CENTER = 1, 5
 _GIVEN_X, _GIVEN_Y, _GIVEN_SIZE = 1 << 8, 1 << 9, 3 << 10
 _MOVE = _GRAVITY_NORTH_WEST | _GIVEN_X | _GIVEN_Y | x11_activate.FROM_A_TASKBAR << 12
 _MOVE_AND_SIZE = _MOVE | _GIVEN_SIZE
-_UNMAXIMIZE = 0
+_MOVE_BY_CENTRE = _GRAVITY_CENTER | _GIVEN_X | _GIVEN_Y | x11_activate.FROM_A_TASKBAR << 12
+_STATE_REMOVE, _STATE_ADD = 0, 1
+_MAXIMIZED = (b"_NET_WM_STATE_MAXIMIZED_VERT", b"_NET_WM_STATE_MAXIMIZED_HORZ")
 _NO_FRAME = (0, 0, 0, 0)
 
 # Where each snap goes, in halves of the monitor: first column, last column,
@@ -135,19 +140,28 @@ def _outer_rect(display, window):
         (left, right, top, bottom)
 
 
-def _place(display, window, data: tuple):
+def _place(display, window, data: tuple, maximize_after: bool = False):
     """Ask for *window*'s move (*data*) after taking it out of the states that
-    make a window manager ignore one: maximized and fullscreen. Every atom
-    is looked up before anything is sent, so a window manager without one
-    leaves the window as it was, never half changed."""
-    display.atom(b"_NET_MOVERESIZE_WINDOW")
-    display.atom(b"_NET_WM_STATE")
-    vert, horz, fullscreen = (display.atom(b"_NET_WM_STATE_" + state)
-                              for state in (b"MAXIMIZED_VERT", b"MAXIMIZED_HORZ", b"FULLSCREEN"))
+    make a window manager ignore one: maximized and fullscreen; with
+    *maximize_after*, maximized again where it lands. Every request is made
+    before any is sent, so a window manager without one of them leaves the
+    window as it was, never half changed."""
+    vert, horz = (display.atom(state) for state in _MAXIMIZED)
+    fullscreen = display.atom(b"_NET_WM_STATE_FULLSCREEN")
     source = x11_activate.FROM_A_TASKBAR
-    display.ask_window_manager(window, b"_NET_WM_STATE", (_UNMAXIMIZE, vert, horz, source))
-    display.ask_window_manager(window, b"_NET_WM_STATE", (_UNMAXIMIZE, fullscreen, 0, source))
-    display.ask_window_manager(window, b"_NET_MOVERESIZE_WINDOW", data)
+    wanted = [(b"_NET_WM_STATE", (_STATE_REMOVE, vert, horz, source)),
+              (b"_NET_WM_STATE", (_STATE_REMOVE, fullscreen, 0, source)),
+              (b"_NET_MOVERESIZE_WINDOW", data)]
+    if maximize_after:
+        wanted.append((b"_NET_WM_STATE", (_STATE_ADD, vert, horz, source)))
+    for message in [display.request(window, kind, words) for kind, words in wanted]:
+        display.send(message)
+
+
+def _maximized(display, window) -> bool:
+    """Whether *window* is maximized both ways (_NET_WM_STATE)."""
+    states = set(display.cardinals(window, b"_NET_WM_STATE"))
+    return {display.atom(state) for state in _MAXIMIZED} <= states
 
 
 def _snap(display, window, action: str) -> str:
@@ -169,25 +183,23 @@ def _snap(display, window, action: str) -> str:
     return "done"
 
 
-def _move_to(display, window, x: int, y: int):
-    """Put *window*'s frame corner at (*x*, *y*)."""
-    _place(display, window, (_MOVE, x, y))
-
-
 def _centre(display, window) -> str:
+    """Put *window*'s middle at its work area's. By the middle, not the
+    corner: a maximized window comes back at its own size first, which
+    isn't known here, and the window manager centres that size."""
     outer = _outer_rect(display, window)
     screens = monitors(display)
     if outer is None or not screens:
         return "no_window"
-    rect = outer[0]
-    ax, ay, aw, ah = _work_area(display, screens[_monitor_index(screens, rect)])
-    _move_to(display, window, ax + (aw - rect[2]) // 2, ay + (ah - rect[3]) // 2)
+    ax, ay, aw, ah = _work_area(display, screens[_monitor_index(screens, outer[0])])
+    _place(display, window, (_MOVE_BY_CENTRE, ax + aw // 2, ay + ah // 2))
     return "done"
 
 
 def _to_next_screen(display, window) -> str:
     """Move *window* to the next monitor (the first after the last), keeping
-    its offset in the monitor but clamped to fit inside it."""
+    its offset in the monitor but clamped to fit inside it, and maximized
+    there if it was here, as KDE and GNOME keep it."""
     outer = _outer_rect(display, window)
     screens = monitors(display)
     if outer is None:
@@ -200,7 +212,7 @@ def _to_next_screen(display, window) -> str:
     mx, my, mw, mh = screens[(index + 1) % len(screens)]
     x = min(max(mx + rect[0] - here[0], mx), max(mx, mx + mw - rect[2]))
     y = min(max(my + rect[1] - here[1], my), max(my, my + mh - rect[3]))
-    _move_to(display, window, x, y)
+    _place(display, window, (_MOVE, x, y), maximize_after=_maximized(display, window))
     return "done"
 
 
