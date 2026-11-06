@@ -64,7 +64,7 @@ before 0.15.0, so older entries use that name.
   Sway and similar, TuxTalk says it can't do that on this desktop.
 - The same Labs tickbox now runs your desktop too. Hold your dictation key,
   say it, let go, and nothing is typed. Windows: "snap left", "snap top
-  right", "centre window", "move window to desktop two", "move window to the
+  right", "center window", "move window to desktop two", "move window to the
   other screen", "minimize Firefox", "maximize Firefox", "restore Firefox".
   Desktops: "show desktop" (again brings the windows back), "show all
   windows", "next desktop", "switch to desktop two". Sound: "volume up",
@@ -72,15 +72,14 @@ before 0.15.0, so older entries use that name.
   "play music", "next track", "previous track", for the player that is
   playing. Also "lock screen", "take a screenshot" and "what can I say",
   which opens the Voice Commands window. It is still off until you tick it.
-- The one-word keys now need a noun, so ordinary talk is not taken for a
-  command: "copy the selection", "paste it", "save the file", "reload the
-  page", "press escape". One word alone (copy, pause, next) is typed as a
-  word, and "literal" before any command types the words.
+- One word alone (copy, pause, next) is typed as a word, and "literal"
+  before any command types the words.
 - Where it works: KDE has all of it. GNOME has it with the TuxTalk extension
   (log out and back in once after updating). X11 desktops like Cinnamon and
-  Xfce have all but "show all windows". On COSMIC, Sway and Hyprland only
-  sound, music, lock screen and screenshot work, and TuxTalk says so for the
-  rest. "scroll down" scrolls what is under the mouse pointer. The command
+  Xfce have all but "show all windows". On COSMIC, Sway and Hyprland windows
+  and desktops can't be done and TuxTalk says so; sound, music and screenshots
+  work, and "lock screen" needs a screen locker that answers (TuxTalk says
+  when it couldn't confirm the lock). "scroll down" scrolls what is under the mouse pointer. The command
   words are English.
 - With "Send each dictation automatically" on, TuxTalk doesn't press Enter
   in a terminal any more. It ran whatever you said as a command, so

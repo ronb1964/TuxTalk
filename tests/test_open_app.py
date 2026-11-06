@@ -424,7 +424,7 @@ def test_the_tooltip_lists_every_kind_of_command_with_your_own_key(prefs_window)
     for said in ("open Firefox", "close Firefox", "switch to Firefox", "minimize window",
                  "new tab", "scroll down", "go to youtube.com", "web search", "literal",
                  "copy the selection", "paste it", "save the file", "reload the page",
-                 "press escape", "snap left", "centre window", "show desktop",
+                 "press escape", "snap left", "center window", "show desktop",
                  "switch to desktop two", "move window to the other screen",
                  "minimize Firefox", "volume up", "pause music", "next track", "lock screen",
                  "take a screenshot", "what can I say"):

@@ -461,7 +461,8 @@ Counts go up to 10 ("three" or "3").
     somewhere else now. Use Ctrl+Z in the app instead.
 
 <span size="large">🧪 <b>Apps, Windows and Keys by Voice</b></span>
-Open apps, close or switch windows, press everyday keys, go to an address or search
+Open apps, close or switch windows, snap and move them, press everyday keys, change
+desktops and volume, control music, lock or take a screenshot, go to an address or search
 the web, all by saying it. Turn it on in
 <b>Preferences → Advanced → TuxTalk Labs → Apps, windows and keys by voice</b>.
 
@@ -493,7 +494,7 @@ Hold <b>{hold}</b>, say <b>snap left</b>, let go. The window you're in fills tha
   • Halves: <b>snap left</b>, <b>snap right</b>, <b>snap top</b>, <b>snap bottom</b>
   • Quarters: <b>snap top left</b>, <b>snap top right</b>, <b>snap bottom left</b>,
     <b>snap bottom right</b>
-  • <b>centre window</b> puts it in the middle of the screen.
+  • <b>center window</b> (or <b>centre window</b>) puts it in the middle of the screen.
   • <b>move window to desktop two</b>, <b>move window to the next desktop</b> and
     <b>move window to the other screen</b> send it there.
   • <b>minimize Firefox</b>, <b>maximize Firefox</b>, <b>restore Firefox</b>: any open app by
@@ -509,14 +510,19 @@ Hold <b>{hold}</b>, say <b>volume up</b>, let go.
   • <b>volume up</b>, <b>volume down</b>; add a number for more: <b>volume up 3</b>.
   • <b>mute sound</b> mutes the computer, TuxTalk's beeps too. Say <b>unmute sound</b> to undo.
   • <b>pause music</b>, <b>play music</b>, <b>next track</b>, <b>previous track</b> control the
-    player that is playing, or the one TuxTalk paused while you talked. If two players are
-    paused, a note names them and starts neither.
+    player that is playing, or the one TuxTalk paused while you talked.
+  • <b>pause music</b> pauses every player that is playing. With two players paused,
+    <b>play music</b> names them in a note and starts neither: you pick one.
 
 <b>Lock, screenshot and help</b>
-  • <b>lock screen</b> uses your desktop's own lock, so you need your password to come back.
-  • <b>take a screenshot</b> saves a picture of the screen. On KDE it goes in
-    Pictures/Screenshots; elsewhere, where your desktop keeps them. GNOME may ask once.
-  • <b>what can I say</b> opens the Voice Commands window with this list.
+Hold <b>{hold}</b>, say <b>lock screen</b>, let go. Your desktop's own lock comes up, so you
+need your password to come back. It needs a screen locker that answers; if TuxTalk
+couldn't confirm the lock, a note says so.
+Hold <b>{hold}</b>, say <b>take a screenshot</b>, let go. On KDE it is saved in
+Pictures/Screenshots; elsewhere, where your desktop keeps them. GNOME may ask once. In a
+hands-free or Type at pause recording, the recording indicator may show in the picture.
+Hold <b>{hold}</b>, say <b>what can I say</b>, let go. The Voice Commands window opens with
+this list.
 
 <b>Keys</b>
 Hold <b>{hold}</b>, say <b>new tab</b>, let go. The key is pressed in the window you're in.
@@ -547,20 +553,14 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
     window naming them, and nothing opens.
   • Where it works: KDE has everything. GNOME has it with the TuxTalk extension (log out and
     back in once after updating). X11 desktops like Cinnamon and Xfce have all but
-    <b>show all windows</b>. On COSMIC, Sway and Hyprland only sound, music, lock and
-    screenshot work; TuxTalk tells you when something can't be done there.
-  • In a hands-free or Type at pause recording, the recording indicator may show up in a
-    screenshot.
-  • Bringing an open app forward works on KDE, on GNOME with the TuxTalk extension, and
-    on X11 desktops like Cinnamon and Xfce. Elsewhere (COSMIC, Sway, Hyprland) the app is
-    started again, and most then show the window they already have.
+    <b>show all windows</b>. On COSMIC, Sway and Hyprland, windows and desktops can't be
+    done (TuxTalk says so; use the window's own buttons), and an open app is started
+    again, which most then answer by showing the window they already have. Sound, music
+    and screenshots work there; the lock needs a locker that answers.
   • In a hands-free or Type at pause recording, a command ends the recording.
   • One word alone (copy, paste, save, pause, next...) is typed as a word: people say those
     as answers in chats.
   • Closing asks to save unsaved work, just like clicking the X.
-  • Closing, minimizing and switching work on KDE, on GNOME with the TuxTalk extension
-    (log out and back in once after updating) and on X11 desktops. On COSMIC, Sway and
-    similar, TuxTalk tells you it can't do that here; use the window's own buttons.
   • Apps open in a terminal too. The keys are the terminal's own there, so <b>select all</b>,
     <b>save the file</b>, <b>find on page</b>, <b>reopen tab</b>, <b>go back</b>,
     <b>go forward</b> and <b>reload the page</b> don't apply in a terminal. On GNOME

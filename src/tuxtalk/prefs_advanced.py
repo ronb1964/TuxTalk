@@ -448,7 +448,7 @@ class AdvancedTab(Tab):
             "\u201ccopy the selection\u201d,\n"
             "  \u201cpaste it\u201d, \u201cpress escape\u201d\n"
             "\u2022 \u201csnap left\u201d, \u201csnap top right\u201d, "
-            "\u201ccentre window\u201d,\n"
+            "\u201ccenter window\u201d,\n"
             "  \u201cmove window to desktop two\u201d,\n"
             "  \u201cmove window to the other screen\u201d, "
             "\u201cminimize Firefox\u201d,\n"

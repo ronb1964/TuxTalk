@@ -8,8 +8,9 @@ import re
 
 import pytest
 
-from tuxtalk import (ai_cleanup, command_phrases, commands_reference, explain, help_text, key_commands, normalize,
-                     spoken_quotes, undo, voice_commands, voice_edit_rules, voice_navigation)
+from tuxtalk import (ai_cleanup, command_phrases, commands_reference, explain, help_text,
+                     key_commands, normalize, spoken_quotes, undo, voice_commands,
+                     voice_edit_rules, voice_navigation)
 from tuxtalk.voice_commands_dialog import _build_markup
 
 PHRASES = [(c.kind, phrase) for s in commands_reference.SECTIONS for c in s.commands
@@ -130,3 +131,17 @@ def test_both_screens_show_the_one_literal_words_list():
 
 def test_the_voice_commands_window_lists_what_can_i_say():
     assert "what can I say" in commands_reference.short_markup()
+
+
+def test_every_command_phrase_help_spells_out_works(monkeypatch):
+    """Help can't list a desktop command the parser doesn't know."""
+    from tuxtalk import config
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(hotkey="F6"))
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    writing = next(text for title, text in help_text.tabs() if title == "Writing")
+    part = writing.split("Snapping and moving windows", 1)[1].split("<b>Keys</b>", 1)[0]
+    body = re.sub(r"(?m)^<b>[^<]+</b>$", "", part)         # the part headings
+    phrases = [p for p in re.findall(r"<b>([^<]+)</b>", body) if p != "F6"]
+    assert len(phrases) > 20
+    for phrase in phrases:
+        assert command_phrases.parse(phrase, navigation=False, actions=True), phrase

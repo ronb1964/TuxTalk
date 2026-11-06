@@ -142,7 +142,7 @@ SECTIONS = (
                 "open, close or bring an app forward", "action"),
         Command(("new tab", "go back", "scroll down", "copy the selection", "paste it"),
                 "press that key in the window you're in", "action"),
-        Command(("snap left", "snap top right", "centre window"),
+        Command(("snap left", "snap top right", "center window"),
                 "place the window", "action"),
         Command(("show desktop", "next desktop", "switch to desktop two"),
                 "desktops", "action"),
@@ -153,7 +153,7 @@ SECTIONS = (
         Command(("lock screen", "take a screenshot", "what can I say"),
                 "lock, screenshot, this list", "action"),
     ), note="One word alone (copy, pause, next) is typed. <b>literal</b> before a command "
-            "types the words."),
+            "types the words. <b>centre window</b> works too."),
     Section("Literal Words",
             note="Say <b>literal</b> or <b>the word</b> before a punctuation or line-break "
                  "word to type the word itself. It works with: "
