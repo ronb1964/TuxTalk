@@ -66,12 +66,13 @@ before 0.15.0, so older entries use that name.
   say it, let go, and nothing is typed. Windows: "snap left", "snap top
   right", "center window", "move window to desktop two", "move window to the
   other screen", "minimize Firefox", "maximize Firefox", "restore Firefox"
-  (for an app that's open: "Restore the files." is typed). Desktops: "show desktop" (again brings the windows back), "show all
-  windows", "next desktop", "switch to desktop two". Sound: "volume up",
-  "volume down" (add a number for more), "mute sound". Music: "pause music",
-  "play music", "next track", "previous track", for the player that is
-  playing. Also "lock screen", "take a screenshot" and "what can I say",
-  which opens the Voice Commands window. It is still off until you tick it.
+  (for an app that's open: "Restore the files." is typed). Desktops: "show
+  desktop" (again brings the windows back), "show all windows", "next
+  desktop", "switch to desktop two". Sound: "volume up", "volume down" (add
+  a number for more), "mute sound". Music: "pause music", "play music",
+  "next track", "previous track", for the player that is playing. Also "lock
+  screen", "take a screenshot" and "what can I say", which opens the Voice
+  Commands window. It is still off until you tick it.
 - After "lock screen" TuxTalk checks that the computer says it's locked.
   The ready beep means it is; otherwise a note says the lock isn't
   confirmed, so you know to check the screen before you walk away.

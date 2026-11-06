@@ -151,7 +151,8 @@ class FakeKWin:
     def _run(self, script):
         result = run_kwin_script(script, f"""
             workspace.stackingOrder = [{", ".join(self.windows)}];
-            workspace.screens = Array.from({{length: {self.screens}}}, (_, i) => ({{name: "DP-" + i}}));
+            workspace.screens = Array.from({{length: {self.screens}}},
+                                           (_, i) => ({{name: "DP-" + i}}));
             const active = {json.dumps(self.active)};
             if (active !== null) {{
                 workspace.activeWindow = workspace.stackingOrder[active];
@@ -297,8 +298,9 @@ _SHELL_EXTENSIONS_XML = """<node><interface name="org.gnome.Shell.Extensions">
 
 
 class FakeShell(_BusService):
-    """GNOME Shell on the test's session bus. With *extension*, TuxTalk's extension answers ActivateApp with
-    *answer*, keeping each app id it's asked about in *called*, and
+    """GNOME Shell on the test's session bus. With *extension*, TuxTalk's
+    extension answers ActivateApp with *answer*, keeping each app id it's
+    asked about in *called*, and
     WindowAction with *window_answer*, keeping (action, app_id, every) in
     *window_calls*, and DesktopCommand with *desktop_answer*, keeping
     (action, number) in *desktop_calls*. *extension* "old" is enabled but
