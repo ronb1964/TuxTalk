@@ -3,10 +3,12 @@ program run and the portal is a fake on the test's bus: no test takes a real
 screenshot."""
 import logging
 import subprocess
+from datetime import datetime
+from pathlib import Path
 
 import pytest
 
-from tuxtalk import screenshot
+from tuxtalk import screen_message, screenshot, ui_style
 
 
 class Tools:
@@ -145,11 +147,77 @@ def test_a_portal_that_never_answers_is_not_followed_by_a_tool(gnome, fake_porta
 
 
 def test_a_portal_save_it_cant_see_is_still_called_saved(gnome, fake_portal, tools, home,
-                                                         actions_on, monkeypatch):
-    monkeypatch.setattr(screenshot.os.path, "exists", lambda _p: False)
+                                                         actions_on):
+    fake_portal.saved = "unseen"
     assert screenshot.take(False) is True
     assert actions_on == ["Screenshot saved"]
     assert tools.commands == []
+
+
+def test_a_portal_done_without_a_file_is_unconfirmed_and_no_tool_runs(gnome, fake_portal,
+                                                                      tools, home, actions_on):
+    """It may have saved one all the same: a second tool would take another."""
+    fake_portal.saved = "nothing"
+    assert screenshot.take(False) is False
+    assert actions_on == ["Screenshot not confirmed"]
+    assert tools.commands == []
+
+
+def test_a_portal_call_that_times_out_is_unconfirmed_and_no_tool_runs(gnome, fake_portal,
+                                                                      tools, home, actions_on,
+                                                                      monkeypatch):
+    monkeypatch.setattr(screenshot, "PORTAL_CALL_TIMEOUT_MS", 200)
+    fake_portal.replies = False
+    assert screenshot.take(False) is False
+    assert len(fake_portal.calls) == 1
+    assert actions_on == ["Screenshot not confirmed"]
+    assert tools.commands == []
+
+
+def test_the_portal_is_asked_without_making_a_folder(gnome, fake_portal, tools, home,
+                                                     actions_on):
+    """The portal saves where it likes: an empty Screenshots folder would be litter."""
+    screenshot.take(False)
+    assert not (home / "Pictures" / "Screenshots").exists()
+
+
+@pytest.fixture
+def same_second(monkeypatch):
+    """Every screenshot is taken in the same second."""
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 11, 5, 14, 30, 0)
+    monkeypatch.setattr(screenshot, "datetime", Clock)
+
+
+def test_two_screenshots_in_one_second_are_both_kept(kde, tools, home, actions_on,
+                                                     same_second):
+    assert screenshot.take(False) is True and screenshot.take(False) is True
+    first, second = (command[-1] for command in tools.commands)
+    assert first != second
+    assert Path(first).read_bytes() == Path(second).read_bytes() == b"png"
+
+
+def test_an_older_file_with_the_name_is_not_taken_for_this_screenshot(kde, tools, home,
+                                                                      actions_on, same_second):
+    older = home / "Pictures" / "Screenshots" / "Screenshot_20261105_143000.png"
+    older.parent.mkdir(parents=True)
+    older.write_bytes(b"older")
+    tools.writes = False
+    assert screenshot.take(False) is False
+    assert actions_on == ["Couldn't take a screenshot"]
+    assert older.read_bytes() == b"older"
+
+
+def test_an_empty_file_is_not_a_screenshot(kde, tools, home, actions_on, monkeypatch):
+    def empty(cmd, **kw):
+        tools.commands.append(list(cmd))
+        open(cmd[-1], "wb").close()
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+    monkeypatch.setattr(screenshot.subprocess, "run", empty)
+    assert screenshot.take(False) is False
+    assert actions_on == ["Couldn't take a screenshot"]
 
 
 def test_only_the_first_installed_tool_is_tried(x11_session, monkeypatch, home):
@@ -164,6 +232,16 @@ def test_the_path_never_reaches_the_log(kde, tools, home, caplog):
         screenshot.take(False)
     assert "take a screenshot (saved" in caplog.text
     assert str(home) not in caplog.text
+
+
+def test_the_folder_never_reaches_the_log_where_the_note_cant_float(monkeypatch, caplog):
+    """Without an X display the label isn't shown, and the log says so
+    without the label, which can name a folder."""
+    monkeypatch.setattr(ui_style, "is_x11", lambda _display: False)
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert screen_message._show_now("Screenshot saved in /media/ron/Pictures", None) is False
+    assert "no X display" in caplog.text
+    assert "/media/ron" not in caplog.text
 
 
 def test_a_timeout_never_puts_the_path_in_the_log(kde, home, monkeypatch, caplog):

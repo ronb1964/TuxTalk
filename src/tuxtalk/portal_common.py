@@ -34,10 +34,12 @@ def _sender_prefix(bus) -> str:
     return bus.get_unique_name().lstrip(":").replace(".", "_")
 
 
-def call_portal(bus, iface, method, param_builder, on_response, on_error=None):
+def call_portal(bus, iface, method, param_builder, on_response, on_error=None,
+                timeout_ms=-1):
     """Issue a portal request and invoke on_response(code:int, results:dict) when
     its Response signal arrives. param_builder(handle_token) returns the method's
     IN args as a GLib.Variant, embedding handle_token in the options a{sv}.
+    *timeout_ms* bounds the method call itself (-1: GDBus's 25 s).
 
     An exception inside on_response goes to on_error(exc). PyGObject would
     otherwise print and swallow it, and a caller waiting on a main loop for
@@ -72,7 +74,7 @@ def call_portal(bus, iface, method, param_builder, on_response, on_error=None):
                                   request_path, None, Gio.DBusSignalFlags.NONE, _on_signal)
     try:
         bus.call_sync(BUS_NAME, OBJ_PATH, iface, method, param_builder(token),
-                      None, Gio.DBusCallFlags.NONE, -1, None)
+                      None, Gio.DBusCallFlags.NONE, timeout_ms, None)
     except BaseException:
         unsubscribe()
         raise

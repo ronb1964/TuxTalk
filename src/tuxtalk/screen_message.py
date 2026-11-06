@@ -133,13 +133,13 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
 
         display = Gdk.Display.get_default()
         # A label floats over the active window without taking the keyboard
-        # only on X11 (XWayland). The service falls back to native Wayland
-        # when there's no X display, and there GTK 3 makes the label an
+        # only on X11 (XWayland). Without an X display GTK 3 makes it an
         # ordinary window that takes the focus, so everything typed while it
         # shows is lost ("Press Enter when you're ready" included, as the VM
-        # tests showed).
+        # tests showed). The log leaves the label out: it can name a folder
+        # or an app.
         if not is_x11(display):
-            logger.info(f"Not showing {text!r} over the window: no X display, so it would "
+            logger.info("Not showing a message over the window: no X display, so it would "
                         "take the keyboard")
             return False
         if center is None:

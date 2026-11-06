@@ -529,14 +529,20 @@ _PORTAL_XML = """<node><interface name="org.freedesktop.portal.Screenshot">
 class FakePortal(_BusService):
     """The screenshot portal on the test's session bus. Screenshot answers
     with the Response signal on the request path it was given: *code* (0
-    done, 1 cancelled, 2 failed, None never answers), and for 0 a file it
-    writes in *folder*. *calls* keeps each call's options."""
+    done, 1 cancelled, 2 failed, None never answers), and for 0 the *saved*
+    result: "file", one it writes in *folder*; "unseen", a file TuxTalk
+    can't see (a sandbox's); "nothing", no uri at all. With *replies* off
+    the method call itself is never answered. *calls* keeps each call's
+    options."""
 
     names = ("org.freedesktop.portal.Desktop",)
 
     def __init__(self, folder):
         self.code = 0
+        self.saved = "file"
+        self.replies = True
         self.calls = []
+        self._unanswered = []
         self._folder = folder
         self._start()
 
@@ -547,17 +553,21 @@ class FakePortal(_BusService):
     def _on_call(self, bus, sender, _path, _interface, _method, parameters, invocation):
         options = parameters.unpack()[1]
         self.calls.append(options)
+        if not self.replies:
+            self._unanswered.append(invocation)     # kept, so GDBus doesn't answer for it
+            return
         request = ("/org/freedesktop/portal/desktop/request/"
                    f"{sender.lstrip(':').replace('.', '_')}/{options['handle_token']}")
         invocation.return_value(GLib.Variant("(o)", (request,)))
         if self.code is None:
             return
         results = {}
-        if self.code == 0:
-            os.makedirs(self._folder, exist_ok=True)
+        if self.code == 0 and self.saved != "nothing":
             shot = os.path.join(self._folder, "Screenshot from the portal.png")
-            with open(shot, "wb") as f:
-                f.write(b"png")
+            if self.saved == "file":
+                os.makedirs(self._folder, exist_ok=True)
+                with open(shot, "wb") as f:
+                    f.write(b"png")
             results = {"uri": GLib.Variant("s", GLib.filename_to_uri(shot))}
         bus.emit_signal(sender, request, "org.freedesktop.portal.Request", "Response",
                         GLib.Variant("(ua{sv})", (self.code, results)))
