@@ -496,6 +496,8 @@ def _no_firefox(run):
 def firefox_go_back(run):
     if skip := _no_firefox(run):
         return skip
+    if why := run.window_blind():       # a key goes only to a window TuxTalk knows
+        return Outcome("skip", why)
     with _open_apps_on(run), _Firefox(run) as firefox:
         if firefox.title("TT Page Two", 45) is None:
             return Outcome("skip", "Firefox never got to the second test page")
@@ -519,6 +521,8 @@ def firefox_go_back(run):
 def firefox_new_tab(run):
     if skip := _no_firefox(run):
         return skip
+    if why := run.window_blind():       # a key goes only to a window TuxTalk knows
+        return Outcome("skip", why)
     with _open_apps_on(run), _Firefox(run) as firefox:
         if firefox.title("TT Page", 45) is None:
             return Outcome("skip", "Firefox never opened the test page")
