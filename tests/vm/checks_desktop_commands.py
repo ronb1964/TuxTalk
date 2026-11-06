@@ -20,6 +20,7 @@ desktop and screens.
 import contextlib
 import json
 import re
+import shlex
 import time
 from collections import namedtuple
 
@@ -222,7 +223,8 @@ def _centre_step(run, kept):
                   "center: size kept (its place can't be read on this desktop)")
 
 
-@check(SECTION, "snap_and_centre", "“snap left”, “snap top right” and “centre window” place the window")
+@check(SECTION, "snap_and_centre",
+       "“snap left”, “snap top right” and “centre window” place the window")
 def snap_and_centre(run):
     if why := run.window_blind():
         return Outcome("skip", why)
@@ -252,7 +254,8 @@ def snap_and_centre(run):
 
 GDBUS_KWIN = ("gdbus", "call", "--session", "--dest", "org.kde.KWin", "--object-path")
 KWIN_MANAGER = "org.kde.KWin.VirtualDesktopManager"
-UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+# KWin hands out ids as the property gives them, braces included on some versions.
+UUID = r"\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?"
 
 
 def _kwin_call(run, path, method, *args):
@@ -288,7 +291,8 @@ def _show_desktop_again(run):
         _said(run, "show_desktop", "Voice command: show desktop")
 
 
-@check(SECTION, "show_desktop_toggles", "“show desktop” hides the windows, said again brings them back")
+@check(SECTION, "show_desktop_toggles",
+       "“show desktop” hides the windows, said again brings them back")
 def show_desktop_toggles(run):
     if why := run.window_blind():
         return Outcome("skip", why)
@@ -358,41 +362,52 @@ def _kwin_desktop_ids(run):
 def _two_desktops(run):
     """Yields None once there are two desktops and the first is in use, else
     the reason why not (a str). KDE gets a second desktop made for the
-    block, which is removed afterwards; X11 desktops can't be added from
-    here. Afterwards the first desktop is in use again."""
-    made = None
-    count = _desktop_count(run)
-    if count == 1 and "kde" in run.vm.spec.tags:
-        before = _kwin_desktop_ids(run)
-        _kwin_call(run, "/VirtualDesktopManager", f"{KWIN_MANAGER}.createDesktop", "1",
-                   "'TT Two'")
-        time.sleep(1)
-        made = next(iter(_kwin_desktop_ids(run) - before), None)
-        count = _desktop_count(run)
+    block, which is removed afterwards (the count must then be the one it
+    began with); X11 desktops can't be added from here. Afterwards the first
+    desktop is in use again."""
+    _back_to_first_desktop(run)
+    made, original = None, None
     try:
+        original = count = _desktop_count(run)
+        if count == 1 and "kde" in run.vm.spec.tags:
+            before = _kwin_desktop_ids(run)
+            _kwin_call(run, "/VirtualDesktopManager", f"{KWIN_MANAGER}.createDesktop", "1",
+                       "'TT Two'")
+            time.sleep(1)
+            made = next(iter(_kwin_desktop_ids(run) - before), None)
+            count = _desktop_count(run)
         if count is None and "gnome" not in run.vm.spec.tags:
             yield "the number of desktops couldn't be read"
         elif count is not None and count < 2:
             yield "this desktop has one desktop and none can be added from here"
         else:
-            if _current_desktop(run) not in (None, 1):
-                _kwin_call(run, "/KWin", "org.kde.KWin.setCurrentDesktop", "1")
             yield None
     finally:
         _back_to_first_desktop(run)
         if made:
-            _kwin_call(run, "/VirtualDesktopManager", f"{KWIN_MANAGER}.removeDesktop", f"'{made}'")
+            _kwin_call(run, "/VirtualDesktopManager", f"{KWIN_MANAGER}.removeDesktop",
+                       f"'{made}'")
+            time.sleep(1)
+            if _desktop_count(run) != original:
+                raise Abort(f"the desktop made for the check could not be removed: "
+                            f"{_desktop_count(run)} desktops, there were {original}")
 
 
 def _back_to_first_desktop(run):
-    """The first desktop in use again: KDE directly, X11 by voice, as the
-    window manager is only asked through TuxTalk here."""
+    """The first desktop in use again: KDE directly; X11 by the voice command,
+    and by wmctrl or xdotool when that was misheard."""
     if _current_desktop(run) in (None, 1):
         return
     if "kde" in run.vm.spec.tags:
         _kwin_call(run, "/KWin", "org.kde.KWin.setCurrentDesktop", "1")
-    else:
-        _said(run, "switch_desktop_one", "Voice command: desktop 1")
+        return
+    _said(run, "switch_desktop_one", "Voice command: desktop 1")
+    if _current_desktop(run) not in (None, 1):
+        _session_tool(run, "sh", "-c", "wmctrl -s 0 || xdotool set_desktop 0")
+        time.sleep(1)
+        if _current_desktop(run) not in (None, 1):
+            raise Abort("the first desktop could not be brought back (no wmctrl or xdotool "
+                        "on this VM, and the voice command wasn't heard)")
 
 
 def _sink_desktop(run):
@@ -459,7 +474,8 @@ def switch_desktops(run):
             return Outcome("pass", "; ".join(seen) + "; nothing typed")
 
 
-@check(SECTION, "move_window_to_desktop", "“move window to desktop two” sends the window there and back")
+@check(SECTION, "move_window_to_desktop",
+       "“move window to desktop two” sends the window there and back")
 def move_window_to_desktop(run):
     if why := run.window_blind():
         return Outcome("skip", why)
@@ -584,7 +600,8 @@ def _close_to(run, percent, muted):
     return now is not None and abs(now[0] - percent) <= 1 and now[1] == muted
 
 
-@check(SECTION, "volume_commands", "“volume down”, “volume up two”, “mute sound” and “unmute sound” change the output")
+@check(SECTION, "volume_commands",
+       "“volume down”, “volume up two”, “mute sound” and “unmute sound” change the output")
 def volume_commands(run):
     with _open_apps_on(run), _output_restored(run) as readable:
         if not readable:
@@ -640,7 +657,8 @@ def _stream_now(run, index):
     return None if stream is None else _stream_percent(stream)
 
 
-@check(SECTION, "volume_kept_after_sounds_come_back", "“volume down” sticks when the other sounds come back up")
+@check(SECTION, "volume_kept_after_sounds_come_back",
+       "“volume down” sticks when the other sounds come back up")
 def volume_kept_after_sounds_come_back(run):
     with _open_apps_on(run), run.settings_put_back("duck_audio"), _output_restored(run) as ok:
         if not ok:
@@ -657,7 +675,7 @@ def volume_kept_after_sounds_come_back(run):
                                "JSON output)")
             index, start = stream
             _typed, _heard, mark = run.say("volume_down", wait=False)
-            run.wait_log(mark, "Put 1 sound(s) back", timeout=30)
+            run.wait_log(mark, "sound(s) back", timeout=30)
             time.sleep(2)
             log = run.log_since(mark)
             output, back = _output(run), _stream_now(run, index)
@@ -666,7 +684,7 @@ def volume_kept_after_sounds_come_back(run):
     if bad := _not_a_command(run, "volume_down", log, heard_in(log)):
         return bad
     problems = []
-    if "Turned 1 other sound(s) down" not in log:
+    if not (parse_numbers(log, r"Turned (\d+) other sound") or 0) >= 1:
         problems.append("the playing sound was never turned down")
     if "Voice command: volume down" not in log:
         problems.append("no “Voice command: volume down” in the log")
@@ -741,6 +759,12 @@ def _pause_problem(calls, status):
 
 @check(SECTION, "music_commands", "“pause music”, “play music” and “next track” reach the player")
 def music_commands(run):
+    names = _session_tool(run, "gdbus", "call", "--session", "--dest", "org.freedesktop.DBus",
+                          "--object-path", "/org/freedesktop/DBus", "--method",
+                          "org.freedesktop.DBus.ListNames")
+    if others := sorted(set(re.findall(r"org\.mpris\.MediaPlayer2\.[\w.-]+", names))):
+        return Outcome("skip", f"another media player is on the bus ({', '.join(others)}); "
+                       "TuxTalk would pause it too")
     with _open_apps_on(run):
         with _fake_player(run, "Playing"):
             seen = []
@@ -787,44 +811,6 @@ def _locked(run, session):
                       check=False).stdout.strip()
 
 
-def _unlock(run, session):
-    """Unlock the VM's session; True once logind says it is unlocked."""
-    for command in ("loginctl unlock-session", "sudo -n loginctl unlock-session"):
-        run.vm.ssh(f"{command} {session}", check=False)
-        if _until(15, lambda: _locked(run, session) == "no"):
-            return True
-    return False
-
-
-@check(SECTION, "lock_screen", "“lock screen” locks the session")
-def lock_screen(run):
-    session = _session_id(run)
-    if not session:
-        return Outcome("skip", "the desktop session's id couldn't be found")
-    if _locked(run, session) == "yes":
-        return Outcome("skip", "the VM's session was already locked")
-    strict = bool(set(LOCK_ANSWERS) & set(run.vm.spec.tags))
-    with _open_apps_on(run):
-        run.sink_ready(fresh=True)
-        try:
-            log, heard = _said(run, "lock_screen", "Voice command: lock screen", timeout=40)
-            locked = bool(_until(5, lambda: _locked(run, session) == "yes"))
-            shot = run.shot("lock-screen")
-        finally:
-            unlocked = _locked(run, session) != "yes" or _unlock(run, session)
-        if not unlocked:
-            raise Abort("the VM's session stayed locked after “lock screen” and could not "
-                        "be unlocked with loginctl")
-    if bad := _not_a_command(run, "lock_screen", log, heard):
-        return bad
-    unconfirmed = "Voice command not done: lock_unconfirmed" in log
-    said = f"locked: {'yes' if locked else 'no'}; the note lock_unconfirmed: " \
-           f"{'yes' if unconfirmed else 'no'}"
-    if locked or (not strict and unconfirmed):
-        return Outcome("pass", f"{said}; the VM's session was unlocked again", screenshot=shot)
-    return Outcome("fail", f"the session didn't lock within 5 seconds ({said})", screenshot=shot)
-
-
 def _new_screenshots(run, marker):
     """The screenshot files made in the home folder since *marker* was touched
     (Spectacle and GNOME both name theirs Screenshot...)."""
@@ -858,10 +844,11 @@ def screenshot_saved(run):
                 time.sleep(1)
             time.sleep(1)
             log, shot = run.log_since(mark), run.shot("screenshot")
-            sizes = [run.vm.ssh(f"stat -c %s {f}", check=False).stdout.strip() for f in files]
+            sizes = [run.vm.ssh(f"stat -c %s {shlex.quote(f)}", check=False).stdout.strip()
+                     for f in files]
         finally:
             for file in files:
-                run.vm.ssh(f"rm -f {file}", check=False)
+                run.vm.ssh(f"rm -f {shlex.quote(file)}", check=False)
             if not folder_existed:
                 run.vm.ssh(f"rmdir {SCREENSHOTS}/Screenshots", check=False)
             run.vm.ssh(f"rm -f {marker}", check=False)
@@ -927,7 +914,8 @@ def _editor_state(run, app, program):
 SHOWING = (None, "shown (KWin)", "unfocused (KWin)")
 
 
-@check(SECTION, "restore_by_name", "“minimize the text editor” and “restore the text editor” by name")
+@check(SECTION, "restore_by_name",
+       "“minimize the text editor” and “restore the text editor” by name")
 def restore_by_name(run):
     if why := _action_blocker(run):
         return Outcome("skip", why)
@@ -967,7 +955,8 @@ SENTENCES = (("bare_pause", "Pause."), ("bare_next", "Next."), ("bare_mute", "Mu
              ("sentence_volume_loud", "Volume is too loud."))
 
 
-@check(SECTION, "bare_words_and_sentences_typed", "One word or a sentence that only sounds like a command is typed")
+@check(SECTION, "bare_words_and_sentences_typed",
+       "One word or a sentence that only sounds like a command is typed")
 def bare_words_and_sentences_typed(run):
     with _open_apps_on(run):
         start = _output(run)
@@ -985,3 +974,48 @@ def bare_words_and_sentences_typed(run):
             return Outcome("fail", f"the volume changed from {start} to {_output(run)}")
         return Outcome("pass", f"All {len(SENTENCES)} were typed as said; no command ran and "
                        "the volume stayed as it was")
+
+
+# Last in the section: a lock that goes wrong must not hold up another check.
+def _unlock(run, session):
+    """Ask logind to unlock the session, whether or not it says it is locked
+    (COSMIC never says), then again through sudo if that didn't take; True
+    once it no longer says "yes"."""
+    for command in ("loginctl unlock-session", "sudo -n loginctl unlock-session"):
+        run.vm.ssh(f"{command} {session}", check=False)
+        time.sleep(5)      # a lock that landed late is undone by this
+        if _locked(run, session) != "yes":
+            return True
+    return False
+
+
+@check(SECTION, "lock_screen", "“lock screen” locks the session")
+def lock_screen(run):
+    session = _session_id(run)
+    if not session:
+        return Outcome("skip", "the desktop session's id couldn't be found")
+    if _locked(run, session) == "yes":
+        return Outcome("skip", "the VM's session was already locked")
+    strict = bool(set(LOCK_ANSWERS) & set(run.vm.spec.tags))
+    with _open_apps_on(run):
+        run.sink_ready(fresh=True)
+        try:
+            log, heard = _said(run, "lock_screen", "Voice command: lock screen", timeout=40)
+            locked = bool(_until(5, lambda: _locked(run, session) == "yes"))
+            shot = run.shot("lock-screen")
+        finally:
+            unlocked = _unlock(run, session)
+        if not unlocked:
+            raise Abort("the VM's session stayed locked after “lock screen” and could not "
+                        "be unlocked with loginctl")
+    if bad := _not_a_command(run, "lock_screen", log, heard):
+        return bad
+    unconfirmed = "Voice command not done: lock_unconfirmed" in log
+    said = f"locked: {'yes' if locked else 'no'}; the note lock_unconfirmed: " \
+           f"{'yes' if unconfirmed else 'no'}"
+    if locked or (not strict and unconfirmed):
+        unverified = "" if locked else ("; whether it really locked can't be verified on this "
+                                        "desktop (the lock isn't reported to logind)")
+        return Outcome("pass", f"{said}{unverified}; the VM's session was unlocked again",
+                       screenshot=shot)
+    return Outcome("fail", f"the session didn't lock within 5 seconds ({said})", screenshot=shot)
