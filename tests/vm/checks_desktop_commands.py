@@ -87,6 +87,14 @@ def parse_output_volume(volume, muted=None):
     return (int(found[1]), "yes" in muted) if found else None
 
 
+def extension_absent(answer):
+    """Whether gdbus's *answer* says GNOME Shell has no TuxTalk extension
+    serving DesktopCommand (not installed, or the old one before a logout),
+    as opposed to one that failed or didn't answer."""
+    return any(f"org.freedesktop.DBus.Error.{name}" in answer
+               for name in ("UnknownMethod", "UnknownObject", "UnknownInterface"))
+
+
 def placed_at(box, spec, place):
     """Whether *box*'s corner is where a snap *place* puts it: (low, high)
     of the screen's width for x and of its height for y. True where the
@@ -467,8 +475,12 @@ def _gnome_first_workspace(run):
                            "--object-path", "/io/github/ronb1964/TuxTalk/Extension",
                            "--method", "io.github.ronb1964.TuxTalk.Extension.DesktopCommand",
                            "desktop", "1")
-    if "done" not in answer or _sink(run) is None:
-        return      # no extension, so nothing switched; or no test window to look at
+    if extension_absent(answer):
+        return      # no extension, so no command can have switched the workspace
+    if _sink(run) is None:
+        if "done" in answer:
+            return  # switched, with no test window to look at
+        raise Abort(f"the first GNOME workspace couldn't be asked for: {answer.strip()[:120]}")
     run.vm.click_centre()
     if not _until(8, lambda: _sink_state(_sink(run)) is None):
         raise Abort("the first GNOME workspace could not be brought back: the test window "
@@ -909,9 +921,12 @@ def _new_screenshots(run, marker):
     return [line for line in out.stdout.splitlines() if line]
 
 
-def _screenshot_settled(log):
-    """Whether TuxTalk has finished with "take a screenshot": its outcome,
-    a note, or the words typed instead."""
+def screenshot_settled(log):
+    """Whether "take a screenshot" can't save anything more: TuxTalk said it
+    saved one, or gave a note, or typed the words. Not "not confirmed": the
+    portal's request is still open then, and a picture can come later."""
+    if "screenshot_unconfirmed" in log or "take a screenshot (unconfirmed)" in log:
+        return False
     return any(line in log for line in ("Voice command: take a screenshot (",
                                         "Voice command not done", "Text injected"))
 
@@ -928,7 +943,7 @@ def screenshot_saved(run):
             _typed, _heard, mark = run.say("take_screenshot", wait=False)
             # One deadline, never moved: TuxTalk's own waits end within it.
             deadline = time.monotonic() + SCREENSHOT_WAIT_S
-            while time.monotonic() < deadline and not _screenshot_settled(run.log_since(mark)):
+            while time.monotonic() < deadline and not screenshot_settled(run.log_since(mark)):
                 # GNOME's portal asks once whether TuxTalk may take screenshots.
                 if not allowed and "gnome" in run.vm.spec.tags:
                     allowed = bool(run.vm.ui("click", "button", "~Allow", timeout=2))

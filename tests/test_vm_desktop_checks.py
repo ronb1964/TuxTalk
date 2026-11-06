@@ -83,6 +83,29 @@ def test_a_screenshot_passes_only_as_one_saved_picture(files, sizes, log, proble
     assert (found is None) if problem is None else (problem in found)
 
 
+@pytest.mark.parametrize("log, settled", [
+    ("Voice command: take a screenshot (saved, with spectacle)", True),
+    ("Voice command not done: no_screenshot_tool", True),
+    ("Text injected", True),
+    ("Voice command: take a screenshot (unconfirmed)\n"
+     "Voice command not done: screenshot_unconfirmed", False),
+    ("", False),
+])
+def test_an_unconfirmed_screenshot_is_waited_for(log, settled):
+    """The portal's request stays open: a picture can still land later."""
+    assert desktop.screenshot_settled(log) is settled
+
+
+@pytest.mark.parametrize("answer, absent", [
+    ("('done',)\n", False),
+    ("Error: GDBus.Error:org.freedesktop.DBus.Error.UnknownMethod: no such method\n", True),
+    ("Error: GDBus.Error:org.freedesktop.DBus.Error.NoReply: Timeout was reached\n", False),
+    ("Error: GDBus.Error:org.gnome.gjs.JSError.TypeError: x is null\n", False),
+])
+def test_only_a_missing_extension_lets_the_workspace_reset_go_unchecked(answer, absent):
+    assert desktop.extension_absent(answer) is absent
+
+
 def test_every_desktop_command_phrase_has_its_entry():
     """A check names its phrase by id; without an entry the run stops."""
     ids = set(desktop.voices.load_phrases())
