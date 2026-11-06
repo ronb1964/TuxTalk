@@ -349,6 +349,11 @@ export class Window extends Signals {
         this.skip_taskbar = false;
         this.type = Meta.WindowType.NORMAL;
         this.minimized = false;
+        this.managed = true;    // false once the window is closed: GNOME Shell drops it
+    }
+
+    get_compositor_private() {
+        return this.managed ? {window: this} : null;
     }
 
     get_window_type() {
@@ -381,6 +386,8 @@ export class Window extends Signals {
     }
 
     unminimize() {
+        if (!this.managed)
+            throw new Error(`window ${this.id} is no longer managed`);
         shell.unminimized.push(this.id);
         this.minimized = false;
     }
@@ -440,8 +447,17 @@ class Display extends Signals {
     }
 }
 
-// A workspace of the stand-in desktop, by its index.
+// A workspace of the stand-in desktop, by its index: the same object each
+// time, as GNOME Shell's are.
+const workspaceObjects = new Map();
+
 function workspace(index) {
+    if (!workspaceObjects.has(index))
+        workspaceObjects.set(index, newWorkspace(index));
+    return workspaceObjects.get(index);
+}
+
+function newWorkspace(index) {
     return {
         index: () => index,
         activate: _time => shell.activatedWorkspace.push(index),

@@ -223,23 +223,40 @@ function sendTo(w, target) {
     return 'done';
 }
 
-// The windows "show desktop" minimized, to bring back with the next one.
-// GNOME has no show-desktop action of its own, so it is done by minimizing
-// the normal windows and remembering them: windows the person minimized
-// earlier must stay minimized when they come back.
-let hiddenByShowDesktop = [];
+// The windows "show desktop" minimized on each workspace, to bring back with
+// the next "show desktop" there. GNOME has no show-desktop action of its own,
+// so it is done by minimizing the normal windows and remembering them:
+// windows the person minimized earlier must stay minimized when they come back.
+const hiddenByShowDesktop = new Map();
+
+// Whether GNOME Shell still manages *w*: a window closed while the desktop was
+// shown keeps its object, which must not be touched again.
+function stillOpen(w) {
+    return w.get_compositor_private() !== null;
+}
+
+// Bring *w* back. One that refuses is left, so the others still come back.
+function unminimize(w) {
+    try {
+        w.unminimize();
+    } catch (e) {
+        console.warn(`TuxTalk: a window didn't come back after "show desktop": ${e}`);
+    }
+}
 
 function showDesktop() {
-    const hidden = hiddenByShowDesktop.filter(w => w.minimized);
-    hiddenByShowDesktop = [];
+    const workspace = global.workspace_manager.get_active_workspace();
+    const hidden = (hiddenByShowDesktop.get(workspace) ?? [])
+        .filter(w => stillOpen(w) && w.minimized);
+    hiddenByShowDesktop.delete(workspace);
     if (hidden.length > 0) {
-        hidden.forEach(w => w.unminimize());
+        hidden.forEach(unminimize);
         return 'done';
     }
-    const shown = global.workspace_manager.get_active_workspace().list_windows()
+    const shown = workspace.list_windows()
         .filter(w => isAppWindow(w) && !w.minimized && !w.skip_taskbar);
     shown.forEach(w => w.minimize());
-    hiddenByShowDesktop = shown;
+    hiddenByShowDesktop.set(workspace, shown);
     return 'done';
 }
 
@@ -321,7 +338,7 @@ const AppFocus = {
     },
 
     // Voice commands that snap or move the focused window, switch workspace
-    // or show the desktop or overview (desktop_commands.py). *number* is the
+    // or show the desktop or overview (desktop_actions.py). *number* is the
     // workspace's for "desktop" and "to desktop", else 0. The answer is
     // 'done', or why nothing was done: no_window, no_desktop, one_desktop,
     // edge (no workspace further that way), one_screen, unknown.
@@ -997,7 +1014,7 @@ export default class TuxTalkExtension extends Extension {
     }
 
     disable() {
-        hiddenByShowDesktop = [];
+        hiddenByShowDesktop.clear();
         if (this._appFocus) {
             this._appFocus.unexport();
             this._appFocus = null;

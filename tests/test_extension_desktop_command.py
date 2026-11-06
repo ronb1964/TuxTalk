@@ -1,6 +1,6 @@
 """Desktop voice commands on GNOME: "snap left", "centre window", "show
 desktop", "switch to desktop two" and the rest ask the extension to place the
-focused window or change workspace (desktop_commands in TuxTalk). The extension
+focused window or change workspace (desktop_actions in TuxTalk). The extension
 runs under Node with stand-ins for GNOME Shell (gnome_extension_js); what it did
 to windows and workspaces is read back from the stand-in's record."""
 import re
@@ -135,6 +135,45 @@ def test_a_third_show_desktop_hides_again():
         t.report(t.shell.minimized);
     """)
     assert answer == [5, 8, 9, 5, 8, 9]
+
+
+def test_show_desktop_on_another_workspace_hides_that_ones_windows():
+    """What was hidden on the first workspace stays for when the user is back there."""
+    answer, _logs = run(ENABLED + FOCUSED + """
+        const first = t.shell.workspaceWindows;
+        ask('show desktop');
+        t.shell.activeWorkspace = 1;
+        t.shell.workspaceWindows = [new t.Window('org.gnome.Nautilus', 11)];
+        ask('show desktop');
+        const onSecond = [...t.shell.minimized];
+        t.shell.activeWorkspace = 0;
+        t.shell.workspaceWindows = first;
+        ask('show desktop');
+        t.report([onSecond, t.shell.unminimized]);
+    """)
+    assert answer == [[5, 8, 9, 11], [5, 8, 9]]
+
+
+def test_a_window_closed_while_the_desktop_shows_is_left_alone():
+    """GNOME Shell no longer manages it: bringing it back would act on a
+    window that is gone, and an error inside GNOME Shell can end the session."""
+    answer, logs = run(ENABLED + FOCUSED + """
+        ask('show desktop');
+        t.shell.workspaceWindows[1].managed = false;
+        t.report([ask('show desktop'), t.shell.unminimized]);
+    """)
+    assert answer == ["done", [5, 9]]
+    assert logs == []
+
+
+def test_a_window_that_wont_come_back_doesnt_keep_the_others_hidden():
+    answer, logs = run(ENABLED + FOCUSED + """
+        ask('show desktop');
+        t.shell.workspaceWindows[0].unminimize = () => { throw new Error('refused'); };
+        t.report([ask('show desktop'), t.shell.unminimized]);
+    """)
+    assert answer == ["done", [8, 9]]
+    assert [level for level, _text in logs] == ["warn"]
 
 
 def test_turning_the_extension_off_forgets_what_show_desktop_hid():
