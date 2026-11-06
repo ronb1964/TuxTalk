@@ -52,7 +52,7 @@ _DOCUMENT_PORTAL = "doc"
 # The picker still being waited for: one at a time.
 _picker = None
 _picker_lock = threading.Lock()
-# Every file name new_path() has handed out, one per screenshot taken.
+# The file names new_path() has handed out whose files aren't written yet.
 _handed_out = set()
 _names_lock = threading.Lock()
 
@@ -78,6 +78,8 @@ def new_path() -> str:
     os.makedirs(folder(), exist_ok=True)
     stem = os.path.join(folder(), datetime.now().strftime("Screenshot_%Y%m%d_%H%M%S"))
     with _names_lock:
+        # A name whose file is written needs remembering no longer.
+        _handed_out.difference_update({name for name in _handed_out if os.path.exists(name)})
         path, number = stem + ".png", 1
         while os.path.exists(path) or path in _handed_out:
             number += 1
@@ -184,11 +186,11 @@ def _ask_portal(interactive: bool = False) -> tuple[str, str]:
 
     timeout = GLib.timeout_source_new(int((PICKER_WAIT_S if interactive else PORTAL_WAIT_S)
                                           * 1000))
-    bus, token = portal_common.session_bus(), portal_common.new_request_token()
     timeout.set_callback(out_of_time)
     context.push_thread_default()
-    unsubscribe = None
+    bus, token, unsubscribe = None, portal_common.new_request_token(), None
     try:
+        bus = portal_common.session_bus()
         unsubscribe = portal_common.call_portal(
             bus, _PORTAL_IFACE, "Screenshot", options, on_response, on_error,
             PORTAL_CALL_TIMEOUT_MS, token=token)
@@ -199,6 +201,7 @@ def _ask_portal(interactive: bool = False) -> tuple[str, str]:
         name = Gio.DBusError.get_remote_error(e) or f"{e.domain} {e.code}"
         if _may_have_reached(e):
             logger.info(f"Screenshot portal didn't answer the call ({name})")
+            answer["out_of_time"] = True
         else:
             logger.info(f"Screenshot portal not available ({name})")
             answer["outcome"] = "unavailable"
@@ -207,9 +210,10 @@ def _ask_portal(interactive: bool = False) -> tuple[str, str]:
         if unsubscribe:
             unsubscribe()
         context.pop_thread_default()
-    if interactive and answer.get("out_of_time"):
-        # Left open, the next "take a screenshot of this window" would open
-        # a second picker beside it.
+    if interactive and answer.get("out_of_time") and bus is not None:
+        # Left open (no answer in time, or a call that timed out but may
+        # have reached it), the next "take a screenshot of this window"
+        # would open a second picker beside it.
         portal_common.close_request(bus, portal_common.request_path(bus, token))
     return answer["outcome"], answer["file"]
 

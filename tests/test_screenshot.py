@@ -383,10 +383,11 @@ def _picked():
 
 
 @pytest.fixture(autouse=True)
-def no_picker_left_open(monkeypatch):
-    """A picker test that fails midway leaves no picker "open" for the next."""
+def no_picker_left_open():
+    """A picker test that fails midway leaves no picker "open" for the next
+    (monkeypatch would put the open one back as it undoes)."""
     yield
-    monkeypatch.setattr(screenshot, "_picker", None)
+    screenshot._picker = None
 
 
 def test_kde_takes_the_active_window_with_spectacle(kde, tools, home, actions_on):
@@ -494,6 +495,16 @@ def test_a_picker_not_answered_in_time_is_closed(gnome, fake_portal, tools, home
     _picked()
     assert len(fake_portal.closed) == 1
     assert actions_on == ["Screenshot not confirmed"]
+
+
+def test_without_a_session_bus_the_screenshot_says_so(gnome, tools, home, actions_on,
+                                                      monkeypatch):
+    """No bus at all is "no portal": the desktop's tool is tried, as before."""
+    def no_bus():
+        raise screenshot.GLib.Error("no session bus")
+    monkeypatch.setattr(screenshot.portal_common, "session_bus", no_bus)
+    assert screenshot.take(False) is True
+    assert tools.commands[0][:2] == ["gnome-screenshot", "-f"]
 
 
 def test_two_screenshots_in_one_second_get_two_names(home):
