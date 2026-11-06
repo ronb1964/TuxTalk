@@ -643,6 +643,37 @@ class FakeScreenSaver(_BusService):
         invocation.return_value(GLib.Variant("(b)", (self.active,)))
 
 
+_XFCONF_XML = """<node><interface name="org.xfce.Xfconf">
+  <method name="GetProperty">
+    <arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="v" direction="out"/>
+  </method>
+</interface></node>"""
+
+
+class FakeXfconf(_BusService):
+    """Xfce's settings store on the test's session bus: GetProperty answers
+    from *values*, {(channel, property): GLib.Variant}, and with Xfconf's
+    PropertyNotFound for anything never set."""
+
+    names = ("org.xfce.Xfconf",)
+
+    def __init__(self):
+        self.values = {}
+        self._start()
+
+    def _register(self, _bus, register):
+        interface = Gio.DBusNodeInfo.new_for_xml(_XFCONF_XML).interfaces[0]
+        register("/org/xfce/Xfconf", interface, self._on_call, None, None)
+
+    def _on_call(self, _bus, _sender, _path, _interface, _method, parameters, invocation):
+        value = self.values.get(parameters.unpack())
+        if value is None:
+            invocation.return_dbus_error("org.xfce.Xfconf.Error.PropertyNotFound",
+                                         "Property does not exist")
+            return
+        invocation.return_value(GLib.Variant("(v)", (value,)))
+
+
 @pytest.fixture
 def screensaver(request):
     """A stand-in screensaver: parametrize indirectly with its bus name."""

@@ -8,9 +8,9 @@ import time
 import types
 
 import pytest
-from gi.repository import GLib
+from gi.repository import Gio, GLib
 
-from desktop_fakes import set_desktop
+from desktop_fakes import FakeXfconf, set_desktop
 from tuxtalk import beeps, system_actions, tray_link
 from tuxtalk.command_phrases import SystemRequest
 
@@ -195,11 +195,32 @@ _ON_EACH = pytest.mark.parametrize("desktop, screensaver", SCREENSAVERS,
                                    indirect=["screensaver"])
 
 
+def _mate_lockdown(monkeypatch, tmp_path, disabled):
+    """MATE's lockdown settings with disable-lock-screen *disabled*, from a
+    schema of the test's own: the machine's settings are never read."""
+    folder = tmp_path / f"schemas-{disabled}"
+    folder.mkdir()
+    (folder / "org.mate.lockdown.gschema.xml").write_text(f"""<schemalist>
+  <schema id="org.mate.lockdown" path="/tuxtalk-tests/mate-lockdown/">
+    <key name="disable-lock-screen" type="b"><default>{str(disabled).lower()}</default></key>
+  </schema>
+</schemalist>""")
+    # Not subprocess.run: the loginctl stand-in takes its place.
+    subprocess.check_call(["glib-compile-schemas", str(folder)])
+    source = Gio.SettingsSchemaSource.new_from_directory(str(folder), None, False)
+    monkeypatch.setattr(Gio.SettingsSchemaSource, "get_default", staticmethod(lambda: source))
+    memory = Gio.memory_settings_backend_new()
+    real = Gio.Settings.new_full
+    monkeypatch.setattr(Gio.Settings, "new_full",
+                        staticmethod(lambda schema, _backend, path: real(schema, memory, path)))
+
+
 @pytest.fixture(autouse=True)
 def an_ordinary_session(monkeypatch, tmp_path):
-    """Where Cinnamon locks: the user isn't in nopasswdlogin, nor in a live
-    or guest session, and the screensaver wasn't started with
-    --disable-locking, whatever the machine running the tests is."""
+    """Where each screensaver locks, whatever the machine running the tests
+    is: the user isn't in nopasswdlogin, nor in a live or guest session
+    (Cinnamon); the lock screen isn't disabled by MATE's lockdown setting;
+    Xfce's /lock/enabled was never changed. Returns the stand-in Xfconf."""
     def no_such_group(name):
         raise KeyError(name)
     monkeypatch.setattr(system_actions.grp, "getgrnam", no_such_group)
@@ -207,9 +228,10 @@ def an_ordinary_session(monkeypatch, tmp_path):
     boot.write_text("BOOT_IMAGE=/vmlinuz root=UUID=1234 ro quiet splash\n")
     monkeypatch.setattr(system_actions, "_KERNEL_COMMAND_LINE", str(boot))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    started = tmp_path / "ordinary-screensaver-cmdline"
-    started.write_bytes(b"/usr/bin/python3\0/usr/bin/cinnamon-screensaver\0")
-    monkeypatch.setattr(system_actions, "_PROCESS_COMMAND_LINE", str(started))
+    _mate_lockdown(monkeypatch, tmp_path, disabled=False)
+    xfconf = FakeXfconf()
+    yield xfconf
+    xfconf.stop()
 
 
 @_ON_EACH
@@ -291,14 +313,7 @@ def _guest_session(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", "/tmp/guest-x1y2z3")
 
 
-def _started_without_locking(monkeypatch, tmp_path):
-    cmdline = tmp_path / "screensaver-cmdline"
-    cmdline.write_bytes(b"/usr/bin/python3\0/usr/bin/cinnamon-screensaver\0--disable-locking\0")
-    monkeypatch.setattr(system_actions, "_PROCESS_COMMAND_LINE", str(cmdline))
-
-
-@pytest.mark.parametrize("no_lock_here", [_nopasswdlogin_member, _live_session, _guest_session,
-                                          _started_without_locking])
+@pytest.mark.parametrize("no_lock_here", [_nopasswdlogin_member, _live_session, _guest_session])
 @pytest.mark.parametrize("screensaver", ["org.cinnamon.ScreenSaver"], indirect=True)
 def test_where_cinnamon_only_blanks_the_screen_it_is_not_called_locked(
         loginctl, screensaver, monkeypatch, tmp_path, actions_on, beeped, no_lock_here):
@@ -313,6 +328,37 @@ def test_where_cinnamon_only_blanks_the_screen_it_is_not_called_locked(
     assert _seen_lock(screensaver)
     assert beeps.READY_BEEP not in beeped
     assert actions_on == ["Lock not confirmed"]
+
+
+@pytest.mark.parametrize("screensaver", ["org.mate.ScreenSaver"], indirect=True)
+def test_with_the_lock_screen_disabled_on_mate_it_is_not_called_locked(
+        loginctl, screensaver, monkeypatch, tmp_path, actions_on, beeped):
+    """mate-screensaver ignores Lock while the lockdown setting
+    disable-lock-screen is on, but still comes on when the computer is idle:
+    that coming on must not be taken for the lock."""
+    set_desktop(monkeypatch, "MATE", "x11")
+    _mate_lockdown(monkeypatch, tmp_path, disabled=True)
+    screensaver.locks_after = 0
+    system_actions.lock(True, sleep=no_wait)
+    assert _seen_lock(screensaver)
+    assert beeps.READY_BEEP not in beeped
+    assert actions_on == ["Lock not confirmed"]
+
+
+@pytest.mark.parametrize("enabled, confirmed", [(False, False), (True, True)])
+@pytest.mark.parametrize("screensaver", ["org.xfce.ScreenSaver"], indirect=True)
+def test_on_xfce_the_lock_is_confirmed_only_with_locking_on(
+        loginctl, screensaver, an_ordinary_session, monkeypatch, actions_on, beeped,
+        enabled, confirmed):
+    """xfce4-screensaver ignores Lock while its /lock/enabled is off (Lock
+    Screen off in its settings), but still comes on when idle."""
+    set_desktop(monkeypatch, "XFCE", "x11")
+    an_ordinary_session.values[("xfce4-screensaver", "/lock/enabled")] = GLib.Variant(
+        "b", enabled)
+    screensaver.locks_after = 0
+    system_actions.lock(True, sleep=no_wait)
+    assert (beeps.READY_BEEP in beeped) == confirmed
+    assert actions_on == ([] if confirmed else ["Lock not confirmed"])
 
 
 @pytest.mark.parametrize("desktop", ["X-Cinnamon", "MATE", "XFCE"])
