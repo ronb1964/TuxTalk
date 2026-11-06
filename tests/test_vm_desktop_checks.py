@@ -2,6 +2,8 @@
 (xprop, wpctl, pactl, the sound server's streams). A misread answer would
 pass or fail a check for the wrong reason, so each reading is pinned here.
 """
+from collections import namedtuple
+
 import pytest
 from conftest import import_vm_tool
 
@@ -41,6 +43,44 @@ def test_pactl_volume_and_mute_are_read_together():
 def test_a_window_is_half_the_screen_only_within_its_range():
     assert desktop.within(960, 1920, 0.4, 0.6)
     assert not desktop.within(1920, 1920, 0.4, 0.6)
+
+
+SCREEN = namedtuple("Spec", "width height")(1280, 800)
+
+
+@pytest.mark.parametrize("box, fits", [
+    (desktop.Box(0, 0, 640, 800), True),
+    (desktop.Box(640, 0, 640, 800), False),           # the right half isn't "snap left"
+    (desktop.Box(None, None, 640, 800), True),        # where the place can't be read
+])
+def test_snap_left_is_judged_by_its_place_too(box, fits):
+    assert desktop.placed_at(box, SCREEN, ((-0.02, 0.1), (-0.02, 0.12))) is fits
+
+
+@pytest.mark.parametrize("answer, desktop_name, open_", [
+    ("(<['blur', 'overview']>,)\n", "kde", True),
+    ("(<['blur']>,)\n", "kde", False),
+    ("(<true>,)\n", "gnome", True),
+    ("(<false>,)\n", "gnome", False),
+    ("Error: GDBus.Error:org.freedesktop.DBus.Error.AccessDenied\n", "gnome", None),
+])
+def test_the_overview_is_judged_by_the_desktops_answer(answer, desktop_name, open_):
+    assert desktop.overview_open(answer, desktop_name) is open_
+
+
+SAVED = "Voice command: take a screenshot (saved, with the portal)"
+
+
+@pytest.mark.parametrize("files, sizes, log, problem", [
+    (["a.png"], ["120"], SAVED, None),
+    (["a.png", "b.png"], ["120", "120"], SAVED, "2 pictures"),
+    ([], [], SAVED, "no new picture"),
+    (["a.png"], ["120"], "Voice command not done: screenshot_unconfirmed", "no new picture"),
+    (["a.png"], ["0"], SAVED, "empty"),
+])
+def test_a_screenshot_passes_only_as_one_saved_picture(files, sizes, log, problem):
+    found = desktop.screenshot_problem(files, sizes, log)
+    assert (found is None) if problem is None else (problem in found)
 
 
 def test_every_desktop_command_phrase_has_its_entry():

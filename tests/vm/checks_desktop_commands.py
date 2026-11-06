@@ -36,9 +36,13 @@ from vmlib import REMOTE
 
 SECTION = "Desktop commands by voice"
 SINK = "TT Sink"
-# What the lock screen's check needs from each desktop: these desktops' lockers
-# tell logind they locked (the same list TuxTalk trusts without the flag).
+# The desktops whose lockers are known to tell logind they locked: there the
+# check needs the lock confirmed; elsewhere TuxTalk's "not confirmed" note is
+# the right answer to a lock logind isn't told of.
 LOCK_ANSWERS = ("kde", "gnome", "cinnamon")
+# TuxTalk waits up to 30 s for the portal and 10 s for its call; then the files
+# are looked for one last time.
+SCREENSHOT_WAIT_S = 50
 SCREENSHOTS = "~/Pictures"
 
 # A window's place: x and y are None where the desktop doesn't tell an app.
@@ -81,6 +85,42 @@ def parse_output_volume(volume, muted=None):
         return (round(float(found[1]) * 100), "[MUTED]" in volume) if found else None
     found = re.search(r"/\s*(\d+)%\s*/", volume)
     return (int(found[1]), "yes" in muted) if found else None
+
+
+def placed_at(box, spec, place):
+    """Whether *box*'s corner is where a snap *place* puts it: (low, high)
+    of the screen's width for x and of its height for y. True where the
+    desktop doesn't tell an app where its window is (x is None)."""
+    if box.x is None:
+        return True
+    (x_low, x_high), (y_low, y_high) = place
+    return within(box.x, spec.width, x_low, x_high) and within(box.y, spec.height, y_low, y_high)
+
+
+def overview_open(answer, desktop):
+    """Whether the overview is open, from gdbus's answer: KWin's
+    activeEffects ("(<['blur', 'overview']>,)") on KDE, GNOME Shell's
+    OverviewActive ("(<true>,)") on GNOME. None when it isn't readable."""
+    if desktop == "kde":
+        found = re.search(r"\[(.*)\]", answer or "")
+        return None if found is None else "'overview'" in found[1]
+    found = re.search(r"<(true|false)>", answer or "")
+    return None if found is None else found[1] == "true"
+
+
+def screenshot_problem(files, sizes, log):
+    """What is wrong with what "take a screenshot" left: no picture, TuxTalk
+    not saying it saved one, two pictures (a second shot after the first may
+    have been taken), or an empty one. None when it is exactly one saved
+    picture."""
+    if not files or "Voice command: take a screenshot (saved" not in log:
+        said = [line for line in log.splitlines() if "screenshot" in line.lower()]
+        return f"no new picture was saved; log: {said}"
+    if len(files) > 1:
+        return f"{len(files)} pictures were saved: a second screenshot was taken"
+    if not all(size and int(size) > 0 for size in sizes):
+        return "the saved picture is empty"
+    return None
 
 
 # --- what the checks read and say ---------------------------------------------
@@ -169,27 +209,29 @@ def _grown_to(run, fits):
     return _until(8, lambda: (box := _sink_box(run)) and fits(box) and box)
 
 
-def _snap_step(run, phrase_id, line, wide, tall):
+def _snap_step(run, phrase_id, line, wide, tall, place):
     """Say a snap and wait for the test window to reach the width and height
-    ratios *wide* and *tall* (low, high) of the screen. (Outcome that stops
-    the check or None, what it saw)."""
+    ratios *wide* and *tall* (low, high) of the screen, at *place*
+    (placed_at) where the desktop tells it. (Outcome that stops the check or
+    None, what it saw)."""
     spec = run.vm.spec
     log, heard = _said(run, phrase_id, f"Voice command: {line}")
     if bad := _not_a_command(run, phrase_id, log, heard):
         return bad, None
     box = _grown_to(run, lambda b: within(b.width, spec.width, *wide)
-                    and within(b.height, spec.height, *tall))
+                    and within(b.height, spec.height, *tall) and placed_at(b, spec, place))
     typed = run.sink_text().strip()
     now = _sink_box(run)
     shot = run.shot(phrase_id.replace("_", "-"))
     done = f"Voice command: {line}" in log
     if not done or typed or not box:
-        size = f"{now.width} x {now.height}" if now else "unknown"
+        size = f"{now.width} x {now.height} at {now.x}, {now.y}" if now else "unknown"
         return Outcome("fail", f"“{line}”: the window is {size} px on a {spec.width} x "
                        f"{spec.height} screen; typed {typed[:40]!r}; log: "
                        f"{'done' if done else 'not done'}", typed=typed,
                        screenshot=shot), None
-    return None, f"{line}: {box.width} x {box.height}"
+    where = f" at {box.x}, {box.y}" if box.x is not None else " (its place can't be read)"
+    return None, f"{line}: {box.width} x {box.height}{where}"
 
 
 def _centred(box, spec):
@@ -235,11 +277,13 @@ def snap_and_centre(run):
         if _sink_box(run) is None:
             return Outcome("skip", "this desktop reports no window sizes through AT-SPI")
         seen = []
-        for phrase_id, line, wide, tall in (("snap_left", "snap left", (0.4, 0.6), (0.8, 1.02)),
-                                            ("snap_top_right", "snap top right", (0.4, 0.6),
-                                             (0.35, 0.6))):
+        top = (-0.02, 0.12)         # a panel at the top is allowed for
+        for phrase_id, line, wide, tall, place in (
+                ("snap_left", "snap left", (0.4, 0.6), (0.8, 1.02), ((-0.02, 0.1), top)),
+                ("snap_top_right", "snap top right", (0.4, 0.6), (0.35, 0.6),
+                 ((0.4, 0.6), top))):
             _focus_sink(run)
-            bad, saw = _snap_step(run, phrase_id, line, wide, tall)
+            bad, saw = _snap_step(run, phrase_id, line, wide, tall, place)
             if bad:
                 return bad
             seen.append(saw)
@@ -394,8 +438,12 @@ def _two_desktops(run):
 
 
 def _back_to_first_desktop(run):
-    """The first desktop in use again: KDE directly; X11 by the voice command,
-    and by wmctrl or xdotool when that was misheard."""
+    """The first desktop in use again: KDE directly; GNOME through the
+    TuxTalk extension, as TuxTalk asks it; X11 by the voice command, and by
+    wmctrl or xdotool when that was misheard."""
+    if "gnome" in run.vm.spec.tags:
+        _gnome_first_workspace(run)
+        return
     if _current_desktop(run) in (None, 1):
         return
     if "kde" in run.vm.spec.tags:
@@ -408,6 +456,23 @@ def _back_to_first_desktop(run):
         if _current_desktop(run) not in (None, 1):
             raise Abort("the first desktop could not be brought back (no wmctrl or xdotool "
                         "on this VM, and the voice command wasn't heard)")
+
+
+def _gnome_first_workspace(run):
+    """GNOME: the first workspace in use, asked of the TuxTalk extension
+    directly (GNOME tells an app no workspace number). An open test window
+    is on it, so it shows with the focus again once there; Abort when it
+    doesn't, as every later check would run on the wrong workspace."""
+    answer = _session_tool(run, "gdbus", "call", "--session", "--dest", "org.gnome.Shell",
+                           "--object-path", "/io/github/ronb1964/TuxTalk/Extension",
+                           "--method", "io.github.ronb1964.TuxTalk.Extension.DesktopCommand",
+                           "desktop", "1")
+    if "done" not in answer or _sink(run) is None:
+        return      # no extension, so nothing switched; or no test window to look at
+    run.vm.click_centre()
+    if not _until(8, lambda: _sink_state(_sink(run)) is None):
+        raise Abort("the first GNOME workspace could not be brought back: the test window "
+                    "doesn't show with the focus")
 
 
 def _sink_desktop(run):
@@ -450,6 +515,10 @@ def _desktop_step(run, phrase_id, line, current, on):
                        f"on {_sink_desktop(run)}, expected {current} and {on}; typed "
                        f"{typed[:40]!r}; log: {'done' if done else 'not done'}",
                        typed=typed, screenshot=shot), None
+    if _current_desktop(run) is None:
+        return None, (f"{line}: the test window {'has' if current == on else 'lost'} the "
+                      "focus (GNOME tells an app no desktop number, so which one is in use "
+                      "isn't verified)")
     return None, f"{line}: desktop {current} in use, window on {on}"
 
 
@@ -537,16 +606,36 @@ def overview(run):
         log, heard = _said(run, "show_all_windows", "Voice command: overview")
         if bad := _not_a_command(run, "show_all_windows", log, heard):
             return bad
-        time.sleep(1)
+        opened = _until(5, lambda: _overview_state(run) is not False)
+        opened = _overview_state(run) if opened else False
         shot = run.shot("overview")
         run.vm.tap("esc")
         time.sleep(1)
         typed = run.sink_text().strip()
-        if "Voice command: overview" not in log or typed:
-            return Outcome("fail", "expected “Voice command: overview” and nothing typed",
-                           typed=typed, screenshot=shot)
-        return Outcome("pass", "TuxTalk opened the overview (the screenshot shows it); Esc "
-                       "closed it", screenshot=shot)
+        done = "Voice command: overview" in log
+        if not done or typed or opened is False:
+            return Outcome("fail", f"expected the overview open and nothing typed; open: "
+                           f"{opened}; log: {'done' if done else 'not done'}", typed=typed,
+                           screenshot=shot)
+        seen = ("the desktop says the overview was open" if opened else
+                "whether it opened can't be read here (the screenshot shows it)")
+        return Outcome("pass", f"TuxTalk asked for the overview; {seen}; Esc closed it",
+                       screenshot=shot)
+
+
+def _overview_state(run):
+    """Whether the desktop says its overview is open: KWin's active effects
+    on KDE, GNOME Shell's OverviewActive on GNOME; None when it can't be read."""
+    desktop = "kde" if "kde" in run.vm.spec.tags else "gnome"
+    if desktop == "kde":
+        answer = _kwin_call(run, "/Effects", "org.freedesktop.DBus.Properties.Get",
+                            "org.kde.kwin.Effects", "activeEffects")
+    else:
+        answer = _session_tool(run, "gdbus", "call", "--session", "--dest", "org.gnome.Shell",
+                               "--object-path", "/org/gnome/Shell", "--method",
+                               "org.freedesktop.DBus.Properties.Get", "org.gnome.Shell",
+                               "OverviewActive")
+    return overview_open(answer, desktop)
 
 
 # --- sound and music ---------------------------------------------------------
@@ -820,7 +909,14 @@ def _new_screenshots(run, marker):
     return [line for line in out.stdout.splitlines() if line]
 
 
-@check(SECTION, "screenshot_saved", "“take a screenshot” saves a picture")
+def _screenshot_settled(log):
+    """Whether TuxTalk has finished with "take a screenshot": its outcome,
+    a note, or the words typed instead."""
+    return any(line in log for line in ("Voice command: take a screenshot (",
+                                        "Voice command not done", "Text injected"))
+
+
+@check(SECTION, "screenshot_saved", "“take a screenshot” saves exactly one picture")
 def screenshot_saved(run):
     marker = f"~/{REMOTE}/shot.marker"
     folder_existed = not run.vm.ssh(f"test -d {SCREENSHOTS}/Screenshots", check=False).returncode
@@ -830,37 +926,30 @@ def screenshot_saved(run):
         run.vm.ssh(f"touch {marker}")
         try:
             _typed, _heard, mark = run.say("take_screenshot", wait=False)
-            deadline = time.monotonic() + 15
-            while time.monotonic() < deadline:
-                files = _new_screenshots(run, marker)
-                log = run.log_since(mark)
-                if files or "Voice command not done" in log or "Text injected" in log:
-                    break
+            # One deadline, never moved: TuxTalk's own waits end within it.
+            deadline = time.monotonic() + SCREENSHOT_WAIT_S
+            while time.monotonic() < deadline and not _screenshot_settled(run.log_since(mark)):
                 # GNOME's portal asks once whether TuxTalk may take screenshots.
-                if "gnome" in run.vm.spec.tags and run.vm.ui("click", "button", "~Allow",
-                                                             timeout=2):
-                    allowed = True
-                    deadline += 10
+                if not allowed and "gnome" in run.vm.spec.tags:
+                    allowed = bool(run.vm.ui("click", "button", "~Allow", timeout=2))
                 time.sleep(1)
-            time.sleep(1)
+            time.sleep(2)       # a file still being written
+            files = _new_screenshots(run, marker)
             log, shot = run.log_since(mark), run.shot("screenshot")
             sizes = [run.vm.ssh(f"stat -c %s {shlex.quote(f)}", check=False).stdout.strip()
                      for f in files]
         finally:
-            for file in files:
+            # One last look, so a picture saved late is removed too.
+            for file in {*files, *_new_screenshots(run, marker)}:
                 run.vm.ssh(f"rm -f {shlex.quote(file)}", check=False)
             if not folder_existed:
                 run.vm.ssh(f"rmdir {SCREENSHOTS}/Screenshots", check=False)
             run.vm.ssh(f"rm -f {marker}", check=False)
     if bad := _not_a_command(run, "take_screenshot", log, heard_in(log)):
         return bad
-    if not files or "Voice command: take a screenshot (saved" not in log:
-        return Outcome("fail", f"no new picture was saved within 15 seconds; log: "
-                       f"{[line for line in log.splitlines() if 'screenshot' in line.lower()]}",
-                       screenshot=shot)
-    if not all(size and int(size) > 0 for size in sizes):
-        return Outcome("fail", "the saved picture is empty", screenshot=shot)
-    return Outcome("pass", f"{len(files)} picture(s) saved and removed again"
+    if problem := screenshot_problem(files, sizes, log):
+        return Outcome("fail", problem, screenshot=shot)
+    return Outcome("pass", "One picture saved and removed again"
                    + ("; GNOME's permission dialog was answered with Allow" if allowed else ""),
                    screenshot=shot)
 
@@ -978,15 +1067,16 @@ def bare_words_and_sentences_typed(run):
 
 # Last in the section: a lock that goes wrong must not hold up another check.
 def _unlock(run, session):
-    """Ask logind to unlock the session, whether or not it says it is locked
-    (COSMIC never says), then again through sudo if that didn't take; True
-    once it no longer says "yes"."""
+    """Unlock the session whatever logind says (COSMIC's locker never tells
+    it), through loginctl and through sudo, and look again: True only when
+    logind says "no" and the test window shows with the focus, which a lock
+    screen in front of it would take. Unknown is not unlocked."""
     for command in ("loginctl unlock-session", "sudo -n loginctl unlock-session"):
         run.vm.ssh(f"{command} {session}", check=False)
-        time.sleep(5)      # a lock that landed late is undone by this
-        if _locked(run, session) != "yes":
-            return True
-    return False
+    time.sleep(5)      # a lock that landed late is undone by this
+    run.vm.click_centre()
+    return bool(_until(10, lambda: _locked(run, session) == "no"
+                       and _sink_state(_sink(run)) is None))
 
 
 @check(SECTION, "lock_screen", "“lock screen” locks the session")
@@ -1006,8 +1096,8 @@ def lock_screen(run):
         finally:
             unlocked = _unlock(run, session)
         if not unlocked:
-            raise Abort("the VM's session stayed locked after “lock screen” and could not "
-                        "be unlocked with loginctl")
+            raise Abort("after “lock screen” the VM's session couldn't be shown to be unlocked "
+                        "(logind not saying \"no\", or the test window not in front)")
     if bad := _not_a_command(run, "lock_screen", log, heard):
         return bad
     unconfirmed = "Voice command not done: lock_unconfirmed" in log
