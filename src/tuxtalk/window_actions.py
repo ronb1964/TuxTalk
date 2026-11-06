@@ -61,6 +61,10 @@ def run(request: WindowRequest, where, beeps_on: bool) -> bool | None:
         found = _open_ones(found.partial)
     elif found.kind == "one" and request.action in _ONLY_WHEN_OPEN:
         found = _open_ones(((found.entry, found.exact),))
+    elif found.kind == "tie" and request.action in _ONLY_WHEN_OPEN:
+        # Two apps of one name: only a window naming its own menu entry is
+        # each one's, so one's window is never taken for the other's.
+        found = _open_ones(tuple((entry, True) for entry in found.entries))
     if found.kind == "none":
         # As for "open": a sentence lost is worse than one typed. The log
         # keeps the user's words out.

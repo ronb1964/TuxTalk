@@ -404,6 +404,26 @@ def test_resizing_an_installed_app_with_no_window_is_typed(actions_on, chat, say
     assert open_windows.done == []
 
 
+NEMO = AppEntry("nemo.desktop", "Files", "Files", "File Manager", "nemo", "")
+
+
+@pytest.mark.parametrize("open_ones, typed, done, notes", [
+    (set(), ["Restore the files."], [], []),
+    ({"nemo"}, [], [("restore", "nemo")], []),
+    ({"nemo", "org.gnome.Nautilus"}, [], [], ["Two apps fit: Files, Files. Say the full name."]),
+])
+def test_two_apps_of_one_name_are_resized_only_by_the_one_open(actions_on, chat, say, kde, apps,
+                                                               open_windows, open_ones, typed,
+                                                               done, notes):
+    """Two file managers called Files: none open is a sentence, one open is
+    that one, both open is the tie note."""
+    apps[:] = [GNOME_FILES, NEMO]
+    open_windows.open = open_ones
+    say("Restore the files.")
+    assert [text for text, _ in chat[2]] == typed
+    assert open_windows.done == done and actions_on == notes
+
+
 def test_restore_an_open_app_by_its_name_restores_it(actions_on, chat, say, kde, apps,
                                                      open_windows):
     apps[:] = [GNOME_FILES, GNOME_SETTINGS]
