@@ -1,8 +1,13 @@
 #!/usr/bin/python3
 """Asks KWin about the windows titled TITLE and prints JSON: a list with
-{"minimized": ..., "active": ...} for each (empty when there's none), or
-{"error": ...}. For KDE on Wayland, where an app is never told that its
-window was minimized, so AT-SPI can't say it either.
+{"minimized", "active", "desktop", "geometry"} for each (empty when there's
+none), or {"error": ...}. "desktop" is the window's desktop number, 0 for all
+of them; "geometry" is [x, y, width, height] on screen. For KDE on Wayland,
+where an app is never told that its window was minimized or where it is, so
+AT-SPI can't say either.
+
+TITLE is matched exactly; "~part" matches any caption containing "part",
+ignoring case (an editor's caption has its document in it).
 
 A short KWin script looks and answers over D-Bus to this process's
 connection, as TuxTalk's kwin_activate.py does. It is loaded under its own
@@ -31,11 +36,28 @@ def script(title, reply_to):
     """The KWin script for *title*, answering to the connection *reply_to*.
     Both go in through json.dumps, so a title is never read as code."""
     return f"""(function () {{
+    var wanted = {json.dumps(title)};
+    function matches(caption) {{
+        if (wanted.charAt(0) !== "~") {{
+            return caption === wanted;
+        }}
+        return caption.toLowerCase().indexOf(wanted.slice(1).toLowerCase()) >= 0;
+    }}
+    function desktopOf(w) {{
+        try {{
+            return w.onAllDesktops ? 0 : w.desktops[0].x11DesktopNumber;
+        }} catch (e) {{
+            return -1;
+        }}
+    }}
     var found = [];
     try {{
         (workspace.stackingOrder || []).forEach(function (w) {{
-            if (w.caption === {json.dumps(title)}) {{
-                found.push({{minimized: w.minimized, active: w === workspace.activeWindow}});
+            if (matches(w.caption)) {{
+                var g = w.frameGeometry;
+                found.push({{minimized: w.minimized, active: w === workspace.activeWindow,
+                            desktop: desktopOf(w),
+                            geometry: [g.x, g.y, g.width, g.height]}});
             }}
         }});
     }} catch (e) {{

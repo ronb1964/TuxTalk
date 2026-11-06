@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """A pretend music player for the "pause music and videos" check: it shows
 up on the session bus the way Brave or Spotify do (MPRIS), starts Playing or
-Paused, and writes every Pause and Play call it gets to a file.
+Paused, and writes every call it gets (Pause, Play, Next...) to a file.
 
 Usage: fake_player.py CALL_LOG [Playing|Paused]
 """
@@ -19,6 +19,7 @@ XML = """<node>
   </interface>
   <interface name="org.mpris.MediaPlayer2.Player">
     <method name="Pause"/><method name="Play"/><method name="PlayPause"/>
+    <method name="Next"/><method name="Previous"/>
     <property name="PlaybackStatus" type="s" access="read"/>
   </interface>
 </node>"""

@@ -380,19 +380,28 @@ def _wayland(run):
     return out.strip() == "wayland"
 
 
-def _kwin_state(run):
-    """"minimized (KWin)" once KWin says the test window is minimized, else
-    None; None too off KDE. On KDE Wayland the window itself keeps saying it
-    is shown and focused after a minimize, so only KWin can tell."""
+def _kwin_windows(run, title):
+    """KWin's answer for the windows titled *title* ("~part": captions
+    holding it): a list of {"minimized", "active", "desktop", "geometry"}, []
+    when there is none, None off KDE or when KWin gave no answer."""
     if "kde" not in run.vm.spec.tags:
         return None
-    out = run.vm.session("python3", f"{run.vm.home}/{REMOTE}/kwin_window.py", "TT Sink",
+    out = run.vm.session("python3", f"{run.vm.home}/{REMOTE}/kwin_window.py", title,
                          check=False).stdout.strip().splitlines()
     try:
         found = json.loads(out[-1])
     except (IndexError, json.JSONDecodeError):
         return None
-    if isinstance(found, list) and found and all(w["minimized"] for w in found):
+    return found if isinstance(found, list) else None
+
+
+def _kwin_state(run, title="TT Sink"):
+    """"minimized (KWin)" once KWin says every window titled *title* is
+    minimized, else None; None too off KDE. On KDE Wayland the window itself
+    keeps saying it is shown and focused after a minimize, so only KWin can
+    tell."""
+    found = _kwin_windows(run, title)
+    if found and all(w["minimized"] for w in found):
         return "minimized (KWin)"
     return None
 
