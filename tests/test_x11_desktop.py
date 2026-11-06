@@ -303,16 +303,26 @@ def test_on_cinnamon_an_x_server_that_doesnt_answer_keeps_popups_away_without_wa
         monkeypatch):
     """Asked as a recording starts, on the thread that also reads the keys:
     waiting for a server that never answers would leave the key's release
-    and Esc unread, and the recording running."""
+    and Esc unread, and the recording running. Asked again meanwhile, it
+    starts no second question that could hang as well."""
     import threading
     import time
     from tuxtalk import x11_activate
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", "X-Cinnamon")
     release = threading.Event()
-    monkeypatch.setattr(x11_activate, "open_display", lambda: release.wait(10))
+    asked = []
+
+    def hung():
+        asked.append(True)
+        release.wait(10)
+
+    monkeypatch.setattr(x11_activate, "open_display", hung)
     started = time.monotonic()
     try:
-        assert x11_desktop.popup_ends_show_desktop() is True
+        assert [x11_desktop.popup_ends_show_desktop() for _ in range(3)] == [True] * 3
         assert time.monotonic() - started < 2
+        assert len(asked) == 1
     finally:
         release.set()
+        x11_desktop._asking.join(5)
+    assert x11_desktop.popup_ends_show_desktop() is False      # answered again

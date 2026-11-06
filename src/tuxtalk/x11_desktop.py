@@ -42,8 +42,11 @@ _SIZED_BY_STATE = (*_MAXIMIZED, b"_NET_WM_STATE_FULLSCREEN")
 # it is centred; then how often its frame is looked at.
 _RESTORE_WAIT_S = 0.5
 _RESTORE_LOOK_S = 0.05
-# How long the X server gets to say whether the desktop is shown.
+# How long the X server gets to say whether the desktop is shown, and the
+# question still being asked: one at most, however long the server hangs.
 _ASK_WAIT_S = 0.5
+_asking = None
+_asking_lock = threading.Lock()
 _NO_FRAME = (0, 0, 0, 0)
 
 # Where each snap goes, in halves of the monitor: first column, last column,
@@ -329,12 +332,18 @@ def popup_ends_show_desktop() -> bool:
     shown there. Asked as a recording starts, on the thread that also reads
     the keys, so an X server that doesn't answer within _ASK_WAIT_S counts as
     "it would": the key's release and Esc are read all the same."""
+    global _asking
     if desktop_detect.get_desktop_environment() != "cinnamon":
         return False
-    answer = []
-    asking = threading.Thread(target=lambda: answer.append(_desktop_shown()), daemon=True,
-                              name="show-desktop-question")
-    asking.start()
+    with _asking_lock:
+        if _asking is not None and _asking.is_alive():
+            # The last question still hangs: no second one to hang as well.
+            return True
+        answer = []
+        _asking = threading.Thread(target=lambda: answer.append(_desktop_shown()),
+                                   daemon=True, name="show-desktop-question")
+        _asking.start()
+        asking = _asking
     asking.join(_ASK_WAIT_S)
     if not answer:
         log.info("The X server didn't say in time whether the desktop is shown")
