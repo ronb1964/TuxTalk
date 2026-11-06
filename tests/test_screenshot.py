@@ -478,6 +478,17 @@ def test_a_window_screenshot_cancelled_in_the_picker_saves_nothing(gnome, fake_p
     assert tools.commands == []
 
 
+def test_a_picker_closed_with_escape_on_gnome_is_cancelled_not_impossible(
+        gnome, fake_portal, tools, home, actions_on):
+    """GNOME answers "failed" when its picker is closed with Escape (Ubuntu
+    VM): TuxTalk said it found no way to take a screenshot."""
+    fake_portal.code = 2
+    screenshot.take(False, window=True)
+    _picked()
+    assert actions_on == ["Screenshot cancelled"]
+    assert tools.commands == []
+
+
 def test_where_no_picker_takes_one_window_it_says_so(fake_portal, tools, home, actions_on,
                                                     monkeypatch):
     """Sway's and Hyprland's portals choose an area, or take the whole

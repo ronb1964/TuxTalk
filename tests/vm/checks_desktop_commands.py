@@ -1073,9 +1073,9 @@ def screenshot_saved(run):
     return Outcome("pass", "One picture saved and removed again", screenshot=shot)
 
 
-# A window's picture may carry its frame and shadow, beyond the size KWin or
-# AT-SPI gives for it.
-WINDOW_FRAME_PX = 120
+# A window's picture may carry its frame and shadow beyond the size KWin or
+# AT-SPI gives for it: KDE's Breeze shadow adds about 65 px a side.
+WINDOW_FRAME_PX = 160
 
 
 @check(SECTION, "window_screenshot",

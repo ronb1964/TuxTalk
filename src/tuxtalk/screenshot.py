@@ -262,6 +262,9 @@ def _from_portal(interactive: bool, tools: list[list[str]], what: str, beeps_on:
     """Ask the portal (its picker with *interactive*), then, only when it
     answered that it can't or isn't there, the first installed of *tools*."""
     outcome, file = _ask_portal(interactive)
+    if interactive and outcome == "failed":
+        # GNOME's answer when its picker is closed with Escape.
+        outcome = "cancelled"
     if outcome == "saved":
         # The portal said so; not seeing the file (a sandbox) doesn't change that.
         return _saved("the portal", _keep(file) if os.path.exists(file) else None, what,
