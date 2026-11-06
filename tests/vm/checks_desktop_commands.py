@@ -594,10 +594,14 @@ def move_window_to_desktop(run):
                 return Outcome("skip", why)
             run.sink_ready(fresh=True)
             seen = []
+            # GNOME removes a workspace left empty and shows the one before:
+            # moving the test window, alone on the second, back to the first
+            # brings the person there with it.
+            back_to = 1 if "gnome" in run.vm.spec.tags else 2
             for phrase_id, line, current, on in (
                     ("move_to_desktop_two", "to desktop 2", 1, 2),
                     ("go_to_desktop_two", "desktop 2", 2, 2),
-                    ("move_to_desktop_one", "to desktop 1", 2, 1),
+                    ("move_to_desktop_one", "to desktop 1", back_to, 1),
                     ("go_to_desktop_one", "desktop 1", 1, 1)):
                 if phrase_id == "move_to_desktop_one":
                     run.vm.click_centre()       # the window must have the focus to move
