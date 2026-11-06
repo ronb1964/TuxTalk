@@ -310,6 +310,23 @@ def _on_window(display, action: str, number: int | None) -> str:
     return _desktops(display, action, number, window)
 
 
+def showing_desktop() -> bool:
+    """Whether the window manager is showing the desktop instead of the
+    windows (_NET_SHOWING_DESKTOP). False where nobody says, or on error."""
+    try:
+        display = x11_activate.open_display()
+        if display is None:
+            return False
+        try:
+            shown = display.cardinals(display.root, b"_NET_SHOWING_DESKTOP")
+        finally:
+            display.close()
+    except OSError as e:
+        log.info(f"Couldn't ask whether the desktop is shown: {e}")
+        return False
+    return bool(shown and shown[0])
+
+
 def act(action: str, number: int | None):
     """Do *action* ("snap left", "center", "to next screen", "show desktop",
     "desktop" or "to desktop" with *number*, "next desktop", "to next

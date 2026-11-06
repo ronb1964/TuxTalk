@@ -20,7 +20,7 @@ import math
 import os
 import time
 
-from . import indicator_styles, ui_style
+from . import indicator_styles, ui_style, x11_desktop
 from .indicator_styles import RadialGain
 from .logger import setup_logger
 
@@ -250,6 +250,12 @@ class RecordingIndicator(Gtk.Window):
             """Place the window, show it without taking the focus and start the
             animation, on GTK's thread."""
             try:
+                if x11_desktop.showing_desktop():
+                    # Any window appearing, a popup too, ends Cinnamon's
+                    # "show desktop" and brings the windows back: saying
+                    # "show desktop" again found them back and hid them.
+                    logger.info("Recording indicator not shown: the desktop is shown")
+                    return False
                 # Window dimensions — same expression used to size the window,
                 # so the maths and the real window cannot disagree.
                 window_width = int(BASE_WIDTH * self.scale)

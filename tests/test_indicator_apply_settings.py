@@ -201,6 +201,22 @@ def test_the_indicator_appears_where_it_belongs_not_in_the_corner_first(position
         _settle(0)
 
 
+@pytest.mark.parametrize("shown, appears", [(1, False), (0, True)])
+def test_the_indicator_stays_away_while_the_desktop_is_shown(window_manager, shown, appears):
+    """On Cinnamon any window appearing, a popup too, ends "show desktop"
+    and brings the windows back (Mint VM), so holding F8 to say "show
+    desktop" again found them back and hid them once more."""
+    window_manager.set_cardinals(window_manager.root, b"_NET_SHOWING_DESKTOP", (shown,))
+    ind = RecordingIndicator(position="center", size="medium")
+    try:
+        ind.show_at_position()
+        _settle()
+        assert ind.get_mapped() is appears
+    finally:
+        ind.destroy()
+        _settle(0)
+
+
 # What each style's renderer is handed: the fed data it draws, and the
 # animation response. The orb draws itself.
 _RENDERERS = {"waveform": "draw_waveform", "bars": "draw_bars", "radial": "draw_radial"}
