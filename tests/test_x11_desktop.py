@@ -42,27 +42,76 @@ def test_x11_snap_bottom_right_takes_the_quarter(desktops, one_monitor):
     assert desktops.requests(b"_NET_MOVERESIZE_WINDOW") == [(w, (0x2F01, 640, 500, 638, 475))]
 
 
-# _NET_MOVERESIZE_WINDOW's first word for a move by the window's centre.
-CENTRE_MOVE = 0x2305
+# _NET_MOVERESIZE_WINDOW's first word for a move of the frame's corner (NorthWest).
+CORNER_MOVE = 0x2301
 MAXIMIZED = (b"_NET_WM_STATE_MAXIMIZED_VERT", b"_NET_WM_STATE_MAXIMIZED_HORZ")
 
 
-def test_x11_centre_moves_without_resizing(desktops, one_monitor):
+def _middle_after(request, width, height):
+    """Where a frame *width* x *height* has its middle once a window
+    manager has done the corner move *request* (ICCCM: with NorthWest
+    gravity x and y are the frame's corner)."""
+    _window, (flags, x, y, *_size) = request
+    assert flags == CORNER_MOVE
+    return x + width // 2, y + height // 2
+
+
+def test_x11_centre_puts_the_middle_of_the_window_in_the_middle(desktops, one_monitor):
+    """A 400 x 200 window in the 1280 x 1000 work area goes to (440, 400)."""
     w = _active_window(desktops)
+    desktops.move(w, 30, 40, 400, 200)
     assert x11_desktop.act("center", None) == "done"
-    assert desktops.requests(b"_NET_MOVERESIZE_WINDOW") == [(w, (CENTRE_MOVE, 640, 500, 0, 0))]
+    [request] = desktops.requests(b"_NET_MOVERESIZE_WINDOW")
+    assert request == (w, (CORNER_MOVE, 440, 400, 0, 0))
+    assert _middle_after(request, 400, 200) == (640, 500)
 
 
-def test_x11_centre_a_maximized_window_centres_it_at_its_restored_size(desktops, one_monitor):
+def test_x11_centre_counts_the_frame(desktops, one_monitor):
+    w = _active_window(desktops, (1, 1, 24, 2))
+    desktops.move(w, 30, 40, 400, 200)
+    x11_desktop.act("center", None)
+    [request] = desktops.requests(b"_NET_MOVERESIZE_WINDOW")
+    assert _middle_after(request, 402, 226) == (640, 500)
+
+
+@pytest.fixture
+def restores_to(desktops, monkeypatch):
+    """restores_to(window, width, height): the window manager gives *window*
+    that size back while TuxTalk waits after asking for the un-maximize."""
+    def restores(window, width, height):
+        def wait(_seconds):
+            desktops.move(window, 0, 0, width, height)
+        monkeypatch.setattr(x11_desktop.time, "sleep", wait)
+    return restores
+
+
+def test_x11_centre_a_maximized_window_centres_it_at_its_restored_size(desktops, one_monitor,
+                                                                       restores_to):
     """Maximized, its frame is the whole work area: centring that frame put
-    the restored window in the top left corner. By its centre, the window
-    manager places it at whatever size it comes back to."""
+    the restored window in the top left corner."""
     w = _active_window(desktops)
     desktops.move(w, 0, 0, 1280, 1000)
     desktops.set_states(w, *MAXIMIZED)
+    restores_to(w, 400, 200)
     assert x11_desktop.act("center", None) == "done"
     assert desktops.requests(b"_NET_WM_STATE")[0][1][0] == 0        # unmaximized first
-    assert desktops.requests(b"_NET_MOVERESIZE_WINDOW") == [(w, (CENTRE_MOVE, 640, 500, 0, 0))]
+    [request] = desktops.requests(b"_NET_MOVERESIZE_WINDOW")
+    assert _middle_after(request, 400, 200) == (640, 500)
+
+
+def test_x11_a_maximized_window_that_doesnt_come_back_is_only_unmaximized(desktops, one_monitor,
+                                                                          monkeypatch):
+    """Its size isn't known, so it isn't moved by a guess: the window
+    manager puts it back where it was."""
+    w = _active_window(desktops)
+    desktops.move(w, 0, 0, 1280, 1000)
+    desktops.set_states(w, *MAXIMIZED)
+    waited = []
+    monkeypatch.setattr(x11_desktop.time, "sleep", waited.append)
+    assert x11_desktop.act("center", None) == "done"
+    assert desktops.requests(b"_NET_WM_STATE")[0][1][0] == 0
+    assert desktops.requests(b"_NET_MOVERESIZE_WINDOW") == []
+    assert 0.3 <= sum(waited) <= 1.0
 
 
 def test_x11_a_move_left_of_the_screen_reaches_the_window_manager(desktops):
