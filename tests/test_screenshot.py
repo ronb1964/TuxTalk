@@ -77,6 +77,21 @@ def test_gnome_asks_the_portal_and_says_where_it_saved(gnome, fake_portal, tools
     assert tools.commands == []
 
 
+def test_a_portal_shot_left_in_a_temporary_folder_is_kept_with_the_others(
+        cosmic, fake_portal, tools, home, actions_on, monkeypatch):
+    """COSMIC's portal answers with a file in /tmp: TuxTalk said "Screenshot
+    saved in //tmp" (Pop!_OS VM), a folder emptied at the next start."""
+    monkeypatch.setattr(screenshot, "_temporary_folders",
+                        lambda: (str(fake_portal.temporary),))
+    fake_portal.saved = "temporary"
+    assert screenshot.take(False) is True
+    kept = list((home / "Pictures" / "Screenshots").glob("Screenshot_*.png"))
+    assert [shot.read_bytes() for shot in kept] == [b"png"]
+    assert not any(fake_portal.temporary.iterdir())
+    assert actions_on == ["Screenshot saved in ~/Pictures/Screenshots"]
+    assert tools.commands == []
+
+
 def test_a_cancelled_portal_saves_nothing_and_tries_no_tool(gnome, fake_portal, tools,
                                                             home, actions_on):
     fake_portal.code = 1

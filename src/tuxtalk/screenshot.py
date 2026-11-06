@@ -3,13 +3,15 @@ the desktop keeps screenshots, with a note saying it was saved.
 
 KDE uses Spectacle in the background. Elsewhere the screenshot portal is
 asked first (GNOME may show its own dialog the first time), then
-gnome-screenshot or xfce4-screenshooter. Nothing is uploaded or copied
-anywhere. Programs run with a timeout and no shell, and the log names the
+gnome-screenshot or xfce4-screenshooter. A portal's picture left in a
+temporary folder (COSMIC's) is moved in with the others. Nothing is
+uploaded or copied anywhere. Programs run with a timeout and no shell, and the log names the
 tool, never a path: a path holds the user's name. The wait is on the
 dictation worker, never GTK's thread."""
 import os
 import shutil
 import subprocess
+import tempfile
 from datetime import datetime
 
 from gi.repository import Gio, GLib
@@ -191,8 +193,7 @@ def take(beeps_on: bool) -> bool:
     outcome, file = _ask_portal()
     if outcome == "saved":
         # The portal said so; not seeing the file (a sandbox) doesn't change that.
-        return _saved("the portal", os.path.dirname(file) if os.path.exists(file) else None,
-                      beeps_on)
+        return _saved("the portal", _kept(file) if os.path.exists(file) else None, beeps_on)
     if outcome in ("cancelled", "unconfirmed"):
         logger.info(f"Voice command: take a screenshot ({outcome})")
         command_notices.say("screenshot_cancelled" if outcome == "cancelled"
@@ -202,6 +203,34 @@ def take(beeps_on: bool) -> bool:
     if tool:
         return _saved(tool, folder(), beeps_on)
     return _nothing_saved(beeps_on)
+
+
+def _temporary_folders() -> tuple[str, ...]:
+    """The folders emptied at the next start or logout."""
+    return tuple(filter(None, (tempfile.gettempdir(), "/var/tmp",
+                               os.environ.get("XDG_RUNTIME_DIR"))))
+
+
+def _kept(file: str) -> str:
+    """The folder of the portal's screenshot *file*, once it is somewhere
+    kept: COSMIC's portal answers with a file in /tmp, which is moved into
+    folder() with the others. Where it can't be moved, its own folder."""
+    file = os.path.realpath(file)       # COSMIC's is named //tmp/...
+    home = os.path.realpath(os.path.expanduser("~"))
+    temporary = any(file.startswith(os.path.realpath(root) + os.sep)
+                    for root in _temporary_folders())
+    if file.startswith(home + os.sep) or not temporary:
+        return os.path.dirname(file)
+    path = _path_for_tool()
+    if path is None:
+        return os.path.dirname(file)
+    try:
+        shutil.move(file, path)
+    except OSError as e:
+        logger.warning(f"Screenshot couldn't be moved out of the portal's folder: "
+                       f"{type(e).__name__}")
+        return os.path.dirname(file)
+    return os.path.dirname(path)
 
 
 def _nothing_saved(beeps_on: bool) -> bool:

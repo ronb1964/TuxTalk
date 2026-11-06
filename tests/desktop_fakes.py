@@ -544,21 +544,24 @@ class FakePortal(_BusService):
     """The screenshot portal on the test's session bus. Screenshot answers
     with the Response signal on the request path it was given: *code* (0
     done, 1 cancelled, 2 failed, None never answers), and for 0 the *saved*
-    result: "file", one it writes in *folder*; "unseen", a file TuxTalk
-    can't see (a sandbox's); "unreadable", a uri that names no local file;
+    result: "file", one it writes in *folder*; "temporary", one it writes in
+    *temporary*, outside the home folder, named with a doubled slash as
+    COSMIC's portal names its own in /tmp; "unseen", a file TuxTalk can't
+    see (a sandbox's); "unreadable", a uri that names no local file;
     "nothing", no uri at all. With *replies* off
     the method call itself is never answered. *calls* keeps each call's
     options."""
 
     names = ("org.freedesktop.portal.Desktop",)
 
-    def __init__(self, folder):
+    def __init__(self, folder, temporary):
         self.code = 0
         self.saved = "file"
         self.replies = True
         self.calls = []
         self._unanswered = []
         self._folder = folder
+        self.temporary = temporary
         self._start()
 
     def _register(self, _bus, register):
@@ -578,11 +581,14 @@ class FakePortal(_BusService):
             return
         results = {}
         if self.code == 0 and self.saved != "nothing":
-            shot = os.path.join(self._folder, "Screenshot from the portal.png")
-            if self.saved == "file":
-                os.makedirs(self._folder, exist_ok=True)
+            folder = self.temporary if self.saved == "temporary" else self._folder
+            shot = os.path.join(folder, "Screenshot from the portal.png")
+            if self.saved in ("file", "temporary"):
+                os.makedirs(folder, exist_ok=True)
                 with open(shot, "wb") as f:
                     f.write(b"png")
+            if self.saved == "temporary":
+                shot = "/" + shot
             uri = ("https://example.invalid/shot.png" if self.saved == "unreadable"
                    else GLib.filename_to_uri(shot))
             results = {"uri": GLib.Variant("s", uri)}
@@ -591,8 +597,8 @@ class FakePortal(_BusService):
 
 
 @pytest.fixture
-def fake_portal(tmp_path):
-    portal = FakePortal(tmp_path / "Pictures")
+def fake_portal(tmp_path, tmp_path_factory):
+    portal = FakePortal(tmp_path / "Pictures", tmp_path_factory.mktemp("portal-tmp"))
     yield portal
     portal.stop()
 
