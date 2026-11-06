@@ -82,7 +82,8 @@ def test_a_portal_shot_left_in_a_temporary_folder_is_kept_with_the_others(
         cosmic, fake_portal, tools, home, actions_on, monkeypatch, own_tmpdir):
     """COSMIC's portal answers with a file in /tmp: TuxTalk said "Screenshot
     saved in //tmp" (Pop!_OS VM), a folder emptied at the next start. With
-    TuxTalk's own TMPDIR elsewhere (pam_tmpdir), /tmp still counts."""
+    TuxTalk's own TMPDIR elsewhere (pam_tmpdir), /tmp still counts: the
+    portal's folder here is pytest's, which is in /tmp."""
     monkeypatch.setattr(screenshot.tempfile, "gettempdir",
                         lambda: str(home / "tmp") if own_tmpdir else str(fake_portal.temporary))
     fake_portal.saved = "temporary"

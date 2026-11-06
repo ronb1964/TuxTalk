@@ -53,15 +53,6 @@ def place(width, height, center, monitor):
     return x, y
 
 
-def show(text, center=None):
-    """Show *text* centred on *center* (None: the middle of the main screen).
-    Safe from any thread; never raises."""
-    from gi.repository import GLib
-    if _ends_show_desktop():
-        return
-    GLib.idle_add(_show_now, text, center)
-
-
 def _ends_show_desktop():
     """Whether a label appearing now would end the desktop's "show desktop"
     (x11_desktop.popup_ends_show_desktop); asked on the caller's thread."""

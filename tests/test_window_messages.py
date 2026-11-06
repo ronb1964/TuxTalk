@@ -296,11 +296,9 @@ def test_on_cinnamon_no_label_floats_while_the_desktop_is_shown(
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
     window_manager.set_cardinals(window_manager.root, b"_NET_SHOWING_DESKTOP", (shown,))
     shown_now = []
-    monkeypatch.setattr(screen_message, "_show_now", lambda *a, **k: shown_now.append(a))
     monkeypatch.setattr(screen_message, "_show_over_window_now",
                         lambda *a, **k: shown_now.append(a))
-    screen_message.show("Volume 60%")
     screen_message.show_over_active_window("Volume 60%")
     while Gtk.events_pending():
         Gtk.main_iteration()
-    assert len(shown_now) == (2 if floats else 0)
+    assert len(shown_now) == (1 if floats else 0)
