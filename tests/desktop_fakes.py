@@ -595,3 +595,53 @@ def fake_portal(tmp_path):
     portal = FakePortal(tmp_path / "Pictures")
     yield portal
     portal.stop()
+
+
+_SCREENSAVER_XML = """<node><interface name="{name}">
+  <method name="Lock">{lock_args}</method>
+  <method name="GetActive"><arg type="b" direction="out"/></method>
+</interface></node>"""
+
+
+class FakeScreenSaver(_BusService):
+    """The screensaver that locks Cinnamon, MATE or Xfce, on the test's
+    session bus as *name* (org.cinnamon.ScreenSaver ...); Cinnamon's Lock
+    takes a message, the others' nothing. Lock is kept in *locks* and comes
+    up after *locks_after* GetActive questions (None: never); with
+    *answers* off neither method is ever answered."""
+
+    def __init__(self, name):
+        self.names = (name,)
+        self.locks, self.looks = [], 0
+        self.locks_after = 0
+        self.answers = True
+        self._unanswered = []
+        self._start()
+
+    def _register(self, _bus, register):
+        name = self.names[0]
+        lock_args = '<arg type="s" direction="in"/>' if "cinnamon" in name else ""
+        xml = _SCREENSAVER_XML.format(name=name, lock_args=lock_args)
+        interface = Gio.DBusNodeInfo.new_for_xml(xml).interfaces[0]
+        path = "/" + name.replace(".", "/")
+        register(path, interface, self._on_call, None, None)
+
+    def _on_call(self, _bus, _sender, _path, _interface, method, parameters, invocation):
+        if not self.answers:
+            self._unanswered.append(invocation)     # kept, so GDBus doesn't answer for it
+            return
+        if method == "Lock":
+            self.locks.append(parameters.unpack())
+            invocation.return_value(None)
+            return
+        self.looks += 1
+        up = bool(self.locks) and self.locks_after is not None and self.looks > self.locks_after
+        invocation.return_value(GLib.Variant("(b)", (up,)))
+
+
+@pytest.fixture
+def screensaver(request):
+    """A stand-in screensaver: parametrize indirectly with its bus name."""
+    saver = FakeScreenSaver(request.param)
+    yield saver
+    saver.stop()

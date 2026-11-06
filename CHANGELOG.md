@@ -75,7 +75,9 @@ before 0.15.0, so older entries use that name.
   Commands window. It is still off until you tick it.
 - After "lock screen" TuxTalk checks that the computer says it's locked.
   The ready beep means it is; otherwise a note says the lock isn't
-  confirmed, so you know to check the screen before you walk away.
+  confirmed, so you know to check the screen before you walk away. On
+  Cinnamon (Linux Mint), MATE and Xfce it locks through the desktop's own
+  screensaver and asks it, since those never tell the system they locked.
 - One word alone (copy, pause, next) is typed as a word, and "literal"
   before any command types the words.
 - Where it works: KDE has all of it. GNOME has it with the TuxTalk extension

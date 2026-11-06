@@ -5,6 +5,7 @@ import subprocess
 
 import pytest
 
+from desktop_fakes import set_desktop
 from tuxtalk import beeps, system_actions, tray_link
 from tuxtalk.command_phrases import SystemRequest
 
@@ -178,4 +179,63 @@ def test_a_slow_session_query_means_not_confirmed(loginctl, cosmic, actions_on, 
         return real(cmd, **kw)
     monkeypatch.setattr(system_actions.subprocess, "run", slow)
     assert system_actions.lock(False, sleep=no_wait) is True
+    assert actions_on == ["Lock not confirmed"]
+
+
+# The desktops whose screensaver locks the screen and never tells logind:
+# (XDG_CURRENT_DESKTOP, the screensaver's bus name).
+SCREENSAVERS = [("X-Cinnamon", "org.cinnamon.ScreenSaver"), ("MATE", "org.mate.ScreenSaver"),
+                ("XFCE", "org.xfce.ScreenSaver")]
+_ON_EACH = pytest.mark.parametrize("desktop, screensaver", SCREENSAVERS,
+                                   indirect=["screensaver"])
+
+
+@_ON_EACH
+def test_there_the_screensaver_locks_and_says_so(loginctl, screensaver, desktop, monkeypatch,
+                                                  actions_on, beeped, caplog):
+    """cinnamon-screensaver never sets logind's LockedHint, so a lock asked
+    of logind was never confirmed on Mint (and on the Mint VM the screen
+    didn't even lock)."""
+    set_desktop(monkeypatch, desktop, "x11")
+    screensaver.locks_after = 1
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert system_actions.lock(True, sleep=no_wait) is True
+    assert len(screensaver.locks) == 1
+    assert not [c for c in loginctl.commands if c[1] == "lock-session"]
+    assert (beeped, actions_on) == ([beeps.READY_BEEP], [])
+    assert "the screensaver says it is locked" in caplog.text
+
+
+@_ON_EACH
+def test_a_lock_the_screensaver_never_shows_is_not_called_locked(
+        loginctl, screensaver, desktop, monkeypatch, actions_on, beeped):
+    set_desktop(monkeypatch, desktop, "x11")
+    screensaver.locks_after = None
+    system_actions.lock(True, sleep=no_wait)
+    assert beeps.READY_BEEP not in beeped
+    assert actions_on == ["Lock not confirmed"]
+
+
+@pytest.mark.parametrize("desktop", ["X-Cinnamon", "MATE", "XFCE"])
+def test_without_its_screensaver_the_lock_goes_through_logind(loginctl, desktop, monkeypatch,
+                                                              actions_on):
+    """An Xfce with light-locker, say: no org.xfce.ScreenSaver on the bus."""
+    set_desktop(monkeypatch, desktop, "x11")
+    loginctl.hint = "yes"
+    assert system_actions.lock(False, sleep=no_wait) is True
+    assert loginctl.commands[0][:2] == ["loginctl", "lock-session"]
+    assert actions_on == []
+
+
+@pytest.mark.parametrize("screensaver", ["org.cinnamon.ScreenSaver"], indirect=True)
+def test_a_screensaver_that_doesnt_answer_is_not_asked_twice(loginctl, screensaver, monkeypatch,
+                                                             actions_on):
+    """It may still be locking: a second request through logind is no
+    better, and the user is told to check the screen."""
+    set_desktop(monkeypatch, "X-Cinnamon", "x11")
+    monkeypatch.setattr(system_actions, "_LOCK_TIMEOUT_S", 0.2)
+    monkeypatch.setattr(system_actions, "_QUERY_TIMEOUT_S", 0.2)
+    screensaver.answers = False
+    assert system_actions.lock(False, sleep=no_wait) is True
+    assert not [c for c in loginctl.commands if c[1] == "lock-session"]
     assert actions_on == ["Lock not confirmed"]
