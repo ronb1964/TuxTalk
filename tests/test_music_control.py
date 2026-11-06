@@ -8,6 +8,7 @@ import time
 
 import pytest
 
+from conftest import esc
 from test_media_pause import FakeBus, run
 from type_at_pause_rig import service_tick_runs
 from tuxtalk import media_pause, music_control, recording
@@ -217,6 +218,48 @@ def test_a_command_the_worker_never_reached_is_dropped(pauser, bus):
     bus.release.set()
     assert pauser.wait_idle(6)
     assert ("spotify", "Next") not in bus.calls
+
+
+def test_a_command_given_up_before_the_worker_reached_it_reads_no_player(pauser, bus):
+    """A worker held up by a hung player has enough to wait for: a command
+    the user was already told about doesn't add its own slow reads."""
+    bus.status = {"stuck": "Playing"}
+    bus.hang.add("stuck")
+    pauser.pause()                                           # holds the worker
+    ran = []
+    assert pauser.run_command(lambda b, paused, go: ran.append(True), timeout=0.05) is None
+    bus.release.set()
+    assert pauser.wait_idle(6)
+    assert ran == []
+
+
+def test_calls_under_way_are_waited_for_one_more_timeout(pauser, bus):
+    def slow_calls(b, paused, go):
+        assert go()
+        time.sleep(0.15)                                     # past one wait, inside two
+        return "done", frozenset()
+    assert pauser.run_command(slow_calls, timeout=0.1) == "done"
+
+
+def test_calls_slower_than_two_timeouts_are_not_waited_for(pauser, bus):
+    def very_slow_calls(b, paused, go):
+        assert go()
+        time.sleep(0.5)
+        return "done", frozenset()
+    assert pauser.run_command(very_slow_calls, timeout=0.1) is None
+    assert pauser.wait_idle(2)
+
+
+def test_esc_while_the_players_are_read_calls_none(pauser, actions_on, chat, say):
+    class EscMeanwhile(FakeBus):
+        def playback_status(self, name):
+            esc()                            # pressed while the worker reads the players
+            return super().playback_status(name)
+    escaped = EscMeanwhile(spotify="Playing")
+    pauser._bus = escaped
+    say("Next track.")
+    assert pauser.wait_idle(2)
+    assert escaped.calls == [] and chat[2] == [] and actions_on == []
 
 
 def test_music_commands_work_with_pausing_while_dictating_off(bus, monkeypatch):

@@ -151,9 +151,10 @@ class MediaPauser:
         act calls go() right before it calls the players, and calls none
         when it says False: the caller gave up waiting and has told the user
         so, and a command acting later ("next track" said twice skipping two
-        tracks) would be worse than none. None past *timeout*; once go() has
-        said True, the calls (each bounded by CALL_TIMEOUT_MS) are waited
-        for instead, since they are being done."""
+        tracks) would be worse than none. A job given up before the worker
+        reached it isn't run at all. None past *timeout*; once go() has said
+        True, the calls (each bounded by CALL_TIMEOUT_MS) are waited for up
+        to one more *timeout*, since they are being done."""
         lock = threading.Lock()
         state = {"gave_up": False, "going": False}
         answer, done = [], threading.Event()
@@ -165,6 +166,9 @@ class MediaPauser:
 
         def job():
             try:
+                with lock:
+                    if state["gave_up"]:
+                        return
                 result, forget = act(self._bus, tuple(self._paused), go)
                 answer.append(result)
                 if state["going"]:

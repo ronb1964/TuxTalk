@@ -271,6 +271,13 @@ def esc_cancelled() -> bool:
     return message is not None and message.cancelled
 
 
+def esc_check():
+    """esc_cancelled() as a check that another thread can make later, about
+    this thread's dictation: the media worker acts for it after a wait."""
+    message = this_thread.cancel_with
+    return lambda: message is not None and message.cancelled
+
+
 def esc_stopped(what: str) -> bool:
     """esc_cancelled(), logging "Not *what*: Esc cancelled the dictation" when
     it is: for a command that checks right before it acts."""

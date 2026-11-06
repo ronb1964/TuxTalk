@@ -12,7 +12,7 @@ The players are read when the command is said; nothing watches them in the
 background."""
 from dataclasses import dataclass
 
-from . import beeps, command_notices, recording
+from . import beeps, command_notices, keyboard_output, recording
 from .command_phrases import MusicRequest
 from .logger import setup_logger
 from .media_pause import MPRIS_PREFIX, PROXIES, status_of
@@ -92,11 +92,12 @@ def _call_each(bus, names: tuple[str, ...], method: str) -> list[str]:
     return called
 
 
-def _on_worker(bus, paused_by_us: tuple[str, ...], go, action: str):
+def _on_worker(bus, paused_by_us: tuple[str, ...], go, action: str, esc):
     """MediaPauser.run_command's act: read the players, choose, and call the
-    ones chosen if go() still says so. Returns ((note, names), forget): the
-    note's kind, or None when done, with the players to name in the note or
-    the log."""
+    ones chosen unless esc() says Esc came meanwhile or go() says the
+    command was given up. Returns ((note, names), forget): the note's kind
+    ("esc" when Esc has said so itself), or None when done, with the
+    players to name in the note or the log."""
     status = {}
     for name in bus.players():
         if (state := status_of(bus, name)) is not None:
@@ -107,6 +108,8 @@ def _on_worker(bus, paused_by_us: tuple[str, ...], go, action: str):
         return (choice.note, names), frozenset()
     if choice.note:
         return (choice.note, []), frozenset()
+    if esc():
+        return ("esc", []), frozenset()
     if not go():
         return ("player_no_answer", []), frozenset()
     called = _call_each(bus, choice.targets, METHODS[action])
@@ -118,11 +121,15 @@ def _on_worker(bus, paused_by_us: tuple[str, ...], go, action: str):
 
 def run(request: MusicRequest, beeps_on: bool) -> bool:
     """Do *request* on the media players. True: done, with the ready beep;
-    False: nothing picked, or no player answered in time, said with a note."""
-    action = request.action
+    False: nothing picked, or no player answered in time, said with a note,
+    or Esc came while the players were read."""
+    action, esc = request.action, keyboard_output.esc_check()
     answer = recording.media_pauser().run_command(
-        lambda bus, paused, go: _on_worker(bus, paused, go, action))
+        lambda bus, paused, go: _on_worker(bus, paused, go, action, esc))
     note, names = answer if answer is not None else ("player_no_answer", [])
+    if note == "esc":
+        logger.info(f"Not done ({action} music): Esc cancelled the dictation")
+        return False
     if note:
         command_notices.say(note, beeps_on, players=", ".join(names))
         return False
