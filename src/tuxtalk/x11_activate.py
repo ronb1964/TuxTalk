@@ -11,7 +11,8 @@ asks the window manager with a _NET_ACTIVE_WINDOW message to the root
 window, as a taskbar does (EWMH); the window manager switches desktops and
 unminimizes as it would for a click there. Through XCB (xcb_ctypes), like
 compositor_focus's look at the focused window. x11_windows asks the window
-manager to close, minimize and maximize the same way.
+manager to close, minimize and maximize the same way, and x11_desktop to
+snap, centre and switch desktops.
 """
 import ctypes
 import logging
@@ -63,7 +64,8 @@ class Display:
         return self._root
 
     def cardinals(self, window, name: bytes) -> list:
-        """The CARDINAL list property *name* of *window* ([] when unset)."""
+        """The 32-bit list property *name* of *window* (CARDINAL, WINDOW or
+        ATOM; [] when unset)."""
         atom = intern_atom(self._lib, self._conn, name)
         raw = get_property(self._lib, self._conn, window, atom) if atom else None
         return _words(raw)
@@ -88,10 +90,8 @@ class Display:
         """The window manager's windows, the one used last at the end; []
         when no window manager lists them."""
         for name in (b"_NET_CLIENT_LIST_STACKING", b"_NET_CLIENT_LIST"):
-            atom = intern_atom(self._lib, self._conn, name)
-            raw = get_property(self._lib, self._conn, self._root, atom) if atom else None
-            if raw:
-                return _words(raw)
+            if found := self.cardinals(self._root, name):
+                return found
         return []
 
     def active_window(self):
