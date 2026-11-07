@@ -126,6 +126,14 @@ def test_with_a_grid_write_is_heard_as_right(said, steps):
     assert parse(said, grid=True) == MouseRequest("nudge", steps, direction="right", in_grid=True)
 
 
+@pytest.mark.parametrize("said, direction", [("Downtown.", "down"), ("uptown", "up")])
+def test_with_a_grid_downtown_is_down_two(said, direction):
+    """Parakeet writes "down two" said quickly as "Downtown."; with no grid
+    it stays a word."""
+    assert parse(said, grid=True) == MouseRequest("nudge", 2, direction=direction, in_grid=True)
+    assert parse(said, grid=False) is None
+
+
 def test_with_a_grid_write_click_is_a_right_click():
     assert parse("Write click.", grid=True) == MouseRequest("right click", in_grid=True)
     assert parse("write click five", grid=True) == MouseRequest("right click", 5, in_grid=True)

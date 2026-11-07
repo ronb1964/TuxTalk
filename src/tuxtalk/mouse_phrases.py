@@ -43,6 +43,8 @@ _NUDGE_COUNTS = {"to": 2, "for": 4}
 # How Parakeet writes "right" said alone or before a count or "click"; only
 # while a grid shows, where "write four" can't be meant as words.
 _WRITE = re.compile(r"^write(?= |$)")
+# "down two" and "up two" said quickly, as Parakeet writes them as one word.
+_RUN_TOGETHER = {"downtown": "down 2", "uptown": "up 2"}
 
 
 def _number(words: str) -> int | None:
@@ -91,7 +93,7 @@ def parse(said: str, grid: bool) -> MouseRequest | None:
     if said in _GRID:
         return MouseRequest("grid")
     if grid:
-        said = _WRITE.sub("right", said)
+        said = _RUN_TOGETHER.get(said) or _WRITE.sub("right", said)
     if request := _click(said, grid):
         return request
     if not grid:
