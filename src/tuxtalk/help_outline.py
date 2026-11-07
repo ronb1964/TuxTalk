@@ -77,18 +77,14 @@ def parse(text):
 
 def _text(lines):
     """*lines* as one text for a card as wide as the window: a line broken
-    by hand in a paragraph carries on the one before it. A blank line, a
-    list's item and a numbered step start their own, and the lines an item
-    goes on with keep their indent, so they line up under its text."""
+    by hand carries on the one before it, in a paragraph and in a list's
+    item alike, so both fill the card. A blank line, an item and a numbered
+    step start their own. (Lined up under its text, a wrapped item filled
+    only part of the card, and on a narrow screen left words stranded.)"""
     out = []
-    in_item = False
     for line in lines:
-        if not line.strip():
-            in_item = False
-        elif _ITEM.match(line):
-            in_item = True
-        elif out and out[-1].strip() and not in_item:
+        if out and out[-1].strip() and line.strip() and not _ITEM.match(line):
             out[-1] = f"{out[-1].rstrip()} {line.strip()}"
-            continue
-        out.append(line.rstrip())
+        else:
+            out.append(line.rstrip())
     return "\n".join(out).strip("\n")

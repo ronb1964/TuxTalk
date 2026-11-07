@@ -1,8 +1,7 @@
 """What Help says, section by section; help_dialog.py shows it, each topic
 a card. The text is Pango markup with marks where cards begin ("#" the
-title, "##" a feature, "###" a card; help_outline reads them), and lines
-are broken by hand at about 85 characters: a paragraph's flow on in the
-card, a list item's keep their place.
+title, "##" a feature, "###" a card; help_outline reads them). Lines are
+broken by hand at about 85 characters, and flow on to the card's width.
 
 Help is sorted by what you're doing (chatting, writing, in a terminal,
 hands-free, fixing mistakes, something wrong), not by feature, so it can be

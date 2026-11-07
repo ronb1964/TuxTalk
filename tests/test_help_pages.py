@@ -58,11 +58,10 @@ def test_a_heading_is_plain_text_so_it_is_escaped_once():
     assert help_outline.parse(SAMPLE).parts[2].sections[0].title == "Fish & chips"
 
 
-def test_paragraphs_flow_on_but_list_items_keep_their_lines():
-    """Help's text is broken at about 85 characters in the source: a
-    paragraph flows to the card's width (in a card as wide as the window it
-    left half of it empty), while an item's own lines keep their indent, so
-    they line up under its text rather than under the bullet."""
+def test_lines_broken_by_hand_flow_on_and_each_item_starts_its_own():
+    """Help's text is broken at about 85 characters in the source; in a card
+    as wide as the window that left part of it empty. A paragraph and a
+    list's item both fill the card; an item and a step start a line."""
     page = help_outline.parse("""# T
 
 ### Taking it back
@@ -78,8 +77,8 @@ A new paragraph,
 broken by hand.""")
     assert page.parts[0].sections[0].body == (
         "Each of these is a dictation of its own, said right after the one it takes back.\n"
-        "  • <b>delete last word</b> and <b>delete last sentence</b>\n"
-        "    remove what you just dictated.\n"
+        "  • <b>delete last word</b> and <b>delete last sentence</b> remove what you just "
+        "dictated.\n"
         "  • Ctrl+Z works too.\n"
         "  1. Click into the first box.\n"
         "     – <b>.deb:</b> the package\n"

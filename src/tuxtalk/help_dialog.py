@@ -13,11 +13,10 @@ from gi.repository import Gtk, Pango
 from . import commands_cards, help_outline, help_pages, help_text, ui_style
 from .help_text import COMMANDS_TITLE, FEEDBACK_URL, PROBLEMS_TITLE, REPORT_LINK
 
-# Help's lists are broken by hand at about 85 characters (help_outline keeps
-# an item's lines), so a card's text is this many of the font's characters
-# wide, and the window that plus _CARD_FRAME_PX of margins, the cards'
-# borders and padding and the scroll bar, or the row of tabs plus
-# _TABS_FRAME_PX if that is wider.
+# Help's text flows to the cards' width; a line about this many of the
+# font's characters long reads easily, so the window is that plus
+# _CARD_FRAME_PX of margins, the cards' borders and padding and the scroll
+# bar, or the row of tabs plus _TABS_FRAME_PX if that is wider.
 _LINE_CHARS = 87
 _CARD_FRAME_PX = 100
 _TABS_FRAME_PX = 60

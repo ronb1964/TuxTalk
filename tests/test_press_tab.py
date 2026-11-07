@@ -179,7 +179,7 @@ def test_help_explains_forms_with_your_own_key(monkeypatch):
     assert 'Hold <b>F6</b>, say "John Smith, press tab", let go' in form
     assert "F8" not in form
     assert "Claude Desktop" in form and "password box" in form
-    assert 'hold\n    <b>F6</b>, say only "press tab", let go' in form
+    assert 'hold <b>F6</b>, say only "press tab", let go' in form
 
 
 def test_press_tab_alone_in_a_claude_desktop_password_box_presses_the_key(monkeypatch,
