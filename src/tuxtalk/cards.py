@@ -85,22 +85,24 @@ def card_head(title, look, icon, note="", labs=""):
 def group_title(title, look, note="", labs=""):
     """The title over a run of cards (a group of commands, a Help feature),
     large, in the colour of *look*, with *note* dim beside it and the Labs
-    tag when *labs* (its tooltip) is given. Returns the widget and the
-    title's label."""
-    text = heading(f'<span size="x-large"><b>{escape(title)}</b></span>', "tt-group-title")
-    text.get_style_context().add_class(f"tt-{look}")
+    tag when *labs* (its tooltip) is given. Returns the widget to put on the
+    page and its labels (title, then note), as card_head does."""
+    labels = [heading(f'<span size="x-large"><b>{escape(title)}</b></span>',
+                      "tt-group-title")]
+    labels[0].get_style_context().add_class(f"tt-{look}")
     if not (note or labs):
-        return text, text
+        return labels[0], labels
     row = Gtk.Box(spacing=10)
     row.get_style_context().add_class(f"tt-{look}")     # the note's and the tag's colour
-    row.pack_start(text, False, False, 0)
     if note:
-        row.pack_start(label(escape(note), "tt-card-note"), False, False, 0)
+        labels.append(label(escape(note), "tt-card-note"))
+    for widget in labels:
+        row.pack_start(widget, False, False, 0)
     if labs:
         tag = labs_tag(labs)
         tag.set_valign(Gtk.Align.CENTER)
         row.pack_start(tag, False, False, 0)
-    return row, text
+    return row, labels
 
 
 def card_box(head):

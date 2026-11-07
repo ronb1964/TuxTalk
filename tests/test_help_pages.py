@@ -115,7 +115,9 @@ def test_the_commands_text_is_only_a_title_and_an_intro():
     """Its cards are the commands: a card written in its text would never
     show."""
     commands = help_outline.parse(dict(help_text.tabs())[help_text.COMMANDS_TITLE])
-    assert commands.title and [p.sections for p in commands.parts] == [()]
+    (part,) = commands.parts
+    assert commands.title and part.intro
+    assert (part.title, part.note, part.labs, part.sections) == ("", "", False, ())
 
 
 @pytest.fixture

@@ -36,7 +36,7 @@ def test_the_link_is_outside_the_sections_so_every_section_shows_it(dialog):
     assert link not in list(widgets(notebook))
 
 
-def test_troubleshooting_links_can_be_clicked(dialog):
+def test_troubleshooting_links_are_links(dialog):
     markup = " ".join(w.get_label() or "" for w in widgets(dialog) if isinstance(w, Gtk.Label))
     assert '<a href="https://github.com/ronb1964/TuxTalk/issues"' in markup
     assert f'<a href="{help_dialog.FEEDBACK_URL}"' in markup

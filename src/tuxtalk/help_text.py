@@ -79,23 +79,23 @@ def _no_hotkey_tips(is_flatpak, keys_where):
     if is_flatpak:
         return (
             "• On the Flatpak your keys are assigned by the desktop, not by TuxTalk.\n"
-            f"• Open {keys_where} and make sure a key is set for both "
+            f"• Open {keys_where}\n  and make sure a key is set for both "
             "<b>Hold to talk</b> and <b>Toggle dictation</b>.\n"
-            "• If the assign prompt never appeared on first run, choose Restart Service "
-            "in the TuxTalk menu and it will ask again.")
+            "• If the assign prompt never appeared on first run, choose Restart Service in the\n"
+            "  TuxTalk menu and it will ask again.")
     return (
-        "• Open <b>Preferences → Advanced → System check</b>. If Typing setup says "
-        "something needs fixing, click its button. You'll be asked for your password "
-        "once. TuxTalk's hotkey helper then reads the dictation keys, and nothing else, "
-        "with no restart needed.\n"
-        "• On a system without systemd the helper can't be used, and TuxTalk joins you "
-        "to the \"input\" group instead. Then the computer needs a restart: logging out "
-        "is often not enough. Typing setup says when this applies.\n"
-        "• Another app may use the same key: pick another in Preferences → General and "
-        "try it with Test Hotkeys.\n"
-        "• On many laptops and small keyboards the F-keys work only with Fn held. Hold Fn "
-        "with your key, or pick Right Ctrl, Right Alt, Scroll Lock or Left Ctrl+Space in "
-        "Preferences → General: where a laptop has them, they need no Fn.")
+        "• Open <b>Preferences → Advanced → System check</b>. If Typing setup says something\n"
+        "  needs fixing, click its button. You'll be asked for your password once. TuxTalk's\n"
+        "  hotkey helper then reads the dictation keys, and nothing else, with no restart\n"
+        "  needed.\n"
+        "• On a system without systemd the helper can't be used, and TuxTalk joins you to\n"
+        "  the \"input\" group instead. Then the computer needs a restart: logging out is\n"
+        "  often not enough. Typing setup says when this applies.\n"
+        "• Another app may use the same key: pick another in Preferences → General and try\n"
+        "  it with Test Hotkeys.\n"
+        "• On many laptops and small keyboards the F-keys work only with Fn held. Hold Fn\n"
+        "  with your key, or pick Right Ctrl, Right Alt, Scroll Lock or Left Ctrl+Space in\n"
+        "  Preferences → General: where a laptop has them, they need no Fn.")
 
 
 def _ctrl_space_line(keys):
@@ -142,14 +142,14 @@ def _values():
 
     if is_flatpak:
         typing_para = (
-            "TuxTalk types straight into the focused app through your desktop's "
-            "secure input portal (libei): there's no typing setup to configure, "
-            "and clipboard paste isn't used.")
+            "TuxTalk types straight into the focused app through your desktop's secure\n"
+            "    input portal (libei): there's no typing setup to configure, and clipboard\n"
+            "    paste isn't used.")
     else:
         typing_para = (
-            "Still nothing in one particular app? <b>Preferences → Advanced → Fine-tuning → "
-            "Text Injection</b>: Auto picks paste or typing for each app; try "
-            "<b>Keystroke Typing</b> or <b>Clipboard Paste</b> there.")
+            "Still nothing in one particular app? <b>Preferences → Advanced → Fine-tuning →\n"
+            "    Text Injection</b>: Auto picks paste or typing for each app; try\n"
+            "    <b>Keystroke Typing</b> or <b>Clipboard Paste</b> there.")
 
     no_hotkey_block = _no_hotkey_tips(is_flatpak, keys_where)
 
@@ -166,28 +166,28 @@ def _values():
     # Update guidance per install type.
     if is_flatpak:
         update_block = (
-            "TuxTalk updates through Flatpak. Run <tt>flatpak update "
-            "io.github.ronb1964.TuxTalk</tt>, or use your software center: the "
-            "built-in \"Check for Updates\" points you at the same command.")
+            "TuxTalk updates through Flatpak. Run <tt>flatpak update\n"
+            "    io.github.ronb1964.TuxTalk</tt>, or use your software center: the built-in\n"
+            "    \"Check for Updates\" points you at the same command.")
     else:
         update_block = (
             "Updating matches how you installed TuxTalk:\n"
-            "   – <b>.deb / .rpm:</b> click \"Download &amp; Install\". It downloads "
-            "the new package and installs it through your system package manager "
-            "(you'll be asked for your password once), then offers to restart.\n"
-            "   – <b>AppImage:</b> click \"Download &amp; Install\". It swaps in the "
-            "new version and restarts automatically.\n"
-            "   – <b>From source:</b> Check for Updates shows the command that "
-            "installs the new version.\n"
-            "   – <b>Arch (AUR):</b> update with your AUR helper, e.g. "
-            "<tt>yay -S tuxtalk-appimage</tt> or <tt>yay -S tuxtalk</tt>.")
+            "   – <b>.deb / .rpm:</b> click \"Download &amp; Install\". It downloads the new\n"
+            "     package and installs it through your system package manager (you'll be\n"
+            "     asked for your password once), then offers to restart.\n"
+            "   – <b>AppImage:</b> click \"Download &amp; Install\". It swaps in the new version\n"
+            "     and restarts automatically.\n"
+            "   – <b>From source:</b> Check for Updates shows the command that installs the\n"
+            "     new version.\n"
+            "   – <b>Arch (AUR):</b> update with your AUR helper, e.g.\n"
+            "     <tt>yay -S tuxtalk-appimage</tt> or <tt>yay -S tuxtalk</tt>.")
 
     paste_tip = (f"Press <b>{paste_key}</b> in the right window and your last dictation is "
                  "typed again. " if paste_key else "")
     paste_line = (f"<b>{paste_key}</b> types your last dictation again, and\n    "
                   if paste_key else "")
     if is_flatpak:
-        key_choice_tip = f"Pick a dictation key that's easy to reach in {keys_where}."
+        key_choice_tip = f"Pick a dictation key that's easy to reach in\n    {keys_where}."
     else:
         key_choice_tip = (
             "Pick <b>Right Alt</b>, <b>Right Ctrl</b>, <b>Scroll Lock</b> or <b>Left "
