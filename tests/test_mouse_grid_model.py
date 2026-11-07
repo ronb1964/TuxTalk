@@ -80,17 +80,21 @@ def test_a_measured_fit_corrects_a_scaled_or_shifted_mapping():
     # The desktop mapped the tablet's 0..1 onto x 100..1100 and y 0..1080.
     sent = ((0.2, 0.2), (0.8, 0.8))
     arrived = ((100 + 0.2 * 1000, 0.2 * 1080), (100 + 0.8 * 1000, 0.8 * 1080))
-    fit = Fit.measured(SCREEN, sent, arrived)
+    fit = Fit.measured(sent, arrived)
     assert fit.fraction((600, 540)) == pytest.approx((0.5, 0.5))
 
 
 def test_a_fit_from_one_spot_is_refused():
     sent = ((0.2, 0.2), (0.8, 0.8))
-    assert Fit.measured(SCREEN, sent, ((300, 100), (300, 900))) is None
-    assert Fit.measured(SCREEN, sent, ((100, 400), (900, 400))) is None
+    assert Fit.measured(sent, ((300, 100), (300, 900))) is None
+    assert Fit.measured(sent, ((100, 400), (900, 400))) is None
 
 
 def test_close_enough_is_three_pixels():
     assert close_enough((100, 100), (103, 97))
     assert not close_enough((100, 100), (104, 100))
     assert not close_enough((100, 100), (100, 96))
+
+
+def test_a_fit_from_one_sent_fraction_is_refused():
+    assert Fit.measured(((0.5, 0.2), (0.5, 0.8)), ((300, 100), (900, 900))) is None

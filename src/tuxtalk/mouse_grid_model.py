@@ -114,18 +114,17 @@ class Fit:
         return cls(scale, (-bounds.x * scale[0], -bounds.y * scale[1]))
 
     @classmethod
-    def measured(cls, bounds: Rect, fractions: tuple[tuple, tuple],
+    def measured(cls, fractions: tuple[tuple, tuple],
                  arrivals: tuple[tuple, tuple]) -> "Fit | None":
         """Fit from two moves: the fractions sent and the pixels reached.
 
-        None when both arrivals share an x or a y: one spot says nothing
-        about that axis's slope. `bounds` is part of the planned interface
-        and not needed by the maths."""
+        None when both arrivals, or both sent fractions, share an x or a y:
+        one spot says nothing about that axis's slope."""
         scale, offset = [], []
         for axis in (0, 1):
             f0, f1 = fractions[0][axis], fractions[1][axis]
             a0, a1 = arrivals[0][axis], arrivals[1][axis]
-            if a0 == a1:
+            if a0 == a1 or f0 == f1:
                 return None
             slope = (f1 - f0) / (a1 - a0)
             scale.append(slope)
