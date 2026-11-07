@@ -150,7 +150,7 @@ def prefs_labs(run):
     names = {w["name"]: w for w in widgets(run)}
     wanted_buttons = ["How these work", "Send feedback", "Show tips again"]
     wanted_boxes = ["Follows the window you’re dictating into", "Type each phrase when you pause"]
-    prefixes = ["Voice editing:", "Select and move:", "Apps, windows and keys by voice:"]
+    prefixes = ["Voice editing:", "Select and move:", "Apps, windows, keys and the mouse by voice:"]
     problems = [f"no “{b}” button" for b in wanted_buttons if b not in names]
     boxes = wanted_boxes + [n for n in names for p in prefixes if n.startswith(p)]
     if len(boxes) != 5:

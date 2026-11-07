@@ -424,8 +424,8 @@ class AdvancedTab(Tab):
         row += 1
         hold = self.config.get("hotkey") or "F8"      # the key Help names too
         check = Gtk.CheckButton(
-            label="Apps, windows and keys by voice: \u201copen Firefox\u201d, "
-                  "\u201cnew tab\u201d, \u201cgo to youtube.com\u201d")
+            label="Apps, windows, keys and the mouse by voice: \u201copen Firefox\u201d, "
+                  "\u201cnew tab\u201d, \u201cmouse grid\u201d")
         check.set_active(bool(self.config.get("open_apps", False)))
         check.set_tooltip_text(
             f"Hold {hold}, say a command, let go: it happens and nothing is typed.\n\n"
@@ -463,7 +463,8 @@ class AdvancedTab(Tab):
             "\u201cwhat can I say\u201d\n"
             "\u2022 \u201ctake a screenshot of this window\u201d\n"
             "\u2022 \u201cmouse grid\u201d, then a number and \u201cclick\u201d: "
-            "click with your voice\n"
+            "click with your voice;\n"
+            "  \u201cleft 3\u201d, \u201cup\u201d\u2026 move the dot\n"
             "\u2022 \u201cgo to youtube.com\u201d: opens the address\n"
             "  (in a browser, replaces the page)\n"
             "\u2022 \u201cweb search cheap tires\u201d: your browser\u2019s own search\n"

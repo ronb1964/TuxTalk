@@ -28,7 +28,7 @@ from .normalize import LITERAL_REPLACEMENTS
 # The TuxTalk Labs tickboxes (Preferences → Advanced) that turn commands on.
 LABS_EDIT = "Voice editing"
 LABS_SELECT = "Select and move"
-LABS_ACTIONS = "Apps, windows and keys by voice"
+LABS_ACTIONS = "Apps, windows, keys and the mouse by voice"
 
 
 class Command(NamedTuple):
@@ -228,10 +228,14 @@ SECTIONS = (
         Command(("click five", "right click 3"), "clicks that part straight away", "mouse"),
         Command(("move here", "move five"), "puts the pointer there without clicking",
                 "mouse"),
+        Command(("left", "right 3", "up", "down two"),
+                "moves the click dot a little (a number moves it more)", "mouse"),
         Command(("cancel", "close grid", "hide grid"), "closes the grid", "mouse"),
         Command(("left click", "right click", "double click", "middle click"),
                 "with no grid: clicks where the pointer is", "mouse"),
-    ), note="With no grid showing, a bare number or <b>click</b> is typed as a word. "
+    ), note="Where it can (KDE, GNOME, Cinnamon) the desktop zooms in as the parts get "
+            "small, and goes back after the click. "
+            "With no grid showing, a bare number or <b>click</b> is typed as a word. "
             "The grid closes by itself after a minute, a click, Esc, or anything else "
             "you dictate. If the pointer can't be put exactly there, nothing is clicked."),
     Section("Desktops", APPS, labs=LABS_ACTIONS, commands=(

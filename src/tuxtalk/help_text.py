@@ -490,7 +490,7 @@ These work <b>right after you dictate</b>, on what you just said.
 Open apps, close or switch windows, snap and move them, press everyday keys, change
 desktops and volume, control music, lock or take a screenshot, go to an address or search
 the web, all by saying it. Turn it on in
-<b>Preferences → Advanced → TuxTalk Labs → Apps, windows and keys by voice</b>.
+<b>Preferences → Advanced → TuxTalk Labs → Apps, windows, keys and the mouse by voice</b>.
 
 The Commands tab lists every one of these commands.
 
@@ -530,8 +530,14 @@ Hold <b>{hold}</b>, say <b>snap left</b>, let go. The window you're in fills tha
 
 ### The mouse
 Hold <b>{hold}</b>, say <b>mouse grid</b>, let go. Numbers 1 to 9 appear over the screen.
-  • Say a number, like <b>five</b>: that part fills with a new grid. Say another to zoom
-    in further.
+  • Say a number, like <b>five</b>: that part fills with a new grid. Say another to go
+    in further. On KDE, GNOME and Cinnamon the whole desktop zooms in as the parts get
+    small, so you can see what you are aiming at. It goes back to normal after the click,
+    or when the grid closes.
+  • From the second grid on, the parts show small numbers in their corners and a dot
+    marks where a click will land.
+  • Say <b>left</b>, <b>right</b>, <b>up</b> or <b>down</b> to move the dot a little, or
+    add a number, like <b>left 3</b>, to move it more. Say a number first.
   • Say <b>click</b> to click the middle of what the grid shows. <b>right click</b>,
     <b>double click</b> and <b>middle click</b> work the same way.
   • Or do both at once: <b>click five</b> clicks part 5 straight away. <b>move here</b>
@@ -881,8 +887,8 @@ There are two kinds:
   your dictation key, say only the command, let go.
 
 The commands are English words, whatever language you dictate in. The same list,
-a tab per group, is in the TuxTalk menu → Voice Commands..., or, with <b>Apps, windows
-and keys by voice</b> ticked in TuxTalk Labs, say <b>what can I say</b>.'''
+a tab per group, is in the TuxTalk menu → Voice Commands..., or, with <b>Apps, windows,
+keys and the mouse by voice</b> ticked in TuxTalk Labs, say <b>what can I say</b>.'''
 
 COMMANDS_EXAMPLES = '''<b>Usage Examples:</b>
 Say: <i>Hello world comma how are you question mark</i>

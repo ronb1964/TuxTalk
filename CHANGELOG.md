@@ -21,9 +21,19 @@ before 0.15.0, so older entries use that name.
 - It works on KDE, GNOME, COSMIC and X11 desktops like Cinnamon and Xfce; on
   the Wayland ones the grid needs XWayland, and on X11 compositing (Xfce and
   Cinnamon have it on unless you turned it off). It is in the same Labs
-  tickbox as the other desktop commands ("Apps, windows and keys by voice"),
-  so it is off until you tick it. Help, on the Writing page, has the steps,
+  tickbox as the other desktop commands, now called "Apps, windows, keys and
+  the mouse by voice", so it is off until you tick it. Help, on the Writing page, has the steps,
   and the Voice Commands list has a card for it.
+- On KDE, GNOME and Cinnamon the whole desktop zooms in 3 times on the part
+  you picked once the parts get small, so you can see what you are aiming at,
+  and goes back after the click, the move, "cancel", the minute running out or
+  anything else you dictate. If you already had the zoom or magnifier on, it
+  is left as you had it. From the second grid on, the parts show small numbers
+  in their corners and a dot marks where the click will land, with no lines
+  across what you are looking at.
+- To fine-tune where the click lands, say "left", "right", "up" or "down" to
+  move the dot a little, or add a number ("left 3") to move it more. Say a
+  number first; before that it tells you so.
 - Left Ctrl+Space is a new dictation key, for anyone whose F-keys need Fn
   or who just likes it. Hold Left Ctrl, then Space, talk, and let go of
   either one to stop. As the toggle key, one tap starts and the next stops.

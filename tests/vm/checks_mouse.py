@@ -1,4 +1,4 @@
-"""Mouse by voice (TuxTalk Labs, the "Apps, windows and keys by voice"
+"""Mouse by voice (TuxTalk Labs, the "Apps, windows, keys and the mouse by voice"
 tickbox): "mouse grid", a number or two, then "click". Only a real desktop
 can say whether TuxTalk's virtual pointer lands where the grid shows, and
 whether the click reaches the app under it.

@@ -382,8 +382,8 @@ def test_a_recording_started_in_the_same_tick_keeps_going(desktop, recording_on,
 
 # --- Preferences ---------------------------------------------------------------------------
 
-OPEN_APPS_LABEL = ("Apps, windows and keys by voice: “open Firefox”, “new tab”, "
-                   "“go to youtube.com”")
+OPEN_APPS_LABEL = ("Apps, windows, keys and the mouse by voice: “open Firefox”, “new tab”, "
+                   "“mouse grid”")
 
 
 def _labs_boxes(window):
@@ -412,6 +412,15 @@ def test_it_is_a_labs_tickbox_after_select_and_move(prefs_window):
         assert said in tip
     box.set_active(True)
     assert window.config["open_apps"] is True
+
+
+def test_the_labs_box_names_the_mouse(prefs_window):
+    box = _labs_boxes(prefs_window())[OPEN_APPS_LABEL]
+    assert "and the mouse by voice" in box.get_label()
+    tip = box.get_tooltip_text()
+    assert "“mouse grid”, then a number and “click”" in tip
+    assert "“left 3”, “up”" in tip and "move the dot" in tip
+    assert "go to youtube.com" in tip
 
 
 def test_the_tooltip_names_the_users_own_key(prefs_window):
