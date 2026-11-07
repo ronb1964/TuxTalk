@@ -10,6 +10,7 @@ worse than none.
 """
 import threading
 import time
+from typing import NamedTuple
 
 from gi.repository import GLib
 
@@ -32,10 +33,20 @@ POLL_S = 0.02
 # so the click lands on the app under it.
 GONE_S = 0.05
 
-# A click request's action -> the button, how many clicks, and the word for the log.
-_CLICKS = {"click": ("left", 1, "clicked"), "double click": ("left", 2, "double-clicked"),
-           "right click": ("right", 1, "right-clicked"),
-           "middle click": ("middle", 1, "middle-clicked")}
+
+class _Click(NamedTuple):
+    """What a click request makes: the button, how many clicks, and its
+    word for the log."""
+
+    button: str
+    count: int
+    done: str
+
+
+_CLICKS = {"click": _Click("left", 1, "clicked"),
+           "double click": _Click("left", 2, "double-clicked"),
+           "right click": _Click("right", 1, "right-clicked"),
+           "middle click": _Click("middle", 1, "middle-clicked")}
 
 
 class _PointerFailed(Exception):
@@ -75,6 +86,7 @@ def act(request, beeps_on: bool) -> bool:
         command_notices.say("pointer_failed", beeps_on)
         return False
     except GaveUp as stop:
+        close(f"not clicked: {stop.reason}")
         if stop.reason != "cancelled":      # Esc: esc_stopped logged it
             logger.warning(f"Mouse: not clicked: {stop.reason}")
             command_notices.say("click_key_held", beeps_on)
@@ -240,9 +252,11 @@ def _aside(session: _Session, fraction):
 
 
 def _move_again(session: _Session, target) -> None:
-    """The pointer a pixel aside and back onto *target* once the grid is gone.
-    COSMIC gives the window under the pointer its press, or its hover, only
-    after the pointer has moved since the grid's window over it went."""
+    """The pointer a pixel aside and back onto *target* once the grid is gone,
+    and again before each press of a click, which may have waited while the
+    real mouse moved it. COSMIC gives the window under the pointer its press,
+    or its hover, only after the pointer has moved since the grid's window
+    over it went."""
     fraction = session.fit.fraction(target)
     for spot in (_aside(session, fraction), fraction):
         if not virtual_pointer.move_to(*spot):
@@ -277,8 +291,10 @@ def _zoom(session: _Session, number: int) -> bool:
 
 def _point(session: _Session, request) -> bool:
     """A click or a move in the grid: the pointer onto the cell's centre (the
-    zoomed region's, with no number), seen there, then the grid gone and the
-    click made."""
+    zoomed region's, with no number) and seen there. A click then waits for
+    a held dictation key with the grid still up, where a real click still
+    cancels it. Then the grid goes, and the pointer is put back on the spot
+    right before each press: the real mouse may have moved it."""
     target = session.grid.target(request.number)
     if isinstance(target, str):
         command_notices.say(target, session.beeps_on, number=request.number)
@@ -288,14 +304,20 @@ def _point(session: _Session, request) -> bool:
             command_notices.say("cant_place", session.beeps_on)
         return False
     where = f"{_spot_name(session, request.number)} at {_xy(target)}"
+    clicking = request.action != "move"
+    if clicking:
+        virtual_pointer.wait_for_dictation_keys()
     if not _end(session, request.action):
         return False                    # closed meanwhile: a real click, the timeout
     time.sleep(GONE_S)
-    _move_again(session, target)
-    if request.action == "move":
-        logger.info(f"Mouse grid: moved to {where}")
+    if clicking:
+        _click(request.action, place=lambda: _move_again(session, target))
+        logger.info(f"Mouse grid: {_CLICKS[request.action].done} {where}")
     else:
-        logger.info(f"Mouse grid: {_click(request.action)} {where}")
+        if keyboard_output.esc_stopped("moved"):
+            return False
+        _move_again(session, target)
+        logger.info(f"Mouse grid: moved to {where}")
     beeps.beep(session.beeps_on, *beeps.READY_BEEP)
     return True
 
@@ -314,23 +336,24 @@ def _lands_on(session: _Session, target) -> bool:
 
 def _click_here(action: str, beeps_on: bool) -> bool:
     """"left click" and the others with no grid: a click where the pointer is."""
-    logger.info(f"Mouse: {_click(action)} where the pointer is")
+    _click(action)
+    logger.info(f"Mouse: {_CLICKS[action].done} where the pointer is")
     beeps.beep(beeps_on, *beeps.READY_BEEP)
     return True
 
 
-def _click(action: str) -> str:
-    """The click *action* asks for, where the pointer is, and its word for
-    the log. Esc is looked at before each press (a double click has two)."""
-    button, count, done = _CLICKS[action]
+def _click(action: str, place=None) -> None:
+    """Make the click *action* asks for, where the pointer is or where
+    *place*() puts it before each press (virtual_pointer.click). Esc is
+    looked at before each press (a double click has two)."""
+    click = _CLICKS[action]
     # The click can put the cursor in other text, so "delete the last
     # sentence" must not erase from it; forgotten first, since even half a
     # double click can move the cursor.
     delivery.forget_typed()
-    if not virtual_pointer.click(button, count,
+    if not virtual_pointer.click(click.button, click.count, place=place,
                                  stopped=lambda: keyboard_output.esc_stopped("clicked")):
         raise _PointerFailed
-    return done
 
 
 def _spot_name(session: _Session, number: int | None) -> str:

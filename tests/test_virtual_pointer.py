@@ -97,6 +97,26 @@ def test_esc_between_the_two_clicks_stops_the_second(pointer):
     assert pointer.events == [(e.BTN_LEFT, 1), ("SYN", 0), (e.BTN_LEFT, 0), ("SYN", 0)]
 
 
+def test_each_press_is_placed_after_the_wait_for_the_key(pointer, monkeypatch):
+    """*place* puts the pointer back on the spot: after a wait the real mouse
+    may have moved it, so right before each press, never before the wait."""
+    steps = []
+
+    def wait_while_held(**_):
+        steps.append("wait")
+        return lambda: None
+    monkeypatch.setattr(modifier_hotkeys, "wait_while_held", wait_while_held)
+    virtual_pointer.click("left", 2, place=lambda: steps.append(("place", len(pointer.events))))
+    assert steps == ["wait", ("place", 0), "wait", ("place", 4)]
+
+
+def test_esc_before_placing_moves_nothing(pointer):
+    placed = []
+    with pytest.raises(GaveUp):
+        virtual_pointer.click(stopped=lambda: True, place=lambda: placed.append(1))
+    assert placed == [] and pointer.events == []
+
+
 def test_esc_while_the_new_device_settles_clicks_nothing(pointer):
     """The first click waits for the desktop to take the new device; Esc
     meanwhile stops it."""

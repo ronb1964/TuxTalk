@@ -99,12 +99,14 @@ def move_to(fx: float, fy: float) -> bool:
     return True
 
 
-def click(button: str = "left", count: int = 1, stopped=None) -> bool:
+def click(button: str = "left", count: int = 1, stopped=None, place=None) -> bool:
     """Click *button* ("left", "right" or "middle") *count* times (2 is a
-    double click) where the pointer is. False when the pointer can't be made
-    or failed. Raises GaveUp before a press: "key_held" when a dictation key
+    double click) where the pointer is, or where *place*(), run before each
+    press once any wait for a dictation key is over, puts it (the real mouse
+    may have moved it meanwhile). False when the pointer can't be made or
+    failed. Raises GaveUp before a press: "key_held" when a dictation key
     held down made it wait too long, "cancelled" when *stopped*(), asked
-    right before each press, says Esc came."""
+    before placing and right before each press, says Esc came."""
     from evdev import ecodes
     code = getattr(ecodes, BUTTONS[button])
     with _lock:
@@ -114,9 +116,11 @@ def click(button: str = "left", count: int = 1, stopped=None) -> bool:
     for turn in range(count):
         if turn:
             time.sleep(DOUBLE_CLICK_GAP_S)
-        _wait_while_held()
-        if stopped is not None and stopped():
-            raise GaveUp("cancelled")
+        wait_for_dictation_keys()
+        _stop_if(stopped)
+        if place is not None:
+            place()
+            _stop_if(stopped)
         if not _press_and_release(code):
             return False
     return True
@@ -138,14 +142,20 @@ def _wait_until_ready() -> None:
     time.sleep(max(0.0, _ready_at - time.monotonic()))
 
 
-def _wait_while_held() -> None:
+def wait_for_dictation_keys() -> None:
     """Until no dictation key like Right Ctrl that the desktop can see is
     down, and a Compose it began is ended (modifier_hotkeys.wait_while_held):
-    the app would see a Ctrl-click. Without the lock, so quitting meanwhile
-    doesn't wait for the key to come up."""
+    the app would see a Ctrl-click. Raises GaveUp("key_held") when the key
+    stays down too long. Without the lock, so quitting meanwhile doesn't
+    wait for the key to come up."""
     before_press = modifier_hotkeys.wait_while_held(gave_up="the click wasn't made")
     while before_press is not None and (wait := before_press()):
         wait()
+
+
+def _stop_if(stopped) -> None:
+    if stopped is not None and stopped():
+        raise GaveUp("cancelled")
 
 
 def _press_and_release(code: int) -> bool:

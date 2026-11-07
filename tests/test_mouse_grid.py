@@ -214,7 +214,9 @@ def test_click_and_a_number_clicks_that_cell_at_once(rig):
 def test_double_click_clicks_twice(rig):
     act("grid")
     act("double click", 9)
-    assert rig.buttons() == LEFT_CLICK * 2
+    # The pointer is put back on the spot before the second, too.
+    presses = [ev for ev in rig.buttons() if ev[0] == e.BTN_LEFT]
+    assert presses == [(e.BTN_LEFT, 1), (e.BTN_LEFT, 0)] * 2
 
 
 def test_move_puts_the_pointer_there_without_clicking(rig, caplog):
@@ -426,6 +428,95 @@ def test_a_key_held_down_says_so_and_clicks_nothing(rig, monkeypatch):
     assert act("click", 5) is False
     assert rig.buttons() == []
     assert rig.notes == ["Not clicked: a dictation key stayed down"]
+    assert not mouse_grid.showing() and not rig.windows[0].showing
+
+
+def _key_held_until_waited(monkeypatch, while_held):
+    """A dictation key down when the click comes, up once *while_held* has
+    run during the wait for it."""
+    held = [True]
+
+    def wait():
+        while_held()
+        held[0] = False
+    monkeypatch.setattr(modifier_hotkeys, "wait_while_held",
+                        lambda **_: lambda: wait if held[0] else None)
+
+
+def _sent_before_each_press(rig):
+    """The last ABS_X and ABS_Y sent before each button press."""
+    sent, places = {}, []
+    for code, value in rig.pointer.events:
+        if code in (e.ABS_X, e.ABS_Y):
+            sent[code] = value
+        elif code == e.BTN_LEFT and value == 1:
+            places.append((sent.get(e.ABS_X), sent.get(e.ABS_Y)))
+    return places
+
+
+def test_a_click_waits_for_a_held_key_with_the_grid_up_then_clicks_the_spot(rig, monkeypatch):
+    """The grid shows while it waits, so the user sees why nothing happened
+    yet; the real mouse moving the pointer meanwhile doesn't move the click."""
+    act("grid")
+    showing = []
+
+    def mouse_moved_meanwhile():
+        showing.append(rig.windows[0].showing)
+        virtual_pointer.move_to(0.01, 0.01)
+    _key_held_until_waited(monkeypatch, mouse_moved_meanwhile)
+    assert act("click", 5) is True
+    assert showing == [True]
+    assert _sent_before_each_press(rig) == [(16384, 16384)]
+    assert rig.buttons() == LEFT_CLICK
+
+
+def test_a_real_click_while_it_waits_for_a_held_key_cancels(rig, monkeypatch):
+    act("grid")
+    _key_held_until_waited(monkeypatch, rig.windows[0].on_real_click)
+    assert act("click", 5) is False
+    assert rig.buttons() == [] and not mouse_grid.showing()
+
+
+def test_both_clicks_of_a_double_click_land_on_the_spot(rig, monkeypatch):
+    """The real mouse moved between the two: the second click still goes
+    where the grid was asked to click."""
+    act("grid")
+    sleep = rig.pointer.clock.sleep
+
+    def mouse_moved_in_the_gap(seconds):
+        if seconds == virtual_pointer.DOUBLE_CLICK_GAP_S:
+            virtual_pointer.move_to(0.9, 0.9)
+        sleep(seconds)
+    monkeypatch.setattr(rig.pointer.clock, "sleep", mouse_moved_in_the_gap)
+    assert act("double click", 5) is True
+    assert _sent_before_each_press(rig) == [(16384, 16384)] * 2
+
+
+@pytest.mark.parametrize("action", ["move", "click"])
+def test_esc_as_the_grid_goes_moves_and_clicks_nothing(rig, monkeypatch, caplog, action):
+    act("grid")
+    escaped = []
+    monkeypatch.setattr(keyboard_output, "esc_cancelled", lambda: bool(escaped))
+    sleep = rig.clock.sleep
+
+    def esc_while_the_grid_goes(seconds):
+        if seconds == mouse_grid.GONE_S:
+            escaped.append(True)
+        sleep(seconds)
+    monkeypatch.setattr(rig.clock, "sleep", esc_while_the_grid_goes)
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert act(action, 5) is False
+    assert rig.pointer.events[rig.hidden_at[0]:] == []
+    assert "moved to" not in caplog.text and rig.beeps == []
+
+
+def test_a_pointer_that_cant_be_put_back_clicks_nothing(rig, monkeypatch):
+    act("grid")
+    move_to = virtual_pointer.move_to
+    monkeypatch.setattr(virtual_pointer, "move_to",
+                        lambda fx, fy: not rig.hidden_at and move_to(fx, fy))
+    assert act("click", 5) is False
+    assert rig.buttons() == [] and rig.notes == ["The mouse didn't work this time"]
 
 
 def test_the_held_key_note_fits_every_dictation_key():
