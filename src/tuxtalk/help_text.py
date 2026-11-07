@@ -537,7 +537,7 @@ Hold <b>{hold}</b>, say <b>mouse grid</b>, let go. Numbers 1 to 9 appear over th
   • Or do both at once: <b>click five</b> clicks part 5 straight away. <b>move here</b>
     (or <b>move five</b>) puts the pointer there without clicking.
   • A second screen carries on the numbers from 10. <b>cancel</b> closes the grid, and so
-    does a minute of waiting, a click, or anything else you dictate.
+    does <b>Esc</b>, a minute of waiting, a click, or anything else you dictate.
   • With no grid showing, <b>left click</b>, <b>right click</b>, <b>double click</b> and
     <b>middle click</b> click where the pointer already is. A bare number or <b>click</b>
     is typed as a word then. <b>literal mouse grid</b> and <b>literal left click</b> type

@@ -10,7 +10,7 @@ import types
 import pytest
 from evdev import ecodes as e
 
-from conftest import FakeClock
+from conftest import FakeClock, esc
 from tuxtalk import (beeps, dictation_worker, focused_window, keyboard_output, modifier_hotkeys,
                      mouse_grid, mouse_grid_window, notices, service_tick, voice_actions,
                      virtual_pointer)
@@ -349,6 +349,14 @@ def test_cancel_closes_with_the_cancel_beep(rig):
 def test_a_real_mouse_click_closes_the_grid(rig):
     act("grid")
     rig.windows[0].on_real_click()
+    assert not mouse_grid.showing() and not rig.windows[0].showing
+
+
+def test_esc_closes_the_grid(rig):
+    """For someone at the keyboard who no longer wants it: no need to say
+    "cancel" or wait the minute."""
+    act("grid")
+    esc()
     assert not mouse_grid.showing() and not rig.windows[0].showing
 
 

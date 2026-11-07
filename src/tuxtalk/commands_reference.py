@@ -232,8 +232,8 @@ SECTIONS = (
         Command(("left click", "right click", "double click", "middle click"),
                 "with no grid: clicks where the pointer is", "mouse"),
     ), note="With no grid showing, a bare number or <b>click</b> is typed as a word. "
-            "The grid closes by itself after a minute, a click, or anything else you "
-            "dictate. If the pointer can't be put exactly there, nothing is clicked."),
+            "The grid closes by itself after a minute, a click, Esc, or anything else "
+            "you dictate. If the pointer can't be put exactly there, nothing is clicked."),
     Section("Desktops", APPS, labs=LABS_ACTIONS, commands=(
         Command(("show desktop",), "hides the windows; say it again to bring them back",
                 "action"),

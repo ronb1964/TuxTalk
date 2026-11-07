@@ -11,7 +11,7 @@ before 0.15.0, so older entries use that name.
   then "click". "double click", "right click" and "middle click" work too,
   "click five" clicks part 5 straight away, and "move here" or "move five"
   puts the pointer there without clicking. "cancel" closes the grid, and so
-  does a minute of waiting, a click, or anything else you dictate. With no
+  does Esc, a minute of waiting, a click, or anything else you dictate. With no
   grid showing, "left click", "right click", "double click" and "middle
   click" click where the pointer is, while a bare number or "click" is typed
   as a word. "literal mouse grid" and "literal left click" type the words, and

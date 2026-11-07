@@ -25,6 +25,7 @@ from . import (
     keyboard_devices,
     keyboard_grab,
     modifier_hotkeys,
+    mouse_grid,
     notices,
     pipeline,
     recording,
@@ -320,13 +321,16 @@ def _on_esc(cfg) -> None:
     """Esc cancels the recording in any mode, and after its key is up too,
     while what was said is still being transcribed or typed. The keyboard
     comes back first: stopping the stream can take seconds with a slow
-    sound server."""
+    sound server. With nothing of that to cancel, it closes the mouse grid,
+    which never takes the keyboard to hear Esc itself."""
     rec = rs.state.current
     if rs.state.is_recording:
         keyboard_grab.release_all()
         recording.cancel_recording(rec, cfg.beeps, cfg.notify, "Cancelled by ESC")
     elif rec.message.finishing:
         recording.cancel_finishing(rec, cfg.beeps, cfg.notify)
+    else:
+        mouse_grid.close("Esc")
 
 
 def _on_test_or_combo(event, hold_key, toggle_key, voice_cmds_combo, paste_last_combo,
