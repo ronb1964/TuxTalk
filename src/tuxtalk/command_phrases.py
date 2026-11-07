@@ -9,6 +9,8 @@ sentence that merely contains a command is typed as text.
 The order matters, first match wins:
 - select and move first (when on), so "go to the end" and "select all" stay
   its own; "go to the top/bottom" are keys only when it is off;
+- mouse requests next while a grid shows (a number or "click" is then a
+  command, "close grid" is not a window), after everything else otherwise;
 - web search before the rest, since it takes any words after its prefix;
 - keys before windows, so "close tab" is a key and not an app named "tab";
 - fixed phrases (desktop, sound, music, system) before windows, so "switch to
@@ -18,8 +20,9 @@ The order matters, first match wins:
 import re
 from dataclasses import dataclass
 
-from . import voice_navigation
+from . import mouse_phrases, voice_navigation
 from .app_commands import OpenRequest, app_name, parse as parse_open
+from .mouse_phrases import MouseRequest
 from .undo import NUMBER_WORDS
 from .voice_navigation import MAX_COUNT, normalize
 
@@ -265,13 +268,14 @@ def _address_request(raw: str) -> AddressRequest | None:
     return AddressRequest(url) if url else None
 
 
-def parse(text: str, *, navigation: bool, actions: bool) -> (
+def parse(text: str, *, navigation: bool, actions: bool, grid: bool = False) -> (
         voice_navigation.Command | OpenRequest | KeyRequest | DesktopRequest | SoundRequest
         | MusicRequest | SystemRequest | WindowRequest | AddressRequest | SearchRequest
-        | None):
+        | MouseRequest | None):
     """What *text* commands, or None when it's dictation to type.
 
-    *navigation* is select and move being on, *actions* the voice commands.
+    *navigation* is select and move being on, *actions* the voice commands,
+    *grid* the mouse grid being on screen.
     """
     if navigation and (command := voice_navigation.parse(text)):
         return command
@@ -280,18 +284,21 @@ def parse(text: str, *, navigation: bool, actions: bool) -> (
     if m := _SEARCH.match(text):
         return SearchRequest(m.group("words"))
     said = normalize(text)
+    if grid and (mouse := mouse_phrases.parse(said, grid)):
+        return mouse
     if key := _key(said):
         return key
     if fixed := _fixed(said):
         return fixed
     if _NO_SUCH_DESKTOP.fullmatch(said):
         return _address_request(text)
-    return _window(said) or _address_request(text) or parse_open(text)
+    return (_window(said) or _address_request(text) or parse_open(text)
+            or mouse_phrases.parse(said, grid))
 
 
-def literal_words(raw: str, *, navigation: bool, actions: bool) -> str:
+def literal_words(raw: str, *, navigation: bool, actions: bool, grid: bool = False) -> str:
     """The words to type for "literal <command>", else *raw* unchanged."""
     m = _LITERAL.match(raw)
-    if m and parse(m.group("rest"), navigation=navigation, actions=actions):
+    if m and parse(m.group("rest"), navigation=navigation, actions=actions, grid=grid):
         return m.group("rest")
     return raw
