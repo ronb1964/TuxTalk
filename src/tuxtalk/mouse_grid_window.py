@@ -4,8 +4,8 @@ One borderless popup per monitor, with an RGBA visual so the desktop shows
 through; without a compositor that draws it see-through, no grid shows.
 Popups are override-redirect windows (XWayland on a Wayland desktop, as with
 the recording indicator), so they go exactly where they're put and never take
-the keyboard from the app being controlled. A zoomed grid
-shows one region, outlined and left clear, with the rest dimmed more.
+the keyboard from the app being controlled. A zoomed grid shows one region,
+outlined and lightly tinted as the whole grid was, with the rest dimmed more.
 
 Every method here runs on the GTK thread. The dictation worker reaches it
 through gtk_loop.call and polls `pointer_since` to see where the virtual
@@ -169,15 +169,6 @@ class GridWindows:
         self._on_real_click = on_real_click
         self._windows: list[_MonitorWindow] = []
         self._pointer: tuple[float, tuple[float, float]] | None = None
-
-    @property
-    def showing(self) -> bool:
-        return bool(self._windows)
-
-    @property
-    def last_pointer(self) -> tuple[float, float] | None:
-        """The root position of the last motion over the grid, if any."""
-        return self._pointer[1] if self._pointer else None
 
     def pointer_since(self, after: float) -> tuple[float, float] | None:
         """The last motion's root position if it came after monotonic time

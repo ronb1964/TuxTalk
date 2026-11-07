@@ -90,7 +90,7 @@ def test_the_windows_cover_the_monitors_the_cells_were_cut_from(windows):
 def test_without_an_x_display_nothing_shows(windows, monkeypatch):
     monkeypatch.setattr(mgw.ui_style, "is_x11", lambda display: False)
     assert windows.show(Grid([mgw.monitors()[0]])) == "grid_needs_x"
-    assert not windows.showing
+    assert windows._windows == []
 
 
 def test_without_compositing_nothing_shows(windows, monkeypatch):
@@ -98,7 +98,7 @@ def test_without_compositing_nothing_shows(windows, monkeypatch):
     would hide the whole screen."""
     monkeypatch.setattr(Gdk.Screen, "is_composited", lambda screen: False)
     assert windows.show(Grid([mgw.monitors()[0]])) == "grid_needs_compositing"
-    assert not windows.showing
+    assert windows._windows == []
 
 
 def test_a_real_click_on_the_grid_calls_back(windows):
@@ -115,5 +115,4 @@ def test_motion_is_reported_in_root_coordinates(windows):
     event.x_root, event.y_root = 321.0, 123.0
     windows._windows[0].emit("motion-notify-event", event)
     assert windows.pointer_since(before) == (321.0, 123.0)
-    assert windows.last_pointer == (321.0, 123.0)
     assert windows.pointer_since(time.monotonic()) is None
