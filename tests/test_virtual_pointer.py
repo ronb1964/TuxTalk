@@ -64,8 +64,17 @@ def test_a_failed_pointer_is_made_again_for_the_next_move(pointer):
 
 
 def test_a_move_waits_for_the_desktop_to_take_the_new_device(pointer):
+    """A move sent before the desktop has opened the new device is lost: in
+    the VMs one 20 ms after it appeared was, and one 50 ms after never."""
     virtual_pointer.move_to(0.5, 0.5)
-    assert pointer.clock.now >= virtual_pointer.SETTLE_S
+    assert pointer.clock.now >= 0.1
+
+
+def test_only_the_first_move_waits_for_the_device(pointer):
+    virtual_pointer.move_to(0.5, 0.5)
+    started = pointer.clock.now
+    virtual_pointer.move_to(0.25, 0.25)
+    assert pointer.clock.now == started
 
 
 def test_no_keyboard_reader_takes_the_pointer():

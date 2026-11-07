@@ -29,9 +29,10 @@ MAX = 32767
 BUTTONS = {"left": "BTN_LEFT", "right": "BTN_RIGHT", "middle": "BTN_MIDDLE"}
 
 # The desktop opens a new input device a moment after it appears, and a move
-# sent before that is lost. The spike used 2 s; the VM tests settle how
-# little will do.
-SETTLE_S = 0.5
+# sent before that is lost. Measured in the VMs (KDE, GNOME, COSMIC,
+# Cinnamon): a move 20 ms after the device appeared was still lost on two of
+# them, one 50 ms after always arrived; this is four times that.
+SETTLE_S = 0.2
 
 # A button held this long is a click to every app; the second click of a
 # double click comes this long after the first lets go, inside every
