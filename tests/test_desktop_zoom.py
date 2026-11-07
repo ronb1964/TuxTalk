@@ -4,6 +4,7 @@ real desktop or writes the real dconf."""
 import json
 import logging
 import os
+import threading
 from types import SimpleNamespace
 
 import dbus
@@ -168,7 +169,7 @@ def test_gnome_padding_parks_where_the_spike_measured():
     assert x == pytest.approx(97.1, abs=0.5) and y == pytest.approx(90.0, abs=0.5)
 
 
-def test_centered_parks_on_the_parts_centre():
+def test_centered_parks_on_the_parts_centre_on_one_monitor():
     for tracking in ("centered", "other"):
         view = desktop_zoom.View(3.0, tracking, False)
         spot = desktop_zoom.parking_spot(Rect(640, 360, 640, 360), FULL_HD, FULL_HD, view)
@@ -184,6 +185,25 @@ def test_the_spot_stays_on_the_parts_monitor():
                  desktop_zoom.View(3.0, "centered", False)):
         x, y = desktop_zoom.parking_spot(part, right, canvas, view)
         assert 1920 <= x <= 3839 and 0 <= y <= 1079
+
+
+def _shown_at(point, roi, canvas_middle, zoom):
+    """Where a view centred on *roi* shows *point*: W / 2 + z * (p - roi)."""
+    return canvas_middle + zoom * (point - roi)
+
+
+def test_centered_on_two_monitors_shows_the_part_on_its_own_monitors_centre():
+    """With two screens side by side the view centres on the pointer over
+    the whole desktop: parked on the part's own centre, the right screen's
+    middle cell would show on the seam between the screens."""
+    canvas = Rect(0, 0, 3840, 1080)
+    right = Rect(1920, 0, 1920, 1080)
+    part = Rect(2560, 360, 640, 360)            # the right screen's cell 14
+    view = desktop_zoom.View(3.0, "centered", False)
+    x, y = desktop_zoom.parking_spot(part, right, canvas, view)
+    assert _shown_at(part.center[0], x, 1920, 3.0) == pytest.approx(right.center[0])
+    assert _shown_at(part.center[1], y, 540, 3.0) == pytest.approx(right.center[1])
+    assert right.x <= x < right.x + right.width
 
 
 # KDE: KWin's Zoom effect, stepped by its own shortcuts
@@ -210,6 +230,12 @@ def test_kde_follows_the_users_mouse_tracking(kwin):
     _kwinrc("[Effect-zoom]\nMouseTracking=1\n")
     assert desktop_zoom.find().view.tracking == "centered"
     _kwinrc("[Effect-zoom]\nMouseTracking=2\n")
+    assert desktop_zoom.find().view.tracking == "other"
+
+
+@pytest.mark.parametrize("value", ["2.0", "push", "9"])
+def test_kde_mouse_tracking_it_cant_read_isnt_taken_for_proportional(kwin, value):
+    _kwinrc(f"[Effect-zoom]\nMouseTracking={value}\n")
     assert desktop_zoom.find().view.tracking == "other"
 
 
@@ -323,26 +349,48 @@ def test_a_failed_put_back_keeps_what_is_still_owed(kwin, caplog):
     assert not os.path.exists(_restore_file())
 
 
+def test_restore_says_whether_the_zoom_is_back(kwin):
+    zoom = desktop_zoom.find()
+    zoom.zoom_in()
+    kwin.failing = ("view_zoom_out", 2)
+    assert zoom.restore() is False
+    kwin.failing = None
+    assert zoom.restore() is True
+    assert zoom.restore() is True           # nothing owed: nothing to do
+
+
+def test_restore_says_whether_the_gnome_magnifier_is_back(desktop, gsettings):
+    desktop("gnome")
+    gsettings.add_magnifier("org.gnome.desktop.a11y", enabled=False, factor=2.0)
+    zoom = desktop_zoom.find()
+    zoom.zoom_in()
+    gsettings.locked.add("screen-magnifier-enabled")
+    assert zoom.restore() is False
+    gsettings.locked.clear()
+    assert zoom.restore() is True
+
+
 def test_the_next_grid_puts_a_failed_put_back_back_first_on_kde(kwin, caplog):
     first = desktop_zoom.find()
     first.zoom_in()
     kwin.failing = ("view_zoom_out", 2)
     first.restore()                 # four out-steps still owed
 
-    # KWin still failing: the next grid doesn't zoom over what's owed.
+    # KWin failing again after two more: the next grid doesn't zoom over
+    # the two still owed, and the file says two.
     kwin.shortcuts.clear()
     assert not desktop_zoom.find().zoom_in()
-    assert "view_zoom_in" not in kwin.shortcuts
+    assert kwin.shortcuts == ["view_zoom_out"] * 2
     with open(_restore_file(), encoding="utf-8") as f:
-        assert json.load(f) == {"desktop": "kde", "steps": 4}
+        assert json.load(f) == {"desktop": "kde", "steps": 2}
     assert "not zooming" in caplog.text
 
-    # KWin answering again: the four go out first, then the new zoom goes in.
+    # KWin answering again: the two go out first, then the new zoom goes in.
     kwin.failing = None
     kwin.shortcuts.clear()
     second = desktop_zoom.find()
     assert second.zoom_in()
-    assert kwin.shortcuts == ["view_zoom_out"] * 4 + ["view_zoom_in"] * 6
+    assert kwin.shortcuts == ["view_zoom_out"] * 2 + ["view_zoom_in"] * 6
     second.restore()
     assert not os.path.exists(_restore_file())
 
@@ -391,6 +439,21 @@ def test_a_zoom_left_on_is_put_back_at_start(kwin, gsettings, caplog):
     assert "Desktop zoom: put back a zoom TuxTalk left on" in caplog.text
 
     _left_over({"desktop": "kde", "steps": 6})
+    desktop_zoom.restore_left_over()
+    assert kwin.shortcuts == ["view_zoom_out"] * 6
+    assert not os.path.exists(_restore_file())
+
+
+def test_a_left_over_kde_zoom_half_put_back_keeps_only_what_is_still_owed(kwin):
+    """Two of six out-steps go through, then KWin stops answering: the next
+    start owes four, not six, or it takes two steps of the user's own zoom."""
+    _left_over({"desktop": "kde", "steps": 6})
+    kwin.failing = ("view_zoom_out", 2)
+    desktop_zoom.restore_left_over()
+    with open(_restore_file(), encoding="utf-8") as f:
+        assert json.load(f) == {"desktop": "kde", "steps": 4}
+
+    kwin.failing = None
     desktop_zoom.restore_left_over()
     assert kwin.shortcuts == ["view_zoom_out"] * 6
     assert not os.path.exists(_restore_file())
@@ -452,7 +515,8 @@ def test_a_restore_file_that_cant_be_read_is_kept(kwin, caplog):
 
 
 def test_a_zoom_step_kwin_cant_use_gives_no_magnifier(kwin):
-    for step in ("nan", "inf", "1.0", "0.5"):
+    # 1.05 would take 23 steps each way, each a D-Bus call.
+    for step in ("nan", "inf", "1.0", "0.5", "1.05", "1.001"):
         _kwinrc(f"[Effect-zoom]\nZoomFactor={step}\n")
         assert desktop_zoom.find() is None
 
@@ -472,3 +536,37 @@ def test_cosmic_and_xfce_have_no_magnifier(kwin, desktop, name):
     desktop(name)
     assert desktop_zoom.find() is None
     assert kwin.calls == 0
+
+
+
+def test_the_next_grids_zoom_waits_for_the_last_ones_put_back(kwin, monkeypatch):
+    """A put-back still stepping out on another thread (a slow KWin) and the
+    next grid's zoom share the restore file: the zoom waits, so it neither
+    steps the same zoom out again (taking the user's own) nor loses the file."""
+    first = desktop_zoom.find()
+    first.zoom_in()
+    kwin.shortcuts.clear()
+    slow, going = threading.Event(), threading.Event()
+    answer = kwin.call
+
+    def slow_call(*args):
+        if args[4][0] == "view_zoom_out":
+            going.set()
+            slow.wait(5)
+        return answer(*args)
+    monkeypatch.setattr(kwin_desktop, "_call", slow_call)
+
+    putting_back = threading.Thread(target=first.restore)
+    putting_back.start()
+    going.wait(5)
+    second = desktop_zoom.find()
+    zooming = threading.Thread(target=second.zoom_in)
+    zooming.start()
+    zooming.join(0.2)
+    assert zooming.is_alive()                   # waiting for the put-back
+    slow.set()
+    putting_back.join(5)
+    zooming.join(5)
+    assert kwin.shortcuts == ["view_zoom_out"] * 6 + ["view_zoom_in"] * 6
+    with open(_restore_file(), encoding="utf-8") as f:
+        assert json.load(f) == {"desktop": "kde", "steps": 6}

@@ -43,6 +43,8 @@ RESTORE_FILE = "zoom-to-restore-{}.json"     # by desktop: kde, gnome, cinnamon
 _DBUS_TIMEOUT_S = 1.0
 
 _KWIN_STEP_DEFAULT = 1.2
+# A ZoomFactor just above 1 would take hundreds of D-Bus steps each way.
+_KWIN_MAX_STEPS = 12
 # kwinrc [Effect-zoom] MouseTracking: 0 proportional (the default),
 # 1 centered, 2 push, 3 disabled, 4 centered strict.
 _KWIN_TRACKING = {0: "proportional", 1: "centered", 4: "centered"}
@@ -68,6 +70,13 @@ class View(NamedTuple):
     padded: bool
 
 
+# One lock for every magnifier: the next grid's magnifier must not step a
+# KDE zoom out from the restore file while the last one's put-back still
+# runs on another thread, or both step out (taking the user's own zoom) and
+# one removes the file the other's zoom needs.
+_lock = threading.Lock()
+
+
 class Magnifier:
     """What the mouse grid drives, KWinZoom or GSettingsMagnifier: zoom in
     once, and put back. Before zooming it puts back whatever an earlier
@@ -80,7 +89,6 @@ class Magnifier:
     _desktop: str   # whose restore file it keeps: "kde", "gnome" or "cinnamon"
 
     def __init__(self):
-        self._lock = threading.Lock()
         self._zoomed = False
 
     def zoom_in(self) -> bool:
@@ -88,7 +96,7 @@ class Magnifier:
         False, logged, when it couldn't: then nothing is left changed,
         unless even undoing failed, and restore() (always safe to call),
         the next zoom_in or the next start puts that back."""
-        with self._lock:
+        with _lock:
             if self._zoomed:
                 return True
             self._put_back()
@@ -100,12 +108,14 @@ class Magnifier:
             self._zoomed = self._zoom()
             return self._zoomed
 
-    def restore(self) -> None:
-        """Put the zoom back as it was before zoom_in. Safe from any thread,
-        and to call again: a second call does nothing. Never raises."""
-        with self._lock:
+    def restore(self) -> bool:
+        """Put the zoom back as it was before zoom_in; whether it is (False
+        when some of it is still owed, kept for a retry). Safe from any
+        thread, and to call again: a second call does nothing. Never raises."""
+        with _lock:
             self._zoomed = False
             self._put_back()
+            return not self._owes()
 
     def _zoom(self) -> bool:
         """Save what puts it back, then zoom; on a failure, undo what was done."""
@@ -159,7 +169,7 @@ class KWinZoom(Magnifier):
 
     def __init__(self, step: float, tracking: str):
         super().__init__()
-        self._steps = max(1, round(math.log(ZOOM) / math.log(step)))
+        self._steps = _kwin_step_count(step)
         self.view = View(step ** self._steps, tracking, False)
         self._owed: int | None = None     # out-steps owed while zoomed
 
@@ -173,17 +183,8 @@ class KWinZoom(Magnifier):
         return False
 
     def _put_back(self) -> None:
-        if self._owed is None:
-            return
-        left = _kwin_steps("view_zoom_out", self._owed)
-        if left:
-            # Exactly what's still owed, for a retry or the next start: one
-            # out-step too many would take away a zoom the user had.
-            self._owed = left
-            _save_restore({"desktop": "kde", "steps": left})
-            return
-        self._owed = None
-        _remove_restore(self._desktop)
+        if self._owed is not None:
+            self._owed = _kwin_put_back(self._owed) or None
 
     def _owes(self) -> bool:
         return self._owed is not None
@@ -199,10 +200,15 @@ def _kwin_zoom() -> KWinZoom | None:
         log.info("Desktop zoom: KDE's Zoom effect is off")
         return None
     step, tracking = _kwin_zoom_settings()
-    if not 1.0 < step < math.inf:
+    if not 1.0 < step < math.inf or _kwin_step_count(step) > _KWIN_MAX_STEPS:
         log.info(f"Desktop zoom: KDE's zoom steps by {step}x, which TuxTalk can't use")
         return None
     return KWinZoom(step, tracking)
+
+
+def _kwin_step_count(step: float) -> int:
+    """How many of KWin's *step* times zooms come nearest ZOOM."""
+    return max(1, round(math.log(ZOOM) / math.log(step)))
 
 
 def _kwin_zoom_settings() -> tuple[float, str]:
@@ -221,7 +227,7 @@ def _kwin_zoom_settings() -> tuple[float, str]:
     try:
         tracking = _KWIN_TRACKING.get(int(section.get("MouseTracking", 0)), "other")
     except ValueError:
-        tracking = "proportional"
+        tracking = "other"
     return step, tracking
 
 
@@ -236,6 +242,19 @@ def _kwin_steps(shortcut: str, steps: int) -> int:
             log.warning(f"Desktop zoom: KDE's {shortcut} failed after {done} of {steps}: {e}")
             return steps - done
     return 0
+
+
+def _kwin_put_back(steps: int) -> int:
+    """Step KWin's zoom out *steps* times; how many are still owed. Exactly
+    those are kept in the restore file, for a retry or the next start (one
+    out-step too many would take away a zoom the user had), and the file
+    goes once none are."""
+    left = _kwin_steps("view_zoom_out", steps)
+    if left:
+        _save_restore({"desktop": "kde", "steps": left})
+    else:
+        _remove_restore("kde")
+    return left
 
 
 # GNOME and Cinnamon
@@ -266,13 +285,8 @@ class GSettingsMagnifier(Magnifier):
         return False
 
     def _put_back(self) -> None:
-        if self._before is None:
-            return
-        if not _set_magnifier(self._root, *self._before):
-            log.warning(f"Desktop zoom: couldn't put the {self.name} back")
-            return
-        self._before = None
-        _remove_restore(self._desktop)
+        if self._before is not None and _gsettings_put_back(self._desktop, *self._before):
+            self._before = None
 
     def _owes(self) -> bool:
         return self._before is not None
@@ -280,8 +294,7 @@ class GSettingsMagnifier(Magnifier):
 
 def _gsettings_magnifier(desktop: str) -> GSettingsMagnifier | None:
     root, name = _GSETTINGS_ROOTS[desktop]
-    if not (_has_keys(f"{root}.applications", (_ENABLED,))
-            and _has_keys(f"{root}.magnifier", (_FACTOR, _TRACKING, _POSITION, _LENS))):
+    if not _has_magnifier(root, (_FACTOR, _TRACKING, _POSITION, _LENS)):
         log.info(f"Desktop zoom: no {name} here")
         return None
     settings = _settings(root, "magnifier")
@@ -291,6 +304,11 @@ def _gsettings_magnifier(desktop: str) -> GSettingsMagnifier | None:
     tracking = settings.get_string(_TRACKING)
     return GSettingsMagnifier(desktop, tracking if tracking in ("proportional", "centered")
                               else "other")
+
+
+def _has_magnifier(root: str, keys: tuple[str, ...]) -> bool:
+    """Whether *root*'s magnifier is installed with its on/off and *keys*."""
+    return _has_keys(f"{root}.applications", (_ENABLED,)) and _has_keys(f"{root}.magnifier", keys)
 
 
 def _has_keys(schema_id: str, keys: tuple[str, ...]) -> bool:
@@ -368,8 +386,9 @@ def restore_left_over() -> None:
     """Put back a zoom a service that stopped while zoomed left on, from
     each desktop's restore file. A file that makes no sense is deleted; one
     that can't be read or acted on now is kept for later. Never raises."""
-    for desktop in ("kde", *_GSETTINGS_ROOTS):
-        _restore_left_over(desktop)
+    with _lock:
+        for desktop in ("kde", *_GSETTINGS_ROOTS):
+            _restore_left_over(desktop)
 
 
 def _restore_left_over(desktop: str) -> None:
@@ -393,7 +412,6 @@ def _restore_left_over(desktop: str) -> None:
         log.info("Desktop zoom: a KDE zoom was left on; it's put back at a start on KDE")
         return
     if put_back():
-        _remove_restore(desktop)
         log.info("Desktop zoom: put back a zoom TuxTalk left on")
 
 
@@ -410,7 +428,7 @@ def _left_over_put_back(desktop: str, data):
             raise ValueError(f"steps {steps!r}")
         if desktop_detect.get_desktop_environment() != "kde":
             return None
-        return lambda: _kwin_steps("view_zoom_out", steps) == 0
+        return lambda: _kwin_put_back(steps) == 0
     enabled, factor = data.get("enabled"), data.get("mag_factor")
     if type(enabled) is not bool or type(factor) not in (int, float):
         raise ValueError(f"enabled {enabled!r}, mag_factor {factor!r}")
@@ -418,14 +436,16 @@ def _left_over_put_back(desktop: str, data):
 
 
 def _gsettings_put_back(desktop: str, enabled: bool, factor: float) -> bool:
+    """Put *desktop*'s magnifier back to *enabled* and *factor*, and remove
+    its restore file; whether it was. The file is kept when it wasn't."""
     root, name = _GSETTINGS_ROOTS[desktop]
-    if not (_has_keys(f"{root}.applications", (_ENABLED,))
-            and _has_keys(f"{root}.magnifier", (_FACTOR,))):
-        log.warning(f"Desktop zoom: a zoom was left on, but there's no {name} here")
+    if not _has_magnifier(root, (_FACTOR,)):
+        log.warning(f"Desktop zoom: there's no {name} here to put back")
         return False
     if not _set_magnifier(root, enabled, factor):
         log.warning(f"Desktop zoom: couldn't put the {name} back")
         return False
+    _remove_restore(desktop)
     return True
 
 
@@ -442,14 +462,20 @@ def parking_spot(part: Rect, monitor: Rect, canvas: Rect, view: View) -> tuple[f
     pointer and W the canvas, from its origin); k = 1 / z on KDE, and less
     by 2 * pad / W on GNOME and Cinnamon, which keep the view
     pad = min(W, H) / 5 / z from the edges. The roi wanted puts the part's
-    centre m at that monitor's centre s: m - (s - W / 2) / z. Centered and
-    the other modes keep the pointer in view: the part's centre."""
+    centre m at that monitor's centre s: m - (s - W / 2) / z. Centered
+    tracking shows roi = c at the canvas's centre, so the pointer goes
+    there: on one monitor the part's centre, on several moved so the part
+    lands on its own monitor's centre. The other modes keep the pointer in
+    view: the part's centre."""
     x, y = part.center
+    mid_x, mid_y = monitor.center
     if view.tracking == "proportional":
         pad = min(canvas.width, canvas.height) / 5 / view.factor if view.padded else 0.0
-        mid_x, mid_y = monitor.center
         x = _proportional(x, mid_x, canvas.x, canvas.width, view.factor, pad)
         y = _proportional(y, mid_y, canvas.y, canvas.height, view.factor, pad)
+    elif view.tracking == "centered":
+        x = _wanted_roi(x, mid_x, canvas.x, canvas.width, view.factor)
+        y = _wanted_roi(y, mid_y, canvas.y, canvas.height, view.factor)
     return (_clamp(x, monitor.x, monitor.width), _clamp(y, monitor.y, monitor.height))
 
 
@@ -457,8 +483,15 @@ def _proportional(middle: float, screen_middle: float, origin: float, size: floa
                   zoom: float, pad: float) -> float:
     """One axis of parking_spot's proportional case, solved for the pointer."""
     k = 1 / zoom - 2 * pad / size
-    wanted = (middle - origin) - (screen_middle - origin - size / 2) / zoom
+    wanted = _wanted_roi(middle, screen_middle, origin, size, zoom) - origin
     return origin + (wanted - k * size / 2) / (1 - k)
+
+
+def _wanted_roi(middle: float, screen_middle: float, origin: float, size: float,
+                zoom: float) -> float:
+    """The point the zoomed view must centre on (the canvas shows p at
+    W / 2 + z * (p - roi)) for *middle* to show at *screen_middle*."""
+    return middle - (screen_middle - origin - size / 2) / zoom
 
 
 def _clamp(value: float, start: float, length: float) -> float:
