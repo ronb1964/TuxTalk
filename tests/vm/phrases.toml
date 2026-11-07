@@ -274,3 +274,34 @@ say = "Show me the desktop."
 
 [sentence_volume_loud]
 say = "Volume is too loud."
+
+# Mouse by voice (checks_mouse.py): a grid, a cell, a click, each said alone.
+# Piper's "Mouse grid." ran together into "Malskrid.".
+[mouse_grid]
+say = "Mouse grid."
+tts = "Mouse, grid."
+
+[mouse_click_five]
+say = "Click five."
+
+[mouse_seven]
+say = "Seven."
+
+[mouse_three]
+say = "Three."
+
+[mouse_click]
+say = "Click."
+
+[mouse_right_click_five]
+say = "Right click five."
+
+[mouse_cancel]
+say = "Cancel."
+
+# With no grid on the screen this is a word like any other: typed.
+[mouse_five]
+say = "Five."
+
+[mouse_left_click]
+say = "Left click."

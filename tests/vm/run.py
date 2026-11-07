@@ -30,6 +30,7 @@ import checks_dictation  # noqa: F401  (each module registers its checks in impo
 import checks_extension  # noqa: F401
 import checks_firstrun  # noqa: F401
 import checks_hotkeys  # noqa: F401
+import checks_mouse  # noqa: F401
 import checks_open_apps  # noqa: F401
 import checks_package  # noqa: F401
 import checks_prefs  # noqa: F401
@@ -48,6 +49,7 @@ RUNS = TOOLS / "runs"
 SECTION_ORDER = ["First run", "Preferences", "Dictation", "Words and numbers",
                  "Type at pause", "Open apps by voice",
                  "Windows, keys and addresses by voice", "Desktop commands by voice",
+                 "Mouse by voice",
                  "AI features", "Send automatically",
                  "Sound and other windows",
                  "With the GNOME extension",
