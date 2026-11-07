@@ -530,7 +530,8 @@ Hold <b>{hold}</b>, say <b>mouse grid</b>, let go. Numbers 1 to 9 appear over th
     does a minute of waiting, a click, or anything else you dictate.
   • With no grid showing, <b>left click</b>, <b>right click</b>, <b>double click</b> and
     <b>middle click</b> click where the pointer already is. A bare number or <b>click</b>
-    is typed as a word then, and <b>literal click</b> types the word whatever is showing.
+    is typed as a word then. <b>literal mouse grid</b> and <b>literal left click</b> type
+    the words; while a grid shows, <b>literal five</b> and <b>literal click</b> do too.
   • If TuxTalk can't put the pointer exactly there, nothing is clicked and a note says
     so. On Wayland desktops the grid needs X (XWayland), which most have.
 

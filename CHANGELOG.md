@@ -14,7 +14,8 @@ before 0.15.0, so older entries use that name.
   does a minute of waiting, a click, or anything else you dictate. With no
   grid showing, "left click", "right click", "double click" and "middle
   click" click where the pointer is, while a bare number or "click" is typed
-  as a word, and "literal" before any of them types the words. If TuxTalk
+  as a word. "literal mouse grid" and "literal left click" type the words, and
+  while a grid shows, so do "literal five" and "literal click". If TuxTalk
   can't put the pointer exactly where the grid shows, nothing is clicked and
   a note says so.
 - It works on KDE, GNOME, COSMIC and X11 desktops like Cinnamon and Xfce; on

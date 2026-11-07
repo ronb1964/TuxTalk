@@ -6,6 +6,7 @@ recording indicator (it's a cyan orb by default), Fix a Word under a
 "Voice Commands" tab (it's "Commands"), tray items that no longer exist, a
 "Fast & Accurate" preset, and setting names that were never real.
 """
+import re
 import pathlib
 
 import pytest
@@ -246,8 +247,21 @@ def test_help_spells_out_the_mouse_grid_with_your_own_hold_key(monkeypatch):
     writing = _writing(monkeypatch, hotkey="F6")
     card = writing.split("### The mouse", 1)[1].split("### Desktops", 1)[0]
     assert "Hold <b>F6</b>, say <b>mouse grid</b>, let go" in card
-    for said in ("click five", "right click", "move here", "cancel", "literal click"):
+    for said in ("click five", "right click", "move here", "cancel"):
         assert said in card, said
     assert "F8" not in card
     tips = dict(help_text.tabs())["Tips"]
     assert "Writing → The mouse" in tips.split("Easier on the hands", 1)[1]
+
+
+def test_every_literal_mouse_example_in_help_types_the_words(monkeypatch):
+    """Help promises "literal" types these words: with no grid for the first
+    two, while a grid shows for the other two."""
+    from tuxtalk import command_phrases, help_text
+    card = _writing(monkeypatch).split("### The mouse", 1)[1].split("### Desktops", 1)[0]
+    examples = re.findall(r"<b>literal ([^<]+)</b>", card)
+    assert examples == ["mouse grid", "left click", "five", "click"]
+    for i, words in enumerate(examples):
+        grid = i >= 2
+        assert command_phrases.literal_words(
+            f"literal {words}", navigation=False, actions=True, grid=grid) == words
