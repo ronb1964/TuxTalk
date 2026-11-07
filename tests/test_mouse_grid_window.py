@@ -155,8 +155,14 @@ def test_zoomed_level_has_thin_cell_lines_corner_numbers_and_a_dot(windows):
     _flush(window)
     assert _boxes_with_class(window, "mouse-grid-cell") == []
     thin = _boxes_with_class(window, "mouse-grid-cell-thin")
-    assert sorted((b.get_allocation().x, b.get_allocation().y) for b in thin) == sorted(
-        (round(c.rect.x), round(c.rect.y)) for c in grid.cells)
+    outlines = sorted((a.x, a.y, a.width, a.height) for a in (b.get_allocation() for b in thin))
+    edges = [(round(c.rect.x), round(c.rect.y), round(c.rect.x + c.rect.width),
+              round(c.rect.y + c.rect.height)) for c in grid.cells]
+    assert outlines == sorted((left, top, right - left, bottom - top)
+                              for left, top, right, bottom in edges)
+    style = thin[0].get_style_context()
+    right = style.get_border(style.get_state()).right
+    assert right == 1                                   # a line is drawn, one pixel wide
     corners = _boxes_with_class(window, "mouse-grid-corner")
     assert len(corners) == 9
     for corner, cell in zip(sorted(corners, key=lambda c: int(c.get_text())), grid.cells, strict=True):
@@ -165,6 +171,7 @@ def test_zoomed_level_has_thin_cell_lines_corner_numbers_and_a_dot(windows):
     (dot,) = _boxes_with_class(window, "mouse-grid-dot")
     cx, cy = _centre(dot)
     assert abs(cx - grid.spot[0]) <= 1 and abs(cy - grid.spot[1]) <= 1
+    assert window._fixed.get_children()[-1] is dot      # drawn over the lines
 
 
 def test_the_dot_follows_a_nudge(windows):

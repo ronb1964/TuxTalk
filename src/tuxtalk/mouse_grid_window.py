@@ -9,8 +9,8 @@ the keyboard from the app being controlled.
 Two looks. The top level draws every cell with a border and a centred number.
 A zoomed grid shows one region, outlined and lightly tinted, with the rest
 dimmed more; its cells have thin lines and a small number in their top-left
-corner, so nothing sits over the middle of a cell, and one dot marks where a
-click lands. The monitor that holds the
+corner, so the numbers stay off the middle of a cell, and one dot marks where
+a click lands. The monitor that holds the
 region draws the dot; the others are dimmed whole.
 
 Every method here runs on the GTK thread. The dictation worker reaches it
@@ -36,7 +36,10 @@ _CSS = b"""
 window.mouse-grid { background-color: rgba(0, 0, 0, 0.18); }
 window.mouse-grid-zoomed { background-color: rgba(0, 0, 0, 0); }
 .mouse-grid-cell { border: 2px solid rgba(255, 210, 0, 0.9); }
-.mouse-grid-cell-thin { border: 1px solid rgba(255, 210, 0, 0.55); }
+/* Right and bottom only: neighbours share one 1 px line, and the region's
+   own outline is the top and left. */
+.mouse-grid-cell-thin { border-style: solid; border-color: rgba(255, 210, 0, 0.55);
+                        border-width: 0 1px 1px 0; }
 .mouse-grid-region { border: 2px solid rgba(255, 210, 0, 1);
                      background-color: rgba(0, 0, 0, 0.18); }
 .mouse-grid-dim { background-color: rgba(0, 0, 0, 0.45); }

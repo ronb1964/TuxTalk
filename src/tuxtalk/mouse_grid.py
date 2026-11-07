@@ -2,8 +2,8 @@
 number zooms into a cell, "left 3" and the like nudge the click dot, and
 "click" or "move" puts the pointer there.
 
-When a number makes the cells small, the desktop's own zoom (desktop_zoom)
-shows them three times bigger, the pointer waiting where the view shows the
+From the first number, the desktop's own zoom (desktop_zoom) shows the
+chosen part about three times bigger, the pointer waiting where the view shows the
 chosen part centred. Every way the grid closes puts that zoom back, and a
 click or move puts it back first, so the click lands on the normal view.
 
@@ -386,19 +386,23 @@ def _holds(rect, point) -> bool:
 def _zoom_desktop(session: _Session, magnifier, parked) -> None:
     """Zoom the desktop in, the pointer already parked, then move the pointer
     a pixel aside and back for the view to follow it. A zoom that fails
-    leaves the grid as it was, unzoomed; a grid that closed while it zoomed
-    gets the zoom put back here, since its close found nothing to put back.
-    A close during the settling wait leaves the pointer alone."""
+    leaves the grid as it was, unzoomed, unless part of it couldn't be undone:
+    then it stays owed, so a click refuses and the close tries again. A grid
+    that closed while it zoomed gets the zoom put back here, since its close
+    found nothing to put back. A close during the settling wait leaves the
+    pointer alone."""
     zoomed = magnifier.zoom_in()
+    undone = zoomed or magnifier.restore()  # whatever a failed zoom couldn't undo itself
     with _lock:
         kept = session.magnifier is magnifier
         if kept:
-            session.desktop_zoomed = zoomed
-            if not zoomed:
+            session.desktop_zoomed = zoomed or not undone
+            if not session.desktop_zoomed:
                 session.magnifier = None        # not tried again at every number
     if not zoomed:
-        magnifier.restore()         # whatever the failed zoom couldn't undo itself
         logger.warning("Mouse grid: the desktop didn't zoom in; the grid goes on without it")
+        if not undone:
+            logger.warning("Mouse grid: couldn't put the desktop zoom back")
         return
     if not kept:
         if magnifier.restore():

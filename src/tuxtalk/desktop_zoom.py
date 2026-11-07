@@ -1,5 +1,5 @@
-"""The desktop's own accessibility zoom, turned on for the mouse grid's small
-cells and put back exactly as it was.
+"""The desktop's own accessibility zoom, turned on while the mouse grid shows
+a part of the screen, and put back exactly as it was.
 
 KDE: KWin's Zoom effect, stepped by its global shortcuts view_zoom_in and
 view_zoom_out, each multiplying the zoom by kwinrc's ZoomFactor. KWin has no

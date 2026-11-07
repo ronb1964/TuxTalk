@@ -28,11 +28,11 @@ before 0.15.0, so older entries use that name.
   tickbox as the other desktop commands, now called "Apps, windows, keys and
   the mouse by voice", so it is off until you tick it. Help, on the Writing
   page, has the steps, and the Voice Commands list has a card for it.
-- On KDE, GNOME and Cinnamon the whole desktop zooms in 3 times on the part
-  you picked, so you can see what you are aiming at, and goes back after the
-  click, the move, "cancel", the minute running out or anything else you
-  dictate. If you already had the zoom or magnifier on, it
-  is left as you had it. From the second grid on, the numbers sit small in
+- On KDE, GNOME and Cinnamon the whole desktop zooms in about three times on
+  the part you picked, so you can see what you are aiming at, and goes back
+  after the click, the move, "cancel", the minute running out or anything
+  else you dictate. If you already had the zoom or magnifier on, it is left
+  as you had it. From the second grid on, the numbers sit small in
   the corners of the parts, with thin lines, and a dot marks where the click
   will land.
 - To fine-tune where the click lands, say "left", "right", "up" or "down" to

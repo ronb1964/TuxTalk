@@ -726,7 +726,7 @@ def magnifier(rig):
 
 def test_the_first_number_zooms_the_desktop_even_on_a_big_screen(rig, magnifier, caplog):
     """On 4K the first number's cells are still 427x240, but the desktop zooms
-    in all the same: every level then looks like the first, a full grid."""
+    in all the same, and a second number re-aims it rather than zooming again."""
     rig.screens = [Rect(0, 0, 3840, 2160)]
     act("grid")
     assert magnifier.calls == []
@@ -864,6 +864,23 @@ def test_a_failed_zoom_is_logged_and_the_grid_goes_on(rig, monkeypatch, caplog):
     assert caplog.text.count("the desktop didn't zoom in") == 1
     assert "zoomed the desktop in" not in caplog.text
     assert mouse_grid.showing() and act("click") is True and rig.buttons() == LEFT_CLICK
+
+
+def test_a_failed_zoom_that_cant_be_undone_stays_owed_and_no_click_is_made(rig, caplog):
+    """Part of a zoom went in and neither its own undo nor the clean-up took
+    it out: the desktop is still zoomed, so the click refuses, as for any
+    zoom that won't go back, rather than going on as if nothing were left."""
+    rig.magnifier = FakeMagnifier(rig, works=False)
+    rig.magnifier.stuck = True
+    act("grid")
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert act("zoom", 5) is True
+        sent = len(rig.pointer.events)
+        assert act("click") is False
+    assert rig.pointer.events[sent:] == [] and rig.buttons() == []
+    assert rig.notes == [command_notices.NOTES["zoom_not_back"][0]]
+    assert rig.magnifier.count("zoom_in") == 1
+    assert "Mouse grid: put the desktop zoom back" not in caplog.text
 
 
 def test_a_nudge_moves_the_dot_and_the_click_lands_on_it(rig, magnifier, caplog):
