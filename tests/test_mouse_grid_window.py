@@ -116,3 +116,69 @@ def test_motion_is_reported_in_root_coordinates(windows):
     windows._windows[0].emit("motion-notify-event", event)
     assert windows.pointer_since(before) == (321.0, 123.0)
     assert windows.pointer_since(time.monotonic()) is None
+
+
+def _boxes_with_class(window, css_class):
+    found = []
+
+    def walk(widget):
+        if widget.get_style_context().has_class(css_class):
+            found.append(widget)
+        if isinstance(widget, Gtk.Container):
+            widget.forall(walk)
+    walk(window)
+    return found
+
+
+def _centre(widget):
+    box = widget.get_allocation()
+    return box.x + box.width / 2, box.y + box.height / 2
+
+
+def test_top_level_still_draws_nine_bordered_cells(windows):
+    windows.show(Grid([mgw.monitors()[0]]))
+    window = windows._windows[0]
+    _flush(window)
+    assert len(_boxes_with_class(window, "mouse-grid-cell")) == 9
+    assert _boxes_with_class(window, "mouse-grid-corner") == []
+    assert _boxes_with_class(window, "mouse-grid-dot") == []
+
+
+def test_zoomed_level_has_corner_numbers_and_a_dot_but_no_cell_lines(windows):
+    grid = Grid([mgw.monitors()[0]])
+    windows.show(grid)
+    grid.zoom(5)
+    windows.redraw(grid)
+    window = windows._windows[0]
+    _flush(window)
+    assert _boxes_with_class(window, "mouse-grid-cell") == []
+    corners = _boxes_with_class(window, "mouse-grid-corner")
+    assert len(corners) == 9
+    for corner, cell in zip(sorted(corners, key=lambda c: int(c.get_text())), grid.cells, strict=True):
+        box = corner.get_allocation()
+        assert (box.x, box.y) == (round(cell.rect.x) + 3, round(cell.rect.y) + 3)
+    (dot,) = _boxes_with_class(window, "mouse-grid-dot")
+    cx, cy = _centre(dot)
+    assert abs(cx - grid.spot[0]) <= 1 and abs(cy - grid.spot[1]) <= 1
+
+
+def test_the_dot_follows_a_nudge(windows):
+    grid = Grid([mgw.monitors()[0]])
+    windows.show(grid)
+    grid.zoom(5)
+    grid.nudge("right", 2)
+    windows.redraw(grid)
+    window = windows._windows[0]
+    _flush(window)
+    (dot,) = _boxes_with_class(window, "mouse-grid-dot")
+    cx, cy = _centre(dot)
+    assert abs(cx - grid.spot[0]) <= 1 and abs(cy - grid.spot[1]) <= 1
+
+
+def test_only_the_monitor_holding_the_spot_draws_the_dot(windows):
+    grid = Grid([mgw.Rect(0, 0, 400, 300), mgw.Rect(400, 0, 400, 300)])
+    windows.show(grid)
+    grid.zoom(5)
+    windows.redraw(grid)
+    counts = [len(_boxes_with_class(w, "mouse-grid-dot")) for w in windows._windows]
+    assert sorted(counts) == [0, 1]

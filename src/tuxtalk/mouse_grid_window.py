@@ -4,8 +4,13 @@ One borderless popup per monitor, with an RGBA visual so the desktop shows
 through; without a compositor that draws it see-through, no grid shows.
 Popups are override-redirect windows (XWayland on a Wayland desktop, as with
 the recording indicator), so they go exactly where they're put and never take
-the keyboard from the app being controlled. A zoomed grid shows one region,
-outlined and lightly tinted as the whole grid was, with the rest dimmed more.
+the keyboard from the app being controlled.
+
+Two looks. The top level draws every cell with a border and a centred number.
+A zoomed grid shows one region, outlined and lightly tinted, with the rest
+dimmed more; its cells have no lines, only a small number in their top-left
+corner, and one dot marks where a click lands. The monitor that holds the
+region draws the dot; the others are dimmed whole.
 
 Every method here runs on the GTK thread. The dictation worker reaches it
 through gtk_loop.call and polls `pointer_since` to see where the virtual
@@ -30,19 +35,27 @@ _CSS = b"""
 window.mouse-grid { background-color: rgba(0, 0, 0, 0.18); }
 window.mouse-grid-zoomed { background-color: rgba(0, 0, 0, 0); }
 .mouse-grid-cell { border: 2px solid rgba(255, 210, 0, 0.9); }
-.mouse-grid-region { border: 3px solid rgba(255, 210, 0, 1);
+.mouse-grid-region { border: 2px solid rgba(255, 210, 0, 1);
                      background-color: rgba(0, 0, 0, 0.18); }
 .mouse-grid-dim { background-color: rgba(0, 0, 0, 0.45); }
 .mouse-grid-number { color: #ffd200; font-weight: bold;
                      background-color: rgba(0, 0, 0, 0.55);
                      border-radius: 8px; padding: 2px 14px; }
 .mouse-grid-number-small { border-radius: 4px; padding: 0 4px; }
+.mouse-grid-corner { color: #ffd200; font-weight: bold;
+                     background-color: rgba(0, 0, 0, 0.55);
+                     border-radius: 4px; padding: 0 3px; }
+.mouse-grid-dot { background-color: #ffd200; border-radius: 50%;
+                  border: 2px solid rgba(0, 0, 0, 0.8); }
 """
 
 # The badge is 40 px in a roomy cell and shrinks, down to a readable 11 px,
 # when the cell is small (a zoomed cell can be only a few dozen pixels).
 _BADGE_PX, _BADGE_MIN_PX, _CELL_PER_BADGE = 40, 11, 4
 _SMALL_BADGE_PX = 24
+# Deeper levels: a fixed 16 px number 3 px in from the cell's corner, and a
+# 10 px dot (its ring included).
+_CORNER_PX, _CORNER_INSET_PX, _DOT_PX = 16, 3, 10
 _css_loaded = False
 
 
@@ -87,6 +100,16 @@ def _badge(cell: Cell) -> Gtk.Label:
     return label
 
 
+def _corner_label(cell: Cell) -> Gtk.Label:
+    """The small number shown in a zoomed cell's top-left corner."""
+    label = Gtk.Label(label=str(cell.number))
+    attrs = Pango.AttrList()
+    attrs.insert(Pango.attr_size_new_absolute(_CORNER_PX * Pango.SCALE))
+    label.set_attributes(attrs)
+    label.get_style_context().add_class("mouse-grid-corner")
+    return label
+
+
 class _MonitorWindow(Gtk.Window):
     """The popup over one monitor, holding that monitor's boxes and badges."""
 
@@ -120,6 +143,20 @@ class _MonitorWindow(Gtk.Window):
         for cell in cells:
             self._put_box(cell.rect, "mouse-grid-cell").set_center_widget(_badge(cell))
 
+    def _put_corner_numbers(self, cells: list[Cell]):
+        for cell in cells:
+            self._fixed.put(_corner_label(cell),
+                            round(cell.rect.x - self.area.x) + _CORNER_INSET_PX,
+                            round(cell.rect.y - self.area.y) + _CORNER_INSET_PX)
+
+    def _put_dot(self, spot: tuple[float, float]):
+        """The click dot, centred on *spot*."""
+        dot = Gtk.Box()
+        dot.get_style_context().add_class("mouse-grid-dot")
+        dot.set_size_request(_DOT_PX, _DOT_PX)
+        self._fixed.put(dot, round(spot[0] - self.area.x - _DOT_PX / 2),
+                        round(spot[1] - self.area.y - _DOT_PX / 2))
+
     def _put_dim_around(self, region: Rect):
         """Dim the monitor except for *region*: four strips around it."""
         a = self.area
@@ -151,7 +188,9 @@ class _MonitorWindow(Gtk.Window):
             if self._holds(region):
                 self._put_dim_around(region)
                 self._put_box(region, "mouse-grid-region")
-                self._put_cells(grid.cells)
+                self._put_corner_numbers(grid.cells)
+                if grid.spot and self._holds(Rect(*grid.spot, 0, 0)):
+                    self._put_dot(grid.spot)
             else:
                 self._put_box(self.area, "mouse-grid-dim")
         self._fixed.show_all()
