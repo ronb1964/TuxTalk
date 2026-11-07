@@ -189,6 +189,18 @@ def test_tab_goes_card_by_card_on_the_commands_tab(shown_help):
     assert top <= card.y < top + scroll.get_page_size(), "the fourth card wasn't scrolled to"
 
 
+def test_the_cards_stand_apart(shown_help):
+    """Each card takes its margin and border around its rows, so a gap shows
+    between one card and the next: with the card's style on a widget that
+    drops them, the cards touched."""
+    dialog = shown_help("commands")
+    cards = [w for w in widgets(dialog) if w.get_style_context().has_class("tt-card")]
+    assert cards
+    for card in cards:
+        rows = sum(child.get_allocated_height() for child in card.get_children())
+        assert card.get_allocated_height() - rows >= 12
+
+
 def test_help_opens_on_the_section_asked_for_with_the_keyboard_there(shown_help):
     """Opened on a section (Preferences' Labs link opens Writing): it shows,
     and the keyboard (and a screen reader) is on the tabs, not on a link."""

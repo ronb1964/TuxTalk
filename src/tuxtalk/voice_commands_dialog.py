@@ -20,8 +20,6 @@ logger = setup_logger(__name__)
 _active_dialog = None
 
 WIDTH, HEIGHT = 900, 640
-# What's left beside the window on a screen narrower than WIDTH.
-_SCREEN_MARGIN_PX = 40
 
 INTRO = ("Hold your dictation key, say the command, let go. The commands are English "
          "words, whatever language you dictate in.")
@@ -40,8 +38,7 @@ def show_voice_commands_dialog():
         return None
 
     dialog = Gtk.Dialog(title="Voice Commands")
-    screen = ui_style.workarea_width()
-    dialog.set_default_size(min(WIDTH, screen - _SCREEN_MARGIN_PX) if screen else WIDTH, HEIGHT)
+    dialog.set_default_size(ui_style.width_on_screen(WIDTH), HEIGHT)
     ui_style.use_tuxtalk_style(dialog)
     dialog.set_resizable(True)
     dialog.set_modal(False)
@@ -89,7 +86,6 @@ def _hint_markup():
     if hotkey:
         return f"Tip: Press <b>{GLib.markup_escape_text(hotkey)}</b> anytime to open this reference"
     return "Tip: Set a hotkey in Preferences → General to open this with a keypress"
-
 
 
 def _group_tabs():

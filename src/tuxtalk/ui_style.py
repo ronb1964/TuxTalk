@@ -319,6 +319,19 @@ def workarea_width():
         return None
 
 
+# What's left beside a window on a screen narrower than the window wants.
+SCREEN_MARGIN_PX = 40
+
+
+def width_on_screen(wanted):
+    """*wanted*, or the narrowest screen's usable width less a margin when
+    that is less (large text, a small or portrait screen)."""
+    screen = workarea_width()
+    if screen and wanted > screen - SCREEN_MARGIN_PX:
+        return screen - SCREEN_MARGIN_PX
+    return wanted
+
+
 def fit_dialog_to_screen(dialog, width, desired_height):
     """Open a dialog *width* wide and *desired_height* tall (below 0: as tall
     as its content), resizable. Onboarding dialogs are tall; on a short

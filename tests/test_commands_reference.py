@@ -56,7 +56,9 @@ def test_each_listed_phrase_is_recognised(kind, phrase, monkeypatch):
         word = re.sub(r"^(literal|the word) ", "", phrase)
         assert normalize.normalize_text(f"apple {phrase} banana") == f"Apple {word} banana."
     elif kind == "exact":
-        assert _done_in_code(phrase)
+        assert _DONE_IN_CODE[phrase] == (
+            "DELETE" if voice_edit_rules.is_delete(phrase)
+            else voice_edit_rules.mechanical_edit(_EDITED, phrase))
     elif kind == "format":
         assert voice_edit_rules.formatting(phrase) in (["bold"], ["italic"], ["underline"])
     else:
@@ -65,9 +67,26 @@ def test_each_listed_phrase_is_recognised(kind, phrase, monkeypatch):
         assert not _done_in_code(phrase) and voice_edit_rules.formatting(phrase) is None
 
 
+# What each exact edit listed makes of _EDITED: done in code, not by the AI.
+_EDITED = "one, two Testing\n    - three"
+_DONE_IN_CODE = {
+    "make this all caps": "ONE, TWO TESTING\n    - THREE",
+    "make this lower case": "one, two testing\n    - three",
+    "make this title case": "One, Two Testing\n    - Three",
+    "indent this": "    one, two Testing\n        - three",
+    "unindent this": "one, two Testing\n- three",
+    "make this a bulleted list": "- one, two Testing\n    - three",
+    "make this a numbered list": "1. one, two Testing\n    2. three",
+    "remove the commas": "one two Testing\n    - three",
+    "remove the word testing": "one, two\n    - three",
+    "remove the bullets": "one, two Testing\n    three",
+    "delete this": "DELETE",
+}
+
+
 def _done_in_code(phrase):
     """An edit made in code, not by the AI: a change to the text, or Delete."""
-    changed = voice_edit_rules.mechanical_edit("one, two testing\n- three", phrase)
+    changed = voice_edit_rules.mechanical_edit(_EDITED, phrase)
     return changed is not None or voice_edit_rules.is_delete(phrase)
 
 
@@ -249,9 +268,11 @@ def test_every_command_phrase_help_spells_out_works(monkeypatch):
         assert command_phrases.parse(phrase, navigation=False, actions=True), phrase
 
 
-# Every command TuxTalk understands is listed: each rule of the parsers is
-# shown by at least one phrase here, so a command added without a line in
-# Help and the Voice Commands window fails these.
+# The other way round: each fixed rule of the parsers (a key or desktop
+# action, a window verb, a top-level alternative of a fixed phrase, an exact
+# edit, an undo unit, a spoken mark) is shown by a phrase here, so such a
+# command added without a row fails these. A new wording of an action
+# already listed, or an alternative nested inside a phrase, isn't caught.
 
 def _listed(kind):
     return [p for s in commands_reference.SECTIONS for c in s.commands if c.kind == kind

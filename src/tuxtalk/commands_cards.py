@@ -34,17 +34,10 @@ _SAY_CHARS = 30
 def labs_line(sections):
     """The line over a group's cards naming the TuxTalk Labs tickboxes its
     Labs cards need, or "" when none do."""
-    boxes = {}
-    for section in sections:
-        if section.labs:
-            boxes.setdefault(section.labs, []).append(section.title)
+    boxes = dict.fromkeys(s.labs for s in sections if s.labs)
     if not boxes:
         return ""
-    if len(boxes) == 1:
-        need = f"<b>{_escape(next(iter(boxes)))}</b>"
-    else:
-        need = " and ".join(f"<b>{_escape(box)}</b> ({_escape(', '.join(titles))})"
-                            for box, titles in boxes.items())
+    need = " and ".join(f"<b>{_escape(box)}</b>" for box in boxes)
     return (f"<b>Labs</b>: the cards tagged Labs need {need} ticked in "
             "<b>Preferences → Advanced → TuxTalk Labs</b>.")
 
@@ -133,6 +126,7 @@ def section_card(section, say_width):
         head.pack_end(tag, False, False, 0)
         name += f", needs Labs: {section.labs}"
     rows = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+    rows.get_style_context().add_class("tt-card")
     rows.pack_start(head, False, False, 0)
     for command in section.commands:
         rows.pack_start(_row(command, say_width), False, False, 0)
@@ -140,8 +134,10 @@ def section_card(section, say_width):
         note = _label(ref.section_note(section), "tt-note")
         note.get_style_context().add_class("tt-card-row")
         rows.pack_start(note, False, False, 0)
-    card = Gtk.EventBox(can_focus=True)
-    card.get_style_context().add_class("tt-card")
+    # Windowless: an EventBox with its own window drops the card's margin
+    # and border, so the cards would touch. It only holds the focus.
+    card = Gtk.EventBox(visible_window=False, can_focus=True)
+    card.get_style_context().add_class("tt-card-focus")
     card.add(rows)
     card.get_accessible().set_name(name)
     card.get_accessible().set_description(_spoken(section))

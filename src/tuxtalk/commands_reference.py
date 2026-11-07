@@ -5,9 +5,10 @@ Commands window both show, as cards (commands_cards).
 Two hand-written lists had drifted apart: each knew phrases the other didn't.
 tests/test_commands_reference.py checks every phrase here against the code
 that recognises it, and the other way round each fixed rule of that code (a
-spoken mark, a key, a window or desktop action, an exact edit, an alternative
-of a fixed phrase) against the phrases here. Counts and app names are shown by
-an example each, and what to tell the AI can be worded any way.
+spoken mark, a key or desktop action, a window verb, an exact edit, a
+top-level alternative of a fixed phrase) against the phrases here. Another
+wording of an action already listed isn't required; counts and app names are
+shown by an example each, and what to tell the AI can be worded any way.
 
 Each command is checked by its *kind*: "inline" (normalize_text turns it into
 punctuation or formatting mid-sentence), "key" (a closing "press enter",
@@ -111,8 +112,9 @@ SECTIONS = (
     Section("Literal Words", DICTATION,
             note="Say <b>literal</b> or <b>the word</b> before a punctuation or line-break "
                  "word to type the word itself. It works with: "
-                 + ", ".join(LITERAL_REPLACEMENTS) + ". <b>literal</b> before a Labs "
-                 "command types its words too (<b>literal open Firefox</b>).",
+                 + ", ".join(LITERAL_REPLACEMENTS) + ". <b>literal</b> before a command for "
+                 "an app, a window, a key or the cursor types its words too "
+                 "(<b>literal open Firefox</b>).",
             commands=(
                 _literal("period", ".", "the word period"),
                 _literal("comma", ",", "the word comma"),
@@ -157,8 +159,11 @@ SECTIONS = (
                 "the AI rewrites the selected text: hold Shift with your dictation key as "
                 "you say it", "instruction", "Help → Writing has the details"),
         Command(("make this all caps", "make this lower case", "make this title case",
-                 "make this a bulleted list", "make this a numbered list", "indent this",
-                 "unindent this"), "the same way, done exactly, without the AI", "exact"),
+                 "indent this", "unindent this"), "the same way, done exactly, without the AI",
+                "exact"),
+        Command(("make this a bulleted list", "make this a numbered list"),
+                "each line a point, without the AI", "exact",
+                "One paragraph goes to the AI, which decides where the points are"),
         Command(("remove the commas", "remove the word testing", "remove the bullets",
                  "delete this"), "takes out just that, or the whole selection", "exact"),
         Command(("make this bold", "make this italic", "underline this"),

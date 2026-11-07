@@ -18,8 +18,7 @@ from .help_text import COMMANDS_TITLE, FEEDBACK_URL, PROBLEMS_TITLE, REPORT_LINK
 _LINE_CHARS = 87
 _FRAME_PX = 60
 HEIGHT = 600
-# Room left beside Help on a screen too narrow for it.
-_SCREEN_MARGIN_PX = 40
+
 
 def _open_report(_widget):
     """Open Report a Problem (a window of its own; see problem_report_window)."""
@@ -37,8 +36,8 @@ def _on_link(label, uri):
 
 
 def text_page(markup_text):
-    """A page of text: *markup_text* in a wrapping label that scrolls (Help's
-    sections but Commands). The label takes the keyboard focus,
+    """A page of text: *markup_text* in a wrapping label that scrolls (every Help
+    section but Commands). The label takes the keyboard focus,
     so the arrow keys, Page Up and Down, Home and End scroll it, and a screen
     reader reads it."""
     scrolled = Gtk.ScrolledWindow()
@@ -119,11 +118,9 @@ def _fit(window, notebook):
     char = context.get_metrics(context.get_font_description(), None).get_approximate_char_width()
     tabs = notebook.get_preferred_width()[0] + _FRAME_PX
     wanted = max(int(_LINE_CHARS * char / Pango.SCALE + _FRAME_PX), tabs)
-    screen = ui_style.workarea_width()
-    if screen and wanted > screen - _SCREEN_MARGIN_PX:
-        notebook.set_scrollable(True)
-        wanted = screen - _SCREEN_MARGIN_PX
-    window.set_default_size(wanted, HEIGHT)
+    width = ui_style.width_on_screen(wanted)
+    notebook.set_scrollable(width < wanted)
+    window.set_default_size(width, HEIGHT)
 
 
 def open_section(notebook, word):
