@@ -60,12 +60,12 @@ def test_a_number_heard_as_digits_is_the_same_words():
 
 @pytest.mark.parametrize("phrase_id, grid, expected", [
     ("mouse_grid", False, MouseRequest("grid")),
-    ("mouse_click_five", True, MouseRequest("click", 5)),
-    ("mouse_seven", True, MouseRequest("zoom", 7)),
-    ("mouse_three", True, MouseRequest("zoom", 3)),
-    ("mouse_click", True, MouseRequest("click")),
-    ("mouse_right_click_five", True, MouseRequest("right click", 5)),
-    ("mouse_cancel", True, MouseRequest("cancel")),
+    ("mouse_click_five", True, MouseRequest("click", 5, in_grid=True)),
+    ("mouse_seven", True, MouseRequest("zoom", 7, in_grid=True)),
+    ("mouse_three", True, MouseRequest("zoom", 3, in_grid=True)),
+    ("mouse_click", True, MouseRequest("click", in_grid=True)),
+    ("mouse_right_click_five", True, MouseRequest("right click", 5, in_grid=True)),
+    ("mouse_cancel", True, MouseRequest("cancel", in_grid=True)),
     ("mouse_five", False, None),
     ("mouse_left_click", False, MouseRequest("click")),
 ])

@@ -14,6 +14,14 @@ def test_numbers_and_click_are_words_without_a_grid(said):
     assert parse(said, grid=False) is None
 
 
+def test_a_request_heard_with_a_grid_says_so():
+    """mouse_grid then never does it once the grid is gone: a bare "click"
+    meant for the grid isn't a click wherever the pointer was left."""
+    assert parse("click", grid=True).in_grid
+    assert parse("Left click.", grid=True).in_grid
+    assert not parse("Left click.", grid=False).in_grid
+
+
 @pytest.mark.parametrize("grid", [False, True])
 def test_the_grid_opens_from_any_state(grid):
     assert parse("Mouse grid.", grid) == MouseRequest("grid")
@@ -24,7 +32,7 @@ def test_the_grid_opens_from_any_state(grid):
     ("Five.", 5), ("number 12", 12), ("Too.", 2), ("twenty five", 25), ("99", 99),
     ("twenty-five", 25), ("ten", 10)])
 def test_with_a_grid_a_number_zooms(said, number):
-    assert parse(said, grid=True) == MouseRequest("zoom", number)
+    assert parse(said, grid=True) == MouseRequest("zoom", number, in_grid=True)
 
 
 @pytest.mark.parametrize("said", ["0", "100", "a hundred", "a", "one hundred"])
@@ -33,19 +41,19 @@ def test_numbers_outside_the_grid_are_words(said):
 
 
 def test_click_and_a_number_clicks_that_cell():
-    assert parse("Right click five.", grid=True) == MouseRequest("right click", 5)
-    assert parse("click", grid=True) == MouseRequest("click")
-    assert parse("left click 7", grid=True) == MouseRequest("click", 7)
-    assert parse("double click too", grid=True) == MouseRequest("double click", 2)
-    assert parse("middle click number 30", grid=True) == MouseRequest("middle click", 30)
+    assert parse("Right click five.", grid=True) == MouseRequest("right click", 5, in_grid=True)
+    assert parse("click", grid=True) == MouseRequest("click", in_grid=True)
+    assert parse("left click 7", grid=True) == MouseRequest("click", 7, in_grid=True)
+    assert parse("double click too", grid=True) == MouseRequest("double click", 2, in_grid=True)
+    assert parse("middle click number 30", grid=True) == MouseRequest("middle click", 30, in_grid=True)
 
 
 def test_move_and_cancel_with_a_grid():
-    assert parse("Move here.", grid=True) == MouseRequest("move")
-    assert parse("move to five", grid=True) == MouseRequest("move", 5)
-    assert parse("move 12", grid=True) == MouseRequest("move", 12)
+    assert parse("Move here.", grid=True) == MouseRequest("move", in_grid=True)
+    assert parse("move to five", grid=True) == MouseRequest("move", 5, in_grid=True)
+    assert parse("move 12", grid=True) == MouseRequest("move", 12, in_grid=True)
     for said in ("cancel", "Close grid.", "hide grid"):
-        assert parse(said, grid=True) == MouseRequest("cancel")
+        assert parse(said, grid=True) == MouseRequest("cancel", in_grid=True)
 
 
 def test_plain_clicks_without_a_grid():
@@ -85,4 +93,4 @@ def test_a_grid_leaves_other_commands_as_they_were(said):
 
 
 def test_close_grid_is_not_a_window_request():
-    assert parse("close grid", grid=True) == MouseRequest("cancel")
+    assert parse("close grid", grid=True) == MouseRequest("cancel", in_grid=True)

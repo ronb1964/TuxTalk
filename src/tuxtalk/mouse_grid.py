@@ -71,8 +71,8 @@ def showing() -> bool:
 
 def act(request, beeps_on: bool) -> bool | None:
     """Do the mouse_phrases.MouseRequest *request*: True when done, False when
-    refused with a note (or the grid went first), None for a grid word with no
-    grid any more (it closed a moment ago), to be typed as words."""
+    refused with a note, or with the cancel beep when the grid it was heard
+    for closed first."""
     try:
         return _act(request, beeps_on)
     except _PointerFailed:
@@ -93,25 +93,35 @@ def close(reason: str) -> None:
     _end(None, reason)
 
 
-def _act(request, beeps_on: bool) -> bool | None:
+def _act(request, beeps_on: bool) -> bool:
     """act() itself: "mouse grid" opens one; without a grid only the plain
     clicks act; with one, the step it asks for, the minute starting again."""
     if request.action == "grid":
         return _open(beeps_on)
     session = _session
     if session is None:
-        if request.action in _CLICKS and request.number is None:
-            return _click_here(request.action, beeps_on)
-        return None
+        if request.in_grid or request.action not in _CLICKS:
+            return _grid_gone(request, beeps_on)
+        return _click_here(request.action, beeps_on)
     session.beeps_on = beeps_on
     if request.action == "cancel":
         _end(session, "cancel")
         beeps.beep(beeps_on, *beeps.CANCEL_BEEP)
         return True
-    gtk_loop.call(_restart_timer, session)
+    if not gtk_loop.call(_restart_timer, session):
+        return _grid_gone(request, beeps_on)
     if request.action == "zoom":
         return _zoom(session, request.number)
     return _point(session, request)
+
+
+def _grid_gone(request, beeps_on: bool) -> bool:
+    """A grid command whose grid closed after it was heard (the minute ran
+    out, a real click): nothing is done, and above all no click wherever the
+    pointer happens to be."""
+    logger.info(f"Mouse grid: not done ({request.action}): the grid closed first")
+    beeps.beep(beeps_on, *beeps.CANCEL_BEEP)
+    return False
 
 
 def _end(only: _Session | None, reason: str) -> bool:
@@ -136,14 +146,15 @@ def _take_down(session: _Session) -> None:
     session.windows.hide()
 
 
-def _restart_timer(session: _Session) -> None:
+def _restart_timer(session: _Session) -> bool:
     """On GTK's thread: the minute starts again, unless the grid closed
-    while the dictation worker was on its way here."""
+    while the dictation worker was on its way here (False)."""
     if _session is not session:
-        return
+        return False
     if session.timer is not None:
         GLib.source_remove(session.timer)
     session.timer = GLib.timeout_add_seconds(TIMEOUT_S, _timed_out, session)
+    return True
 
 
 def _timed_out(session: _Session) -> bool:

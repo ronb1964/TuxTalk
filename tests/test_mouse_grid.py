@@ -341,8 +341,28 @@ def test_left_click_without_a_grid_clicks_where_the_pointer_is(rig):
     assert rig.pointer.events == LEFT_CLICK and rig.beeps == [beeps.READY_BEEP]
 
 
-def test_a_grid_word_after_the_grid_went_is_left_to_be_typed(rig):
-    assert act("zoom", 5) is None and act("cancel") is None
+@pytest.mark.parametrize("action, number", [("click", None), ("right click", None),
+                                            ("click", 5), ("zoom", 5), ("move", None),
+                                            ("cancel", None)])
+def test_a_grid_command_whose_grid_went_does_nothing(rig, action, number):
+    """Heard while the grid showed, done after it closed (the minute ran out,
+    a real click): never a click wherever the pointer was left."""
+    request = MouseRequest(action, number, in_grid=True)
+    assert mouse_grid.act(request, True) is False
+    assert rig.pointer.events == [] and rig.beeps == [beeps.CANCEL_BEEP]
+
+
+def test_a_grid_that_closes_as_its_command_starts_does_nothing(rig, monkeypatch):
+    act("grid")
+    call = mouse_grid.gtk_loop.call
+
+    def timeout_first(fn, *args):
+        if fn is mouse_grid._restart_timer:
+            rig.fire_timer()
+        return call(fn, *args)
+    monkeypatch.setattr(mouse_grid.gtk_loop, "call", timeout_first)
+    assert act("zoom", 5) is False
+    assert rig.windows[0].drawn == [None]       # never zoomed
 
 
 def _key_stays_down(monkeypatch):

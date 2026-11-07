@@ -20,6 +20,9 @@ class MouseRequest:
     action: str   # "grid", "zoom", "click", "double click", "right click",
                   # "middle click", "move" or "cancel"
     number: int | None = None   # the grid cell; None: the pointer's own spot
+    # Heard while a grid showed, so one of its commands: never done without
+    # it, should the grid close before the request is acted on.
+    in_grid: bool = False
 
 
 _GRID = frozenset({"mouse grid", "show grid", "show mouse grid"})
@@ -55,9 +58,11 @@ def _click(said: str, grid: bool) -> MouseRequest | None:
         return None
     word = m[1]
     if m["cell"] is None:
-        return MouseRequest(_CLICKS.get(word, "click")) if grid or word != "click" else None
+        if grid or word != "click":
+            return MouseRequest(_CLICKS.get(word, "click"), in_grid=grid)
+        return None
     number = _number(m["cell"]) if grid else None
-    return MouseRequest(_CLICKS.get(word, "click"), number) if number else None
+    return MouseRequest(_CLICKS.get(word, "click"), number, in_grid=True) if number else None
 
 
 def parse(said: str, grid: bool) -> MouseRequest | None:
@@ -69,11 +74,11 @@ def parse(said: str, grid: bool) -> MouseRequest | None:
     if not grid:
         return None
     if said in _CANCEL:
-        return MouseRequest("cancel")
+        return MouseRequest("cancel", in_grid=True)
     if said == "move here":
-        return MouseRequest("move")
+        return MouseRequest("move", in_grid=True)
     if m := _MOVE.fullmatch(said):
         number = _number(m["cell"])
-        return MouseRequest("move", number) if number else None
+        return MouseRequest("move", number, in_grid=True) if number else None
     number = _number(said)
-    return MouseRequest("zoom", number) if number else None
+    return MouseRequest("zoom", number, in_grid=True) if number else None
