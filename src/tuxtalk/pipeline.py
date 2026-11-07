@@ -173,8 +173,7 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             return
         raw, said = split_key_command(as_words)
         key = _key_to_press(raw, said, job)
-        if said and not raw.strip():
-            _press_alone(said, in_password, job)
+        if _nothing_to_type(raw, said, in_password, job):
             return
         words = _shape_text(raw, said, key, job)
         if words is None:
@@ -200,6 +199,21 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             # After the words, never before them: keyboard options changed
             # since the start count from the next press of the key.
             modifier_hotkeys.read_compose_keys()
+
+
+def _nothing_to_type(raw: str, said: str, in_password: bool, job: _Job) -> bool:
+    """Whether the dictation ends here with nothing typed: "press enter" or
+    "press tab" said alone just presses the key, and in a password field
+    nothing else gets past this, as when a mouse command was let through
+    but its grid closed before it ran (the words aren't seen by the AI
+    either)."""
+    if said and not raw.strip():
+        _press_alone(said, in_password, job)
+        return True
+    if in_password:
+        notices.password_field_refused(job.beeps_on)
+        return True
+    return False
 
 
 def _cancelled(job: _Job) -> bool:
@@ -297,12 +311,13 @@ def _before_the_words(raw: str, audio_f32, job: _Job):
     # never sees them. Only "press enter" or "press tab" on its own still
     # presses the key, there and not where the phrases before went:
     # people type the password by hand, then say it to log in, or move
-    # between the boxes.
+    # between the boxes. A mouse command types nothing, so it goes ahead:
+    # it may be how a voice user clicks out of the box.
     in_password = focused_window.is_password()
     if in_password:
         job.message.held_mark, job.message.held_cue = None, ""
         job.message.sentence_audio = []
-        if not key_only:
+        if not key_only and not voice_actions.is_mouse_command(raw):
             notices.password_field_refused(job.beeps_on)
             return None, True
 

@@ -58,10 +58,17 @@ def _parse(raw: str):
                                  actions=live.open_apps, grid=mouse_grid.showing())
 
 
+def is_mouse_command(raw: str) -> bool:
+    """Whether the dictation *raw* is a mouse command, with the grid as it is
+    now. Those type nothing, so a password field lets them through: a voice
+    user can click out of one."""
+    return isinstance(_parse(raw), MouseRequest)
+
+
 def close_grid_unless_for_it(raw: str) -> None:
     """Close the mouse grid when the dictation *raw* isn't one of its
     commands: anything else is then typed or run as usual, with the grid gone."""
-    if mouse_grid.showing() and not isinstance(_parse(raw), MouseRequest):
+    if mouse_grid.showing() and not is_mouse_command(raw):
         mouse_grid.close("another dictation")
 
 

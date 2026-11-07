@@ -11,8 +11,9 @@ import pytest
 from evdev import ecodes as e
 
 from conftest import FakeClock
-from tuxtalk import (beeps, dictation_worker, keyboard_output, modifier_hotkeys, mouse_grid,
-                     mouse_grid_window, notices, service_tick, voice_actions, virtual_pointer)
+from tuxtalk import (beeps, dictation_worker, focused_window, keyboard_output, modifier_hotkeys,
+                     mouse_grid, mouse_grid_window, notices, service_tick, voice_actions,
+                     virtual_pointer)
 from tuxtalk import live_settings as live
 from tuxtalk.mouse_grid_model import Rect
 from tuxtalk.mouse_phrases import MouseRequest
@@ -483,6 +484,45 @@ def test_a_click_forgets_the_last_dictation_for_undo(rig, actions_on, chat, say,
     say("Delete last sentence.")
     assert rig.buttons() == LEFT_CLICK
     assert 14 not in keyboard.typed_keys()               # no Backspace
+
+
+@pytest.fixture
+def in_a_password_field(rig, actions_on, chat, monkeypatch):
+    """Voice commands on and the cursor in a password field; the refusals
+    are counted."""
+    refused = []
+    monkeypatch.setattr(focused_window, "is_password", lambda: True)
+    monkeypatch.setattr(notices, "password_field_refused", lambda beeps_on: refused.append(1))
+    return refused
+
+
+def test_the_mouse_works_from_a_password_field(rig, in_a_password_field, chat, say, caplog):
+    """Mouse commands type nothing, so they can click out of a password
+    field; anything else said there is still neither typed nor logged."""
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        say("Left click.")
+        say("Mouse grid.")
+        say("Five.")
+        say("Cancel.")
+        say("Swordfish forever.")
+    assert rig.pointer.events[:4] == LEFT_CLICK          # the click, before the grid's moves
+    assert rig.windows[0].drawn == [None, Rect(640, 360, 640, 360)]
+    assert not mouse_grid.showing()
+    assert chat[2] == [] and in_a_password_field == [1]
+    assert "wordfish" not in caplog.text
+
+
+def test_a_grid_word_whose_grid_went_meanwhile_isnt_typed_in_a_password_field(
+        grid_on_screen, in_a_password_field, chat, say, monkeypatch):
+    """Let through as a grid command, then the minute ran out before it ran:
+    not typed, and not handed to the AI either."""
+    from tuxtalk import dictation_text
+    shaped = []
+    monkeypatch.setattr(dictation_text, "prepare_text", lambda *a, **k: shaped.append(a) or "x")
+    monkeypatch.setattr(voice_actions, "close_grid_unless_for_it",
+                        lambda raw: mouse_grid.close("the minute ran out"))
+    say("Five.")
+    assert chat[2] == [] and shaped == [] and in_a_password_field == [1]
 
 
 def test_a_voice_edit_closes_the_grid(grid_on_screen, monkeypatch):
