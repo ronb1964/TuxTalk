@@ -157,7 +157,7 @@ def prefs_labs(run):
         problems.append(f"Labs options found: {boxes}")
     problems += [f"“{b[:30]}” is on" for b in boxes
                  if "checked" in names.get(b, {}).get("states", [])]
-    return verdict(problems, "Voice editing, Select and move, Apps, windows and keys, "
+    return verdict(problems, "Voice editing, Select and move, Apps, windows, keys and the mouse, "
                              "Type at pause, "
                              "Indicator follows the window: all off; How these work and "
                              "Send feedback present")

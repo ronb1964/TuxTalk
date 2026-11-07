@@ -22,8 +22,8 @@ before 0.15.0, so older entries use that name.
   the Wayland ones the grid needs XWayland, and on X11 compositing (Xfce and
   Cinnamon have it on unless you turned it off). It is in the same Labs
   tickbox as the other desktop commands, now called "Apps, windows, keys and
-  the mouse by voice", so it is off until you tick it. Help, on the Writing page, has the steps,
-  and the Voice Commands list has a card for it.
+  the mouse by voice", so it is off until you tick it. Help, on the Writing
+  page, has the steps, and the Voice Commands list has a card for it.
 - On KDE, GNOME and Cinnamon the whole desktop zooms in 3 times on the part
   you picked once the parts get small, so you can see what you are aiming at,
   and goes back after the click, the move, "cancel", the minute running out or
@@ -70,8 +70,8 @@ before 0.15.0, so older entries use that name.
   recording, opening an app ends the recording. An AppImage with no menu
   entry can't be found. The words open, launch and start are English.
 - Help, on the Writing page, has the steps.
-- The same Labs tickbox now does more, and is called "Apps, windows and keys
-  by voice". Hold your dictation key, say it, let go, and nothing is typed:
+- The same Labs tickbox now does more, and is called "Apps, windows, keys and
+  the mouse by voice". Hold your dictation key, say it, let go, and nothing is typed:
   "close Firefox", "close all Firefox", "close window", "switch to Firefox",
   "minimize window", "maximize window" and "restore window"; "new tab", "close
   tab", "next tab", "previous tab", "reopen tab", "go back", "go forward",
