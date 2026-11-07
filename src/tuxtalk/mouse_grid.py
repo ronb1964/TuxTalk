@@ -3,9 +3,10 @@ number zooms into a cell, "left 3" and the like nudge the click dot, and
 "click" or "move" puts the pointer there.
 
 From the first number, the desktop's own zoom (desktop_zoom) shows the
-chosen part about three times bigger, the pointer waiting where the view shows the
-chosen part centred. Every way the grid closes puts that zoom back, and a
-click or move puts it back first, so the click lands on the normal view.
+chosen part about three times bigger, the pointer waiting where the view
+shows the chosen part centred. Every way the grid closes puts that zoom
+back, and a click or move puts it back first, so the click lands on the
+normal view.
 
 It runs on the dictation worker, like every voice command. The grid's
 windows belong to GTK's thread, so each step on them goes through
@@ -76,8 +77,9 @@ class _Session:
         self.chosen_cell: int | None = None     # the number said last, the grid now inside it
         self.timer = None               # the GLib source of the timeout; GTK's thread only
         # The desktop's zoom (a desktop_zoom.Magnifier, or None where there's
-        # none, or once put back), and whether it's zoomed in now. Taken and
-        # changed under _lock: the grid closes from any thread.
+        # none, or once put back), and whether it's zoomed in now or still
+        # owes a put-back. Taken and changed under _lock: the grid closes
+        # from any thread.
         self.magnifier = magnifier
         self.desktop_zoomed = False
 
@@ -400,9 +402,11 @@ def _zoom_desktop(session: _Session, magnifier, parked) -> None:
             if not session.desktop_zoomed:
                 session.magnifier = None        # not tried again at every number
     if not zoomed:
-        logger.warning("Mouse grid: the desktop didn't zoom in; the grid goes on without it")
-        if not undone:
-            logger.warning("Mouse grid: couldn't put the desktop zoom back")
+        if undone:
+            logger.warning("Mouse grid: the desktop didn't zoom in; the grid goes on without it")
+        else:
+            logger.warning("Mouse grid: the desktop didn't zoom in and a zoom is still owed; "
+                           "no click until it's put back")
         return
     if not kept:
         if magnifier.restore():

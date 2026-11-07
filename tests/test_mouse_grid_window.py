@@ -75,6 +75,19 @@ def test_no_pointer_is_drawn_over_the_grid(windows):
     assert cursor is not None and cursor.get_cursor_type() == Gdk.CursorType.BLANK_CURSOR
 
 
+def test_the_pointer_shows_again_as_the_grid_goes(windows):
+    """A desktop that picks the pointer's look only on its next motion
+    (COSMIC) keeps the last one it was given: the grid's windows give back
+    the normal pointer before they go, or a close by voice leaves none."""
+    windows.show(Grid([mgw.monitors()[0]]))
+    window = windows._windows[0]
+    _flush(window)
+    as_it_went = []
+    window.connect("unrealize", lambda w: as_it_went.append(w.get_window().get_cursor()))
+    windows.hide()
+    assert as_it_went == [None]
+
+
 def test_after_a_zoom_the_numbers_are_inside_the_cell(windows):
     grid = Grid([mgw.monitors()[0]])
     windows.show(grid)

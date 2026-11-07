@@ -66,7 +66,7 @@ class FakeGSettings:
 
         class Settings:
             def __init__(self, schema):
-                self._schema, self._keys = schema, store.schemas[schema]
+                self._keys = store.schemas[schema]
 
             @classmethod
             def new(cls, schema):
@@ -409,6 +409,24 @@ def test_the_next_grid_puts_a_failed_put_back_back_first_on_kde(kwin, caplog):
     assert not os.path.exists(_restore_file())
 
 
+def test_the_next_grids_restore_says_no_while_an_earlier_zoom_is_owed(kwin):
+    """The next grid's magnifier owes nothing of its own, but the desktop is
+    still zoomed by the last one's: its restore says so, or the grid would
+    click on a zoomed desktop. Once KWin answers, it puts that zoom back."""
+    first = desktop_zoom.find()
+    first.zoom_in()
+    kwin.failing = ("view_zoom_out", 0)
+    first.restore()                 # all six still owed, in the file
+
+    second = desktop_zoom.find()
+    assert not second.zoom_in()
+    assert second.restore() is False
+    kwin.failing = None
+    assert second.restore() is True
+    assert kwin.shortcuts == ["view_zoom_in"] * 6 + ["view_zoom_out"] * 6
+    assert not os.path.exists(_restore_file())
+
+
 def test_the_same_magnifier_puts_back_what_it_owes_before_zooming_again(kwin):
     zoom = desktop_zoom.find()
     zoom.zoom_in()
@@ -441,6 +459,62 @@ def test_the_next_grid_never_takes_a_half_put_back_magnifier_for_the_users(deskt
 
 
 # A zoom left on by a service that stopped
+
+
+class Stopped(BaseException):
+    """The service ending mid-zoom: nothing after it runs, as when it dies."""
+
+
+def _stop_at(kwin, monkeypatch, shortcut, done_before, after_the_step):
+    """The service stops at *shortcut*'s call after *done_before* of them
+    went through: before that call takes effect, or *after_the_step*."""
+    answer = kwin.call
+
+    def call(*args):
+        if args[4][0] == shortcut and kwin.shortcuts.count(shortcut) == done_before:
+            if after_the_step:
+                answer(*args)
+            raise Stopped
+        return answer(*args)
+    monkeypatch.setattr(kwin_desktop, "_call", call)
+
+
+def _owed_on_disk():
+    """The out-steps KDE's restore file owes, 0 with none."""
+    if not os.path.exists(_restore_file()):
+        return 0
+    with open(_restore_file(), encoding="utf-8") as f:
+        return json.load(f)["steps"]
+
+
+@pytest.mark.parametrize("taken", range(6))
+def test_a_stop_between_zoom_steps_leaves_exactly_the_steps_taken_owed(kwin, monkeypatch,
+                                                                       taken):
+    _stop_at(kwin, monkeypatch, "view_zoom_in", taken, after_the_step=False)
+    with pytest.raises(Stopped):
+        desktop_zoom.find().zoom_in()
+    assert kwin.shortcuts == ["view_zoom_in"] * taken
+    assert _owed_on_disk() == taken
+
+
+@pytest.mark.parametrize("shortcut", ["view_zoom_in", "view_zoom_out"])
+@pytest.mark.parametrize("done_before", range(6))
+@pytest.mark.parametrize("after_the_step", [False, True])
+def test_a_stop_anywhere_never_leaves_more_owed_than_is_zoomed_in(kwin, monkeypatch, shortcut,
+                                                                  done_before, after_the_step):
+    """Owing one step more than is in would take a step of the user's own
+    zoom at the next start: whatever the step a stop comes at, the file
+    owes what's in, or one fewer when the stop falls between a step and
+    its count."""
+    zoom = desktop_zoom.find()
+    if shortcut == "view_zoom_out":
+        zoom.zoom_in()
+    _stop_at(kwin, monkeypatch, shortcut, done_before, after_the_step)
+    stopping = zoom.zoom_in if shortcut == "view_zoom_in" else zoom.restore
+    with pytest.raises(Stopped):
+        stopping()
+    zoomed_in = kwin.shortcuts.count("view_zoom_in") - kwin.shortcuts.count("view_zoom_out")
+    assert zoomed_in - 1 <= _owed_on_disk() <= zoomed_in
 
 
 def test_a_zoom_left_on_is_put_back_at_start(kwin, gsettings, caplog):

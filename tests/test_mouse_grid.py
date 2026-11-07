@@ -11,9 +11,10 @@ import pytest
 from evdev import ecodes as e
 
 from conftest import FakeClock, esc
-from tuxtalk import (beeps, command_notices, desktop_zoom, dictation_worker, focused_window,
-                     keyboard_output, modifier_hotkeys, mouse_grid, mouse_grid_window, notices,
-                     service_tick, voice_actions, virtual_pointer)
+from tuxtalk import (beeps, command_notices, config, desktop_detect, desktop_zoom,
+                     dictation_worker, focused_window, keyboard_output, modifier_hotkeys,
+                     mouse_grid, mouse_grid_window, notices, service_tick, voice_actions,
+                     virtual_pointer)
 from tuxtalk import live_settings as live
 from tuxtalk.mouse_grid_model import Rect, close_enough
 from tuxtalk.mouse_phrases import MouseRequest
@@ -855,7 +856,7 @@ def test_a_grid_that_closes_while_the_desktop_zooms_in_puts_the_zoom_back(rig, m
     assert caplog.text.count("Mouse grid: put the desktop zoom back") == 1
 
 
-def test_a_failed_zoom_is_logged_and_the_grid_goes_on(rig, monkeypatch, caplog):
+def test_a_failed_zoom_is_logged_and_the_grid_goes_on(rig, caplog):
     rig.magnifier = FakeMagnifier(rig, works=False)
     act("grid")
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
@@ -882,6 +883,40 @@ def test_a_failed_zoom_that_cant_be_undone_stays_owed_and_no_click_is_made(rig, 
     assert rig.notes == [command_notices.NOTES["zoom_not_back"][0]]
     assert rig.magnifier.count("zoom_in") == 1
     assert "Mouse grid: put the desktop zoom back" not in caplog.text
+
+
+def test_a_zoom_an_earlier_grid_left_on_stops_the_next_grids_click(rig, monkeypatch, tmp_path):
+    """KWin stopped answering as the last grid closed, so its zoom is still
+    on, owed in desktop_zoom's restore file. The next grid's magnifier owes
+    nothing of its own, but its click refuses all the same; once KWin
+    answers again, the next click puts that zoom back first and clicks."""
+    monkeypatch.setattr(config, "get_data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(desktop_detect, "get_desktop_environment", lambda: "kde")
+    kwin = types.SimpleNamespace(answers=True, steps=[])
+
+    def step(shortcut):
+        if kwin.answers:
+            kwin.steps.append(shortcut)
+        return kwin.answers
+    monkeypatch.setattr(desktop_zoom, "_kwin_step", step)
+
+    rig.magnifier = desktop_zoom.KWinZoom(1.2, "proportional")
+    act("grid")
+    act("zoom", 5)
+    kwin.answers = False
+    act("cancel")
+
+    rig.magnifier = desktop_zoom.KWinZoom(1.2, "proportional")
+    act("grid")
+    assert act("zoom", 5) is True
+    assert act("click") is False
+    assert rig.buttons() == [] and rig.notes == [command_notices.NOTES["zoom_not_back"][0]]
+
+    kwin.answers = True
+    rig.magnifier = desktop_zoom.KWinZoom(1.2, "proportional")
+    act("grid")
+    assert act("click") is True and rig.buttons() == LEFT_CLICK
+    assert kwin.steps == ["view_zoom_in"] * 6 + ["view_zoom_out"] * 6
 
 
 def test_a_nudge_moves_the_dot_and_the_click_lands_on_it(rig, magnifier, caplog):

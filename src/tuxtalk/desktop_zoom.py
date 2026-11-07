@@ -9,10 +9,11 @@ magnifier's settings (GNOME Shell dropped its D-Bus API); only
 screen-magnifier-enabled and mag-factor are ever written, and only for a
 full-screen magnifier, not a lens.
 
-Before changing anything, what puts it back is written to
-zoom-to-restore-<desktop>.json in TuxTalk's data folder and removed once
-it's put back, so a service that stopped while zoomed puts it back at its
-next start (restore_left_over): a user left at 3x who doesn't know the
+What puts it back is kept in zoom-to-restore-<desktop>.json in TuxTalk's
+data folder, written before the magnifier's settings change and counted
+step by step on KDE, never owing more than went in, and removed once it's
+put back. So a service that stopped while zoomed puts it back at its next
+start (restore_left_over): a user left at 3x who doesn't know the
 desktop's own zoom keys is the worst outcome here. A file per desktop: a
 KDE zoom left on waits for the next KDE session (KWin keeps its zoom),
 and a GNOME session in between zooms without touching it.
@@ -110,21 +111,24 @@ class Magnifier:
                 log.warning(f"Desktop zoom: not zooming, the {self.name} isn't put back yet")
                 return False
             if not _nothing_left_on_disk(self._desktop):
+                log.warning("Desktop zoom: not zooming, a zoom left on earlier isn't put back yet")
                 return False
             self._zoomed = self._zoom()
             return self._zoomed
 
     def restore(self) -> bool:
-        """Put the zoom back as it was before zoom_in; whether it is (False
-        when some of it is still owed, kept for a retry). Safe from any
-        thread, and to call again: a second call does nothing. Never raises."""
+        """Put the zoom back as it was before zoom_in, and any zoom an earlier
+        one left owed on this desktop; whether nothing is owed now (False
+        keeps it for a retry: a click must not land on a zoomed desktop).
+        Safe from any thread, and to call again: with nothing owed a second
+        call does nothing. Never raises."""
         with _lock:
             self._zoomed = False
             self._put_back()
-            return not self._owes()
+            return not self._owes() and _nothing_left_on_disk(self._desktop)
 
     def _zoom(self) -> bool:
-        """Save what puts it back, then zoom; on a failure, undo what was done."""
+        """Zoom in, what puts it back kept on disk; on a failure, undo what was done."""
         raise NotImplementedError
 
     def _put_back(self) -> None:
@@ -142,10 +146,7 @@ def _nothing_left_on_disk(desktop: str) -> bool:
     isn't this zoom's to put back, and stays as it is."""
     if os.path.exists(_restore_path(desktop)):
         _restore_left_over(desktop)
-    if os.path.exists(_restore_path(desktop)):
-        log.warning("Desktop zoom: not zooming, a zoom left on earlier isn't put back yet")
-        return False
-    return True
+    return not os.path.exists(_restore_path(desktop))
 
 
 def find() -> Magnifier | None:
@@ -180,10 +181,14 @@ class KWinZoom(Magnifier):
         self._owed: int | None = None     # out-steps owed while zoomed
 
     def _zoom(self) -> bool:
-        if not _save_restore({"desktop": "kde", "steps": self._steps}):
-            return False
-        self._owed = self._steps - _kwin_steps("view_zoom_in", self._steps)
-        if self._owed == self._steps:
+        self._owed = 0
+        while self._owed < self._steps:
+            if not _kwin_step("view_zoom_in"):
+                break
+            self._owed += 1
+            if not _owe_kwin(self._owed):   # a step a stop couldn't put back isn't kept
+                break
+        else:
             return True
         self._put_back()        # the steps that did go in
         return False
@@ -237,30 +242,40 @@ def _kwin_zoom_settings() -> tuple[float, str]:
     return step, tracking
 
 
-def _kwin_steps(shortcut: str, steps: int) -> int:
-    """Invoke KWin's *shortcut* *steps* times; how many weren't done (0 when
-    all were). A failure is logged and stops the rest. A best guess on a
-    timeout: a busy KWin may still take that step after the call gave up."""
-    for done in range(steps):
-        try:
-            kwin_desktop.invoke_shortcut(shortcut, _DBUS_TIMEOUT_S)
-        except Exception as e:      # dbus-python's errors: kglobalaccel gone or hung
-            log.warning(f"Desktop zoom: KDE's {shortcut} failed after {done} of {steps}: {e}")
-            return steps - done
-    return 0
+def _kwin_step(shortcut: str) -> bool:
+    """Invoke KWin's *shortcut* once; whether it went, a failure logged. A
+    best guess on a timeout: a busy KWin may still take the step after the
+    call gave up."""
+    try:
+        kwin_desktop.invoke_shortcut(shortcut, _DBUS_TIMEOUT_S)
+        return True
+    except Exception as e:      # dbus-python's errors: kglobalaccel gone or hung
+        log.warning(f"Desktop zoom: KDE's {shortcut} failed: {e}")
+        return False
 
 
 def _kwin_put_back(steps: int) -> int:
-    """Step KWin's zoom out *steps* times; how many are still owed. Exactly
-    those are kept in the restore file, for a retry or the next start (one
-    out-step too many would take away a zoom the user had), and the file
-    goes once none are."""
-    left = _kwin_steps("view_zoom_out", steps)
-    if left:
-        _save_restore({"desktop": "kde", "steps": left})
-    else:
-        _remove_restore("kde")
-    return left
+    """Step KWin's zoom out *steps* times; how many are still owed. The
+    restore file counts down before each step, so a stop at any point
+    leaves it owing no more than is still in (one out-step too many would
+    take away a zoom the user had); it goes once none are."""
+    while steps:
+        _owe_kwin(steps - 1)
+        if not _kwin_step("view_zoom_out"):
+            _owe_kwin(steps)        # it didn't go: still owed, for a retry
+            return steps
+        steps -= 1
+    return 0
+
+
+def _owe_kwin(steps: int) -> bool:
+    """Make KDE's restore file owe *steps* out-steps, removed at none;
+    whether it does. One that can't be written is removed instead: owing
+    too few leaves some zoom on after a stop, owing too many takes away
+    the user's own."""
+    if steps and _save_restore({"desktop": "kde", "steps": steps}):
+        return True
+    return _remove_restore("kde") and not steps
 
 
 # GNOME and Cinnamon
@@ -379,13 +394,16 @@ def _save_restore(data: dict) -> bool:
         return False
 
 
-def _remove_restore(desktop: str) -> None:
+def _remove_restore(desktop: str) -> bool:
+    """Remove *desktop*'s restore file; whether it's gone."""
     try:
         os.remove(_restore_path(desktop))
     except FileNotFoundError:
         pass
     except OSError as e:
         log.warning(f"Desktop zoom: couldn't remove {_restore_path(desktop)}: {e}")
+        return False
+    return True
 
 
 def restore_left_over() -> None:

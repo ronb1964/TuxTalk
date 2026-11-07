@@ -9,9 +9,9 @@ the keyboard from the app being controlled.
 Two looks. The top level draws every cell with a border and a centred number.
 A zoomed grid shows one region, outlined and lightly tinted, with the rest
 dimmed more; its cells have thin lines and a small number in their top-left
-corner, so the numbers stay off the middle of a cell, and one dot marks where
-a click lands. The monitor that holds the
-region draws the dot; the others are dimmed whole.
+corner, so the numbers stay off the middle of a cell, and one dot marks
+where a click lands. The monitor that holds the region draws the dot; the
+others are dimmed whole.
 
 Every method here runs on the GTK thread. The dictation worker reaches it
 through gtk_loop.call and polls `pointer_since` to see where the virtual
@@ -132,7 +132,8 @@ def _corner_label(cell: Cell, px: int) -> Gtk.Label:
 def _hide_the_pointer(window: Gtk.Window) -> None:
     """No pointer drawn over the grid: the real one waits wherever the zoom
     needs it and would cover a number; the dot shows where a click lands.
-    It comes back with the grid's windows gone, before any click."""
+    It comes back as the grid's windows go (GridWindows.hide), before any
+    click."""
     gdk_window = window.get_window()
     gdk_window.set_cursor(Gdk.Cursor.new_for_display(gdk_window.get_display(),
                                                      Gdk.CursorType.BLANK_CURSOR))
@@ -281,6 +282,15 @@ class GridWindows:
             window.draw_grid(grid)
 
     def hide(self):
+        """Take the grid's windows away, the pointer shown again first: a
+        compositor that picks the window under the pointer only on its next
+        motion (COSMIC) would otherwise keep the blank one after a close by
+        voice, Esc or the timeout, with the mouse untouched."""
+        for window in self._windows:
+            if window.get_window() is not None:
+                window.get_window().set_cursor(None)
+        if self._windows:
+            Gdk.Display.get_default().flush()
         for window in self._windows:
             window.destroy()
         self._windows = []
