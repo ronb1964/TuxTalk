@@ -109,15 +109,16 @@ class Grid:
         return "ok"
 
     def nudge(self, direction: str, steps: int) -> str:
-        """Move the click spot *steps* steps, staying inside the part shown:
+        """Move the click spot *steps* steps, staying inside the part shown
+        (its last pixel at most: one further is the next monitor's first):
         "ok", or "nudge_needs_a_number" when no part has been chosen yet."""
         if self.region is None or self.spot is None:
             return "nudge_needs_a_number"
         dx, dy = _NUDGES[direction]
         x, y = self.spot[0] + dx * NUDGE_PX * steps, self.spot[1] + dy * NUDGE_PX * steps
         region = self.region
-        self.spot = (min(max(x, region.x), region.x + region.width),
-                     min(max(y, region.y), region.y + region.height))
+        self.spot = (min(max(x, region.x), region.x + region.width - 1),
+                     min(max(y, region.y), region.y + region.height - 1))
         return "ok"
 
     def cells_are_small(self) -> bool:

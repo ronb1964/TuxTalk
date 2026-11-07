@@ -35,6 +35,12 @@ _CLICK = re.compile(r"(click|left click|right click|double click|middle click)"
                     r"(?: (?P<cell>.+))?")
 _NUDGE = re.compile(r"(?P<direction>left|right|up|down)(?: (?P<steps>.+))?")
 _MOVE = re.compile(r"move (?:to )?(?P<cell>.+)")
+# A nudge's count as Parakeet writes a small number said after a direction
+# ("up to", "right for"); after a direction these can't mean anything else.
+_NUDGE_COUNTS = {"to": 2, "for": 4}
+# How Parakeet writes "right" said alone or before a count or "click"; only
+# while a grid shows, where "write four" can't be meant as words.
+_WRITE = re.compile(r"^write(?= |$)")
 
 
 def _number(words: str) -> int | None:
@@ -72,7 +78,8 @@ def _nudge(said: str) -> MouseRequest | None:
     m = _NUDGE.fullmatch(said)
     if not m:
         return None
-    steps = 1 if m["steps"] is None else _number(m["steps"])
+    steps = m["steps"]
+    steps = 1 if steps is None else _NUDGE_COUNTS.get(steps) or _number(steps)
     return MouseRequest("nudge", steps, in_grid=True, direction=m["direction"]) if steps else None
 
 
@@ -80,6 +87,8 @@ def parse(said: str, grid: bool) -> MouseRequest | None:
     """The mouse request *said* (command_phrases' normalized form) is, or None."""
     if said in _GRID:
         return MouseRequest("grid")
+    if grid:
+        said = _WRITE.sub("right", said)
     if request := _click(said, grid):
         return request
     if not grid:

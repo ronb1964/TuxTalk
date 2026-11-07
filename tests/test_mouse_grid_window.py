@@ -182,3 +182,27 @@ def test_only_the_monitor_holding_the_spot_draws_the_dot(windows):
     windows.redraw(grid)
     counts = [len(_boxes_with_class(w, "mouse-grid-dot")) for w in windows._windows]
     assert sorted(counts) == [0, 1]
+
+
+def test_the_deepest_corner_numbers_stay_inside_their_cells(windows):
+    """With no desktop zoom the deepest cells are about 13 px high: each
+    number fits its cell, so no row's number covers the next row's."""
+    grid = Grid([mgw.Rect(0, 0, 1920, 1080)])
+    windows.show(grid)
+    for number in (5, 5, 5):
+        assert grid.zoom(number) == "ok"
+    assert grid.zoom(5) == "smallest"
+    windows.redraw(grid)
+    window = windows._windows[0]
+    _flush(window)
+    corners = sorted(_boxes_with_class(window, "mouse-grid-corner"), key=lambda c: int(c.get_text()))
+    assert len(corners) == 9
+    for corner, cell in zip(corners, grid.cells, strict=True):
+        box = corner.get_allocation()
+        assert box.y + box.height <= round(cell.rect.y + cell.rect.height)
+        assert box.x + box.width <= round(cell.rect.x + cell.rect.width)
+
+
+def test_a_roomy_cell_keeps_the_16_px_number_and_a_tiny_one_has_none():
+    assert mgw.corner_size(mgw.Cell(1, mgw.Rect(0, 0, 120, 120))) == (16, 3)
+    assert mgw.corner_size(mgw.Cell(1, mgw.Rect(0, 0, 14, 8.9))) is None

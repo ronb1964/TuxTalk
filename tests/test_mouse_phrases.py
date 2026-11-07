@@ -99,7 +99,8 @@ def test_close_grid_is_not_a_window_request():
 @pytest.mark.parametrize("said, direction, steps", [
     ("left", "left", 1), ("Left.", "left", 1), ("left 3", "left", 3),
     ("left three", "left", 3), ("up two", "up", 2), ("down too", "down", 2),
-    ("Right 10.", "right", 10)])
+    ("Right 10.", "right", 10), ("Up to.", "up", 2), ("right for", "right", 4),
+    ("left too", "left", 2)])
 def test_with_a_grid_a_direction_nudges(said, direction, steps):
     assert parse(said, grid=True) == MouseRequest(
         "nudge", steps, direction=direction, in_grid=True)
@@ -117,3 +118,29 @@ def test_move_left_is_not_a_nudge():
 def test_left_click_still_clicks_with_and_without_a_grid():
     assert parse("left click", grid=True) == MouseRequest("click", in_grid=True)
     assert parse("left click", grid=False) == MouseRequest("click")
+
+
+@pytest.mark.parametrize("said, steps", [("Write.", 1), ("write four", 4), ("Write 4.", 4)])
+def test_with_a_grid_write_is_heard_as_right(said, steps):
+    """Parakeet writes "Right four." as "Write four."."""
+    assert parse(said, grid=True) == MouseRequest("nudge", steps, direction="right", in_grid=True)
+
+
+def test_with_a_grid_write_click_is_a_right_click():
+    assert parse("Write click.", grid=True) == MouseRequest("right click", in_grid=True)
+    assert parse("write click five", grid=True) == MouseRequest("right click", 5, in_grid=True)
+
+
+@pytest.mark.parametrize("said", ["write", "Write four.", "write click", "up to", "right for"])
+def test_homophones_are_words_without_a_grid(said):
+    assert parse(said, grid=False) is None
+
+
+def test_literal_types_write_four_with_a_grid():
+    assert command_phrases.literal_words(
+        "literal write four", navigation=True, actions=True, grid=True) == "write four"
+
+
+@pytest.mark.parametrize("said", ["write it down", "writer", "up to you", "right for me"])
+def test_a_sentence_with_a_homophone_is_not_a_nudge(said):
+    assert parse(said, grid=True) is None

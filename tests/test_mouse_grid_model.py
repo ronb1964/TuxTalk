@@ -147,7 +147,20 @@ def test_a_nudge_stops_at_the_parts_edge():
     grid.zoom(5)
     grid.nudge("right", 99)
     grid.nudge("up", 99)
-    assert grid.spot == (1280, 360)
+    assert grid.spot == (1279, 360)
+
+
+def test_a_nudge_to_the_right_edge_stays_on_its_own_monitor():
+    """The part's right edge is the next monitor's first column: a click
+    there would land on the other screen, with no dot shown on either."""
+    right = Rect(1920, 0, 1920, 1080)
+    grid = Grid([SCREEN, right])
+    grid.zoom(3)
+    grid.nudge("right", 99)
+    grid.nudge("down", 99)
+    x, y = grid.target(None)
+    assert x < right.x and y < SCREEN.height
+    assert x == 1919
 
 
 def test_a_new_number_puts_the_spot_back_in_the_middle():

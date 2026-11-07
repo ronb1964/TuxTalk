@@ -53,9 +53,13 @@ window.mouse-grid-zoomed { background-color: rgba(0, 0, 0, 0); }
 # when the cell is small (a zoomed cell can be only a few dozen pixels).
 _BADGE_PX, _BADGE_MIN_PX, _CELL_PER_BADGE = 40, 11, 4
 _SMALL_BADGE_PX = 24
-# Deeper levels: a fixed 16 px number 3 px in from the cell's corner, and a
-# 10 px dot (its ring included).
-_CORNER_PX, _CORNER_INSET_PX, _DOT_PX = 16, 3, 10
+# Deeper levels: a 16 px number 3 px in from the cell's corner, and a 10 px
+# dot (its ring included). Without a desktop zoom the deepest cells are only
+# 9 to 14 px, so there the number shrinks and moves in to 1 px, down to 8 px,
+# and below that isn't shown. A label is about 1.45 times its font size high
+# (13 px for a 9 px font, measured).
+_CORNER_PX, _CORNER_MIN_PX, _CORNER_INSET_PX, _DOT_PX = 16, 8, 3, 10
+_LINE_PER_FONT_PX = 1.45
 _css_loaded = False
 
 
@@ -100,11 +104,21 @@ def _badge(cell: Cell) -> Gtk.Label:
     return label
 
 
-def _corner_label(cell: Cell) -> Gtk.Label:
+def corner_size(cell: Cell) -> tuple[int, int] | None:
+    """The corner number's font size and inset in pixels for *cell*, so it
+    stays inside it; None when even the smallest readable one wouldn't."""
+    room = min(cell.rect.width, cell.rect.height)
+    roomy = room >= _CORNER_INSET_PX + _CORNER_PX * _LINE_PER_FONT_PX
+    inset = _CORNER_INSET_PX if roomy else 1
+    px = min(_CORNER_PX, int((room - inset) / _LINE_PER_FONT_PX))
+    return (px, inset) if px >= _CORNER_MIN_PX else None
+
+
+def _corner_label(cell: Cell, px: int) -> Gtk.Label:
     """The small number shown in a zoomed cell's top-left corner."""
     label = Gtk.Label(label=str(cell.number))
     attrs = Pango.AttrList()
-    attrs.insert(Pango.attr_size_new_absolute(_CORNER_PX * Pango.SCALE))
+    attrs.insert(Pango.attr_size_new_absolute(px * Pango.SCALE))
     label.set_attributes(attrs)
     label.get_style_context().add_class("mouse-grid-corner")
     return label
@@ -145,9 +159,13 @@ class _MonitorWindow(Gtk.Window):
 
     def _put_corner_numbers(self, cells: list[Cell]):
         for cell in cells:
-            self._fixed.put(_corner_label(cell),
-                            round(cell.rect.x - self.area.x) + _CORNER_INSET_PX,
-                            round(cell.rect.y - self.area.y) + _CORNER_INSET_PX)
+            size = corner_size(cell)
+            if size is None:
+                continue
+            px, inset = size
+            self._fixed.put(_corner_label(cell, px),
+                            round(cell.rect.x - self.area.x) + inset,
+                            round(cell.rect.y - self.area.y) + inset)
 
     def _put_dot(self, spot: tuple[float, float]):
         """The click dot, centred on *spot*."""
