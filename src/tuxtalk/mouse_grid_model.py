@@ -1,0 +1,144 @@
+"""The numbered grid of "mouse by voice", as plain geometry.
+
+Each monitor is cut into 3 x 3 cells numbered row by row, top-left first,
+the numbers going on from one monitor to the next. Saying a number zooms into
+that cell, which is cut into 3 x 3 again, until a cell would be too small to
+aim at. `Fit` turns the chosen screen point into the 0..1 fraction the
+virtual pointer's tablet wants. Nothing here touches GTK, so it is tested
+without a screen.
+"""
+from typing import NamedTuple
+
+# A zoom that would make cells narrower or lower than this is refused.
+MIN_CELL_PX = 8
+
+SPLIT = 3
+
+
+class Rect(NamedTuple):
+    """A rectangle in desktop pixels."""
+
+    x: float
+    y: float
+    width: float
+    height: float
+
+    @property
+    def center(self) -> tuple[float, float]:
+        return (self.x + self.width / 2, self.y + self.height / 2)
+
+
+class Cell(NamedTuple):
+    """One numbered square of the grid."""
+
+    number: int
+    rect: Rect
+
+
+def _split(rect: Rect, first_number: int) -> list[Cell]:
+    """The nine cells of a rectangle, row by row from the top left."""
+    w, h = rect.width / SPLIT, rect.height / SPLIT
+    return [
+        Cell(first_number + row * SPLIT + col,
+             Rect(rect.x + col * w, rect.y + row * h, w, h))
+        for row in range(SPLIT) for col in range(SPLIT)
+    ]
+
+
+class Grid:
+    """The cells on screen now: every monitor's nine, or nine inside a zoom."""
+
+    def __init__(self, monitors: list[Rect]):
+        self._monitors = list(monitors)
+        self._top = [cell for i, m in enumerate(self._monitors)
+                     for cell in _split(m, i * SPLIT * SPLIT + 1)]
+        self.region: Rect | None = None
+        self._zoomed: list[Cell] = []
+
+    @property
+    def cells(self) -> list[Cell]:
+        return self._zoomed if self.region else self._top
+
+    @property
+    def bounds(self) -> Rect:
+        """The box around all monitors, which the tablet's range covers."""
+        left = min(m.x for m in self._monitors)
+        top = min(m.y for m in self._monitors)
+        right = max(m.x + m.width for m in self._monitors)
+        bottom = max(m.y + m.height for m in self._monitors)
+        return Rect(left, top, right - left, bottom - top)
+
+    def _cell(self, number: int) -> Cell | None:
+        return next((c for c in self.cells if c.number == number), None)
+
+    def zoom(self, number: int) -> str:
+        """Go into a cell: "ok", "no_cell" or "smallest" (nothing changes)."""
+        cell = self._cell(number)
+        if cell is None:
+            return "no_cell"
+        if min(cell.rect.width, cell.rect.height) / SPLIT < MIN_CELL_PX:
+            return "smallest"
+        self.region = cell.rect
+        self._zoomed = _split(cell.rect, 1)
+        return "ok"
+
+    def target(self, number: int | None) -> tuple[float, float] | str:
+        """Where to click: a cell's centre, or with no number the zoomed
+        region's (a lone monitor's, at the top). "say_a_number" when that
+        would be a guess between monitors, "no_cell" for a number not shown."""
+        if number is not None:
+            cell = self._cell(number)
+            return cell.rect.center if cell else "no_cell"
+        if self.region:
+            return self.region.center
+        if len(self._monitors) == 1:
+            return self._monitors[0].center
+        return "say_a_number"
+
+
+class Fit:
+    """Turns a screen point into the tablet's 0..1 fraction on each axis.
+
+    Per axis a straight line, fraction = scale * point + offset, either the
+    plain one over the desktop's box or one fitted from two spots where the
+    pointer was seen to land, for a desktop that maps the tablet differently.
+    """
+
+    def __init__(self, scale: tuple[float, float], offset: tuple[float, float]):
+        self._scale = scale
+        self._offset = offset
+
+    @classmethod
+    def straight(cls, bounds: Rect) -> "Fit":
+        scale = (1 / bounds.width, 1 / bounds.height)
+        return cls(scale, (-bounds.x * scale[0], -bounds.y * scale[1]))
+
+    @classmethod
+    def measured(cls, bounds: Rect, fractions: tuple[tuple, tuple],
+                 arrivals: tuple[tuple, tuple]) -> "Fit | None":
+        """Fit from two moves: the fractions sent and the pixels reached.
+
+        None when both arrivals share an x or a y: one spot says nothing
+        about that axis's slope. `bounds` is part of the planned interface
+        and not needed by the maths."""
+        scale, offset = [], []
+        for axis in (0, 1):
+            f0, f1 = fractions[0][axis], fractions[1][axis]
+            a0, a1 = arrivals[0][axis], arrivals[1][axis]
+            if a0 == a1:
+                return None
+            slope = (f1 - f0) / (a1 - a0)
+            scale.append(slope)
+            offset.append(f0 - slope * a0)
+        return cls((scale[0], scale[1]), (offset[0], offset[1]))
+
+    def fraction(self, point: tuple[float, float]) -> tuple[float, float]:
+        return (point[0] * self._scale[0] + self._offset[0],
+                point[1] * self._scale[1] + self._offset[1])
+
+
+def close_enough(target: tuple[float, float], arrived: tuple[float, float],
+                 tolerance: float = 3.0) -> bool:
+    """Whether the pointer landed within `tolerance` pixels on both axes."""
+    return (abs(target[0] - arrived[0]) <= tolerance
+            and abs(target[1] - arrived[1]) <= tolerance)
