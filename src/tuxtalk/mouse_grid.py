@@ -64,7 +64,7 @@ def showing() -> bool:
     return _session is not None
 
 
-def act(request, beeps_on: bool) -> bool | None:
+def act(request, beeps_on: bool) -> bool:
     """Do the mouse_phrases.MouseRequest *request*: True when done, False when
     refused with a note, or with the cancel beep when the grid it was heard
     for closed first."""
@@ -83,8 +83,8 @@ def act(request, beeps_on: bool) -> bool | None:
 
 def close(reason: str) -> None:
     """Take the grid off the screen, if one shows. From any thread: after a
-    click, on "cancel", at the timeout, on a real mouse click, for another
-    dictation, at quitting."""
+    click, on "cancel" or Esc, at the timeout, on a real mouse click, for
+    another dictation, at quitting."""
     _end(None, reason)
 
 
