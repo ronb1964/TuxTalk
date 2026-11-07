@@ -1,9 +1,10 @@
 """The see-through numbered grid of "mouse by voice", drawn over each monitor.
 
 One borderless popup per monitor, with an RGBA visual so the desktop shows
-through; without a compositor that draws it see-through, no grid shows. Popups are override-redirect windows (XWayland on a Wayland
-desktop, as with the recording indicator), so they go exactly where they're
-put and never take the keyboard from the app being controlled. A zoomed grid
+through; without a compositor that draws it see-through, no grid shows.
+Popups are override-redirect windows (XWayland on a Wayland desktop, as with
+the recording indicator), so they go exactly where they're put and never take
+the keyboard from the app being controlled. A zoomed grid
 shows one region, outlined and left clear, with the rest dimmed more.
 
 Every method here runs on the GTK thread. The dictation worker reaches it
@@ -92,7 +93,8 @@ class _MonitorWindow(Gtk.Window):
     def __init__(self, area: Rect, on_motion, on_press):
         super().__init__(type=Gtk.WindowType.POPUP)
         self.area = area
-        self.set_visual(self.get_screen().get_rgba_visual())     # show() checked it's there
+        # show() checked the screen has one.
+        self.set_visual(self.get_screen().get_rgba_visual())
         self.move(round(area.x), round(area.y))
         self.set_default_size(round(area.width), round(area.height))
         self.resize(round(area.width), round(area.height))
