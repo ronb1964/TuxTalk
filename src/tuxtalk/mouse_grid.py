@@ -13,7 +13,7 @@ import time
 
 from gi.repository import GLib
 
-from . import beeps, command_notices, gtk_loop, keyboard_output, virtual_pointer
+from . import beeps, command_notices, delivery, gtk_loop, keyboard_output, virtual_pointer
 from .logger import setup_logger
 from .mouse_grid_model import Fit, Grid, close_enough
 from .virtual_keyboard import GaveUp
@@ -317,6 +317,10 @@ def _click(action: str) -> str:
     """The click *action* asks for, where the pointer is, and its word for
     the log. Esc is looked at before each press (a double click has two)."""
     button, count, done = _CLICKS[action]
+    # The click can put the cursor in other text, so "delete the last
+    # sentence" must not erase from it; forgotten first, since even half a
+    # double click can move the cursor.
+    delivery.forget_typed()
     if not virtual_pointer.click(button, count,
                                  stopped=lambda: keyboard_output.esc_stopped("clicked")):
         raise _PointerFailed

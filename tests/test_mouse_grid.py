@@ -429,6 +429,20 @@ def test_literal_and_a_grid_word_types_it_and_closes_the_grid(grid_on_screen, ac
     assert not mouse_grid.showing()
 
 
+@pytest.mark.parametrize("clicks", [["Left click."], ["Mouse grid.", "Click five."]])
+def test_a_click_forgets_the_last_dictation_for_undo(rig, actions_on, chat, say, keyboard,
+                                                     monkeypatch, clicks):
+    """The click may have put the cursor in other text: "delete last
+    sentence" must not erase from there."""
+    monkeypatch.setattr(live, "press_enter_after", False)
+    say("Hello there.")
+    for words in clicks:
+        say(words)
+    say("Delete last sentence.")
+    assert rig.buttons() == LEFT_CLICK
+    assert 14 not in keyboard.typed_keys()               # no Backspace
+
+
 def test_a_voice_edit_closes_the_grid(grid_on_screen, monkeypatch):
     """Shift and the dictation key: the edit's recording goes to voice
     editing, not through the voice commands, and closes the grid too."""
