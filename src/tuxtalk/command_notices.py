@@ -173,6 +173,10 @@ NOTES = {
         "Can't place the pointer exactly on this screen setup",
         "TuxTalk couldn't put the pointer exactly on that spot, so it didn't click. Use "
         "the mouse for this one."),
+    "zoom_not_back": (
+        "Not clicked: the desktop is still zoomed in",
+        "TuxTalk couldn't put the desktop's zoom back, and a click would land where you "
+        "can't see it. Zoom out with your desktop's own zoom keys, then say it again."),
     "click_key_held": (
         "Not clicked: a dictation key stayed down",
         f"Your dictation key read as held down for {HELD_LIMIT_S:g} seconds, and the click "

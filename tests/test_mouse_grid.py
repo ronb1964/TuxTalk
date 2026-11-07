@@ -67,7 +67,8 @@ class FakeWindows:
 class FakeMagnifier:
     """The desktop's zoom as desktop_zoom.find gives it, KDE's by default:
     whether it's zoomed now, how many restores really put it back, and each
-    zoom_in and restore with where the pointer was sent last when it came."""
+    zoom_in and restore with where the pointer was sent last when it came.
+    With *stuck* on, a restore can't put the zoom back (KWin not answering)."""
 
     name = "KDE zoom"
     view = desktop_zoom.View(3.0, "proportional", False)
@@ -76,6 +77,7 @@ class FakeMagnifier:
         self.rig = rig
         self.works = works
         self.zoomed = False
+        self.stuck = False
         self.put_back = 0
         self.calls = []
 
@@ -91,8 +93,11 @@ class FakeMagnifier:
 
     def restore(self):
         self.calls.append(("restore", self.rig.landing()))
+        if self.stuck:
+            return False
         self.put_back += self.zoomed
         self.zoomed = False
+        return True
 
     def count(self, call):
         return [name for name, _ in self.calls].count(call)
@@ -880,3 +885,86 @@ def test_a_nudge_before_any_number_asks_for_one(rig):
     assert act("nudge", 1, "up") is False
     assert rig.notes == ["Say a number first"] and mouse_grid.showing()
     assert rig.windows[0].dots == []
+
+
+# The zoom that can't be put back, and closes in the middle of a zoom
+
+
+@pytest.mark.parametrize("action", ["click", "move"])
+def test_with_the_zoom_stuck_on_nothing_is_clicked_or_moved(rig, magnifier, caplog, action):
+    """A click on a desktop still zoomed in would land where the user can't
+    see it: the grid closes and says why instead."""
+    act("grid")
+    act("zoom", 5)
+    magnifier.stuck = True
+    sent = len(rig.pointer.events)
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert act(action) is False
+    assert rig.pointer.events[sent:] == []              # not moved, not clicked
+    assert not mouse_grid.showing() and not rig.windows[0].showing
+    assert rig.notes == [command_notices.NOTES["zoom_not_back"][0]]
+    assert "Mouse grid: couldn't put the desktop zoom back" in caplog.text
+    assert "Mouse grid: put the desktop zoom back" not in caplog.text
+
+
+def test_a_close_that_cant_put_the_zoom_back_says_so_in_the_log(rig, magnifier, caplog):
+    act("grid")
+    act("zoom", 5)
+    magnifier.stuck = True
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        act("cancel")
+    assert "WARNING" in caplog.text and "couldn't put the desktop zoom back" in caplog.text
+    assert "Mouse grid: put the desktop zoom back" not in caplog.text
+
+
+def test_a_close_just_before_the_pointer_parks_leaves_the_pointer_alone(rig, magnifier,
+                                                                         monkeypatch):
+    """Esc or a real click right as a number is acted on: the pointer the
+    user just took isn't moved, and the desktop doesn't zoom."""
+    act("grid")
+    view = magnifier.view
+    monkeypatch.setattr(FakeMagnifier, "view", property(
+        lambda self: mouse_grid.close("Esc") or view))
+    sent = len(rig.pointer.events)
+    assert act("zoom", 5) is True
+    assert rig.pointer.events[sent:] == []
+    assert magnifier.count("zoom_in") == 0
+
+
+def test_a_close_while_the_zoom_settles_leaves_the_pointer_alone(rig, magnifier, monkeypatch):
+    """The pointer goes a pixel aside and back once the view has settled,
+    but not if the grid closed meanwhile: it's the user's pointer again."""
+    act("grid")
+    sleep = rig.clock.sleep
+
+    def closing_sleep(seconds):
+        if seconds == mouse_grid.ZOOM_SETTLE_S:
+            mouse_grid.close("Esc")
+        sleep(seconds)
+    monkeypatch.setattr(rig.clock, "sleep", closing_sleep)
+    act("zoom", 5)
+    parked = rig.landing()
+    assert magnifier.calls == [("zoom_in", parked), ("restore", parked)]
+    assert rig.landing() == parked and rig.landings().count(parked) == 1
+
+
+def test_the_desktops_zoom_is_looked_up_before_the_grid_shows(rig, monkeypatch):
+    """On KDE that's a D-Bus call: done while the grid shows, a real click
+    on it then would find no grid to close and leave it up."""
+    shown_at_lookup = []
+    monkeypatch.setattr(desktop_zoom, "find",
+                        lambda: shown_at_lookup.append(bool(rig.windows)) or None)
+    act("grid")
+    assert shown_at_lookup == [False]
+
+
+def test_a_real_click_as_soon_as_the_grid_shows_closes_it(rig, monkeypatch):
+    real_pointer_since = FakeWindows.pointer_since
+
+    def click_then_look(self, after):
+        if self.showing:
+            self.on_real_click()
+        return real_pointer_since(self, after)
+    monkeypatch.setattr(FakeWindows, "pointer_since", click_then_look)
+    assert act("grid") is False
+    assert not mouse_grid.showing() and not rig.windows[0].showing
