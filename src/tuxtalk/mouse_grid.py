@@ -212,8 +212,7 @@ def _move_and_see(session: _Session, fraction):
     grid saw it land, or None if it never did. A move onto the spot the
     pointer is already on sends no motion, so with none in time it goes a
     pixel aside and back."""
-    aside = (fraction[0] + 1 / session.grid.bounds.width, fraction[1])
-    for route in ([fraction], [aside, fraction]):
+    for route in ([fraction], [_aside(session, fraction), fraction]):
         since = time.monotonic()
         for spot in route:
             if not virtual_pointer.move_to(*spot):
@@ -221,6 +220,21 @@ def _move_and_see(session: _Session, fraction):
         if (arrived := _arrival(session, since)) is not None:
             return arrived
     return None
+
+
+def _aside(session: _Session, fraction):
+    """*fraction* moved a pixel to the right."""
+    return (fraction[0] + 1 / session.grid.bounds.width, fraction[1])
+
+
+def _move_again(session: _Session, target) -> None:
+    """The pointer a pixel aside and back onto *target* once the grid is gone.
+    COSMIC gives the window under the pointer its press, or its hover, only
+    after the pointer has moved since the grid's window over it went."""
+    fraction = session.fit.fraction(target)
+    for spot in (_aside(session, fraction), fraction):
+        if not virtual_pointer.move_to(*spot):
+            raise _PointerFailed
 
 
 def _arrival(session: _Session, since: float):
@@ -264,10 +278,11 @@ def _point(session: _Session, request) -> bool:
     where = f"{_spot_name(session, request.number)} at {_xy(target)}"
     if not _end(session, request.action):
         return False                    # closed meanwhile: a real click, the timeout
+    time.sleep(GONE_S)
+    _move_again(session, target)
     if request.action == "move":
         logger.info(f"Mouse grid: moved to {where}")
     else:
-        time.sleep(GONE_S)
         if keyboard_output.esc_stopped("clicked"):
             return False
         button, count, done = _CLICKS[request.action]

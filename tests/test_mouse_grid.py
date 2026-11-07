@@ -46,6 +46,7 @@ class FakeWindows:
 
     def hide(self):
         self.showing = False
+        self.rig.hidden_at.append(len(self.rig.pointer.events))
 
     def pointer_since(self, after):
         landings = self.rig.landings()
@@ -72,6 +73,7 @@ class Rig:
         self.offset = 0
         self.screens = [SCREEN]
         self.windows = []
+        self.hidden_at = []      # how many pointer events had gone out at each hide
         self.timers = []         # [id, callback, args, removed]
         self.beeps = []
         self.notes = []
@@ -166,6 +168,26 @@ def test_grid_number_click_clicks_the_cells_centre(rig):
     assert rig.buttons() == LEFT_CLICK
     assert not mouse_grid.showing() and not rig.windows[0].showing
     assert rig.beeps == [beeps.READY_BEEP]
+
+
+def test_the_pointer_moves_again_after_the_grid_goes_before_the_click(rig):
+    """COSMIC sends a press to the window under the pointer only once the
+    pointer moves after the grid's window went: without that, the click is lost."""
+    act("grid")
+    act("click", 5)
+    since_hidden = rig.pointer.events[rig.hidden_at[0]:rig._first_press()]
+    across = [value for code, value in since_hidden if code == e.ABS_X]
+    assert len(across) == 2 and across[0] != across[1] == 16384
+    assert rig.sent_before_the_click() == (16384, 16384)
+
+
+def test_a_move_moves_again_after_the_grid_goes(rig):
+    """The same for "move": the app under the grid gets its hover."""
+    act("grid")
+    act("move", 5)
+    across = [value for code, value in rig.pointer.events[rig.hidden_at[0]:]
+              if code == e.ABS_X]
+    assert len(across) == 2 and across[-1] == 16384
 
 
 def test_click_and_a_number_clicks_that_cell_at_once(rig):
