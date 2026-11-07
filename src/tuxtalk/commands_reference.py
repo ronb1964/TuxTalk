@@ -144,9 +144,10 @@ SECTIONS = (
                  "go down a line"), "move the cursor", "select"),
         Command(("unselect", "clear the selection"), "drop the selection", "select"),
     )),
-    Section("Changing Your Mind", FIXING, note="Needs <b>Fix self-corrections with AI</b> turned on "
-                                       "in Preferences → Advanced (a one-time download of "
-                                       "about {ai_size})", commands=(
+    Section("Changing Your Mind", FIXING,
+            note="Needs <b>Fix self-corrections with AI</b> turned on in Preferences → "
+                 "Advanced (a one-time download of about {ai_size})",
+            commands=(
         Command(("no wait", "I mean", "make that", "scratch that", "or rather"),
                 'correct yourself mid-sentence: "meet at 3, no wait, 4" → "meet at 4"',
                 "correction"),
