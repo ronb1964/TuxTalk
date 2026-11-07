@@ -112,9 +112,9 @@ SECTIONS = (
     Section("Literal Words", DICTATION,
             note="Say <b>literal</b> or <b>the word</b> before a punctuation or line-break "
                  "word to type the word itself. It works with: "
-                 + ", ".join(LITERAL_REPLACEMENTS) + ". <b>literal</b> before a command for "
-                 "an app, a window, a key or the cursor types its words too "
-                 "(<b>literal open Firefox</b>).",
+                 + ", ".join(LITERAL_REPLACEMENTS) + ". <b>literal</b> before a command "
+                 "from Select and Move, Apps and Windows, Keys and Web or Sound and "
+                 "System types its words too (<b>literal open Firefox</b>).",
             commands=(
                 _literal("period", ".", "the word period"),
                 _literal("comma", ",", "the word comma"),

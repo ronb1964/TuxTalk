@@ -320,15 +320,15 @@ def workarea_width():
 
 
 # What's left beside a window on a screen narrower than the window wants.
-SCREEN_MARGIN_PX = 40
+_SCREEN_MARGIN_PX = 40
 
 
 def width_on_screen(wanted):
     """*wanted*, or the narrowest screen's usable width less a margin when
     that is less (large text, a small or portrait screen)."""
     screen = workarea_width()
-    if screen and wanted > screen - SCREEN_MARGIN_PX:
-        return screen - SCREEN_MARGIN_PX
+    if screen and wanted > screen - _SCREEN_MARGIN_PX:
+        return screen - _SCREEN_MARGIN_PX
     return wanted
 
 
