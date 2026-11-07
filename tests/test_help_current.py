@@ -239,3 +239,15 @@ def test_terminals_says_what_left_ctrl_space_costs_only_when_it_is_the_key(monke
         assert "Left Ctrl+Space" in page
     page = _terminals(monkeypatch, "F8")
     assert "code completion" not in page and "Right Ctrl+Space" not in page
+
+
+def test_help_spells_out_the_mouse_grid_with_your_own_hold_key(monkeypatch):
+    from tuxtalk import help_text
+    writing = _writing(monkeypatch, hotkey="F6")
+    card = writing.split("### The mouse", 1)[1].split("### Desktops", 1)[0]
+    assert "Hold <b>F6</b>, say <b>mouse grid</b>, let go" in card
+    for said in ("click five", "right click", "move here", "cancel", "literal click"):
+        assert said in card, said
+    assert "F8" not in card
+    tips = dict(help_text.tabs())["Tips"]
+    assert "Writing → The mouse" in tips.split("Easier on the hands", 1)[1]

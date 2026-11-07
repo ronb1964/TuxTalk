@@ -462,6 +462,8 @@ class AdvancedTab(Tab):
             "\u2022 \u201clock screen\u201d, \u201ctake a screenshot\u201d, "
             "\u201cwhat can I say\u201d\n"
             "\u2022 \u201ctake a screenshot of this window\u201d\n"
+            "\u2022 \u201cmouse grid\u201d, then a number and \u201cclick\u201d: "
+            "click with your voice\n"
             "\u2022 \u201cgo to youtube.com\u201d: opens the address\n"
             "  (in a browser, replaces the page)\n"
             "\u2022 \u201cweb search cheap tires\u201d: your browser\u2019s own search\n"

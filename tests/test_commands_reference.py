@@ -10,8 +10,8 @@ import pytest
 
 from tuxtalk import (ai_cleanup, app_commands, app_finder, command_phrases, commands_cards,
                      commands_reference, explain, help_outline, help_text, key_commands,
-                     normalize, spoken_quotes, undo, voice_commands, voice_edit_rules,
-                     voice_navigation)
+                     mouse_phrases, normalize, spoken_quotes, undo, voice_commands,
+                     voice_edit_rules, voice_navigation)
 
 PHRASES = [(c.kind, phrase) for s in commands_reference.SECTIONS for c in s.commands
            for phrase in c.said]
@@ -51,6 +51,8 @@ def test_each_listed_phrase_is_recognised(kind, phrase, monkeypatch):
         assert voice_navigation.parse(phrase) is not None
     elif kind == "action":
         assert command_phrases.parse(phrase, navigation=False, actions=True) is not None
+    elif kind == "mouse":
+        assert command_phrases.parse(phrase, navigation=False, actions=True, grid=True)
     elif kind == "correction":
         assert ai_cleanup.has_correction(f"Meet at 3, {phrase}, 4.")
     elif kind == "literal":
@@ -398,3 +400,17 @@ def test_every_spoken_mark_is_listed():
 
 def test_each_section_is_in_one_of_the_groups():
     assert {s.group for s in commands_reference.SECTIONS} == set(commands_reference.GROUPS)
+
+
+def test_every_mouse_action_is_listed():
+    """Each thing the grid can do, from the parser's own request type, has a
+    listed phrase; so do the clicks that need no grid."""
+    made = [command_phrases.parse(p, navigation=False, actions=True, grid=True)
+            for p in _listed("mouse")]
+    assert {r.action for r in made} == {"grid", "zoom", "click", "double click",
+                                        "right click", "middle click", "move", "cancel"}
+    assert all(isinstance(r, mouse_phrases.MouseRequest) for r in made)
+    no_grid = [p for p in _listed("mouse")
+               if command_phrases.parse(p, navigation=False, actions=True, grid=False)]
+    assert {"mouse grid", "left click", "right click"} <= set(no_grid)
+    assert "click" not in no_grid and "five" not in no_grid

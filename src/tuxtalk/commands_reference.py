@@ -217,6 +217,23 @@ SECTIONS = (
         Command(("move window to the other screen",),
                 "moves it to your other screen (with two or more)", "action"),
     )),
+    Section("The Mouse", APPS, labs=LABS_ACTIONS, commands=(
+        Command(("mouse grid", "show grid"),
+                "numbers each part of the screen (a second screen carries on from 10)",
+                "mouse"),
+        Command(("five", "number five"), "zooms into that part, with a new grid inside it",
+                "mouse"),
+        Command(("click", "double click", "right click", "middle click"),
+                "clicks the middle of what the grid shows", "mouse"),
+        Command(("click five", "right click 3"), "clicks that part straight away", "mouse"),
+        Command(("move here", "move five"), "puts the pointer there without clicking",
+                "mouse"),
+        Command(("cancel", "close grid", "hide grid"), "closes the grid", "mouse"),
+        Command(("left click", "right click", "double click", "middle click"),
+                "with no grid: clicks where the pointer is", "mouse"),
+    ), note="With no grid showing, a bare number or <b>click</b> is typed as a word. "
+            "The grid closes by itself after a minute, a click, or anything else you "
+            "dictate. If the pointer can't be put exactly there, nothing is clicked."),
     Section("Desktops", APPS, labs=LABS_ACTIONS, commands=(
         Command(("show desktop",), "hides the windows; say it again to bring them back",
                 "action"),

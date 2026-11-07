@@ -518,6 +518,22 @@ Hold <b>{hold}</b>, say <b>snap left</b>, let go. The window you're in fills tha
   • <b>minimize Firefox</b>, <b>maximize Firefox</b>, <b>restore Firefox</b>: any open app by
     name.
 
+### The mouse
+Hold <b>{hold}</b>, say <b>mouse grid</b>, let go. Numbers 1 to 9 appear over the screen.
+  • Say a number, like <b>five</b>: that part fills with a new grid. Say another to zoom
+    in further.
+  • Say <b>click</b> to click the middle of what the grid shows. <b>right click</b>,
+    <b>double click</b> and <b>middle click</b> work the same way.
+  • Or do both at once: <b>click five</b> clicks part 5 straight away. <b>move here</b>
+    (or <b>move five</b>) puts the pointer there without clicking.
+  • A second screen carries on the numbers from 10. <b>cancel</b> closes the grid, and so
+    does a minute of waiting, a click, or anything else you dictate.
+  • With no grid showing, <b>left click</b>, <b>right click</b>, <b>double click</b> and
+    <b>middle click</b> click where the pointer already is. A bare number or <b>click</b>
+    is typed as a word then, and <b>literal click</b> types the word whatever is showing.
+  • If TuxTalk can't put the pointer exactly there, nothing is clicked and a note says
+    so. On Wayland desktops the grid needs X (XWayland), which most have.
+
 ### Desktops
 Hold <b>{hold}</b>, say <b>show desktop</b>, let go. Say it again and the windows come back.
   • <b>show all windows</b> spreads them out so you can pick one.
@@ -883,6 +899,8 @@ TIPS = '''# Tips
 
 ### Easier on the hands
   • {key_choice_tip}
+  • No mouse? Hold <b>{hold}</b>, say <b>mouse grid</b>, let go, then say a number and
+    <b>click</b> (Writing → The mouse).
   • Hands-free: turn on "Double-tap {toggle} for hands-free" in <b>Preferences →
     General</b>. Then double-tap <b>{toggle}</b> and talk without holding a key, and it
     stops when you do.
