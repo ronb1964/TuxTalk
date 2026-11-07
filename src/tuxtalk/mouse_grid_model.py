@@ -49,8 +49,8 @@ class Grid:
     """The cells on screen now: every monitor's nine, or nine inside a zoom."""
 
     def __init__(self, monitors: list[Rect]):
-        self._monitors = list(monitors)
-        self._top = [cell for i, m in enumerate(self._monitors)
+        self.monitors = list(monitors)      # each monitor's rectangle, as read once
+        self._top = [cell for i, m in enumerate(self.monitors)
                      for cell in _split(m, i * SPLIT * SPLIT + 1)]
         self.region: Rect | None = None
         self._zoomed: list[Cell] = []
@@ -62,10 +62,10 @@ class Grid:
     @property
     def bounds(self) -> Rect:
         """The box around all monitors, which the tablet's range covers."""
-        left = min(m.x for m in self._monitors)
-        top = min(m.y for m in self._monitors)
-        right = max(m.x + m.width for m in self._monitors)
-        bottom = max(m.y + m.height for m in self._monitors)
+        left = min(m.x for m in self.monitors)
+        top = min(m.y for m in self.monitors)
+        right = max(m.x + m.width for m in self.monitors)
+        bottom = max(m.y + m.height for m in self.monitors)
         return Rect(left, top, right - left, bottom - top)
 
     def _cell(self, number: int) -> Cell | None:
@@ -91,8 +91,8 @@ class Grid:
             return cell.rect.center if cell else "no_cell"
         if self.region:
             return self.region.center
-        if len(self._monitors) == 1:
-            return self._monitors[0].center
+        if len(self.monitors) == 1:
+            return self.monitors[0].center
         return "say_a_number"
 
 

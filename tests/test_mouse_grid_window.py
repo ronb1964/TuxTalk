@@ -80,6 +80,13 @@ def test_after_a_zoom_the_numbers_are_inside_the_cell(windows):
         assert region.y <= box.y and box.y + box.height <= region.y + region.height
 
 
+def test_the_windows_cover_the_monitors_the_cells_were_cut_from(windows):
+    """One reading of the monitors for both: a screen plugged in meanwhile
+    can't give windows that don't match the cells."""
+    windows.show(Grid([mgw.Rect(0, 0, 320, 240)]))
+    assert [w.area for w in windows._windows] == [mgw.Rect(0, 0, 320, 240)]
+
+
 def test_without_an_x_display_nothing_shows(windows, monkeypatch):
     monkeypatch.setattr(mgw.ui_style, "is_x11", lambda display: False)
     assert windows.show(Grid([mgw.monitors()[0]])) == "grid_needs_x"

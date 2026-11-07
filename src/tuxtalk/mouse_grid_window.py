@@ -203,7 +203,7 @@ class GridWindows:
         _load_css_once(screen)
         self._pointer = None
         self._windows = [_MonitorWindow(area, self._on_motion, self._on_press)
-                         for area in monitors()]
+                         for area in grid.monitors]
         self.redraw(grid)
         for window in self._windows:
             window.show()

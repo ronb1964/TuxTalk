@@ -49,10 +49,9 @@ class _PointerFailed(Exception):
 class _Session:
     """One grid on the screen, from "mouse grid" until it closes."""
 
-    def __init__(self, windows, grid: Grid, screens: list, beeps_on: bool):
+    def __init__(self, windows, grid: Grid, beeps_on: bool):
         self.windows = windows
         self.grid = grid
-        self.screens = screens          # the monitors' rectangles, for the log
         self.beeps_on = beeps_on
         self.fit: Fit | None = None
         self.level = 1
@@ -166,14 +165,12 @@ def _timed_out(session: _Session) -> bool:
 
 
 def _put_up(windows):
-    """On GTK's thread: the grid over every monitor, as (grid, monitors,
-    None), or (None, None, the command_notices kind saying why) when it
-    can't be shown."""
+    """On GTK's thread: the grid over every monitor, as (grid, None), or
+    (None, the command_notices kind saying why) when it can't be shown."""
     from . import mouse_grid_window
-    screens = mouse_grid_window.monitors()
-    grid = Grid(screens)
+    grid = Grid(mouse_grid_window.monitors())
     refused = windows.show(grid)
-    return (None, None, refused) if refused else (grid, screens, None)
+    return (None, refused) if refused else (grid, None)
 
 
 def _open(beeps_on: bool) -> bool:
@@ -183,11 +180,11 @@ def _open(beeps_on: bool) -> bool:
     from . import mouse_grid_window
     close("a new grid")
     windows = mouse_grid_window.GridWindows(lambda: close("a real mouse click"))
-    grid, screens, refused = gtk_loop.call(_put_up, windows)
+    grid, refused = gtk_loop.call(_put_up, windows)
     if refused:
         command_notices.say(refused, beeps_on)
         return False
-    session = _Session(windows, grid, screens, beeps_on)
+    session = _Session(windows, grid, beeps_on)
     with _lock:
         _session = session
     session.fit = _calibrate(session)
@@ -198,7 +195,7 @@ def _open(beeps_on: bool) -> bool:
     if _session is not session:         # a real click closed it meanwhile
         return False
     gtk_loop.call(_restart_timer, session)
-    logger.info(f"Mouse grid: shown on {len(session.screens)} screen(s)")
+    logger.info(f"Mouse grid: shown on {len(session.grid.monitors)} screen(s)")
     return True
 
 
@@ -354,4 +351,4 @@ def _xy(point) -> str:
 
 
 def _layout(session: _Session) -> str:
-    return " ".join(f"{r.width:g}x{r.height:g}+{r.x:g}+{r.y:g}" for r in session.screens)
+    return " ".join(f"{r.width:g}x{r.height:g}+{r.x:g}+{r.y:g}" for r in session.grid.monitors)
