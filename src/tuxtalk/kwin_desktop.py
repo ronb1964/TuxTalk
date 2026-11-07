@@ -12,6 +12,9 @@ invokeShortcut answers nothing, so it can't say there was no second screen
 to move a window to, and KWin has no D-Bus call that counts screens. A
 small look-only KWin script counts them (has_other_screen).
 
+The mouse grid's zoom (desktop_zoom) steps KWin's Zoom effect the same
+way, through invoke_shortcut and effect_loaded.
+
 Answers are the strings desktop_actions turns into a spoken-style note:
 "done", "no_desktop", "one_desktop", "one_screen", "edge" and "unknown";
 "stopped" when act()'s *still_wanted* said no, and said why.
@@ -67,14 +70,27 @@ def _property(path: str, interface: str, name: str, timeout: float):
                  KWIN, timeout)
 
 
+def invoke_shortcut(shortcut: str, timeout: float) -> None:
+    """Invoke KWin's global *shortcut* by name, as if its keys were pressed.
+    Raises the D-Bus error when kglobalaccel can't be reached."""
+    _call("/component/kwin", "org.kde.kglobalaccel.Component", "invokeShortcut", "s",
+          (shortcut,), KGLOBALACCEL, timeout)
+
+
+def effect_loaded(effect: str, timeout: float) -> bool:
+    """Whether KWin's *effect* ("zoom", ...) is on. Raises the D-Bus error
+    when KWin can't be reached."""
+    return bool(_call("/Effects", "org.kde.kwin.Effects", "isEffectLoaded", "s", (effect,),
+                      KWIN, timeout))
+
+
 def _invoke(shortcut: str, timeout: float, still_wanted: Callable[[], bool] | None) -> str:
     """Invoke *shortcut*, unless *still_wanted* says it no longer is: KWin
     may have taken a while to answer the questions asked before it, and a
     window shortcut acts on whichever window has the focus by now."""
     if still_wanted is not None and not still_wanted():
         return "stopped"
-    _call("/component/kwin", "org.kde.kglobalaccel.Component", "invokeShortcut", "s",
-          (shortcut,), KGLOBALACCEL, timeout)
+    invoke_shortcut(shortcut, timeout)
     return "done"
 
 

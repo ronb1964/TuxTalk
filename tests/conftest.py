@@ -1082,7 +1082,7 @@ def service_main(monkeypatch):
     """The dictation service's main(): *cached* says whether the speech model
     is already downloaded. The service's own globals are put back afterwards."""
     import types
-    from tuxtalk import (app, config, custom_words, desktop_identity, gtk_loop,
+    from tuxtalk import (app, config, custom_words, desktop_identity, desktop_zoom, gtk_loop,
                          input_backends, model_helper, ui_style, virtual_keyboard)
     import tuxtalk.dbus_service
     from tuxtalk import audio_duck
@@ -1135,6 +1135,7 @@ def service_main(monkeypatch):
     monkeypatch.setattr(custom_words, "load", lambda: [])
     monkeypatch.setattr(virtual_keyboard, "start", lambda: None)
     monkeypatch.setattr(audio_duck, "restore_left_over", lambda: None)
+    monkeypatch.setattr(desktop_zoom, "restore_left_over", step("puts back a zoom left on"))
     monkeypatch.setattr(tuxtalk.dbus_service, "TuxTalkDBusService", Bus)
     monkeypatch.setattr(app, "RecordingIndicator", Indicator)
     monkeypatch.setattr(gtk_loop, "start", step("starts the GTK loop"))

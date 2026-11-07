@@ -16,8 +16,8 @@ import signal
 import sys
 import threading
 
-from . import (engine, gtk_loop, keyboard_output, recording, single_instance, tray_link,
-               virtual_keyboard, voice_detector)
+from . import (desktop_zoom, engine, gtk_loop, keyboard_output, recording, single_instance,
+               tray_link, virtual_keyboard, voice_detector)
 from . import live_settings as live
 from . import recording_state as rs
 from .config import load_config, load_custom_commands
@@ -209,6 +209,8 @@ def _load_settings():
     # dictation is typed. The Flatpak types through the portal instead.
     if not os.environ.get("FLATPAK_ID"):
         virtual_keyboard.start()
+    # A service that stopped while the mouse grid had the desktop zoomed in.
+    desktop_zoom.restore_left_over()
 
     # A service that stopped mid-dictation may have left other apps quiet.
     try:
