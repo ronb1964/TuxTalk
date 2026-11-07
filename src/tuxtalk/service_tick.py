@@ -14,6 +14,7 @@ from . import (
     keyboard_output,
     pipeline,
     recording,
+    virtual_pointer,
     x11_clipboard,
 )
 from . import live_settings as live
@@ -209,6 +210,7 @@ def _quit(cfg, svc: ServiceState) -> None:
                "TuxTalk was quitting and couldn't finish it in time. Say it again once "
                "TuxTalk is back.")
     _leave_the_clipboard()
+    virtual_pointer.close()
     logger.info("Quitting")
     raise SystemExit(0)
 

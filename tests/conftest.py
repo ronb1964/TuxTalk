@@ -767,6 +767,30 @@ class FakeKeyboard:
         return [code for code, value in self.events if value == 1]
 
 
+class FakePointer:
+    """Stands in for TuxTalk's virtual pointer. *events* keeps every write as
+    (code, value) and every SYN as ("SYN", 0); *fail_after* makes writes fail
+    after that many, and *attempts* counts the writes tried, failed ones too."""
+
+    def __init__(self):
+        self.events = []
+        self.attempts = []
+        self.fail_after = None
+        self.closed = False
+
+    def write(self, _type, code, value):
+        self.attempts.append((code, value))
+        if self.fail_after is not None and len(self.events) >= self.fail_after:
+            raise OSError(19, "No such device")
+        self.events.append((code, value))
+
+    def syn(self):
+        self.events.append(("SYN", 0))
+
+    def close(self):
+        self.closed = True
+
+
 class FakeClock:
     """virtual_keyboard's time: waits pass at once, and their total shows how
     long the typing would have taken."""
@@ -792,6 +816,19 @@ def keyboard(monkeypatch):
     monkeypatch.setattr(virtual_keyboard, "time", clock)
     monkeypatch.setattr(virtual_keyboard, "_device", None)
     monkeypatch.setattr(virtual_keyboard, "_make_device", lambda: fake)
+    return fake
+
+
+@pytest.fixture(autouse=True)
+def pointer(monkeypatch):
+    """A recording pointer for every test: a real one would move and click
+    on the computer running the tests."""
+    from tuxtalk import virtual_pointer
+    fake = FakePointer()
+    fake.clock = FakeClock()
+    monkeypatch.setattr(virtual_pointer, "time", fake.clock)
+    monkeypatch.setattr(virtual_pointer, "_device", None)
+    monkeypatch.setattr(virtual_pointer, "_make_device", lambda: fake)
     return fake
 
 

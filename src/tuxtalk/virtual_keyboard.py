@@ -98,31 +98,30 @@ def _capabilities():
     return {e.EV_KEY: keys, e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL]}
 
 
-def _keyboard_class():
-    """evdev's UInput as a keyboard TuxTalk only writes to. Built when a
-    keyboard is made, so importing this module needs no evdev."""
-    from evdev import UInput
+def write_only_device(capabilities, name: str, phys: str):
+    """A uinput device TuxTalk only writes to (the keyboard here, the pointer
+    in virtual_pointer.py). evdev is imported when one is made, so importing
+    this module needs none."""
+    from evdev import UInput, ecodes
 
-    class Keyboard(UInput):
+    class WriteOnly(UInput):
         def _find_device(self, *_fd):
             """Skip opening the new device to read it back: TuxTalk only
             writes to it. With the hotkey helper installed only the helper
             may read /dev/input, and python-evdev retried for two seconds
-            before giving up, on every keyboard made.
+            before giving up, on every device made.
 
             _find_device is python-evdev's own, not part of its API. 1.9
             (poetry.lock) passes the device's fd, and Ubuntu 22.04's 1.4
             nothing, so it takes either. Check it when updating evdev, since a
-            changed signature stops the keyboard from being made."""
+            changed signature stops the device from being made."""
             return None
 
-    return Keyboard
+    return WriteOnly(capabilities, name=name, bustype=ecodes.BUS_VIRTUAL, phys=phys)
 
 
 def _make_device():
-    from evdev import ecodes
-    return _keyboard_class()(_capabilities(), name=NAME, bustype=ecodes.BUS_VIRTUAL,
-                             phys="tuxtalk/keyboard")
+    return write_only_device(_capabilities(), NAME, "tuxtalk/keyboard")
 
 
 def _open():

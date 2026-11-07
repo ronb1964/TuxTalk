@@ -178,8 +178,8 @@ def test_making_the_keyboard_waits_for_nothing(monkeypatch):
     monkeypatch.setattr(evdev_uinput.UInput, "_verify", lambda self: None)
     waits = []
     monkeypatch.setattr(evdev_uinput.time, "sleep", waits.append)
-    device = virtual_keyboard._keyboard_class()(virtual_keyboard._capabilities(),
-                                                name=virtual_keyboard.NAME)
+    device = virtual_keyboard.write_only_device(virtual_keyboard._capabilities(),
+                                                virtual_keyboard.NAME, "tuxtalk/keyboard")
     assert waits == [] and device.device is None
     device.close()
 

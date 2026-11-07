@@ -1,0 +1,97 @@
+"""TuxTalk's own virtual pointer (virtual_pointer.py), on the recording
+pointer from conftest.py; a real one would click on the computer running
+the tests."""
+from evdev import ecodes as e
+
+from tuxtalk import hotkey_helper, keyboard_devices, modifier_hotkeys, virtual_pointer
+from tuxtalk.virtual_keyboard import GaveUp
+
+
+def test_move_writes_the_fraction_of_the_range(pointer):
+    assert virtual_pointer.move_to(0.5, 0.25) is True
+    assert pointer.events == [(e.ABS_X, 16384), (e.ABS_Y, 8192), ("SYN", 0)]
+
+
+def test_a_fraction_outside_the_screen_is_clamped(pointer):
+    virtual_pointer.move_to(1.4, -0.2)
+    assert pointer.events[:2] == [(e.ABS_X, 32767), (e.ABS_Y, 0)]
+
+
+def test_double_right_click_presses_and_releases_twice(pointer):
+    assert virtual_pointer.click("right", 2) is True
+    one_click = [(e.BTN_RIGHT, 1), ("SYN", 0), (e.BTN_RIGHT, 0), ("SYN", 0)]
+    assert pointer.events == one_click * 2
+
+
+def test_the_second_click_of_a_double_click_follows_quickly(pointer):
+    virtual_pointer.click("left", 2)
+    started = pointer.clock.now
+    virtual_pointer.click("left", 2)
+    assert pointer.clock.now - started < 0.3
+
+
+def test_a_click_waits_while_the_dictation_modifier_is_held(pointer, monkeypatch):
+    seen = []
+    monkeypatch.setattr(modifier_hotkeys, "wait_while_held",
+                        lambda: lambda: seen.append(list(pointer.events)))
+    virtual_pointer.click()
+    assert seen[0] == []        # nothing was pressed yet
+
+
+def test_a_click_that_had_to_give_up_waiting_presses_nothing(pointer, monkeypatch):
+    def give_up():
+        raise GaveUp("key_held")
+    monkeypatch.setattr(modifier_hotkeys, "wait_while_held", lambda: give_up)
+    assert virtual_pointer.click() is False
+    assert pointer.events == []
+
+
+def test_the_button_is_released_even_when_writing_fails_midway(pointer):
+    virtual_pointer.move_to(0.5, 0.5)
+    pointer.fail_after = len(pointer.events) + 2        # the press and its SYN go through
+    assert virtual_pointer.click() is False
+    assert pointer.attempts[-1] == (e.BTN_LEFT, 0)      # letting go was tried
+    assert pointer.closed                               # the kernel lets go of what is held
+    assert virtual_pointer._device is None
+
+
+def test_a_failed_pointer_is_made_again_for_the_next_move(pointer):
+    virtual_pointer.move_to(0.1, 0.1)
+    pointer.fail_after = 0
+    assert virtual_pointer.move_to(0.2, 0.2) is False
+    pointer.fail_after = None
+    assert virtual_pointer.move_to(0.2, 0.2) is True
+
+
+def test_a_move_waits_for_the_desktop_to_take_the_new_device(pointer):
+    virtual_pointer.move_to(0.5, 0.5)
+    assert pointer.clock.now >= virtual_pointer.SETTLE_S
+
+
+def test_no_keyboard_reader_takes_the_pointer():
+    caps = virtual_pointer._capabilities()
+    keys = set(caps[e.EV_KEY])
+
+    class Device:
+        name = virtual_pointer.NAME
+
+        def capabilities(self):
+            return {e.EV_KEY: list(keys), e.EV_ABS: [a for a, _ in caps[e.EV_ABS]]}
+
+    assert keyboard_devices.is_keyboard_device(Device()) is False
+    try:
+        hotkey_helper.check_keyboard(keys, virtual_pointer.NAME)
+    except hotkey_helper.Skipped:
+        pass
+    else:
+        raise AssertionError("the hotkey helper would read the pointer")
+
+
+def test_the_device_is_made_once_and_only_when_used(pointer):
+    assert virtual_pointer._device is None
+    virtual_pointer.click()
+    first = virtual_pointer._device
+    virtual_pointer.click()
+    assert first is pointer and virtual_pointer._device is first
+    assert virtual_pointer.close() is None
+    assert pointer.closed and virtual_pointer._device is None
