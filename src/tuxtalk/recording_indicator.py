@@ -57,8 +57,8 @@ def positioning_available():
     return bool(os.environ.get("DISPLAY"))
 
 
-# TuxTalk Labs, "follow the active window": how far inside the window being
-# dictated into the indicator sits. More room at the top, to clear the title
+# Following the window dictated into: how far inside that window the
+# indicator sits. More room at the top, to clear the title
 # bar (part of the frame), and at the bottom, to clear a status bar.
 FOLLOW_MARGIN = 40      # above the bottom edge
 FOLLOW_TOP = 50         # below the top edge
@@ -165,8 +165,8 @@ class RecordingIndicator(Gtk.Window):
         # isn't shown at all then (show_at_position). The floating labels in
         # screen_message are popups for the same reason.
         super().__init__(title="TuxTalk Recording", type=Gtk.WindowType.POPUP)
-        # TuxTalk Labs: show near the bottom of the window being dictated
-        # into, instead of the fixed position (_follow_target).
+        # Shown in the window being dictated into, at the chosen position,
+        # instead of on the main monitor (_follow_target).
         self.follow_window = follow_window
 
         # Style + appearance. The orb keeps its own draw path; the other styles
@@ -257,8 +257,8 @@ class RecordingIndicator(Gtk.Window):
 
                 follow = self._follow_target(window_width, window_height)
                 if follow:
-                    # TuxTalk Labs: near the bottom of the window being
-                    # dictated into; the configured offset doesn't apply.
+                    # In the window being dictated into, at the chosen
+                    # position; the screen offsets don't apply there.
                     window_x, window_y = follow
                 else:
                     window_x, window_y = fixed_position(

@@ -481,7 +481,6 @@ class AdvancedTab(Tab):
 
     def _labs_links(self, grid, row):
         """How these work and Send feedback, at the end of Labs."""
-        # How these work (Help, on its Writing tab) and Send feedback.
         from .help_dialog import FEEDBACK_URL, show_help_dialog
         labs_links = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         labs_links.set_margin_top(12)

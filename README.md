@@ -134,12 +134,12 @@ You can copy the text or save it as a text file, or as subtitles for the video. 
 <td width="50%"><img src="screenshots/transcribe-file.png" alt="Transcribe a File: shop-meeting.mp3 turned into three paragraphs of text with times, and buttons to copy it or save it as text or subtitles"></td>
 </tr>
 <tr>
-<td width="50%"><img src="screenshots/prefs-labs.png" alt="Preferences, Advanced: the TuxTalk Labs section with voice editing, Type at pause and the indicator that follows your window"></td>
+<td width="50%"><img src="screenshots/prefs-labs.png" alt="Preferences, Advanced: the TuxTalk Labs section with voice editing and Type at pause"></td>
 <td>
 
 ### Try what's coming next
 
-TuxTalk Labs is at the bottom of Preferences, Advanced. It's for features that work but aren't finished, like Type at pause, voice editing ("edit that, make it shorter") and an indicator that follows the window you're dictating into. They're off until you turn them on, and there's a link right there to tell me how they're working for you.
+TuxTalk Labs is at the bottom of Preferences, Advanced. It's for features that work but aren't finished, like Type at pause and voice editing ("edit that, make it shorter"). They're off until you turn them on, and there's a link right there to tell me how they're working for you.
 
 </td>
 </tr>
@@ -406,7 +406,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Recent Dictations.** Your last 20, one click to copy. Kept in memory only.
 - **Your Stats.** Words dictated and typing time saved, at your own typing speed.
 - **Settings backup.** Save everything to one file and load it on another computer. TuxTalk also keeps your last 10 settings on its own, so you can roll back a change.
-- **A recording indicator you can style.** Orb, waveform, frequency bars or radial, any color, anywhere on screen. It reacts to your voice so you know it's listening. In Labs it can follow the window you're dictating into.
+- **A recording indicator you can style.** Orb, waveform, frequency bars or radial, any color. It shows up in the window you're dictating into, or stays in one spot on the screen if you'd rather, and it reacts to your voice so you know it's listening.
 - **Swiss German spelling.** Types ss instead of ß, on by itself when your system is set to Swiss German.
 - **Tells you why when it can't type.** If a dictation can't be typed into the window, TuxTalk says why and what fixes it.
 - **Private.** Everything runs on your computer, and what you dictate is never written to a log unless you turn that on for troubleshooting.

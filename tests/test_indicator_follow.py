@@ -134,7 +134,11 @@ def test_the_tickbox_sits_under_position_and_goes_grey_with_it(prefs_window, mon
     monkeypatch.setattr(recording_indicator, "positioning_available", lambda: True)
     box, grid = _follow_box(prefs_window())
     assert box.get_sensitive()
-    assert grid.child_get_property(box, "top-attach") == 6
+    from gi.repository import Gtk
+    from gtk_text import find
+    position = find(grid, Gtk.Label, "Position:")
+    assert grid.child_get_property(box, "top-attach") == \
+        grid.child_get_property(position, "top-attach") + 1
 
 
 def test_start_here_explains_it_and_where_to_turn_it_off():
