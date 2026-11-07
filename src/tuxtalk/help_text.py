@@ -1,4 +1,5 @@
-"""What Help says, section by section; help_dialog.py shows it.
+"""What Help says, section by section; help_dialog.py shows it, with the
+commands' cards (commands_cards) on the Commands tab.
 
 Help is sorted by what you're doing (chatting, writing, in a terminal,
 hands-free, fixing mistakes, something wrong), not by feature, so it can be
@@ -108,7 +109,8 @@ def _ctrl_space_line(keys):
 
 
 def tabs():
-    """[(title, Pango markup)] for each of Help's sections, in order."""
+    """[(title, Pango markup)] for each of Help's sections, in order. For
+    Commands it is the text over the cards, which help_dialog adds."""
     values = _values()
     return [(title, text.format(**values))
             for title, text in _TABS]
@@ -827,7 +829,8 @@ There are two kinds:
   them right after the dictation they're about, as a dictation by themselves: hold
   your dictation key, say only the command, let go.
 The commands are English words, whatever language you dictate in. The same list,
-a tab per group, is in the TuxTalk menu → Voice Commands..., or say <b>what can I say</b>.'''
+a tab per group, is in the TuxTalk menu → Voice Commands..., or, with <b>Apps, windows
+and keys by voice</b> ticked in TuxTalk Labs, say <b>what can I say</b>.'''
 
 COMMANDS_EXAMPLES = '''<b>Usage Examples:</b>
 Say: <i>Hello world comma how are you question mark</i>

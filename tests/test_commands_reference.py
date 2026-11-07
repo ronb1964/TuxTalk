@@ -8,10 +8,9 @@ import re
 
 import pytest
 
-from tuxtalk import (ai_cleanup, command_phrases, commands_cards, commands_reference, explain,
-                     help_text,
-                     key_commands, normalize, spoken_quotes, undo, voice_commands,
-                     voice_edit_rules, voice_navigation)
+from tuxtalk import (ai_cleanup, app_commands, app_finder, command_phrases, commands_cards,
+                     commands_reference, explain, help_text, key_commands, normalize,
+                     spoken_quotes, undo, voice_commands, voice_edit_rules, voice_navigation)
 
 PHRASES = [(c.kind, phrase) for s in commands_reference.SECTIONS for c in s.commands
            for phrase in c.said]
@@ -56,11 +55,20 @@ def test_each_listed_phrase_is_recognised(kind, phrase, monkeypatch):
     elif kind == "literal":
         word = re.sub(r"^(literal|the word) ", "", phrase)
         assert normalize.normalize_text(f"apple {phrase} banana") == f"Apple {word} banana."
+    elif kind == "exact":
+        assert _done_in_code(phrase)
+    elif kind == "format":
+        assert voice_edit_rules.formatting(phrase) in (["bold"], ["italic"], ["underline"])
     else:
-        # Any wording works, the AI reads it; the exact jobs are done in code.
+        # Any wording works: the AI reads it, nothing in code takes it.
         assert kind == "instruction"
-        done_in_code = {"make this all caps": "ONE, TWO", "remove the commas": "one two"}
-        assert voice_edit_rules.mechanical_edit("one, two", phrase) == done_in_code.get(phrase)
+        assert not _done_in_code(phrase) and voice_edit_rules.formatting(phrase) is None
+
+
+def _done_in_code(phrase):
+    """An edit made in code, not by the AI: a change to the text, or Delete."""
+    changed = voice_edit_rules.mechanical_edit("one, two testing\n- three", phrase)
+    return changed is not None or voice_edit_rules.is_delete(phrase)
 
 
 def test_a_symbol_comes_out_as_the_symbol_listed():
@@ -104,9 +112,45 @@ def window_text():
         dialog.destroy()
 
 
-def test_both_screens_show_every_phrase(help_pages, window_text):
-    for _kind, phrase in PHRASES:
-        assert phrase in help_pages["Commands"] and phrase in window_text, phrase
+def _say_columns(root):
+    """Each card row's "what to say" column, as its text."""
+    from gi.repository import Gtk
+    from gtk_text import widgets
+    return [w.get_text() for w in widgets(root)
+            if isinstance(w, Gtk.Label) and w.get_style_context().has_class("tt-say")]
+
+
+def _labels(root):
+    """The text of every label in *root*: what shows, without tooltips."""
+    from gi.repository import Gtk
+    from gtk_text import widgets
+    return "\n".join(w.get_text() for w in widgets(root) if isinstance(w, Gtk.Label))
+
+
+@pytest.fixture
+def screens(monkeypatch):
+    """Help's Commands page and the Voice Commands window, built, not shown."""
+    from gi.repository import Gtk
+    from gtk_text import widgets
+    from tuxtalk import config, help_dialog, voice_commands_dialog
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)
+    monkeypatch.setattr(Gtk.Window, "present", lambda self: None)
+    help_window = help_dialog.show_help_dialog()
+    window = voice_commands_dialog.show_voice_commands_dialog()
+    notebook = next(w for w in widgets(help_window) if isinstance(w, Gtk.Notebook))
+    commands = next(notebook.get_nth_page(n) for n in range(notebook.get_n_pages())
+                    if notebook.get_tab_label_text(notebook.get_nth_page(n)) == "Commands")
+    yield commands, window
+    help_window.destroy()
+    window.destroy()
+
+
+def test_both_screens_show_every_command_on_its_own_row(screens):
+    """Each command's phrases, on a row of their own, in both."""
+    listed = [", ".join(c.said) for s in commands_reference.SECTIONS for c in s.commands]
+    for screen in screens:
+        assert _say_columns(screen) == listed
 
 
 def test_the_voice_commands_window_keeps_each_note(window_text):
@@ -118,10 +162,63 @@ def test_the_voice_commands_window_keeps_each_note(window_text):
                 assert _plain(command.note) in window_text, command.note
 
 
-def test_both_screens_say_where_labs_commands_are_turned_on(help_pages, window_text):
-    labs = _plain(commands_cards.LABS_LINE)
-    assert labs in window_text
-    assert any(s.labs for s in commands_reference.SECTIONS)
+def test_both_screens_say_which_labs_tickbox_each_group_needs(screens):
+    """In text that shows, not only a tooltip a keyboard never reaches."""
+    for group in commands_reference.GROUPS:
+        sections = [s for s in commands_reference.SECTIONS if s.group == group]
+        line = _plain(commands_cards.labs_line(sections))
+        for screen in screens:
+            assert (line in _labels(screen)) if line else True, group
+        for section in sections:
+            if section.labs:
+                assert section.labs in line
+    boxes = {s.labs for s in commands_reference.SECTIONS} - {""}
+    assert boxes == {commands_reference.LABS_EDIT, commands_reference.LABS_SELECT,
+                     commands_reference.LABS_ACTIONS}
+
+
+def test_the_labs_tickboxes_named_are_the_ones_in_preferences():
+    import inspect
+    from tuxtalk import prefs_advanced
+    source = inspect.getsource(prefs_advanced)
+    for box in (commands_reference.LABS_EDIT, commands_reference.LABS_SELECT,
+                commands_reference.LABS_ACTIONS):
+        assert f'label="{box}:' in source, box
+
+
+def test_help_says_what_can_i_say_needs_labs(help_pages):
+    """Said with the box unticked, "what can I say" is typed as words."""
+    assert command_phrases.parse("what can I say", navigation=False, actions=False) is None
+    intro = help_pages["Commands"].split("what can I say", 1)[0]
+    assert commands_reference.LABS_ACTIONS in " ".join(intro.split())
+
+
+def test_a_screen_reader_hears_each_card_by_its_heading_and_commands():
+    """Its rows are labels no key reaches: the card that takes the focus
+    carries them."""
+    from gi.repository import Gtk
+    for section in commands_reference.SECTIONS:
+        card = commands_cards.section_card(section, Gtk.SizeGroup())
+        accessible = card.get_accessible()
+        assert card.get_can_focus()
+        assert accessible.get_name().startswith(section.title)
+        if section.labs:
+            assert section.labs in accessible.get_name()
+        else:
+            assert "Labs" not in accessible.get_name()
+        for command in section.commands:
+            for phrase in command.said:
+                assert phrase in accessible.get_description()
+            assert _plain(command.result) in accessible.get_description()
+
+
+def test_a_heading_with_an_ampersand_still_shows():
+    from gi.repository import Gtk
+    from gtk_text import widgets
+    section = commands_reference.Section("Apps & Windows", commands_reference.APPS, ())
+    card = commands_cards.section_card(section, Gtk.SizeGroup())
+    texts = [w.get_text() for w in widgets(card) if isinstance(w, Gtk.Label)]
+    assert "Apps & Windows" in texts
 
 
 def test_both_screens_show_the_one_literal_words_list(help_pages, window_text):
@@ -191,27 +288,88 @@ def test_every_sound_music_and_system_command_is_listed():
         | {("SystemRequest", a) for a in ("lock", "screenshot", "window screenshot", "commands")}
 
 
+def _alternatives(pattern):
+    """*pattern*'s top-level alternatives ("a|b(?:c|d)" -> "a", "b(?:c|d)")."""
+    parts, depth, start = [], 0, 0
+    for i, char in enumerate(pattern):
+        if char == "(" and pattern[i - 1:i] != "\\":
+            depth += 1
+        elif char == ")" and pattern[i - 1:i] != "\\":
+            depth -= 1
+        elif char == "|" and depth == 0:
+            parts.append(pattern[start:i])
+            start = i + 1
+    return parts + [pattern[start:]]
+
+
 def test_every_fixed_command_phrasing_is_listed():
-    """Each way the parser takes a fixed phrase ("turn down the volume")."""
+    """Each way the parser takes a fixed phrase ("turn down the volume"),
+    an alternative added to one ("show the voice commands") included."""
     listed = [p.lower() for p in _listed("action")]
-    missing = [pattern.pattern for pattern, _build in command_phrases._FIXED
-               if not any(pattern.fullmatch(phrase) for phrase in listed)]
+    missing = [alternative for pattern, _build in command_phrases._FIXED
+               for alternative in _alternatives(pattern.pattern)
+               if not any(re.fullmatch(alternative, phrase) for phrase in listed)]
     assert missing == []
 
 
 def test_every_window_command_is_listed():
+    """Every window action, for the window you're in and for an app by name,
+    taken from the parser's own tables: a new verb needs a row."""
     windows = {(r.action, r.app is not None, r.every) for r in _requests()
                if isinstance(r, command_phrases.WindowRequest)}
-    assert windows == {("close", False, False), ("minimize", False, False),
-                       ("maximize", False, False), ("unmaximize", False, False),
-                       ("close", True, False), ("close", True, True),
-                       ("minimize", True, False), ("maximize", True, False),
-                       ("restore", True, False), ("switch", True, False)}
+    this_window = {(action, False, False) for _pattern, action in command_phrases._WINDOW_ACTIONS}
+    named = {(action, True, False) for action in command_phrases._NAMED_WINDOW_VERBS.values()}
+    assert windows == this_window | named | {("close", True, True), ("switch", True, False)}
+
+
+def test_every_way_to_open_an_app_is_listed():
+    """Each verb, a second one, a copy (Flatpak, Snap, AppImage) and the
+    desktop's own app for a job ("open the browser")."""
+    opened = [r for r in _requests() if isinstance(r, command_phrases.OpenRequest)]
+    verbs = {p.split()[0] for p in _listed("action")
+             if isinstance(command_phrases.parse(p, navigation=False, actions=True),
+                           command_phrases.OpenRequest)}
+    assert verbs == set(app_commands.VERBS)
+    assert any(r.new for r in opened)
+    assert {r.install for r in opened} == {"", *app_commands._INSTALL_WORDS}
+    jobs = {app_finder._DEFAULT_WORDS.get(re.sub(r"^the ", "", r.name)) for r in opened}
+    assert jobs - {None} == set(app_finder._DEFAULT_WORDS.values())
 
 
 def test_opening_an_address_and_a_web_search_are_listed():
     kinds = {type(r).__name__ for r in _requests()}
     assert {"OpenRequest", "AddressRequest", "SearchRequest"} <= kinds
+
+
+def test_every_edit_done_in_code_is_listed():
+    """Each exact edit (all caps, a list, indent, remove a word, Delete) and
+    each formatting shortcut has a phrase: they work only as worded."""
+    listed = [voice_edit_rules._norm(p) for p in _listed("exact")]
+    rules = (voice_edit_rules._UPPER, voice_edit_rules._LOWER, voice_edit_rules._TITLE,
+             voice_edit_rules._REMOVE_MARKS, voice_edit_rules._BULLETED,
+             voice_edit_rules._NUMBERED, voice_edit_rules._INDENT, voice_edit_rules._UNINDENT,
+             voice_edit_rules._REMOVE_BULLETS, voice_edit_rules._REMOVE_WORD,
+             voice_edit_rules._DELETE)
+    missing = [rule.pattern for rule in rules if not any(rule.match(p) for p in listed)]
+    assert missing == []
+    shortcuts = {k for p in _listed("format") for k in voice_edit_rules.formatting(p)}
+    assert shortcuts == set(voice_edit_rules._SHORTCUTS.values())
+
+
+def test_every_undo_and_fix_a_word_command_is_listed():
+    units = {undo.detect_undo_command(p)[0] for p in _listed("undo")}
+    assert units == {"word", "sentence", "paragraph", "everything"}
+    fixes = {p for p in voice_commands._FIX_WORD_PHRASES if not p.endswith(" please")}
+    assert fixes == set(_listed("fix"))
+
+
+def test_every_spoken_mark_is_listed():
+    """Each rule normalize turns words into a mark or a break by is shown."""
+    listed = _listed("inline")
+    rules = normalize._MULTI_WORD_REPLACEMENTS + normalize._SINGLE_WORD_REPLACEMENTS
+    missing = [pattern.pattern for pattern, _mark in rules
+               if not any(pattern.search(f"apple {p} banana") for p in listed)]
+    assert missing == []
 
 
 def test_each_section_is_in_one_of_the_groups():

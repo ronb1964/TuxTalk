@@ -90,6 +90,13 @@ before 0.15.0, so older entries use that name.
   Xfce have all but "show all windows". On COSMIC, Sway and Hyprland windows
   and desktops can't be done and TuxTalk says so; sound, music, the lock and
   screenshots work. The command words are English.
+- Every voice command is now listed in one place, as cards: Help's Commands
+  tab, which comes right after Start Here, and the Voice Commands window,
+  which has a tab per group (Dictation, Fixing, Editing, Apps and Windows,
+  Keys and Web, Sound and System). Each card has a coloured heading, and the
+  Labs ones say which tickbox in TuxTalk Labs turns them on. Tab goes from
+  card to card, and a screen reader reads each card's commands. Problems is
+  the last tab in Help now.
 - With "Send each dictation automatically" on, TuxTalk doesn't press Enter
   in a terminal any more. It ran whatever you said as a command, so
   "testing 1, 2, 3" came back "command not found". Say "press enter" at the

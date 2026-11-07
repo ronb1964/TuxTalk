@@ -172,6 +172,13 @@ def scroll_with_keys(_widget, event, scrolled):
     return True
 
 
+def selectable_text(label):
+    """Make *label* selectable, so Tab and a screen reader reach its text,
+    without all of it highlighted each time it takes the focus."""
+    label.set_selectable(True)
+    label.connect_after("grab-focus", lambda lbl: lbl.select_region(0, 0))
+
+
 # For a theme that names no accent: a plain green, the same in the recording
 # indicator and in Preferences' preview of it.
 FALLBACK_ACCENT = (0x4c / 255, 0xaf / 255, 0x50 / 255)

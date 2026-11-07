@@ -105,19 +105,33 @@ def _key(widget, keyval):
     return widget.emit("key-press-event", event)
 
 
-def test_each_tab_scrolls_from_the_keyboard(monkeypatch):
-    """Each tab's page takes the focus, so Page Down and the arrows scroll
-    it, as in Help. Before, only Close could be focused and a keyboard user
+def test_tab_goes_into_each_tab_and_the_keys_scroll_it():
+    """From the tabs, Tab goes into the page shown, and Page Down and the
+    arrows scroll it, as in Help. Before, only Close could be focused and a keyboard user
     saw the first third."""
     from gi.repository import Gdk, Gtk
+    from gtk_keys import press, settle
     from gtk_text import widgets
-    dialog = _open_window(monkeypatch)
+    dialog = voice_commands_dialog.show_voice_commands_dialog()
+    settle()
     try:
         tabs = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
         for number in range(tabs.get_n_pages()):
-            page = next(w for w in widgets(tabs.get_nth_page(number))
-                        if isinstance(w, Gtk.EventBox) and w.get_can_focus())
-            assert _key(page, Gdk.KEY_Page_Down) is True
+            tabs.set_current_page(number)
+            tabs.grab_focus()
+            press(dialog, Gdk.KEY_Tab)
+            page = tabs.get_nth_page(number)
+            assert dialog.get_focus() in list(widgets(page)), number
+        tabs.set_current_page(0)
+        tabs.grab_focus()
+        press(dialog, Gdk.KEY_Tab)
+        scroll = tabs.get_nth_page(0).get_vadjustment()
+        start, card = scroll.get_value(), dialog.get_focus()
+        press(dialog, Gdk.KEY_Page_Down)
+        paged = scroll.get_value()
+        assert paged > start + scroll.get_page_size() / 2
+        press(dialog, Gdk.KEY_Down)
+        assert scroll.get_value() > paged and dialog.get_focus() is card
     finally:
         dialog.destroy()
 

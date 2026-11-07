@@ -8,6 +8,7 @@ import pytest
 
 from gi.repository import Gtk
 
+from gtk_keys import press as _press, settle as _settle
 from gtk_text import widgets
 from tuxtalk import help_dialog
 
@@ -117,27 +118,6 @@ def shown_help(monkeypatch):
         dialog.destroy()
 
 
-def _settle():
-    while Gtk.events_pending():
-        Gtk.main_iteration_do(False)
-
-
-def _press(dialog, keyval, state=0):
-    """Press and release *keyval* in *dialog*, as the keyboard would: GTK
-    hands it to the widget with the focus."""
-    from gi.repository import Gdk
-    seat = Gdk.Display.get_default().get_default_seat()
-    keymap = Gdk.Keymap.get_for_display(Gdk.Display.get_default())
-    code = keymap.get_entries_for_keyval(keyval)[1][0].keycode
-    for kind in (Gdk.EventType.KEY_PRESS, Gdk.EventType.KEY_RELEASE):
-        event = Gdk.Event.new(kind)
-        event.window, event.send_event = dialog.get_window(), True
-        event.keyval, event.state, event.hardware_keycode = keyval, state, code
-        event.set_device(seat.get_keyboard())
-        Gtk.main_do_event(event)
-        _settle()
-
-
 def _page_text(notebook):
     page = notebook.get_nth_page(notebook.get_current_page())
     label = next(w for w in widgets(page) if isinstance(w, Gtk.Label))
@@ -182,6 +162,31 @@ def test_the_keys_scroll_the_text(shown_help):
     _press(dialog, Gdk.KEY_Home)
     assert scroll.get_value() == scroll.get_lower()
     assert dialog.get_focus() is label
+
+
+def test_tab_goes_card_by_card_on_the_commands_tab(shown_help):
+    """Commands is cards, not one text: Tab reaches the text over them, then
+    each card in turn, named for a screen reader, the page scrolling to show
+    it; Page Down still scrolls."""
+    from gi.repository import Gdk
+    dialog = shown_help("commands")
+    notebook = _notebook(dialog)
+    scroll = notebook.get_nth_page(notebook.get_current_page()).get_vadjustment()
+    _press(dialog, Gdk.KEY_Tab)
+    intro = dialog.get_focus()
+    assert isinstance(intro, Gtk.Label) and "Voice Commands Reference" in intro.get_text()
+    start = scroll.get_value()
+    _press(dialog, Gdk.KEY_Page_Down)
+    assert scroll.get_value() > start + scroll.get_page_size() / 2
+    assert dialog.get_focus() is intro
+    _press(dialog, Gdk.KEY_Home)
+    names = []
+    for _card in range(4):
+        _press(dialog, Gdk.KEY_Tab)
+        names.append(dialog.get_focus().get_accessible().get_name())
+    assert names == ["Punctuation", "Brackets", "Formatting", "Literal Words"]
+    card, top = dialog.get_focus().get_allocation(), scroll.get_value()
+    assert top <= card.y < top + scroll.get_page_size(), "the fourth card wasn't scrolled to"
 
 
 def test_help_opens_on_the_section_asked_for_with_the_keyboard_there(shown_help):

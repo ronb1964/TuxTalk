@@ -38,7 +38,7 @@ def _on_link(label, uri):
 
 def text_page(markup_text):
     """A page of text: *markup_text* in a wrapping label that scrolls (Help's
-    sections, the Voice Commands window). The label takes the keyboard focus,
+    sections but Commands). The label takes the keyboard focus,
     so the arrow keys, Page Up and Down, Home and End scroll it, and a screen
     reader reads it."""
     scrolled = Gtk.ScrolledWindow()
@@ -49,10 +49,7 @@ def text_page(markup_text):
     label.set_line_wrap(True)
     label.set_xalign(0)
     label.set_valign(Gtk.Align.START)
-    label.set_selectable(True)
-    # A selectable label selects all of itself when focused; reading it
-    # shouldn't leave the whole page highlighted.
-    label.connect_after("grab-focus", lambda lbl: lbl.select_region(0, 0))
+    ui_style.selectable_text(label)
     for side in ("top", "bottom", "start", "end"):
         getattr(label, f"set_margin_{side}")(15 if side in ("top", "bottom") else 8)
     label.connect("key-press-event", ui_style.scroll_with_keys, scrolled)

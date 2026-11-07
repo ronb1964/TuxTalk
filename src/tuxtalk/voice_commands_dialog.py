@@ -19,6 +19,16 @@ logger = setup_logger(__name__)
 # One window at a time: a second click brings the open one forward.
 _active_dialog = None
 
+WIDTH, HEIGHT = 900, 640
+# What's left beside the window on a screen narrower than WIDTH.
+_SCREEN_MARGIN_PX = 40
+
+INTRO = ("Hold your dictation key, say the command, let go. The commands are English "
+         "words, whatever language you dictate in.")
+SNIPPETS = ("<b>Snippets</b>: say a short phrase, get the full text. Add your own in "
+            "<b>Preferences → Words</b>; wrap the text in <b>\"quotes\"</b> to type it "
+            "exactly as written.")
+
 
 def show_voice_commands_dialog():
     """Show the cheat sheet of every voice command, or bring the open one
@@ -30,7 +40,8 @@ def show_voice_commands_dialog():
         return None
 
     dialog = Gtk.Dialog(title="Voice Commands")
-    dialog.set_default_size(900, 640)
+    screen = ui_style.workarea_width()
+    dialog.set_default_size(min(WIDTH, screen - _SCREEN_MARGIN_PX) if screen else WIDTH, HEIGHT)
     ui_style.use_tuxtalk_style(dialog)
     dialog.set_resizable(True)
     dialog.set_modal(False)
@@ -43,11 +54,7 @@ def show_voice_commands_dialog():
     content.set_margin_bottom(8)
     content.set_margin_start(12)
     content.set_margin_end(12)
-    intro = Gtk.Label(xalign=0)
-    intro.set_markup(INTRO)
-    intro.set_line_wrap(True)
-    intro.set_margin_bottom(8)
-    content.pack_start(intro, False, False, 0)
+    content.pack_start(commands_cards.paragraph(INTRO), False, False, 0)
     content.pack_start(_group_tabs(), True, True, 0)
 
     hint = Gtk.Label()
@@ -83,12 +90,6 @@ def _hint_markup():
         return f"Tip: Press <b>{GLib.markup_escape_text(hotkey)}</b> anytime to open this reference"
     return "Tip: Set a hotkey in Preferences → General to open this with a keypress"
 
-
-INTRO = ("Hold your dictation key, say the command, let go. The commands are English "
-         "words, whatever language you dictate in.")
-SNIPPETS = ("<b>Snippets</b>: say a short phrase, get the full text. Add your own in "
-            "<b>Preferences → Words</b>; wrap the text in <b>\"quotes\"</b> to type it "
-            "exactly as written.")
 
 
 def _group_tabs():

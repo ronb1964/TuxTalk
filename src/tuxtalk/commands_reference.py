@@ -4,8 +4,10 @@ Commands window both show, as cards (commands_cards).
 
 Two hand-written lists had drifted apart: each knew phrases the other didn't.
 tests/test_commands_reference.py checks every phrase here against the code
-that recognises it, and every rule of that code against the phrases here: a
-command can't be listed that doesn't work, nor work without being listed.
+that recognises it, and the other way round each fixed rule of that code (a
+spoken mark, a key, a window or desktop action, an exact edit, an alternative
+of a fixed phrase) against the phrases here. Counts and app names are shown by
+an example each, and what to tell the AI can be worded any way.
 
 Each command is checked by its *kind*: "inline" (normalize_text turns it into
 punctuation or formatting mid-sentence), "key" (a closing "press enter",
@@ -13,6 +15,8 @@ split_key_command), "undo" (detect_undo_command), "fix" (Fix a Word's
 phrases), "edit" ("edit that, ..."), "select" (voice_navigation),
 "correction" (a self-correction the AI acts on, found by its pattern),
 "instruction" (an example of what to tell the AI; any wording works),
+"exact" (an edit done in code, voice_edit_rules), "format" (a word
+processor's own shortcut),
 "action" (command_phrases.parse: the Labs apps, windows, desktops and sound), or
 "literal" (normalize_text types the word after "literal" or "the word").
 """
@@ -20,10 +24,15 @@ from typing import NamedTuple
 
 from .normalize import LITERAL_REPLACEMENTS
 
+# The TuxTalk Labs tickboxes (Preferences → Advanced) that turn commands on.
+LABS_EDIT = "Voice editing"
+LABS_SELECT = "Select and move"
+LABS_ACTIONS = "Apps, windows and keys by voice"
 
 
 class Command(NamedTuple):
-    """The ways to say one command, what it does, and Help's longer note."""
+    """The ways to say one command (plain text), what it does, and a note
+    under that (both Pango markup: <b>tab</b>)."""
     said: tuple
     result: str
     kind: str
@@ -32,11 +41,12 @@ class Command(NamedTuple):
 
 class Section(NamedTuple):
     """A heading's commands, shown in *group* (a tab of the Voice Commands
-    window, a run of cards in Help); *labs* says it needs TuxTalk Labs."""
+    window, a run of cards in Help); *labs* names the TuxTalk Labs tickbox
+    they need, if any."""
     title: str
     group: str
     commands: tuple
-    labs: bool = False
+    labs: str = ""
     note: str = ""
 
 
@@ -98,6 +108,19 @@ SECTIONS = (
                 "key", "It sends a chat message or runs a command. <b>literal press enter</b> "
                        "types the words"),
     )),
+    Section("Literal Words", DICTATION,
+            note="Say <b>literal</b> or <b>the word</b> before a punctuation or line-break "
+                 "word to type the word itself. It works with: "
+                 + ", ".join(LITERAL_REPLACEMENTS) + ". <b>literal</b> before a Labs "
+                 "command types its words too (<b>literal open Firefox</b>).",
+            commands=(
+                _literal("period", ".", "the word period"),
+                _literal("comma", ",", "the word comma"),
+                _literal("press tab", "a tab character"),
+                _literal("new line", "a line break", "the word new line"),
+                _literal("question mark", "?"),
+                _literal("exclamation point", "!"),
+            )),
     Section("Undo", FIXING, commands=(
         Command(("delete last word", "undo last word", "remove last word"),
                 "delete the last word you dictated", "undo"),
@@ -116,19 +139,35 @@ SECTIONS = (
                 "It presses Ctrl+A then Backspace; in a terminal, Ctrl+E then Ctrl+U"),
     )),
     Section("Fixing a Word", FIXING, commands=(
-        Command(("fix that word", "fix that"),
+        Command(("fix that word", "fix that", "fix a word", "fix the word", "fix this word",
+                 "fix the last word"),
                 "open Fix a Word on what you just said, to teach TuxTalk the right spelling "
                 "for next time", "fix"),
     )),
-    Section("Editing by Voice", EDITING, labs=True, commands=(
-        Command(("make this more formal", "fix the grammar", "make this all caps",
-                 "remove the commas"),
-                "changes the selected text: hold Shift with your dictation key as you "
-                "say it", "instruction", "The Writing section has the details"),
+    Section("Changing Your Mind", FIXING,
+            note="Needs <b>Fix self-corrections with AI</b> turned on in Preferences → "
+                 "Advanced (a one-time download of about {ai_size})",
+            commands=(
+        Command(("no wait", "I mean", "make that", "scratch that", "or rather"),
+                'correct yourself mid-sentence: "meet at 3, no wait, 4" → "meet at 4"',
+                "correction"),
+    )),
+    Section("Editing by Voice", EDITING, labs=LABS_EDIT, commands=(
+        Command(("make this more formal", "fix the grammar", "make it friendlier"),
+                "the AI rewrites the selected text: hold Shift with your dictation key as "
+                "you say it", "instruction", "Help → Writing has the details"),
+        Command(("make this all caps", "make this lower case", "make this title case",
+                 "make this a bulleted list", "make this a numbered list", "indent this",
+                 "unindent this"), "the same way, done exactly, without the AI", "exact"),
+        Command(("remove the commas", "remove the word testing", "remove the bullets",
+                 "delete this"), "takes out just that, or the whole selection", "exact"),
+        Command(("make this bold", "make this italic", "underline this"),
+                "presses the app's own shortcut, in LibreOffice and other word processors",
+                "format", "Font, size and colour can't be changed by voice"),
         Command(("edit that, make it shorter",), "right after dictating, no keys: changes it",
                 "edit"),
     )),
-    Section("Select and Move", EDITING, labs=True, commands=(
+    Section("Select and Move", EDITING, labs=LABS_SELECT, commands=(
         Command(("select that", "select the last sentence", "select the last 3 words",
                  "select the last paragraph"), "select what you just said", "select"),
         Command(("select all", "select the line", "select the next word",
@@ -144,25 +183,24 @@ SECTIONS = (
                  "go down a line"), "move the cursor", "select"),
         Command(("unselect", "clear the selection"), "drop the selection", "select"),
     )),
-    Section("Changing Your Mind", FIXING,
-            note="Needs <b>Fix self-corrections with AI</b> turned on in Preferences → "
-                 "Advanced (a one-time download of about {ai_size})",
-            commands=(
-        Command(("no wait", "I mean", "make that", "scratch that", "or rather"),
-                'correct yourself mid-sentence: "meet at 3, no wait, 4" → "meet at 4"',
-                "correction"),
-    )),
-    Section("Apps", APPS, labs=True, commands=(
-        Command(("open Firefox",), "opens it, or brings its window to the front", "action"),
+    Section("Apps", APPS, labs=LABS_ACTIONS, commands=(
+        Command(("open Firefox", "launch Firefox", "start Firefox"),
+                "opens it, or brings its window to the front", "action"),
+        Command(("open another Firefox", "open new Firefox"), "starts a second one", "action"),
+        Command(("open Firefox Flatpak", "open Firefox Snap", "open Firefox AppImage"),
+                "that copy of it, when you have more than one", "action"),
+        Command(("open the browser", "open email", "open files", "open the text editor",
+                 "open the terminal"), "the app your desktop uses for that", "action"),
         Command(("switch to Firefox",), "brings its window to the front", "action"),
         Command(("close Firefox", "close all Firefox"),
-                "closes its window (all of them); it asks to save first", "action"),
+                "closes its window (all of them); an app with unsaved work asks to save "
+                "first", "action"),
         Command(("minimize Firefox", "maximize Firefox", "restore Firefox"),
                 "its window, by name", "action"),
     ), note="Any app on the computer, by the name in its menu entry."),
-    Section("The Window You're In", APPS, labs=True, commands=(
-        Command(("close window", "close this window"), "closes it; it asks to save first",
-                "action"),
+    Section("The Window You're In", APPS, labs=LABS_ACTIONS, commands=(
+        Command(("close window", "close this window"),
+                "closes it; an app with unsaved work asks to save first", "action"),
         Command(("minimize window", "maximize window", "restore window"),
                 "hides it, fills the screen, or puts it back", "action"),
         Command(("snap left", "snap right", "snap top", "snap bottom",
@@ -171,9 +209,10 @@ SECTIONS = (
                 "fills that quarter", "action"),
         Command(("center window", "centre window", "move window to the center"),
                 "moves it to the middle", "action"),
-        Command(("move window to the other screen",), "with two screens", "action"),
+        Command(("move window to the other screen",),
+                "moves it to your other screen (with two or more)", "action"),
     )),
-    Section("Desktops", APPS, labs=True, commands=(
+    Section("Desktops", APPS, labs=LABS_ACTIONS, commands=(
         Command(("show desktop",), "hides the windows; say it again to bring them back",
                 "action"),
         Command(("show all windows",), "every window at once, to pick one", "action"),
@@ -183,7 +222,7 @@ SECTIONS = (
                  "move window to the previous desktop"),
                 "sends the window you're in there", "action"),
     )),
-    Section("Tabs and Pages", KEYS, labs=True, commands=(
+    Section("Tabs and Pages", KEYS, labs=LABS_ACTIONS, commands=(
         Command(("new tab", "close tab", "next tab", "previous tab", "reopen tab"),
                 "in a browser or any app with tabs", "action"),
         Command(("go back", "go forward", "reload the page", "refresh the page"),
@@ -194,48 +233,38 @@ SECTIONS = (
                 "scrolls what's under the mouse pointer; a number scrolls more", "action"),
         Command(("find on page",), "opens the page's search", "action"),
     )),
-    Section("Everyday Keys", KEYS, labs=True, commands=(
+    Section("Everyday Keys", KEYS, labs=LABS_ACTIONS, commands=(
         Command(("save the file", "select all", "copy the selection", "paste it",
                  "press escape"), "presses the key in the window you're in", "action"),
     ), note="One word alone (copy, paste, save) is typed: people say those as answers."),
-    Section("Addresses and Search", KEYS, labs=True, commands=(
+    Section("Addresses and Search", KEYS, labs=LABS_ACTIONS, commands=(
         Command(("go to youtube dot com",), "opens the address; in a browser, in that tab",
                 "action"),
         Command(("web search cheap tires",), "your browser's own search", "action"),
     )),
-    Section("Sound and Music", SOUND, labs=True, commands=(
+    Section("Sound and Music", SOUND, labs=LABS_ACTIONS, commands=(
         Command(("volume up", "volume down", "volume up 3", "turn down the volume"),
                 "louder or quieter; a number for more steps", "action"),
         Command(("mute sound", "unmute sound"), "turns the sound off or on", "action"),
         Command(("pause music", "play music", "resume the music"),
-                "the player that's playing", "action"),
+                "the player that's playing, or the paused one", "action"),
         Command(("next track", "previous track", "next song"), "in that player", "action"),
     )),
-    Section("Lock, Screenshots and Help", SOUND, labs=True, commands=(
+    Section("Lock, Screenshots and Help", SOUND, labs=LABS_ACTIONS, commands=(
         Command(("lock screen", "lock the computer"),
                 "your desktop's own lock; the ready beep means it's locked", "action"),
-        Command(("take a screenshot",), "the whole screen, into Pictures/Screenshots",
+        Command(("take a screenshot",), "the whole screen, saved to your screenshots folder",
                 "action"),
-        Command(("take a screenshot of this window", "screenshot this window"),
-                "just the window you're in (GNOME: pick it in the screenshot tool)",
-                "action"),
-        Command(("what can I say",), "opens this list", "action"),
-    ), note="<b>literal</b> before any of these types the words instead."),
-    Section("Literal Words", DICTATION,
-            note="Say <b>literal</b> or <b>the word</b> before a punctuation or line-break "
-                 "word to type the word itself. It works with: "
-                 + ", ".join(LITERAL_REPLACEMENTS) + ".",
-            commands=(
-                _literal("period", ".", "the word period"),
-                _literal("comma", ",", "the word comma"),
-                _literal("press tab", "a tab character"),
-                _literal("new line", "a line break", "the word new line"),
-                _literal("question mark", "?"),
-                _literal("exclamation point", "!"),
-            )),
+        Command(("take a screenshot of this window", "screenshot this window",
+                 "screenshot the window", "take a window screenshot"),
+                "just the window you're in (GNOME and Pop!_OS: pick it in the screenshot "
+                "tool)", "action"),
+        Command(("what can I say", "show the voice commands"), "opens this list", "action"),
+    )),
 )
 
 
 def section_note(section):
+    """*section*'s note, with the AI download's size filled in."""
     from .ai_download import DOWNLOAD_SIZE_TEXT
     return section.note.format(ai_size=DOWNLOAD_SIZE_TEXT)
