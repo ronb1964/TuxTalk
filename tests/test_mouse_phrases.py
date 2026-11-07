@@ -29,7 +29,7 @@ def test_the_grid_opens_from_any_state(grid):
 
 
 @pytest.mark.parametrize("said, number", [
-    ("Five.", 5), ("number 12", 12), ("Too.", 2), ("twenty five", 25), ("99", 99),
+    ("Five.", 5), ("number 12", 12), ("Too.", 2), ("free", 3), ("twenty five", 25), ("99", 99),
     ("twenty-five", 25), ("ten", 10)])
 def test_with_a_grid_a_number_zooms(said, number):
     assert parse(said, grid=True) == MouseRequest("zoom", number, in_grid=True)
@@ -144,3 +144,18 @@ def test_literal_types_write_four_with_a_grid():
 @pytest.mark.parametrize("said", ["write it down", "writer", "up to you", "right for me"])
 def test_a_sentence_with_a_homophone_is_not_a_nudge(said):
     assert parse(said, grid=True) is None
+
+
+@pytest.mark.parametrize("said, wanted", [
+    ("Free.", MouseRequest("zoom", 3, in_grid=True)),
+    ("click free", MouseRequest("click", 3, in_grid=True)),
+    ("move free", MouseRequest("move", 3, in_grid=True)),
+    ("right free", MouseRequest("nudge", 3, direction="right", in_grid=True))])
+def test_with_a_grid_free_is_three(said, wanted):
+    """Parakeet writes "Three." said alone as "Free"."""
+    assert parse(said, grid=True) == wanted
+
+
+@pytest.mark.parametrize("said", ["Free.", "click free", "move free", "right free"])
+def test_free_is_a_word_without_a_grid(said):
+    assert parse(said, grid=False) is None

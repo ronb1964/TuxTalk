@@ -35,6 +35,8 @@ _CLICK = re.compile(r"(click|left click|right click|double click|middle click)"
                     r"(?: (?P<cell>.+))?")
 _NUDGE = re.compile(r"(?P<direction>left|right|up|down)(?: (?P<steps>.+))?")
 _MOVE = re.compile(r"move (?:to )?(?P<cell>.+)")
+# A small number said alone, as Parakeet writes it.
+_HEARD_AS = {"too": 2, "free": 3}
 # A nudge's count as Parakeet writes a small number said after a direction
 # ("up to", "right for"); after a direction these can't mean anything else.
 _NUDGE_COUNTS = {"to": 2, "for": 4}
@@ -45,10 +47,11 @@ _WRITE = re.compile(r"^write(?= |$)")
 
 def _number(words: str) -> int | None:
     """The cell number *words* say ("5", "five", "number twelve", "twenty five"),
-    or None. "too" is how Parakeet often writes a "two" said alone."""
+    or None. Only read while a grid shows, where "too" and "free" are how
+    Parakeet often writes a "two" or a "three" said alone."""
     words = words.removeprefix("number ")
-    if words == "too":
-        return 2
+    if words in _HEARD_AS:
+        return _HEARD_AS[words]
     if words in NUMBER_WORDS and words not in ("a", "an"):
         number = NUMBER_WORDS[words]
     else:
