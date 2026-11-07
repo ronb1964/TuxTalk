@@ -305,3 +305,8 @@ say = "Five."
 
 [mouse_left_click]
 say = "Left click."
+
+# Moves the click dot four steps of 5 px; only a grid takes it (mouse_phrases._NUDGE).
+[mouse_right_four]
+say = "Right four."
+tts = "Right, four."

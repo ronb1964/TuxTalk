@@ -31,6 +31,22 @@ TOLERANCE_PX = 3
 AIM_TOLERANCE = 0.005
 SHOWN = "Mouse grid: shown on"
 ZOOMED = "Mouse grid: zoomed into cell"
+# The step of mouse_grid_model.NUDGE_PX, and the log lines of the desktop zoom.
+NUDGE_PX = 5
+NUDGED = "Mouse grid: moved the dot"
+DESKTOP_ZOOMED = "Mouse grid: zoomed the desktop in"
+DESKTOP_UNZOOMED = "Mouse grid: put the desktop zoom back"
+NOT_ZOOMED = "Mouse grid: the desktop didn't zoom in"
+# Not an error: the user's own magnifier is a lens or part of the screen.
+ZOOM_NOT_USED = "covers part of the screen; not used"
+# Desktops whose zoom TuxTalk drives, and their magnifier's gsettings schema
+# (KDE's has none to read: its Zoom effect shows in the log only).
+ZOOM_DESKTOPS = ("kde", "gnome", "cinnamon")
+MAGNIFIER_SCHEMAS = {"gnome": "org.gnome.desktop.a11y", "cinnamon": "org.cinnamon.desktop.a11y"}
+ZOOM_FACTOR = 3.0
+# The step of each phrase that is not a number: its log line.
+STEP_LINES = {"mouse_right_four": NUDGED}
+_STEP_DIRECTIONS = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
 # Where a plain "left click" is tried: inside button C of the maximized
 # window on every VM's screen, panels and docks allowed for.
 PLAIN_CLICK_AT = (0.8, 0.25)
@@ -86,6 +102,69 @@ def aim_problem(aim, screen, fraction):
     if max(off) > AIM_TOLERANCE:
         want = f"{fraction[0] * screen[0]:.0f},{fraction[1] * screen[1]:.0f}"
         return f"the grid aimed at {aim[0]},{aim[1]}, not at the cell's centre {want}"
+    return None
+
+
+def nudge_offset(direction, steps):
+    """How many pixels (x, y) *steps* nudges to *direction* move the click dot."""
+    dx, dy = _STEP_DIRECTIONS[direction]
+    return dx * NUDGE_PX * steps, dy * NUDGE_PX * steps
+
+
+def nudge_problem(aim, screen, fraction, offset):
+    """What is wrong with the grid aiming at *aim* when it should be the
+    *offset* pixels from *fraction* of a *screen*; None when it is."""
+    if aim is None:
+        return "the log doesn't say where the grid clicked"
+    want = (fraction[0] * screen[0] + offset[0], fraction[1] * screen[1] + offset[1])
+    if max(abs(aim[0] - want[0]), abs(aim[1] - want[1])) > TOLERANCE_PX:
+        return (f"the grid aimed at {aim[0]},{aim[1]}, not at {want[0]:.0f},{want[1]:.0f}, "
+                f"{offset[0]},{offset[1]} px from the part's centre")
+    return None
+
+
+def zoomed_in(log):
+    """Whether the log says the grid zoomed the desktop in."""
+    return DESKTOP_ZOOMED in (log or "")
+
+
+def zoom_problem(log, expects_zoom):
+    """What is wrong with the desktop zoom the *log* shows. A desktop where
+    zoom is *expects_zoom* must have zoomed, unless the user's own magnifier
+    is a lens; every zoom must be put back."""
+    log = log or ""
+    if NOT_ZOOMED in log:
+        return "the desktop didn't zoom in, though the grid asked for it"
+    zoomed = log.count(DESKTOP_ZOOMED)
+    if not zoomed:
+        if expects_zoom and ZOOM_NOT_USED not in log:
+            return "the desktop didn't zoom in; the log says nothing about a zoom"
+        return None
+    if log.count(DESKTOP_UNZOOMED) != zoomed or log.rfind(DESKTOP_UNZOOMED) < log.rfind(
+            DESKTOP_ZOOMED):
+        return "the desktop zoom was not put back after the click"
+    return None
+
+
+def parse_magnifier(enabled, factor):
+    """(on, factor) from gsettings' answers for screen-magnifier-enabled and
+    mag-factor, or None when it gave no answer (no such schema)."""
+    try:
+        return enabled.strip() == "true", float(factor.strip().split()[-1])
+    except (ValueError, IndexError):
+        return None
+
+
+def magnifier_problem(before, during, after):
+    """What is wrong with the magnifier settings read (on, factor) before
+    the grid, while it was zoomed and after the click; None when it came on
+    at the zoom factor and is exactly as it was after."""
+    if before is None:
+        return None
+    if during != (True, ZOOM_FACTOR):
+        return f"the magnifier wasn't on at {ZOOM_FACTOR:g}x while the grid was zoomed: {during}"
+    if after != before:
+        return f"the magnifier was not put back: it was {before} and is {after}"
     return None
 
 
@@ -151,12 +230,15 @@ def _step(run, phrase_id, line):
                         heard=heard)
 
 
-def _grid_click(run, phrase_ids, line, press, fraction, shot_name):
-    """Open the grid over the buttons, say *phrase_ids* (numbers that zoom,
-    then the click, whose log line starts with *line*) and judge the *press*
-    (button, letter) seen against where the grid aimed, which must be
-    *fraction* of the screen. (Outcome that stops the check or None, what it
-    saw, the screenshot of the grid at its last level)."""
+def _grid_click(run, phrase_ids, line, press, fraction, shot_name, offset=None,
+                while_zoomed=None):
+    """Open the grid over the buttons, say *phrase_ids* (numbers that zoom
+    and nudges, then the click, whose log line starts with *line*) and judge
+    the *press* (button, letter) seen against where the grid aimed, which
+    must be *fraction* of the screen, plus *offset* pixels after a nudge.
+    *while_zoomed* is called once the steps before the click are done.
+    (Outcome that stops the check or None, what it saw, the screenshot of
+    the grid at its last level)."""
     with _buttons(run):
         screen = _screen(run)
         _log, bad = _step(run, "mouse_grid", SHOWN)
@@ -165,10 +247,12 @@ def _grid_click(run, phrase_ids, line, press, fraction, shot_name):
         shot = run.shot(f"{shot_name}-grid")
         *zooms, click = phrase_ids
         for phrase_id in zooms:
-            _log, bad = _step(run, phrase_id, ZOOMED)
+            _log, bad = _step(run, phrase_id, STEP_LINES.get(phrase_id, ZOOMED))
             if bad:
                 bad.screenshot = shot
                 return bad, None, shot
+        if while_zoomed:
+            while_zoomed()
         if zooms:
             shot = run.shot(f"{shot_name}-zoomed")
         log, bad = _step(run, click, line)
@@ -178,7 +262,9 @@ def _grid_click(run, phrase_ids, line, press, fraction, shot_name):
         time.sleep(0.5)
         presses = _presses(run)
         aim = aimed_at(log)
-        if problem := aim_problem(aim, screen, fraction) or click_problem(presses, *press, aim):
+        aim_wrong = (nudge_problem(aim, screen, fraction, offset) if offset
+                     else aim_problem(aim, screen, fraction))
+        if problem := aim_wrong or click_problem(presses, *press, aim):
             return Outcome("fail", problem, screenshot=run.shot(f"{shot_name}-after")), \
                 None, shot
     saw = presses[0]
@@ -204,6 +290,61 @@ def mouse_grid_zoom(run):
     return _grid_check(run, ["mouse_seven", "mouse_three", "mouse_click"],
                        "Mouse grid: clicked the middle of cell 3, level 3,",
                        ("left", "G"), (5 / 18, 13 / 18), "mouse-zoom")
+
+
+def _magnifier(run):
+    """The desktop magnifier's (on, factor) in the VM, None where there is
+    none to read (KDE, other desktops)."""
+    schema = next((MAGNIFIER_SCHEMAS[t] for t in run.vm.spec.tags if t in MAGNIFIER_SCHEMAS),
+                  None)
+    if schema is None:
+        return None
+
+    def get(schema_id, key):
+        return run.vm.session("gsettings", "get", schema_id, key, check=False).stdout
+    return parse_magnifier(get(f"{schema}.applications", "screen-magnifier-enabled"),
+                           get(f"{schema}.magnifier", "mag-factor"))
+
+
+@check(SECTION, "mouse_grid_desktop_zoom",
+       "The desktop zooms in for a small cell and is put back after the click")
+def mouse_grid_desktop_zoom(run):
+    expects = bool(set(ZOOM_DESKTOPS) & set(run.vm.spec.tags))
+    before, during, mark = _magnifier(run), [], run.log_mark()
+
+    def read_while_zoomed():
+        run.wait_log(mark, DESKTOP_ZOOMED, NOT_ZOOMED, "Desktop zoom:", timeout=10)
+        time.sleep(1)
+        during.append(_magnifier(run))
+    with _mouse_on(run):
+        bad, saw, shot = _grid_click(
+            run, ["mouse_seven", "mouse_three", "mouse_click"],
+            "Mouse grid: clicked the middle of cell 3, level 3,", ("left", "G"),
+            (5 / 18, 13 / 18), "mouse-desktop-zoom", while_zoomed=read_while_zoomed)
+    if bad:
+        return bad
+    log = run.log_since(mark)
+    if problem := zoom_problem(log, expects):
+        return Outcome("fail", problem, screenshot=shot)
+    if not zoomed_in(log):
+        return Outcome("pass", f"no desktop zoom here; the grid still clicked: {saw}",
+                       screenshot=shot)
+    time.sleep(1)
+    if problem := magnifier_problem(before, during[0], _magnifier(run)):
+        return Outcome("fail", problem, screenshot=shot)
+    return Outcome("pass", f"The desktop zoomed in {ZOOM_FACTOR:g}x and was put back; {saw}",
+                   screenshot=shot)
+
+
+@check(SECTION, "mouse_grid_nudge",
+       "“right four” moves the click dot 20 px, and “click” lands there")
+def mouse_grid_nudge(run):
+    with _mouse_on(run):
+        bad, saw, shot = _grid_click(
+            run, ["mouse_seven", "mouse_right_four", "mouse_click"],
+            "Mouse grid: clicked the dot in cell 7, level 2,", ("left", "G"), (1 / 6, 5 / 6),
+            "mouse-nudge", offset=nudge_offset("right", 4))
+    return bad or Outcome("pass", saw, screenshot=shot)
 
 
 @check(SECTION, "mouse_right_click", "“right click five” on the grid opens a context menu")
