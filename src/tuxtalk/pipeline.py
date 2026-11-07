@@ -161,13 +161,16 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # runs and no key is pressed for a cancelled recording.
         if raw is None or _cancelled(job):
             return
+        # "literal open Firefox" types "open Firefox". Read before a command
+        # runs or the mouse grid closes: "literal five" types "five" while
+        # the grid shows.
+        as_words = voice_actions.typed_as_words(raw)
         if _ran_as_command(raw, job):
             # "undo that", "clear everything": the words kept for the
             # sentence's final mark may be gone from the screen.
             job.message.sentence_audio = []
             return
-        # "literal open Firefox" types "open Firefox".
-        raw, said = split_key_command(voice_actions.typed_as_words(raw))
+        raw, said = split_key_command(as_words)
         key = _key_to_press(raw, said, job)
         if said and not raw.strip():
             _press_alone(said, in_password, job)
@@ -322,6 +325,9 @@ def _ran_as_command(raw: str, job: _Job) -> bool:
     """Whether the whole dictation was a command, and was run instead of
     typed. Esc a moment before stops the keys of undo and of select and
     move at the first ("clear everything" emptied the box after it)."""
+    # The mouse grid closes for anything but its own words, before a
+    # command acts or the words are typed under it.
+    voice_actions.close_grid_unless_for_it(raw)
     with keyboard_output.until_cancelled(job.message):
         if (voice_commands.handle_undo(raw, job.beeps_on, job.notify_on)
                 # Select and move by voice ("select the last sentence"), TuxTalk Labs.

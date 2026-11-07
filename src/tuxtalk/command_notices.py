@@ -1,8 +1,9 @@
 """The notes for a voice command that wasn't done (everyday keys, window,
-desktop, sound and music commands, addresses and searches): a short label
-floated over the window and a sentence in a notification, each saying what
-happened and what to do; and for one that was, the log line and the ready
-beep, with a short label where the result isn't seen on the screen."""
+desktop, sound and music commands, addresses and searches, the mouse
+grid): a short label floated over the window and a sentence in a
+notification, each saying what happened and what to do; and for one that
+was, the log line and the ready beep, with a short label where the result
+isn't seen on the screen."""
 from . import app_focus, beeps, desktop_detect, notices, screen_message
 from .logger import setup_logger
 
@@ -143,6 +144,29 @@ NOTES = {
         "Can't take just the window here",
         "This desktop can't take a screenshot of one window. Say \"take a screenshot\" "
         "for the whole screen."),
+    "grid_needs_x": (
+        "The mouse grid needs X (XWayland) here",
+        "This desktop has no X display for TuxTalk to draw the grid on. \"Left click\" and "
+        "\"right click\" still click where the pointer is."),
+    "no_cell": (
+        "No cell {number} here",
+        "The grid has no cell {number}. Say one of the numbers on the screen."),
+    "say_a_number": (
+        "Say a number first",
+        "There's more than one screen, so say the number of a cell, or \"click\" and "
+        "the number."),
+    "smallest": (
+        "That's as small as it goes",
+        "The cells can't get any smaller. Say \"click\" to click the middle, or "
+        "\"click\" and a number."),
+    "cant_place": (
+        "Can't place the pointer exactly on this screen setup",
+        "TuxTalk couldn't put the pointer exactly on that spot, so it didn't click. Use "
+        "the mouse for this one."),
+    "pointer_failed": (
+        "The mouse didn't work this time",
+        "TuxTalk's virtual pointer didn't move or click. Say it again; if it keeps "
+        "happening, open Preferences, Advanced, Show system check."),
 }
 
 # kind -> label, for a command that was done but whose result the user may

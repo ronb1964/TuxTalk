@@ -46,8 +46,11 @@ _css_loaded = False
 
 
 def monitors() -> list[Rect]:
-    """Each monitor's rectangle in X11 desktop pixels, in GDK's order."""
+    """Each monitor's rectangle in X11 desktop pixels, in GDK's order; none
+    with no display at all (GridWindows.show then refuses)."""
     display = Gdk.Display.get_default()
+    if display is None:
+        return []
     rects = []
     for i in range(display.get_n_monitors()):
         g = display.get_monitor(i).get_geometry()

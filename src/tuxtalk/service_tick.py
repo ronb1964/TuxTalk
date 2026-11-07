@@ -12,6 +12,7 @@ from . import (
     hotkey_keys,
     keyboard_grab,
     keyboard_output,
+    mouse_grid,
     pipeline,
     recording,
     virtual_pointer,
@@ -210,6 +211,7 @@ def _quit(cfg, svc: ServiceState) -> None:
                "TuxTalk was quitting and couldn't finish it in time. Say it again once "
                "TuxTalk is back.")
     _leave_the_clipboard()
+    mouse_grid.close("quitting")
     virtual_pointer.close()
     logger.info("Quitting")
     raise SystemExit(0)

@@ -7,12 +7,13 @@ the dictation (voice_commands.handle_navigation)."""
 from collections.abc import Callable
 
 from . import (command_phrases, delivery, desktop_actions, everyday_keys, focused_window,
-               keyboard_output, music_control, open_app, sound_control, system_actions,
-               web_commands, window_actions)
+               keyboard_output, mouse_grid, music_control, open_app, sound_control,
+               system_actions, web_commands, window_actions)
 from . import live_settings as live
 from .app_commands import OpenRequest
 from .command_phrases import (AddressRequest, DesktopRequest, KeyRequest, MusicRequest,
                               SearchRequest, SoundRequest, SystemRequest, WindowRequest)
+from .mouse_phrases import MouseRequest
 
 
 def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
@@ -23,8 +24,7 @@ def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
     *ongoing*: the recording_state.Message of the Type at pause recording
     *raw* is a phrase of, cut at a pause, else None. A command that acts ends
     that recording."""
-    request = command_phrases.parse(raw, navigation=live.voice_navigation,
-                                    actions=live.open_apps)
+    request = _parse(raw)
     if isinstance(request, OpenRequest):
         return open_app.open_request(request, beeps_on, ongoing)
     if isinstance(request, KeyRequest):
@@ -46,7 +46,23 @@ def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
     if isinstance(request, SystemRequest):
         return _act(f"done ({request.action})",
                     lambda: system_actions.run(request, beeps_on), ongoing)
+    if isinstance(request, MouseRequest):
+        return _act(f"done (mouse: {request.action})",
+                    lambda: mouse_grid.act(request, beeps_on), ongoing)
     return None
+
+
+def _parse(raw: str):
+    """command_phrases.parse with the settings and the mouse grid as they are now."""
+    return command_phrases.parse(raw, navigation=live.voice_navigation,
+                                 actions=live.open_apps, grid=mouse_grid.showing())
+
+
+def close_grid_unless_for_it(raw: str) -> None:
+    """Close the mouse grid when the dictation *raw* isn't one of its
+    commands: anything else is then typed or run as usual, with the grid gone."""
+    if mouse_grid.showing() and not isinstance(_parse(raw), MouseRequest):
+        mouse_grid.close("another dictation")
 
 
 def _send(act, request, what: str, beeps_on: bool, ongoing) -> bool:
@@ -69,7 +85,7 @@ def _send(act, request, what: str, beeps_on: bool, ongoing) -> bool:
 
 
 def _act(what: str, do: Callable[[], bool | None], ongoing) -> bool | None:
-    """A command that sends no keys (a window, desktop, sound or music
+    """A command that sends no keys (a window, desktop, sound, music or mouse
     command), done by do(), so the recording can end after it; only one
     that was done ends it, so a refused one ("Couldn't tell which window")
     lets the user carry on talking. *what* is for the log when Esc came
@@ -87,4 +103,4 @@ def typed_as_words(raw: str) -> str:
     types "new tab", as "literal press enter" types "press enter". Anything
     else, or with voice commands off, unchanged."""
     return command_phrases.literal_words(raw, navigation=live.voice_navigation,
-                                         actions=live.open_apps)
+                                         actions=live.open_apps, grid=mouse_grid.showing())
