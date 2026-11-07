@@ -320,7 +320,7 @@ def _magnifier(run):
 
 
 @check(SECTION, "mouse_grid_desktop_zoom",
-       "The desktop zooms in for a small cell and is put back after the click")
+       "The desktop zooms in on the part chosen and is put back after the click")
 def mouse_grid_desktop_zoom(run):
     desktop = _zoom_desktop(run)
     readable = desktop in MAGNIFIER_SCHEMAS

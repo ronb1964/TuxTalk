@@ -144,7 +144,9 @@ def test_top_level_still_draws_nine_bordered_cells(windows):
     assert _boxes_with_class(window, "mouse-grid-dot") == []
 
 
-def test_zoomed_level_has_corner_numbers_and_a_dot_but_no_cell_lines(windows):
+def test_zoomed_level_has_thin_cell_lines_corner_numbers_and_a_dot(windows):
+    """A zoomed level is still a grid, nine thin outlines, with its numbers
+    in the corners rather than over the middle of each cell."""
     grid = Grid([mgw.monitors()[0]])
     windows.show(grid)
     grid.zoom(5)
@@ -152,6 +154,9 @@ def test_zoomed_level_has_corner_numbers_and_a_dot_but_no_cell_lines(windows):
     window = windows._windows[0]
     _flush(window)
     assert _boxes_with_class(window, "mouse-grid-cell") == []
+    thin = _boxes_with_class(window, "mouse-grid-cell-thin")
+    assert sorted((b.get_allocation().x, b.get_allocation().y) for b in thin) == sorted(
+        (round(c.rect.x), round(c.rect.y)) for c in grid.cells)
     corners = _boxes_with_class(window, "mouse-grid-corner")
     assert len(corners) == 9
     for corner, cell in zip(sorted(corners, key=lambda c: int(c.get_text())), grid.cells, strict=True):

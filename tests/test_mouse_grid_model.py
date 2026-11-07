@@ -182,18 +182,3 @@ def test_click_with_no_number_clicks_the_nudged_spot():
     grid.zoom(5)
     grid.nudge("down", 4)
     assert grid.target(None) == (960, 560)
-
-
-def test_cells_are_small_at_1920x1080_after_one_number():
-    grid = Grid([SCREEN])
-    assert not grid.cells_are_small()
-    grid.zoom(5)
-    assert grid.cells_are_small()
-
-
-def test_cells_are_small_on_3840x2160_only_after_two_numbers():
-    grid = Grid([Rect(0, 0, 3840, 2160)])
-    grid.zoom(5)
-    assert not grid.cells_are_small()
-    grid.zoom(5)
-    assert grid.cells_are_small()

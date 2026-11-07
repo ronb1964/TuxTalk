@@ -343,7 +343,7 @@ def _arrival(session: _Session, since: float):
 
 def _zoom(session: _Session, number: int) -> bool:
     """A number: the grid goes into that cell, and the desktop zooms in on
-    it when its cells are small, or re-aims a zoom already on."""
+    it, or re-aims a zoom already on."""
     result = session.grid.zoom(number)
     if result != "ok":
         command_notices.say(result, session.beeps_on, number=number)
@@ -356,7 +356,7 @@ def _zoom(session: _Session, number: int) -> bool:
         if _session is not session:
             return True
         magnifier, zoomed = session.magnifier, session.desktop_zoomed
-    if magnifier is None or not (zoomed or session.grid.cells_are_small()):
+    if magnifier is None:
         return True
     spot = _park(session, magnifier.view)
     if spot is not None and not zoomed:

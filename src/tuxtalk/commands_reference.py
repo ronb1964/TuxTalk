@@ -233,8 +233,8 @@ SECTIONS = (
         Command(("cancel", "close grid", "hide grid"), "closes the grid", "mouse"),
         Command(("left click", "right click", "double click", "middle click"),
                 "with no grid: clicks where the pointer is", "mouse"),
-    ), note="Where it can (KDE, GNOME, Cinnamon) the desktop zooms in as the parts get "
-            "small, and goes back after the click. "
+    ), note="Where it can (KDE, GNOME, Cinnamon) the desktop zooms in on the part "
+            "you say, and goes back after the click. "
             "With no grid showing, a bare number or <b>click</b> is typed as a word. "
             "The grid closes by itself after a minute, a click, Esc, or anything else "
             "you dictate. If the pointer can't be put exactly there, nothing is clicked."),

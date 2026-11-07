@@ -8,8 +8,9 @@ the keyboard from the app being controlled.
 
 Two looks. The top level draws every cell with a border and a centred number.
 A zoomed grid shows one region, outlined and lightly tinted, with the rest
-dimmed more; its cells have no lines, only a small number in their top-left
-corner, and one dot marks where a click lands. The monitor that holds the
+dimmed more; its cells have thin lines and a small number in their top-left
+corner, so nothing sits over the middle of a cell, and one dot marks where a
+click lands. The monitor that holds the
 region draws the dot; the others are dimmed whole.
 
 Every method here runs on the GTK thread. The dictation worker reaches it
@@ -35,6 +36,7 @@ _CSS = b"""
 window.mouse-grid { background-color: rgba(0, 0, 0, 0.18); }
 window.mouse-grid-zoomed { background-color: rgba(0, 0, 0, 0); }
 .mouse-grid-cell { border: 2px solid rgba(255, 210, 0, 0.9); }
+.mouse-grid-cell-thin { border: 1px solid rgba(255, 210, 0, 0.55); }
 .mouse-grid-region { border: 2px solid rgba(255, 210, 0, 1);
                      background-color: rgba(0, 0, 0, 0.18); }
 .mouse-grid-dim { background-color: rgba(0, 0, 0, 0.45); }
@@ -157,8 +159,10 @@ class _MonitorWindow(Gtk.Window):
         for cell in cells:
             self._put_box(cell.rect, "mouse-grid-cell").set_center_widget(_badge(cell))
 
-    def _put_corner_numbers(self, cells: list[Cell]):
+    def _put_zoomed_cells(self, cells: list[Cell]):
+        """Each zoomed cell: a thin outline, and its number in the corner."""
         for cell in cells:
+            self._put_box(cell.rect, "mouse-grid-cell-thin")
             size = corner_size(cell)
             if size is None:
                 continue
@@ -206,7 +210,7 @@ class _MonitorWindow(Gtk.Window):
             if self._holds(region):
                 self._put_dim_around(region)
                 self._put_box(region, "mouse-grid-region")
-                self._put_corner_numbers(grid.cells)
+                self._put_zoomed_cells(grid.cells)
                 if grid.spot and self._holds(Rect(*grid.spot, 0, 0)):
                     self._put_dot(grid.spot)
             else:

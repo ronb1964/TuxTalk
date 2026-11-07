@@ -18,10 +18,6 @@ SPLIT = 3
 # are a visible move.
 NUDGE_PX = 5
 
-# Cells narrower or lower than this are too small to read the screen through,
-# so the desktop is zoomed to show them bigger.
-ZOOM_BELOW_PX = 150
-
 _NUDGES = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
 
 
@@ -120,10 +116,6 @@ class Grid:
         self.spot = (min(max(x, region.x), region.x + region.width - 1),
                      min(max(y, region.y), region.y + region.height - 1))
         return "ok"
-
-    def cells_are_small(self) -> bool:
-        """Whether the cells shown are too small to see well without zooming."""
-        return any(min(c.rect.width, c.rect.height) < ZOOM_BELOW_PX for c in self.cells)
 
     def target(self, number: int | None) -> tuple[float, float] | str:
         """Where to click: a cell's centre, or with no number the zoomed

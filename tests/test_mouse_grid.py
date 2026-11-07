@@ -724,17 +724,18 @@ def magnifier(rig):
     return rig.magnifier
 
 
-def test_a_number_zooms_the_desktop_when_cells_get_small(rig, magnifier, caplog):
-    """On 4K the first number's cells are still big (427x240): no zoom; the
-    second's (142x80) are small, and the desktop zooms in."""
+def test_the_first_number_zooms_the_desktop_even_on_a_big_screen(rig, magnifier, caplog):
+    """On 4K the first number's cells are still 427x240, but the desktop zooms
+    in all the same: every level then looks like the first, a full grid."""
     rig.screens = [Rect(0, 0, 3840, 2160)]
     act("grid")
+    assert magnifier.calls == []
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
-        assert act("zoom", 5) is True
-        assert magnifier.calls == []
         assert act("zoom", 5) is True
     assert magnifier.zoomed and magnifier.count("zoom_in") == 1
     assert "Mouse grid: zoomed the desktop in 3.0x (KDE zoom, proportional)" in caplog.text
+    assert act("zoom", 5) is True
+    assert magnifier.count("zoom_in") == 1          # re-aimed, not zoomed again
 
 
 def test_no_magnifier_means_no_zoom_and_the_grid_still_works(rig):
