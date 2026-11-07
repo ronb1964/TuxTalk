@@ -11,9 +11,9 @@ import pytest
 from evdev import ecodes as e
 
 from conftest import FakeClock, esc
-from tuxtalk import (beeps, command_notices, dictation_worker, focused_window, keyboard_output,
-                     modifier_hotkeys, mouse_grid, mouse_grid_window, notices, service_tick,
-                     voice_actions, virtual_pointer)
+from tuxtalk import (beeps, command_notices, desktop_zoom, dictation_worker, focused_window,
+                     keyboard_output, modifier_hotkeys, mouse_grid, mouse_grid_window, notices,
+                     service_tick, voice_actions, virtual_pointer)
 from tuxtalk import live_settings as live
 from tuxtalk.mouse_grid_model import Rect, close_enough
 from tuxtalk.mouse_phrases import MouseRequest
@@ -32,6 +32,7 @@ class FakeWindows:
         self.on_real_click = on_real_click
         self.showing = False
         self.drawn = []
+        self.dots = []          # the click dot at each redraw
         self._seen = None       # (time, position) of the last motion
         self._moves = 0         # the moves already looked at
         self._at = None         # where the pointer is
@@ -45,6 +46,7 @@ class FakeWindows:
 
     def redraw(self, grid):
         self.drawn.append(grid.region)
+        self.dots.append(grid.spot)
 
     def hide(self):
         self.showing = False
@@ -62,15 +64,51 @@ class FakeWindows:
         return None
 
 
+class FakeMagnifier:
+    """The desktop's zoom as desktop_zoom.find gives it, KDE's by default:
+    whether it's zoomed now, how many restores really put it back, and each
+    zoom_in and restore with where the pointer was sent last when it came."""
+
+    name = "KDE zoom"
+    view = desktop_zoom.View(3.0, "proportional", False)
+
+    def __init__(self, rig, works=True):
+        self.rig = rig
+        self.works = works
+        self.zoomed = False
+        self.put_back = 0
+        self.calls = []
+
+    def zoom_in(self):
+        self.calls.append(("zoom_in", self.rig.landing()))
+        self.while_zooming()
+        self.zoomed = self.works
+        return self.works
+
+    def while_zooming(self):
+        """What else happens while the desktop zooms in: nothing, unless a
+        test says so."""
+
+    def restore(self):
+        self.calls.append(("restore", self.rig.landing()))
+        self.put_back += self.zoomed
+        self.zoomed = False
+
+    def count(self, call):
+        return [name for name, _ in self.calls].count(call)
+
+
 class Rig:
     """The stand-ins' settings and what came out. *offset* puts the landing
     that many pixels to the right; with *visible* off no motion comes at all
-    (the pointer is off every grid window); *refused* is why no grid shows."""
+    (the pointer is off every grid window); *refused* is why no grid shows;
+    *magnifier* is the desktop's zoom (None: a desktop without one)."""
 
     def __init__(self, pointer):
         self.pointer = pointer
         self.clock = FakeClock()
         self.refused = None
+        self.magnifier = None
         self.visible = True
         self.offset = 0
         self.screens = [SCREEN]
@@ -157,6 +195,7 @@ def rig(pointer, monkeypatch):
 
     monkeypatch.setattr(mouse_grid_window, "GridWindows", windows)
     monkeypatch.setattr(mouse_grid_window, "monitors", lambda: list(rig.screens))
+    monkeypatch.setattr(desktop_zoom, "find", lambda: rig.magnifier)
     monkeypatch.setattr(mouse_grid, "time", rig.clock)
     monkeypatch.setattr(mouse_grid.GLib, "timeout_add_seconds", add_timer)
     monkeypatch.setattr(mouse_grid.GLib, "source_remove", remove_timer)
@@ -168,8 +207,8 @@ def rig(pointer, monkeypatch):
     mouse_grid.close("the test is over")
 
 
-def act(action, number=None):
-    return mouse_grid.act(MouseRequest(action, number), True)
+def act(action, number=None, direction=None):
+    return mouse_grid.act(MouseRequest(action, number, direction=direction), True)
 
 
 def test_grid_number_click_clicks_the_cells_centre(rig):
@@ -668,3 +707,176 @@ def test_quitting_with_a_grid_open_closes_it(grid_on_screen, monkeypatch):
     with pytest.raises(SystemExit):
         service_tick._quit(types.SimpleNamespace(), types.SimpleNamespace())
     assert not mouse_grid.showing() and not grid_on_screen.windows[0].showing
+
+
+# The desktop's own zoom
+
+
+@pytest.fixture
+def magnifier(rig):
+    """A desktop whose zoom TuxTalk can drive (KDE's, by default)."""
+    rig.magnifier = FakeMagnifier(rig)
+    return rig.magnifier
+
+
+def test_a_number_zooms_the_desktop_when_cells_get_small(rig, magnifier, caplog):
+    """On 4K the first number's cells are still big (427x240): no zoom; the
+    second's (142x80) are small, and the desktop zooms in."""
+    rig.screens = [Rect(0, 0, 3840, 2160)]
+    act("grid")
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert act("zoom", 5) is True
+        assert magnifier.calls == []
+        assert act("zoom", 5) is True
+    assert magnifier.zoomed and magnifier.count("zoom_in") == 1
+    assert "Mouse grid: zoomed the desktop in 3.0x (KDE zoom, proportional)" in caplog.text
+
+
+def test_no_magnifier_means_no_zoom_and_the_grid_still_works(rig):
+    act("grid")
+    moved = len(rig.pointer.events)
+    assert act("zoom", 5) is True
+    assert len(rig.pointer.events) == moved         # nothing parked
+    assert act("click") is True
+    assert rig.landing() == (960, 540) and rig.buttons() == LEFT_CLICK
+
+
+@pytest.mark.parametrize("screens, number, monitor", [
+    ([SCREEN], 1, SCREEN),
+    ([SCREEN, Rect(1920, 0, 1920, 1080)], 14, Rect(1920, 0, 1920, 1080))])
+def test_the_pointer_parks_where_the_part_shows_centred(rig, magnifier, screens, number,
+                                                        monitor):
+    """Proportional tracking: the pointer waits where the view shows the part
+    centred on its own monitor, not on the part itself; there it goes a pixel
+    aside and back once zoomed, for the desktop to aim the view."""
+    rig.screens = screens
+    act("grid")
+    act("zoom", number)
+    grid = mouse_grid._session.grid
+    spot = desktop_zoom.parking_spot(grid.region, monitor, grid.bounds, magnifier.view)
+    assert close_enough(rig.landing(), spot, tolerance=1)
+    assert magnifier.calls == [("zoom_in", rig.landing())]
+    aside, back = rig.landings()[-2:]
+    assert back == rig.landing() and aside == (back[0] + 1, back[1])
+
+
+def test_cell_one_parks_the_pointer_in_the_corner_on_kde(rig, magnifier):
+    """The spike's check: the pointer at 0,0 and a 3x zoom show cell 1 filling
+    the screen."""
+    act("grid")
+    act("zoom", 1)
+    assert rig.landing() == (0, 0)
+
+
+def test_a_second_number_re_aims_without_zooming_again(rig, magnifier, caplog):
+    act("grid")
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        act("zoom", 5)
+        assert act("zoom", 1) is True
+    grid = mouse_grid._session.grid
+    spot = desktop_zoom.parking_spot(grid.region, SCREEN, grid.bounds, magnifier.view)
+    assert close_enough(rig.landing(), spot, tolerance=1)
+    assert magnifier.count("zoom_in") == 1 and magnifier.zoomed
+    assert caplog.text.count("zoomed the desktop in") == 1
+
+
+def test_the_zoom_goes_back_before_the_click_moves_the_pointer(rig, magnifier):
+    """The click comes on the normal view, with no pan between: the zoom is
+    put back while the pointer still waits at its parking spot."""
+    act("grid")
+    act("zoom", 5)
+    act("zoom", 1)
+    parked = rig.landing()
+    assert act("click") is True
+    assert magnifier.calls[-1] == ("restore", parked) and magnifier.put_back == 1
+    assert rig.landing() == _last_dot(rig) and rig.buttons() == LEFT_CLICK
+
+
+def _last_dot(rig):
+    """The last dot the grid drew, as whole pixels."""
+    x, y = rig.windows[-1].dots[-1]
+    return (round(x), round(y))
+
+
+def _pointer_fails(rig, monkeypatch):
+    monkeypatch.setattr(virtual_pointer, "move_to", lambda fx, fy: False)
+    act("zoom", 5)
+
+
+def _cant_place(rig, monkeypatch):
+    rig.offset = 10
+    act("click", 5)
+
+
+@pytest.mark.parametrize("closing", [
+    lambda rig, mp: act("cancel"),
+    lambda rig, mp: rig.fire_timer(),
+    lambda rig, mp: rig.windows[0].on_real_click(),
+    lambda rig, mp: esc(),
+    lambda rig, mp: mouse_grid.close("another dictation"),
+    lambda rig, mp: mouse_grid.close("a voice edit"),
+    lambda rig, mp: mouse_grid.close("quitting"),
+    lambda rig, mp: act("grid"),
+    _cant_place,
+    _pointer_fails,
+    lambda rig, mp: act("click"),
+    lambda rig, mp: act("move")],
+    ids=["cancel", "timeout", "real click", "Esc", "another dictation", "voice edit",
+         "quitting", "new grid", "cant place", "pointer failed", "click", "move"])
+def test_every_way_the_grid_closes_puts_the_zoom_back(rig, magnifier, monkeypatch, caplog,
+                                                      closing):
+    act("grid")
+    act("zoom", 5)
+    assert magnifier.zoomed
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        closing(rig, monkeypatch)
+    assert not rig.windows[0].showing
+    assert not magnifier.zoomed and magnifier.put_back == 1
+    assert caplog.text.count("Mouse grid: put the desktop zoom back") == 1
+
+
+def test_a_grid_that_closes_while_the_desktop_zooms_in_puts_the_zoom_back(rig, magnifier,
+                                                                         caplog):
+    """A real click as the zoom comes on: the close found nothing to put
+    back yet, so the zoom that came on after it is put back too."""
+    act("grid")
+    magnifier.while_zooming = rig.windows[0].on_real_click
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        act("zoom", 5)
+    assert not mouse_grid.showing()
+    assert not magnifier.zoomed and magnifier.put_back == 1
+    assert caplog.text.count("Mouse grid: put the desktop zoom back") == 1
+
+
+def test_a_failed_zoom_is_logged_and_the_grid_goes_on(rig, monkeypatch, caplog):
+    rig.magnifier = FakeMagnifier(rig, works=False)
+    act("grid")
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert act("zoom", 5) is True
+        assert act("zoom", 1) is True
+    assert rig.magnifier.count("zoom_in") == 1          # tried once, not at every number
+    assert caplog.text.count("the desktop didn't zoom in") == 1
+    assert "zoomed the desktop in" not in caplog.text
+    assert mouse_grid.showing() and act("click") is True and rig.buttons() == LEFT_CLICK
+
+
+def test_a_nudge_moves_the_dot_and_the_click_lands_on_it(rig, magnifier, caplog):
+    act("grid")
+    act("zoom", 5)
+    sent = len(rig.pointer.events)
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert act("nudge", 3, "left") is True
+    assert rig.windows[0].dots[-1] == (945, 540)
+    assert len(rig.pointer.events) == sent              # the pointer stays parked
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert act("click") is True
+    assert rig.landing() == (945, 540) and rig.buttons() == LEFT_CLICK
+    assert "Mouse grid: moved the dot left 3, to 945,540" in caplog.text
+    assert "clicked the dot in cell 5, level 2, at 945,540" in caplog.text
+
+
+def test_a_nudge_before_any_number_asks_for_one(rig):
+    act("grid")
+    assert act("nudge", 1, "up") is False
+    assert rig.notes == ["Say a number first"] and mouse_grid.showing()
+    assert rig.windows[0].dots == []

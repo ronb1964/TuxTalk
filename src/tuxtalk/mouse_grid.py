@@ -1,5 +1,11 @@
 """Mouse by voice, step by step: "mouse grid" shows the numbered grid, a
-number zooms into a cell, and "click" or "move" puts the pointer there.
+number zooms into a cell, "left 3" and the like nudge the click dot, and
+"click" or "move" puts the pointer there.
+
+When a number makes the cells small, the desktop's own zoom (desktop_zoom)
+shows them three times bigger, the pointer waiting where the view shows the
+chosen part centred. Every way the grid closes puts that zoom back, and a
+click or move puts it back first, so the click lands on the normal view.
 
 It runs on the dictation worker, like every voice command. The grid's
 windows belong to GTK's thread, so each step on them goes through
@@ -14,7 +20,8 @@ from typing import NamedTuple
 
 from gi.repository import GLib
 
-from . import beeps, command_notices, delivery, gtk_loop, keyboard_output, virtual_pointer
+from . import (beeps, command_notices, delivery, desktop_zoom, gtk_loop, keyboard_output,
+               virtual_pointer)
 from .logger import setup_logger
 from .mouse_grid_model import Fit, Grid, close_enough
 from .virtual_keyboard import GaveUp
@@ -32,6 +39,10 @@ POLL_S = 0.02
 # Long enough for a hidden grid to be gone from the screen (about a frame),
 # so the click lands on the app under it.
 GONE_S = 0.05
+
+# How long after the desktop zooms in the pointer goes a pixel aside and back,
+# for GNOME and Cinnamon, which aim the view on the pointer's next motion.
+ZOOM_SETTLE_S = 0.15
 
 
 class _Click(NamedTuple):
@@ -56,7 +67,7 @@ class _PointerFailed(Exception):
 class _Session:
     """One grid on the screen, from "mouse grid" until it closes."""
 
-    def __init__(self, windows, grid: Grid, beeps_on: bool):
+    def __init__(self, windows, grid: Grid, beeps_on: bool, magnifier):
         self.windows = windows
         self.grid = grid
         self.beeps_on = beeps_on
@@ -64,6 +75,11 @@ class _Session:
         self.level = 1
         self.zoomed_into: int | None = None     # the cell the last zoom went into
         self.timer = None               # the GLib source of the timeout; GTK's thread only
+        # The desktop's zoom (a desktop_zoom.Magnifier, or None where there's
+        # none, or once put back), and whether it's zoomed in now. Taken and
+        # changed under _lock: the grid closes from any thread.
+        self.magnifier = magnifier
+        self.zoomed = False
 
 
 _lock = threading.Lock()
@@ -119,6 +135,8 @@ def _act(request, beeps_on: bool) -> bool:
         return _grid_gone(request, beeps_on)
     if request.action == "zoom":
         return _zoom(session, request.number)
+    if request.action == "nudge":
+        return _nudge(session, request)
     return _point(session, request)
 
 
@@ -133,7 +151,7 @@ def _grid_gone(request, beeps_on: bool) -> bool:
 
 def _end(only: _Session | None, reason: str) -> bool:
     """Close the grid showing, or only *only* if that is still the one
-    showing. True when this closed it."""
+    showing, and put the desktop's zoom back. True when this closed it."""
     global _session
     with _lock:
         session = _session
@@ -142,7 +160,22 @@ def _end(only: _Session | None, reason: str) -> bool:
         _session = None
     logger.info(f"Mouse grid closed: {reason}")
     gtk_loop.call(_take_down, session)
+    _unzoom(session)
     return True
+
+
+def _unzoom(session: _Session) -> None:
+    """Put the desktop's zoom back, on the thread that asks (a D-Bus call
+    or a settings write, never inside gtk_loop.call), and let go of the
+    magnifier: another restore of it later could undo a newer zoom."""
+    with _lock:
+        magnifier, session.magnifier = session.magnifier, None
+        zoomed, session.zoomed = session.zoomed, False
+    if magnifier is None:
+        return
+    magnifier.restore()
+    if zoomed:
+        logger.info("Mouse grid: put the desktop zoom back")
 
 
 def _take_down(session: _Session) -> None:
@@ -192,7 +225,7 @@ def _open(beeps_on: bool) -> bool:
     if refused:
         command_notices.say(refused, beeps_on)
         return False
-    session = _Session(windows, grid, beeps_on)
+    session = _Session(windows, grid, beeps_on, desktop_zoom.find())
     with _lock:
         _session = session
     session.fit = _calibrate(session)
@@ -256,7 +289,8 @@ def _move_again(session: _Session, target) -> None:
     and again before each press of a click, which may have waited while the
     real mouse moved it. COSMIC gives the window under the pointer its press,
     or its hover, only after the pointer has moved since the grid's window
-    over it went."""
+    over it went. Also once the desktop has zoomed in, for the magnifiers
+    that aim the view on motion."""
     fraction = session.fit.fraction(target)
     for spot in (_aside(session, fraction), fraction):
         if not virtual_pointer.move_to(*spot):
@@ -278,6 +312,8 @@ def _arrival(session: _Session, since: float):
 
 
 def _zoom(session: _Session, number: int) -> bool:
+    """A number: the grid goes into that cell, and the desktop zooms in on
+    it when its cells are small, or re-aims a zoom already on."""
     result = session.grid.zoom(number)
     if result != "ok":
         command_notices.say(result, session.beeps_on, number=number)
@@ -286,6 +322,69 @@ def _zoom(session: _Session, number: int) -> bool:
     session.zoomed_into = number
     gtk_loop.call(session.windows.redraw, session.grid)
     logger.info(f"Mouse grid: zoomed into cell {number}, level {session.level}")
+    magnifier = session.magnifier
+    if magnifier is not None and (session.zoomed or session.grid.cells_are_small()):
+        spot = _park(session, magnifier.view)
+        if not session.zoomed:
+            _zoom_desktop(session, magnifier, spot)
+    return True
+
+
+def _park(session: _Session, view):
+    """The pointer to where the zoomed desktop shows the part chosen centred
+    on its monitor (desktop_zoom.parking_spot); that spot."""
+    grid = session.grid
+    middle = grid.region.center
+    monitor = next(m for m in grid.monitors if _holds(m, middle))
+    spot = desktop_zoom.parking_spot(grid.region, monitor, grid.bounds, view)
+    if not virtual_pointer.move_to(*session.fit.fraction(spot)):
+        raise _PointerFailed
+    return spot
+
+
+def _holds(rect, point) -> bool:
+    """Whether the rectangle *rect* holds the screen point *point*."""
+    return (rect.x <= point[0] < rect.x + rect.width
+            and rect.y <= point[1] < rect.y + rect.height)
+
+
+def _zoom_desktop(session: _Session, magnifier, parked) -> None:
+    """Zoom the desktop in, the pointer already parked, then move the pointer
+    a pixel aside and back for the view to follow it. A zoom that fails
+    leaves the grid as it was, unzoomed; a grid that closed while it zoomed
+    gets the zoom put back here, since its close found nothing to put back."""
+    zoomed = magnifier.zoom_in()
+    with _lock:
+        kept = session.magnifier is magnifier
+        if kept:
+            session.zoomed = zoomed
+            if not zoomed:
+                session.magnifier = None        # not tried again at every number
+    if not zoomed:
+        magnifier.restore()         # whatever the failed zoom couldn't undo itself
+        logger.warning("Mouse grid: the desktop didn't zoom in; the grid goes on without it")
+        return
+    if not kept:
+        magnifier.restore()
+        logger.info("Mouse grid: put the desktop zoom back")
+        return
+    view = magnifier.view
+    logger.info(f"Mouse grid: zoomed the desktop in {view.factor:.1f}x "
+                f"({magnifier.name}, {view.tracking})")
+    time.sleep(ZOOM_SETTLE_S)
+    _move_again(session, parked)
+
+
+def _nudge(session: _Session, request) -> bool:
+    """"left 3" and the like: the click dot moves; the pointer stays where
+    it waits, so a zoomed view doesn't pan."""
+    result = session.grid.nudge(request.direction, request.number)
+    if result != "ok":
+        command_notices.say(result, session.beeps_on)
+        return False
+    gtk_loop.call(session.windows.redraw, session.grid)
+    logger.info(f"Mouse grid: moved the dot {request.direction} {request.number}, "
+                f"to {_xy(session.grid.spot)}")
     return True
 
 
@@ -299,6 +398,7 @@ def _point(session: _Session, request) -> bool:
     if isinstance(target, str):
         command_notices.say(target, session.beeps_on, number=request.number)
         return False
+    _unzoom(session)            # first: the pointer then moves on the normal view
     if not _lands_on(session, target):
         if _end(session, "the pointer didn't land on the spot"):
             command_notices.say("cant_place", session.beeps_on)
@@ -361,7 +461,9 @@ def _spot_name(session: _Session, number: int | None) -> str:
     if number:
         return f"cell {number}, level {session.level},"
     if session.zoomed_into:
-        return f"the middle of cell {session.zoomed_into}, level {session.level},"
+        grid = session.grid
+        where = "the middle of" if grid.spot == grid.region.center else "the dot in"
+        return f"{where} cell {session.zoomed_into}, level {session.level},"
     return "the middle of the screen,"
 
 
