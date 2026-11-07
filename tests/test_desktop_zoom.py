@@ -268,13 +268,15 @@ def test_a_desktop_without_the_magnifier_schemas_gives_none(desktop, gsettings):
     assert desktop_zoom.find() is None
 
 
-def test_restore_twice_changes_nothing_the_second_time(kwin, gsettings, desktop):
+def test_restore_twice_changes_nothing_the_second_time_on_kde(kwin):
     zoom = desktop_zoom.find()
     zoom.zoom_in()
     zoom.restore()
     zoom.restore()
     assert kwin.shortcuts.count("view_zoom_out") == 6
 
+
+def test_restore_twice_changes_nothing_the_second_time_on_gnome(desktop, gsettings):
     desktop("gnome")
     gsettings.add_magnifier("org.gnome.desktop.a11y", enabled=False, factor=2.0)
     zoom = desktop_zoom.find()
@@ -285,7 +287,7 @@ def test_restore_twice_changes_nothing_the_second_time(kwin, gsettings, desktop)
     assert gsettings.magnifier("org.gnome.desktop.a11y") == (False, 4.0)
 
 
-def test_a_failing_zoom_call_leaves_nothing_changed_and_logs(kwin, gsettings, desktop, caplog):
+def test_a_failing_zoom_call_leaves_nothing_changed_and_logs_on_kde(kwin, caplog):
     kwin.failing = ("view_zoom_in", 3)
     assert not desktop_zoom.find().zoom_in()
     # The three steps that went in were taken back out again.
@@ -293,7 +295,9 @@ def test_a_failing_zoom_call_leaves_nothing_changed_and_logs(kwin, gsettings, de
     assert not os.path.exists(_restore_file())
     assert "Desktop zoom" in caplog.text
 
-    caplog.clear()
+
+def test_a_failing_zoom_call_leaves_nothing_changed_and_logs_on_gnome(desktop, gsettings,
+                                                                      caplog):
     desktop("gnome")
     gsettings.add_magnifier("org.gnome.desktop.a11y", enabled=False, factor=2.0)
     gsettings.locked.add("screen-magnifier-enabled")
@@ -316,6 +320,61 @@ def test_a_failed_put_back_keeps_what_is_still_owed(kwin, caplog):
     zoom.restore()
     assert kwin.shortcuts.count("view_zoom_out") == 6
     assert not os.path.exists(_restore_file())
+
+
+def test_the_next_grid_puts_a_failed_put_back_back_first_on_kde(kwin, caplog):
+    first = desktop_zoom.find()
+    first.zoom_in()
+    kwin.failing = ("view_zoom_out", 2)
+    first.restore()                 # four out-steps still owed
+
+    # KWin still failing: the next grid doesn't zoom over what's owed.
+    kwin.shortcuts.clear()
+    assert not desktop_zoom.find().zoom_in()
+    assert "view_zoom_in" not in kwin.shortcuts
+    with open(_restore_file(), encoding="utf-8") as f:
+        assert json.load(f) == {"desktop": "kde", "steps": 4}
+    assert "not zooming" in caplog.text
+
+    # KWin answering again: the four go out first, then the new zoom goes in.
+    kwin.failing = None
+    kwin.shortcuts.clear()
+    second = desktop_zoom.find()
+    assert second.zoom_in()
+    assert kwin.shortcuts == ["view_zoom_out"] * 4 + ["view_zoom_in"] * 6
+    second.restore()
+    assert not os.path.exists(_restore_file())
+
+
+def test_the_same_magnifier_puts_back_what_it_owes_before_zooming_again(kwin):
+    zoom = desktop_zoom.find()
+    zoom.zoom_in()
+    kwin.failing = ("view_zoom_out", 2)
+    zoom.restore()
+    kwin.failing = None
+    kwin.shortcuts.clear()
+    assert zoom.zoom_in()
+    assert kwin.shortcuts == ["view_zoom_out"] * 4 + ["view_zoom_in"] * 6
+
+
+def test_the_next_grid_never_takes_a_half_put_back_magnifier_for_the_users(desktop, gsettings):
+    desktop("gnome")
+    root = "org.gnome.desktop.a11y"
+    gsettings.add_magnifier(root, enabled=False, factor=2.0)
+    first = desktop_zoom.find()
+    first.zoom_in()
+    gsettings.locked.add("screen-magnifier-enabled")
+    first.restore()                 # refused: still on at 3x
+
+    assert not desktop_zoom.find().zoom_in()
+    with open(_restore_file(), encoding="utf-8") as f:
+        assert json.load(f) == {"desktop": "gnome", "enabled": False, "mag_factor": 2.0}
+
+    gsettings.locked.clear()
+    second = desktop_zoom.find()
+    assert second.zoom_in()
+    second.restore()
+    assert gsettings.magnifier(root) == (False, 2.0)
 
 
 # A zoom left on by a service that stopped
@@ -346,6 +405,31 @@ def test_a_damaged_restore_file_is_deleted_with_a_warning(kwin, gsettings, caplo
     assert not os.path.exists(_restore_file())
     assert kwin.shortcuts == []
     assert "WARNING" in caplog.text and "Desktop zoom" in caplog.text
+
+
+def test_a_kde_zoom_left_on_waits_for_kde(kwin, desktop, gsettings, caplog):
+    caplog.set_level(logging.INFO)
+    desktop("gnome")
+    _left_over({"desktop": "kde", "steps": 6})
+    desktop_zoom.restore_left_over()
+    assert kwin.calls == 0
+    assert os.path.exists(_restore_file())
+    assert "put back at a start on KDE" in caplog.text
+    assert "WARNING" not in caplog.text
+
+
+def test_a_restore_file_that_cant_be_read_is_kept(kwin, caplog):
+    os.makedirs(_restore_file())    # opening it fails, as an unreadable file does
+    desktop_zoom.restore_left_over()
+    assert os.path.isdir(_restore_file())
+    assert "couldn't read the restore file" in caplog.text
+    assert kwin.calls == 0
+
+
+def test_a_zoom_step_kwin_cant_use_gives_no_magnifier(kwin):
+    for step in ("nan", "inf", "1.0", "0.5"):
+        _kwinrc(f"[Effect-zoom]\nZoomFactor={step}\n")
+        assert desktop_zoom.find() is None
 
 
 def test_the_service_puts_back_a_zoom_left_on_before_listening(service_main):

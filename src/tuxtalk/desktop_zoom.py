@@ -25,7 +25,7 @@ import logging
 import math
 import os
 import threading
-from typing import NamedTuple, Protocol
+from typing import NamedTuple
 
 from gi.repository import Gio
 
@@ -66,65 +66,106 @@ class View(NamedTuple):
     padded: bool
 
 
-class Magnifier(Protocol):
-    """What the mouse grid drives: KWinZoom or GSettingsMagnifier."""
+class Magnifier:
+    """What the mouse grid drives, KWinZoom or GSettingsMagnifier: zoom in
+    once, and put back. Before zooming it puts back whatever an earlier
+    zoom still owes, its own or one left on disk, and refuses while that
+    can't be done: zooming over it would take the half put back desktop
+    for the user's own."""
 
     name: str       # for the log: "KDE zoom", "GNOME magnifier", ...
     view: View
 
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._zoomed = False
+
     def zoom_in(self) -> bool:
-        """Zoom in to ZOOM; False, logged and with nothing left changed, when
-        it couldn't. Zooming in again while zoomed does nothing."""
+        """Zoom in to ZOOM; True when zoomed, also when it already was.
+        False, logged, when it couldn't: then nothing is left changed,
+        unless even undoing failed, and restore() (always safe to call),
+        the next zoom_in or the next start puts that back."""
+        with self._lock:
+            if self._zoomed:
+                return True
+            self._put_back()
+            if self._owes():
+                log.warning(f"Desktop zoom: not zooming, the {self.name} isn't put back yet")
+                return False
+            if not _nothing_left_on_disk():
+                return False
+            self._zoomed = self._zoom()
+            return self._zoomed
 
     def restore(self) -> None:
         """Put the zoom back as it was before zoom_in. Safe from any thread,
         and to call again: a second call does nothing. Never raises."""
+        with self._lock:
+            self._zoomed = False
+            self._put_back()
+
+    def _zoom(self) -> bool:
+        """Save what puts it back, then zoom; on a failure, undo what was done."""
+        raise NotImplementedError
+
+    def _put_back(self) -> None:
+        """Put back what's still owed, if anything; keep it owed on a failure."""
+        raise NotImplementedError
+
+    def _owes(self) -> bool:
+        raise NotImplementedError
+
+
+def _nothing_left_on_disk() -> bool:
+    """Whether no restore file is left from an earlier zoom (another
+    magnifier's put-back that failed, or one the start couldn't do), after
+    trying once more to put it back."""
+    if os.path.exists(_restore_path()):
+        restore_left_over()
+    if os.path.exists(_restore_path()):
+        log.warning("Desktop zoom: not zooming, a zoom left on earlier isn't put back yet")
+        return False
+    return True
 
 
 def find() -> Magnifier | None:
     """This desktop's zoom, or None where there's none TuxTalk can drive:
-    KDE with its Zoom effect off, a GNOME or Cinnamon magnifier set to a
-    lens or part of the screen, and every other desktop."""
+    KDE with its Zoom effect off or KWin not answering, a GNOME or Cinnamon
+    magnifier set to a lens or part of the screen, and every other desktop."""
     desktop = desktop_detect.get_desktop_environment()
-    try:
-        if desktop == "kde":
-            return _kwin_zoom()
-        if desktop in _GSETTINGS_ROOTS:
-            return _gsettings_magnifier(desktop)
-    except Exception as e:      # dbus-python's errors when KWin doesn't answer
-        log.warning(f"Desktop zoom: couldn't ask the desktop for its zoom: {e}")
+    if desktop == "kde":
+        return _kwin_zoom()
+    if desktop in _GSETTINGS_ROOTS:
+        return _gsettings_magnifier(desktop)
     return None
 
 
 # KDE
 
 
-class KWinZoom:
-    """KWin's Zoom effect, stepped in and back out by its own shortcuts."""
+class KWinZoom(Magnifier):
+    """KWin's Zoom effect, stepped in and back out by its own shortcuts.
+
+    view.factor is the zoom reached from 1x. KWin can't say its zoom
+    level, so a user already zoomed in gets the part aimed less exactly
+    (their zoom times this); the put-back, counted in steps, is exact."""
 
     name = "KDE zoom"
 
     def __init__(self, step: float, tracking: str):
+        super().__init__()
         self._steps = max(1, round(math.log(ZOOM) / math.log(step)))
         self.view = View(step ** self._steps, tracking, False)
-        self._lock = threading.Lock()
         self._owed: int | None = None     # out-steps owed while zoomed
 
-    def zoom_in(self) -> bool:
-        with self._lock:
-            if self._owed is not None:
-                return True
-            if not _save_restore({"desktop": "kde", "steps": self._steps}):
-                return False
-            self._owed = self._steps - _kwin_steps("view_zoom_in", self._steps)
-            if self._owed == self._steps:
-                return True
-            self._put_back()        # the steps that did go in
+    def _zoom(self) -> bool:
+        if not _save_restore({"desktop": "kde", "steps": self._steps}):
             return False
-
-    def restore(self) -> None:
-        with self._lock:
-            self._put_back()
+        self._owed = self._steps - _kwin_steps("view_zoom_in", self._steps)
+        if self._owed == self._steps:
+            return True
+        self._put_back()        # the steps that did go in
+        return False
 
     def _put_back(self) -> None:
         if self._owed is None:
@@ -139,14 +180,22 @@ class KWinZoom:
         self._owed = None
         _remove_restore()
 
+    def _owes(self) -> bool:
+        return self._owed is not None
+
 
 def _kwin_zoom() -> KWinZoom | None:
-    if not kwin_desktop.effect_loaded("zoom", _DBUS_TIMEOUT_S):
+    try:
+        loaded = kwin_desktop.effect_loaded("zoom", _DBUS_TIMEOUT_S)
+    except Exception as e:      # dbus-python's errors when KWin doesn't answer
+        log.warning(f"Desktop zoom: couldn't ask KWin about its Zoom effect: {e}")
+        return None
+    if not loaded:
         log.info("Desktop zoom: KDE's Zoom effect is off")
         return None
     step, tracking = _kwin_zoom_settings()
-    if step <= 1.0:
-        log.info(f"Desktop zoom: KDE's zoom steps by {step}x, which doesn't zoom")
+    if not 1.0 < step < math.inf:
+        log.info(f"Desktop zoom: KDE's zoom steps by {step}x, which TuxTalk can't use")
         return None
     return KWinZoom(step, tracking)
 
@@ -173,7 +222,8 @@ def _kwin_zoom_settings() -> tuple[float, str]:
 
 def _kwin_steps(shortcut: str, steps: int) -> int:
     """Invoke KWin's *shortcut* *steps* times; how many weren't done (0 when
-    all were). A failure is logged and stops the rest."""
+    all were). A failure is logged and stops the rest. A best guess on a
+    timeout: a busy KWin may still take that step after the call gave up."""
     for done in range(steps):
         try:
             kwin_desktop.invoke_shortcut(shortcut, _DBUS_TIMEOUT_S)
@@ -186,38 +236,29 @@ def _kwin_steps(shortcut: str, steps: int) -> int:
 # GNOME and Cinnamon
 
 
-class GSettingsMagnifier:
+class GSettingsMagnifier(Magnifier):
     """GNOME's or Cinnamon's full-screen magnifier, turned on at ZOOM and
     put back to the user's own on/off and factor."""
 
     def __init__(self, desktop: str, tracking: str):
+        super().__init__()
         self._desktop = desktop
         self._root, self.name = _GSETTINGS_ROOTS[desktop]
         self.view = View(ZOOM, tracking, True)
-        self._lock = threading.Lock()
-        self._before: tuple[bool, float] | None = None    # while zoomed
+        self._before: tuple[bool, float] | None = None    # owed while zoomed
 
-    def zoom_in(self) -> bool:
-        """Note the user's own on/off and factor, then turn the magnifier on
-        at ZOOM; see Magnifier.zoom_in."""
-        with self._lock:
-            if self._before is not None:
-                return True
-            before = (_settings(self._root, "applications").get_boolean(_ENABLED),
-                      _settings(self._root, "magnifier").get_double(_FACTOR))
-            if not _save_restore({"desktop": self._desktop, "enabled": before[0],
-                                  "mag_factor": before[1]}):
-                return False
-            self._before = before
-            if _set_magnifier(self._root, True, ZOOM):
-                return True
-            log.warning(f"Desktop zoom: the {self.name}'s settings can't be changed")
-            self._put_back()
+    def _zoom(self) -> bool:
+        before = (_settings(self._root, "applications").get_boolean(_ENABLED),
+                  _settings(self._root, "magnifier").get_double(_FACTOR))
+        if not _save_restore({"desktop": self._desktop, "enabled": before[0],
+                              "mag_factor": before[1]}):
             return False
-
-    def restore(self) -> None:
-        with self._lock:
-            self._put_back()
+        self._before = before
+        if _set_magnifier(self._root, True, ZOOM):
+            return True
+        log.warning(f"Desktop zoom: the {self.name}'s settings can't be changed")
+        self._put_back()
+        return False
 
     def _put_back(self) -> None:
         if self._before is None:
@@ -227,6 +268,9 @@ class GSettingsMagnifier:
             return
         self._before = None
         _remove_restore()
+
+    def _owes(self) -> bool:
+        return self._before is not None
 
 
 def _gsettings_magnifier(desktop: str) -> GSettingsMagnifier | None:
@@ -260,21 +304,33 @@ def _settings(root: str, schema: str):
 
 def _set_magnifier(root: str, enabled: bool, factor: float) -> bool:
     """Write the magnifier's on/off and factor; False when a key refused
-    (locked down). Turning it on, the factor goes first, so it never shows
-    at the old factor; turning it off, it goes off first, so the old factor
-    never shows magnified. A key that already holds its value isn't
-    written: a locked key that never changed has nothing to put back."""
+    (locked down), every write tried all the same. Turning it on, the
+    factor goes first, so it never shows at the old factor; turning it off,
+    it goes off first, so the old factor never shows magnified."""
     switch = _settings(root, "applications")
     magnifier = _settings(root, "magnifier")
-    writes = [lambda: (magnifier.get_double(_FACTOR) == factor
-                       or magnifier.set_double(_FACTOR, factor)),
-              lambda: (switch.get_boolean(_ENABLED) == enabled
-                       or switch.set_boolean(_ENABLED, enabled))]
-    if not enabled:
-        writes.reverse()
-    done = [write() for write in writes]    # every write tried, even after a refusal
+    if enabled:
+        done = [_write_factor(magnifier, factor), _write_enabled(switch, enabled)]
+    else:
+        done = [_write_enabled(switch, enabled), _write_factor(magnifier, factor)]
     Gio.Settings.sync()
     return all(done)
+
+
+# A key that already holds its value isn't written: a locked key that never
+# changed has nothing to put back, and isn't a failure.
+
+
+def _write_factor(magnifier, factor: float) -> bool:
+    if magnifier.get_double(_FACTOR) == factor:
+        return True
+    return magnifier.set_double(_FACTOR, factor)
+
+
+def _write_enabled(switch, enabled: bool) -> bool:
+    if switch.get_boolean(_ENABLED) == enabled:
+        return True
+    return switch.set_boolean(_ENABLED, enabled)
 
 
 # What to put back, kept on disk while zoomed
@@ -289,7 +345,7 @@ def _save_restore(data: dict) -> bool:
         config.write_text_atomic(_restore_path(), json.dumps(data), keep_backup=False)
         return True
     except OSError as e:
-        log.warning(f"Desktop zoom: not zooming, couldn't save how to put it back: {e}")
+        log.warning(f"Desktop zoom: couldn't save how to put the zoom back: {e}")
         return False
 
 
@@ -304,17 +360,24 @@ def _remove_restore() -> None:
 
 def restore_left_over() -> None:
     """Put back a zoom a service that stopped while zoomed left on, from the
-    restore file. A file that makes no sense is deleted; one that couldn't
-    be acted on now is kept for the next start. Never raises."""
+    restore file. A file that makes no sense is deleted; one that can't be
+    read or acted on now is kept for later. Never raises."""
     try:
-        with open(_restore_path(), encoding="utf-8") as f:
-            data = json.load(f)
-        put_back = _left_over_put_back(data)
+        with open(_restore_path(), "rb") as f:
+            text = f.read()
     except FileNotFoundError:
         return
-    except (OSError, ValueError) as e:
+    except OSError as e:
+        log.warning(f"Desktop zoom: couldn't read the restore file, kept for later: {e}")
+        return
+    try:
+        put_back = _left_over_put_back(json.loads(text))
+    except ValueError as e:
         log.warning(f"Desktop zoom: deleted a restore file that made no sense: {e}")
         _remove_restore()
+        return
+    if put_back is None:
+        log.info("Desktop zoom: a KDE zoom was left on; it's put back at a start on KDE")
         return
     if put_back():
         _remove_restore()
@@ -323,8 +386,9 @@ def restore_left_over() -> None:
 
 def _left_over_put_back(data):
     """What puts back the zoom *data* (the restore file) describes, as a
-    function answering whether it did. Raises ValueError when *data* isn't
-    a restore file."""
+    function answering whether it did; None for KDE's zoom off KDE, where
+    KWin isn't there to take it. Raises ValueError when *data* isn't a
+    restore file."""
     desktop = data.get("desktop") if isinstance(data, dict) else None
     if not isinstance(desktop, str):
         raise ValueError(f"desktop {desktop!r}")
@@ -332,6 +396,8 @@ def _left_over_put_back(data):
         steps = data.get("steps")
         if type(steps) is not int or steps < 1:
             raise ValueError(f"steps {steps!r}")
+        if desktop_detect.get_desktop_environment() != "kde":
+            return None
         return lambda: _kwin_steps("view_zoom_out", steps) == 0
     if desktop in _GSETTINGS_ROOTS:
         enabled, factor = data.get("enabled"), data.get("mag_factor")
