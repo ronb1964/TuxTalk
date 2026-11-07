@@ -257,7 +257,7 @@ def test_help_spells_out_the_mouse_grid_with_your_own_hold_key(monkeypatch):
 def test_every_literal_mouse_example_in_help_types_the_words(monkeypatch):
     """Help promises "literal" types these words: with no grid for the first
     two, while a grid shows for the other two."""
-    from tuxtalk import command_phrases, help_text
+    from tuxtalk import command_phrases
     card = _writing(monkeypatch).split("### The mouse", 1)[1].split("### Desktops", 1)[0]
     examples = re.findall(r"<b>literal ([^<]+)</b>", card)
     assert examples == ["mouse grid", "left click", "five", "click"]
