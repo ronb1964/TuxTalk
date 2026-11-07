@@ -9,8 +9,9 @@ import re
 import pytest
 
 from tuxtalk import (ai_cleanup, app_commands, app_finder, command_phrases, commands_cards,
-                     commands_reference, explain, help_pages, help_text, key_commands, normalize,
-                     spoken_quotes, undo, voice_commands, voice_edit_rules, voice_navigation)
+                     commands_reference, explain, help_outline, help_text, key_commands,
+                     normalize, spoken_quotes, undo, voice_commands, voice_edit_rules,
+                     voice_navigation)
 
 PHRASES = [(c.kind, phrase) for s in commands_reference.SECTIONS for c in s.commands
            for phrase in c.said]
@@ -262,7 +263,7 @@ def test_every_command_phrase_help_spells_out_works(monkeypatch):
     writing = next(text for title, text in help_text.tabs() if title == "Writing")
     shown = ("Snapping and moving windows", "Desktops", "Sound and music",
              "Lock, screenshot and help")
-    body = "\n".join(s.body for part in help_pages.parse(writing).parts
+    body = "\n".join(s.body for part in help_outline.parse(writing).parts
                      for s in part.sections if s.title in shown)
     phrases = [p for p in re.findall(r"<b>([^<]+)</b>", body) if p != "F6"]
     assert len(phrases) > 20

@@ -295,6 +295,7 @@ cp /usr/lib/girepository-1.0/*.typelib AppDir/usr/lib/girepository-1.0/ 2>/dev/n
 # tests/test_bundled_typelibs.py derives the unguarded set from the source and
 # fails if this list drifts, so do not edit it by hand without running it.
 REQUIRED_TYPELIBS=(
+    "Atk-1.0.typelib"
     "AyatanaAppIndicator3-0.1.typelib"
     "Gtk-3.0.typelib"
     "Gdk-3.0.typelib"

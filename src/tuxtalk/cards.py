@@ -8,6 +8,7 @@ The look is in prefs_style.css (the tt-* classes); the windows using these
 pages carry its class (ui_style.use_tuxtalk_style).
 """
 import gi
+gi.require_version("Atk", "1.0")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Atk, GLib, Gtk, Pango
 
@@ -64,36 +65,42 @@ def labs_tag(tooltip):
 def card_head(title, look, icon, note="", labs=""):
     """A card's heading band: *icon*, *title* (plain text) and *note* (dim,
     beside it), in the colours of *look* (a tt-<look> class), and the Labs
-    tag when *labs* (its tooltip) is given."""
+    tag when *labs* (its tooltip) is given. Returns the band and its
+    heading's labels (title, then note), which name the card's text."""
     head = Gtk.Box(spacing=10)
     for style in ("tt-card-head", f"tt-{look}"):
         head.get_style_context().add_class(style)
     head.pack_start(Gtk.Image.new_from_icon_name(icon, Gtk.IconSize.LARGE_TOOLBAR),
                     False, False, 0)
-    head.pack_start(heading(f'<span size="large"><b>{escape(title)}</b></span>',
-                            "tt-card-title"), False, False, 0)
+    labels = [heading(f'<span size="large"><b>{escape(title)}</b></span>', "tt-card-title")]
     if note:
-        head.pack_start(label(escape(note), "tt-card-note"), False, False, 0)
+        labels.append(label(escape(note), "tt-card-note"))
+    for widget in labels:
+        head.pack_start(widget, False, False, 0)
     if labs:
         head.pack_end(labs_tag(labs), False, False, 0)
-    return head
+    return head, labels
 
 
-def group_title(title, look, labs=""):
+def group_title(title, look, note="", labs=""):
     """The title over a run of cards (a group of commands, a Help feature),
-    large, in the colour of *look*, with the Labs tag when *labs* (its
-    tooltip) is given."""
+    large, in the colour of *look*, with *note* dim beside it and the Labs
+    tag when *labs* (its tooltip) is given. Returns the widget and the
+    title's label."""
     text = heading(f'<span size="x-large"><b>{escape(title)}</b></span>', "tt-group-title")
     text.get_style_context().add_class(f"tt-{look}")
-    if not labs:
-        return text
+    if not (note or labs):
+        return text, text
     row = Gtk.Box(spacing=10)
-    row.get_style_context().add_class(f"tt-{look}")     # the tag's colour
+    row.get_style_context().add_class(f"tt-{look}")     # the note's and the tag's colour
     row.pack_start(text, False, False, 0)
-    tag = labs_tag(labs)
-    tag.set_valign(Gtk.Align.CENTER)
-    row.pack_start(tag, False, False, 0)
-    return row
+    if note:
+        row.pack_start(label(escape(note), "tt-card-note"), False, False, 0)
+    if labs:
+        tag = labs_tag(labs)
+        tag.set_valign(Gtk.Align.CENTER)
+        row.pack_start(tag, False, False, 0)
+    return row, text
 
 
 def card_box(head):

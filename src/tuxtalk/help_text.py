@@ -1,5 +1,8 @@
-"""What Help says, section by section; help_dialog.py shows it, with the
-commands' cards (commands_cards) on the Commands tab.
+"""What Help says, section by section; help_dialog.py shows it, each topic
+a card. The text is Pango markup with marks where cards begin ("#" the
+title, "##" a feature, "###" a card; help_outline reads them), and lines
+are broken by hand at about 85 characters: a paragraph's flow on in the
+card, a list item's keep their place.
 
 Help is sorted by what you're doing (chatting, writing, in a terminal,
 hands-free, fixing mistakes, something wrong), not by feature, so it can be
@@ -255,6 +258,7 @@ CHATTING = '''# Chats and Messages
 Hold <b>{hold}</b>, say your message ending with <b>press enter</b>, let go:
 "see you at noon, press enter" types "See you at noon." and presses Enter, which
 sends it. Hold <b>{hold}</b> and say only "press enter" to just press Enter.
+
 <b>new line</b> starts a new line and never sends anything.
 
 ### Optional: send every dictation
@@ -369,6 +373,7 @@ Right after a dictation, say the change as your next one, all in one go: hold <b
 say <b>edit that, make it shorter</b>, let go. TuxTalk selects what it just typed and
 rewrites it, with no Shift needed. Saying only "edit that" gets a reminder to say what to
 change, and "edit that file tonight" is typed as words.
+
 With hands-free (double-tap {toggle}) and Type at pause, you can say a message, look it
 over, say <b>edit that, make it friendlier</b>, then <b>press enter</b> to send it, all
 without touching the keyboard.
@@ -393,6 +398,7 @@ Join changes with "and" or "then": <b>make this formal and remove the commas</b>
 <b>translate this to Spanish, then make it shorter</b>. They're done one after the other,
 up to three. Each one has to start like a command (make, remove, add, change...), so
 "make it shorter and simpler" is still one change.
+
 Bold, italics, underline and delete press keys in the app, so they can't be combined with
 other changes: do those as an edit of their own.
 
@@ -400,6 +406,7 @@ other changes: do those as an edit of their own.
 Say <b>make this bold</b>, <b>italicize this</b> or <b>underline this</b> in LibreOffice and
 other word processors, and TuxTalk presses the app's own Ctrl+B, Ctrl+I or
 Ctrl+U for you.
+
 Plain-text apps like KWrite and Kate have no formatting to apply. Font, size and color
 can't be changed by voice.
 
@@ -435,6 +442,7 @@ TuxTalk tells you why in a notification:
 Select text or move the cursor by saying so. When a dictation is <b>only</b> one of these
 commands, TuxTalk does it instead of typing it: hold <b>{hold}</b>, say only <b>select the
 last word</b>, let go. Said inside a longer sentence, the words are typed as usual.
+
 Counts go up to 10 ("three" or "3").
 
 ### What you just said
@@ -474,6 +482,7 @@ Open apps, close or switch windows, snap and move them, press everyday keys, cha
 desktops and volume, control music, lock or take a screenshot, go to an address or search
 the web, all by saying it. Turn it on in
 <b>Preferences → Advanced → TuxTalk Labs → Apps, windows and keys by voice</b>.
+
 The Commands tab lists every one of these commands.
 
 ### How to use it
@@ -536,6 +545,7 @@ Hold <b>{hold}</b>, say <b>take a screenshot of this window</b>, let go. Just th
 you're working in is saved. On GNOME and Pop!_OS your desktop's screenshot tool opens
 instead: choose Window in it (on GNOME, press W), click the window, then press Enter.
 Where a desktop can't take just one window, a note says so.
+
 In a hands-free or Type at pause recording, the recording indicator may show in either
 picture.
 
@@ -646,6 +656,7 @@ on/off toggle. The seconds box beside it sets how long a pause ends it.
 ## 🧪 Type at Pause
 Each phrase is typed as soon as you pause, while you go on talking, instead of
 all of it when you stop. Nothing that was typed changes afterwards.
+
 Turn it on in <b>Preferences → Advanced → TuxTalk Labs → Type at pause</b>. Then hold
 <b>{hold}</b> (or double-tap <b>{toggle}</b>), say "see you at noon", pause: it's typed, and
 you can go on talking.

@@ -171,15 +171,15 @@ def test_help_on_forms_says_what_happens(monkeypatch, no_auto_send, raw, done):
 
 
 def test_help_explains_forms_with_your_own_key(monkeypatch):
-    from tuxtalk import config, help_pages, help_text
+    from tuxtalk import config, help_outline, help_text
     monkeypatch.setattr(config, "load_config", lambda: config.Settings(hotkey="F6"))
     writing = next(text for title, text in help_text.tabs() if "Writing" in title)
-    form = next(s.body for part in help_pages.parse(writing).parts for s in part.sections
+    form = next(s.body for part in help_outline.parse(writing).parts for s in part.sections
                 if s.title == "Filling in a form")
     assert 'Hold <b>F6</b>, say "John Smith, press tab", let go' in form
     assert "F8" not in form
     assert "Claude Desktop" in form and "password box" in form
-    assert 'hold <b>F6</b>, say only "press tab", let go' in form
+    assert 'hold\n    <b>F6</b>, say only "press tab", let go' in form
 
 
 def test_press_tab_alone_in_a_claude_desktop_password_box_presses_the_key(monkeypatch,

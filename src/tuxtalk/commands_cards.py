@@ -75,7 +75,8 @@ def section_card(section, say_width):
     look, icon = GROUP_LOOK[section.group]
     labs = (f"Needs {section.labs} ticked in Preferences → Advanced → TuxTalk Labs"
             if section.labs else "")
-    rows = cards.card_box(cards.card_head(section.title, look, icon, labs=labs))
+    head, _labels = cards.card_head(section.title, look, icon, labs=labs)
+    rows = cards.card_box(head)
     for command in section.commands:
         rows.pack_start(_row(command, say_width), False, False, 0)
     if section.note:
@@ -117,7 +118,7 @@ def all_groups_page(title, intro, outro):
     say_width = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL)
     children = [cards.page_title(title), cards.paragraph(intro)]
     for group in ref.GROUPS:
-        children.append(cards.group_title(group, GROUP_LOOK[group][0]))
+        children.append(cards.group_title(group, GROUP_LOOK[group][0])[0])
         children.extend(_group_children(group, say_width))
     children.append(cards.paragraph(outro))
     return cards.page(children)

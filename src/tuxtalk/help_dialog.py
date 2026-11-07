@@ -1,6 +1,7 @@
 """The Help window, shared by the tray and Preferences: one tab along the
-top for each situation, as help_text.py writes it for this computer, in
-Preferences' look (ui_style.use_tuxtalk_style), so the two windows match.
+top for each situation, as help_text.py writes it for this computer, its
+topics as cards (help_pages; Commands: commands_cards), in Preferences'
+look (ui_style.use_tuxtalk_style), so the two windows match.
 
 Tabs can't wrap to a second row in GTK 3, so each section added makes the
 row wider; on a screen too narrow for it the row scrolls with arrows.
@@ -9,15 +10,17 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Pango
 
-from . import commands_cards, help_pages, help_text, ui_style
+from . import commands_cards, help_outline, help_pages, help_text, ui_style
 from .help_text import COMMANDS_TITLE, FEEDBACK_URL, PROBLEMS_TITLE, REPORT_LINK
 
-# Help's text is broken by hand at about 85 characters, so the page is this
-# many of the font's characters wide, and the window that plus _FRAME_PX of
-# margins, the cards' borders and padding and the scroll bar, or the row of
-# tabs if that is wider.
+# Help's lists are broken by hand at about 85 characters (help_outline keeps
+# an item's lines), so a card's text is this many of the font's characters
+# wide, and the window that plus _CARD_FRAME_PX of margins, the cards'
+# borders and padding and the scroll bar, or the row of tabs plus
+# _TABS_FRAME_PX if that is wider.
 _LINE_CHARS = 87
-_FRAME_PX = 100
+_CARD_FRAME_PX = 100
+_TABS_FRAME_PX = 60
 HEIGHT = 600
 
 
@@ -60,7 +63,9 @@ def _add_sections(notebook, sections):
         if title == PROBLEMS_TITLE:
             page = _problems_page(markup)
         elif title == COMMANDS_TITLE:
-            commands = help_pages.parse(markup)
+            # Its cards are the commands: its text is only a title and an
+            # intro (a test keeps it so).
+            commands = help_outline.parse(markup)
             page = commands_cards.all_groups_page(
                 commands.title, commands.parts[0].intro, help_text.COMMANDS_EXAMPLES)
         else:
@@ -94,8 +99,8 @@ def _fit(window, notebook):
     takes the screen less a margin, its lines wrap and the tabs scroll."""
     context = window.get_pango_context()
     char = context.get_metrics(context.get_font_description(), None).get_approximate_char_width()
-    tabs = notebook.get_preferred_width()[0] + _FRAME_PX
-    wanted = max(int(_LINE_CHARS * char / Pango.SCALE + _FRAME_PX), tabs)
+    tabs = notebook.get_preferred_width()[0] + _TABS_FRAME_PX
+    wanted = max(int(_LINE_CHARS * char / Pango.SCALE + _CARD_FRAME_PX), tabs)
     width = ui_style.width_on_screen(wanted)
     notebook.set_scrollable(width < wanted)
     window.set_default_size(width, HEIGHT)
