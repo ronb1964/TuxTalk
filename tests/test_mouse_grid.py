@@ -11,11 +11,12 @@ import pytest
 from evdev import ecodes as e
 
 from conftest import FakeClock
-from tuxtalk import (beeps, dictation_worker, mouse_grid, mouse_grid_window, notices,
-                     service_tick, voice_actions, virtual_pointer)
+from tuxtalk import (beeps, dictation_worker, modifier_hotkeys, mouse_grid, mouse_grid_window,
+                     notices, service_tick, voice_actions, virtual_pointer)
 from tuxtalk import live_settings as live
 from tuxtalk.mouse_grid_model import Rect
 from tuxtalk.mouse_phrases import MouseRequest
+from tuxtalk.virtual_keyboard import GaveUp
 
 SCREEN = Rect(0, 0, 1920, 1080)
 LEFT_CLICK = [(e.BTN_LEFT, 1), ("SYN", 0), (e.BTN_LEFT, 0), ("SYN", 0)]
@@ -342,6 +343,29 @@ def test_left_click_without_a_grid_clicks_where_the_pointer_is(rig):
 
 def test_a_grid_word_after_the_grid_went_is_left_to_be_typed(rig):
     assert act("zoom", 5) is None and act("cancel") is None
+
+
+def _key_stays_down(monkeypatch):
+    """A dictation key held past modifier_hotkeys' limit: the wait gives up."""
+    def wait():
+        raise GaveUp("key_held")
+    monkeypatch.setattr(modifier_hotkeys, "wait_while_held", lambda: lambda: wait)
+
+
+def test_a_key_held_down_says_so_and_clicks_nothing(rig, monkeypatch):
+    """Not "the mouse didn't work": the user can fix this by letting go."""
+    act("grid")
+    _key_stays_down(monkeypatch)
+    assert act("click", 5) is False
+    assert rig.buttons() == []
+    assert rig.notes == ["Not clicked: a dictation key stayed down"]
+
+
+def test_a_plain_click_with_a_key_held_down_says_so(rig, monkeypatch):
+    _key_stays_down(monkeypatch)
+    assert act("right click") is False
+    assert rig.pointer.events == []
+    assert rig.notes == ["Not clicked: a dictation key stayed down"]
 
 
 def test_a_pointer_that_cant_be_made_says_so(rig, monkeypatch):

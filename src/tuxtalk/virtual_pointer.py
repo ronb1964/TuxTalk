@@ -16,7 +16,7 @@ import time
 
 from . import modifier_hotkeys
 from .logger import setup_logger
-from .virtual_keyboard import GaveUp, write_only_device
+from .virtual_keyboard import write_only_device
 
 logger = setup_logger(__name__)
 
@@ -101,26 +101,20 @@ def move_to(fx: float, fy: float) -> bool:
 
 def click(button: str = "left", count: int = 1) -> bool:
     """Click *button* ("left", "right" or "middle") *count* times (2 is a
-    double click) where the pointer is. False when the pointer can't be made,
-    failed, or a dictation key held down made the click wait too long."""
+    double click) where the pointer is. False when the pointer can't be made
+    or failed. Raises GaveUp("key_held") before a press when a dictation key
+    held down made it wait too long."""
     from evdev import ecodes
     code = getattr(ecodes, BUTTONS[button])
     with _lock:
-        device = _open()
-        if device is None:
+        if _open() is None:
             return False
         _wait_until_ready()
-        try:
-            for turn in range(count):
-                if turn:
-                    time.sleep(DOUBLE_CLICK_GAP_S)
-                _press_and_release(device, code)
-        except GaveUp as stop:
-            logger.warning(f"Not clicked: {stop.reason}")
-            return False
-        except OSError as e:
-            logger.error(f"TuxTalk's virtual pointer failed clicking: {e}")
-            _drop(device)
+    for turn in range(count):
+        if turn:
+            time.sleep(DOUBLE_CLICK_GAP_S)
+        _wait_while_held()
+        if not _press_and_release(code):
             return False
     return True
 
@@ -141,21 +135,38 @@ def _wait_until_ready() -> None:
     time.sleep(max(0.0, _ready_at - time.monotonic()))
 
 
-def _press_and_release(device, code: int) -> None:
-    """One click. Not while a dictation key like Right Ctrl is down: the app
-    would see a Ctrl-click. Letting go is tried even when the press's SYN
-    failed; if that fails too, the caller drops the device, which makes the
-    kernel let go of the button."""
-    from evdev import ecodes
-    if wait := modifier_hotkeys.wait_while_held():
+def _wait_while_held() -> None:
+    """Until no dictation key like Right Ctrl that the desktop can see is
+    down, and a Compose it began is ended (modifier_hotkeys.wait_while_held):
+    the app would see a Ctrl-click. Without the lock, so quitting meanwhile
+    doesn't wait for the key to come up."""
+    before_press = modifier_hotkeys.wait_while_held()
+    while before_press is not None and (wait := before_press()):
         wait()
-    device.write(ecodes.EV_KEY, code, 1)
-    try:
-        device.syn()
-        time.sleep(HOLD_S)
-    finally:
-        device.write(ecodes.EV_KEY, code, 0)
-        device.syn()
+
+
+def _press_and_release(code: int) -> bool:
+    """One click; False when writing failed, and the device is dropped,
+    which makes the kernel let go of the button. Letting go is tried even
+    when the press's SYN failed."""
+    from evdev import ecodes
+    with _lock:
+        device = _device
+        if device is None:              # taken away meanwhile, by quitting
+            return False
+        try:
+            device.write(ecodes.EV_KEY, code, 1)
+            try:
+                device.syn()
+                time.sleep(HOLD_S)
+            finally:
+                device.write(ecodes.EV_KEY, code, 0)
+                device.syn()
+        except OSError as e:
+            logger.error(f"TuxTalk's virtual pointer failed clicking: {e}")
+            _drop(device)
+            return False
+    return True
 
 
 def _drop(device) -> None:

@@ -16,6 +16,7 @@ from gi.repository import GLib
 from . import beeps, command_notices, gtk_loop, keyboard_output, virtual_pointer
 from .logger import setup_logger
 from .mouse_grid_model import Fit, Grid, close_enough
+from .virtual_keyboard import GaveUp
 
 logger = setup_logger(__name__)
 
@@ -77,6 +78,10 @@ def act(request, beeps_on: bool) -> bool | None:
     except _PointerFailed:
         close("the virtual pointer failed")
         command_notices.say("pointer_failed", beeps_on)
+        return False
+    except GaveUp as stop:
+        logger.warning(f"Mouse: not clicked: {stop.reason}")
+        command_notices.say("click_key_held", beeps_on)
         return False
 
 

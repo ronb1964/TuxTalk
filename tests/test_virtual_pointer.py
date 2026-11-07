@@ -1,6 +1,7 @@
 """TuxTalk's own virtual pointer (virtual_pointer.py), on the recording
 pointer from conftest.py; a real one would click on the computer running
 the tests."""
+import pytest
 from evdev import ecodes as e
 
 from tuxtalk import hotkey_helper, keyboard_devices, modifier_hotkeys, virtual_pointer
@@ -30,19 +31,59 @@ def test_the_second_click_of_a_double_click_follows_quickly(pointer):
     assert pointer.clock.now - started < 0.3
 
 
+def _held_until_waited(on_wait):
+    """modifier_hotkeys.wait_while_held as it really is: a check made before
+    each press, handing back the wait while a dictation key is down; the
+    wait runs *on_wait* and the key comes up."""
+    held = [True]
+
+    def wait():
+        on_wait()
+        held[0] = False
+
+    return lambda: (lambda: wait if held[0] else None)
+
+
 def test_a_click_waits_while_the_dictation_modifier_is_held(pointer, monkeypatch):
+    """Right Ctrl held as the click goes would make it a Ctrl+click."""
     seen = []
     monkeypatch.setattr(modifier_hotkeys, "wait_while_held",
-                        lambda: lambda: seen.append(list(pointer.events)))
+                        _held_until_waited(lambda: seen.append(list(pointer.events))))
+    assert virtual_pointer.click() is True
+    assert seen == [[]]                 # nothing was pressed while it waited
+    assert pointer.events == [(e.BTN_LEFT, 1), ("SYN", 0), (e.BTN_LEFT, 0), ("SYN", 0)]
+
+
+def test_waiting_for_the_key_leaves_the_pointer_free(pointer, monkeypatch):
+    """The wait can last half a minute: quitting meanwhile mustn't hang on it."""
+    free = []
+
+    def try_the_lock():
+        free.append(virtual_pointer._lock.acquire(blocking=False))
+        if free[-1]:
+            virtual_pointer._lock.release()
+    monkeypatch.setattr(modifier_hotkeys, "wait_while_held", _held_until_waited(try_the_lock))
     virtual_pointer.click()
-    assert seen[0] == []        # nothing was pressed yet
+    assert free == [True]
+
+
+def test_each_click_of_a_double_click_checks_the_key(pointer, monkeypatch):
+    checks = []
+
+    def wait_while_held():
+        checks.append(len(pointer.events))
+        return lambda: None
+    monkeypatch.setattr(modifier_hotkeys, "wait_while_held", wait_while_held)
+    virtual_pointer.click("left", 2)
+    assert checks == [0, 4]             # before the first press and before the second
 
 
 def test_a_click_that_had_to_give_up_waiting_presses_nothing(pointer, monkeypatch):
     def give_up():
         raise GaveUp("key_held")
-    monkeypatch.setattr(modifier_hotkeys, "wait_while_held", lambda: give_up)
-    assert virtual_pointer.click() is False
+    monkeypatch.setattr(modifier_hotkeys, "wait_while_held", lambda: lambda: give_up)
+    with pytest.raises(GaveUp):
+        virtual_pointer.click()
     assert pointer.events == []
 
 
@@ -88,12 +129,8 @@ def test_no_keyboard_reader_takes_the_pointer():
             return {e.EV_KEY: list(keys), e.EV_ABS: [a for a, _ in caps[e.EV_ABS]]}
 
     assert keyboard_devices.is_keyboard_device(Device()) is False
-    try:
+    with pytest.raises(hotkey_helper.Skipped):
         hotkey_helper.check_keyboard(keys, virtual_pointer.NAME)
-    except hotkey_helper.Skipped:
-        pass
-    else:
-        raise AssertionError("the hotkey helper would read the pointer")
 
 
 def test_the_device_is_made_once_and_only_when_used(pointer):

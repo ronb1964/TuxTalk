@@ -6,6 +6,7 @@ was, the log line and the ready beep, with a short label where the result
 isn't seen on the screen."""
 from . import app_focus, beeps, desktop_detect, notices, screen_message
 from .logger import setup_logger
+from .modifier_hotkeys import HELD_LIMIT_S
 
 logger = setup_logger(__name__)
 
@@ -163,6 +164,10 @@ NOTES = {
         "Can't place the pointer exactly on this screen setup",
         "TuxTalk couldn't put the pointer exactly on that spot, so it didn't click. Use "
         "the mouse for this one."),
+    "click_key_held": (
+        "Not clicked: a dictation key stayed down",
+        f"Right Ctrl or Right Alt read as held down for {HELD_LIMIT_S:g} seconds, and the "
+        "click would have been a Ctrl or Alt click. Let go of the key and say it again."),
     "pointer_failed": (
         "The mouse didn't work this time",
         "TuxTalk's virtual pointer didn't move or click. Say it again; if it keeps "
