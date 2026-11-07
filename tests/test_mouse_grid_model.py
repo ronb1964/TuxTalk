@@ -111,6 +111,9 @@ def _on_a_monitor(point, monitors):
     # both has a hole below the small one.
     [Rect(0, 0, 3840, 2160), Rect(3840, 0, 1920, 1080)],
     [Rect(1920, 0, 1920, 1080), Rect(0, 600, 1920, 1080)],
+    # Staggered so that the first screen's cell 1 and the second's cell 9
+    # are at the same height.
+    [Rect(0, 0, 1280, 1080), Rect(1280, -1620, 3840, 2160)],
 ])
 def test_the_calibration_spots_are_on_a_monitor_and_apart(monitors):
     """Sent off every screen, the pointer stops at an edge, and a fit from

@@ -15,7 +15,7 @@ from tuxtalk import (beeps, dictation_worker, focused_window, keyboard_output, m
                      mouse_grid, mouse_grid_window, notices, service_tick, voice_actions,
                      virtual_pointer)
 from tuxtalk import live_settings as live
-from tuxtalk.mouse_grid_model import Rect
+from tuxtalk.mouse_grid_model import Rect, close_enough
 from tuxtalk.mouse_phrases import MouseRequest
 from tuxtalk.virtual_keyboard import GaveUp
 
@@ -85,6 +85,7 @@ class Rig:
         while the pointer is off the grid (*visible* off)."""
         if not self.visible:
             return []
+        left, top = min(s.x for s in self.screens), min(s.y for s in self.screens)
         right = max(s.x + s.width for s in self.screens)
         bottom = max(s.y + s.height for s in self.screens)
         sent, spots = {}, []
@@ -93,8 +94,9 @@ class Rig:
                 sent[code] = value
             elif code == "SYN" and len(sent) == 2:
                 spots.append(self._onto_a_screen(
-                    round(sent[e.ABS_X] / virtual_pointer.MAX * right) + self.offset,
-                    round(sent[e.ABS_Y] / virtual_pointer.MAX * bottom)))
+                    left + round(sent[e.ABS_X] / virtual_pointer.MAX * (right - left))
+                    + self.offset,
+                    top + round(sent[e.ABS_Y] / virtual_pointer.MAX * (bottom - top))))
         return spots
 
     def _onto_a_screen(self, x, y):
@@ -322,6 +324,20 @@ def test_two_screens_that_dont_fill_their_box_still_click(rig):
     assert act("grid") is True
     assert act("click", 14) is True and rig.notes == []
     assert rig.landing() == (3840 + 960, 540) and rig.buttons() == LEFT_CLICK
+
+
+def test_staggered_screens_on_a_desktop_that_maps_differently_still_click(rig):
+    """The first screen's cell 1 and the second's cell 9 are at the same
+    height there, and a fit needs two spots apart on both axes: every grid
+    refused to open."""
+    rig.screens = [Rect(0, 0, 1280, 1080), Rect(1280, -1620, 3840, 2160)]
+    rig.offset = 40
+    assert act("grid") is True
+    assert act("click", 14) is True and rig.notes == []
+    # Fitted on one screen and used across both, the landing's whole pixels
+    # can put it a pixel or two off, inside what a click allows.
+    assert close_enough(rig.landing(), (1280 + 1920, -1620 + 1080))
+    assert rig.buttons() == LEFT_CLICK
 
 
 def test_the_grid_closes_by_itself_after_a_minute(rig, caplog):
