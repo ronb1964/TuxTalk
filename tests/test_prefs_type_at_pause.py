@@ -251,7 +251,8 @@ def test_the_advanced_tab_builds_it(prefs_window):
 def test_help_explains_type_at_pause(help_pages):
     hands_free = next(text for title, text in help_pages.items() if "Hands-free" in title)
     assert "Type at Pause" in hands_free
-    assert "Fine-tuning (under Type at pause → Adjust Settings)" in hands_free
+    # The heading, and beside it where to find those settings.
+    assert "Fine-tuning\n(under Type at pause → Adjust Settings)" in hands_free
 
 
 # --- stopping the test, its microphone, and what the settings show ------------------

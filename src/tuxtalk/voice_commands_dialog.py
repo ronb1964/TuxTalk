@@ -10,7 +10,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib
 
-from . import commands_cards, commands_reference, ui_style
+from . import cards, commands_cards, commands_reference, ui_style
 from .logger import setup_logger
 from .ui_style import close_on_escape
 
@@ -51,7 +51,7 @@ def show_voice_commands_dialog():
     content.set_margin_bottom(8)
     content.set_margin_start(12)
     content.set_margin_end(12)
-    content.pack_start(commands_cards.paragraph(INTRO), False, False, 0)
+    content.pack_start(cards.paragraph(INTRO), False, False, 0)
     content.pack_start(_group_tabs(), True, True, 0)
 
     hint = Gtk.Label()

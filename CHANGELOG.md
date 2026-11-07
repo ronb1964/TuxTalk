@@ -97,6 +97,10 @@ before 0.15.0, so older entries use that name.
   Labs ones say which tickbox in TuxTalk Labs turns them on. Tab goes from
   card to card, and a screen reader reads each card's commands. Problems is
   the last tab in Help now.
+- The rest of Help has the same look: every tab's topics are cards with a
+  coloured heading, the features with their own steps (Voice Editing, Type
+  at Pause, Transcribe a File) are under a title of their own, and the text
+  fills the window's width. Tab goes from card to card there too.
 - With "Send each dictation automatically" on, TuxTalk doesn't press Enter
   in a terminal any more. It ran whatever you said as a command, so
   "testing 1, 2, 3" came back "command not found". Say "press enter" at the

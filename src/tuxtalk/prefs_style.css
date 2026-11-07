@@ -365,8 +365,10 @@ window.talktype-prefs, dialog.talktype-prefs {
     margin-bottom: 12px;
 }
 
-/* A card has the keyboard focus (Tab moves card by card). */
-.talktype-prefs .tt-card-focus:focus > .tt-card {
+/* A card, or the text in it, has the keyboard focus (Tab moves card by
+   card). */
+.talktype-prefs .tt-card-focus:focus > .tt-card,
+.talktype-prefs .tt-card.tt-has-focus {
     border-color: #8ab4f8;
     box-shadow: 0 0 0 1px #8ab4f8;
 }
@@ -385,6 +387,8 @@ window.talktype-prefs, dialog.talktype-prefs {
 .talktype-prefs .tt-does { color: #b4b4b4; }
 .talktype-prefs .tt-note { color: #969696; font-size: 92%; }
 .talktype-prefs .tt-intro { margin-bottom: 8px; }
+.talktype-prefs .tt-page-title { margin: 2px 0 8px 2px; }
+.talktype-prefs .tt-card-head .tt-card-note { opacity: 0.75; }
 .talktype-prefs .tt-group-title { margin: 14px 0 6px 2px; }
 
 .talktype-prefs .tt-labs {

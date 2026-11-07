@@ -9,14 +9,15 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Pango
 
-from . import commands_cards, help_text, ui_style
+from . import commands_cards, help_pages, help_text, ui_style
 from .help_text import COMMANDS_TITLE, FEEDBACK_URL, PROBLEMS_TITLE, REPORT_LINK
 
 # Help's text is broken by hand at about 85 characters, so the page is this
 # many of the font's characters wide, and the window that plus _FRAME_PX of
-# margins and scroll bar, or the row of tabs if that is wider.
+# margins, the cards' borders and padding and the scroll bar, or the row of
+# tabs if that is wider.
 _LINE_CHARS = 87
-_FRAME_PX = 60
+_FRAME_PX = 100
 HEIGHT = 600
 
 
@@ -35,29 +36,8 @@ def _on_link(label, uri):
     return True
 
 
-def text_page(markup_text):
-    """A page of text: *markup_text* in a wrapping label that scrolls (every Help
-    section but Commands). The label takes the keyboard focus,
-    so the arrow keys, Page Up and Down, Home and End scroll it, and a screen
-    reader reads it."""
-    scrolled = Gtk.ScrolledWindow()
-    scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-    label = Gtk.Label()
-    label.set_markup(markup_text)
-    label.connect("activate-link", _on_link)
-    label.set_line_wrap(True)
-    label.set_xalign(0)
-    label.set_valign(Gtk.Align.START)
-    ui_style.selectable_text(label)
-    for side in ("top", "bottom", "start", "end"):
-        getattr(label, f"set_margin_{side}")(15 if side in ("top", "bottom") else 8)
-    label.connect("key-press-event", ui_style.scroll_with_keys, scrolled)
-    scrolled.add(label)
-    return scrolled
-
-
 def _problems_page(markup):
-    """The Problems section, with a Report a Problem button above its text:
+    """The Problems section, with a Report a Problem button above its cards:
     the first thing seen there, not a link near the bottom of the page."""
     report = Gtk.Button(label="Report a Problem\u2026")
     report.get_style_context().add_class("suggested-action")
@@ -68,14 +48,10 @@ def _problems_page(markup):
     note.set_line_wrap(True)
     note.get_style_context().add_class("dim-label")
     row = Gtk.Box(spacing=14)
-    for side in ("top", "start", "end"):
-        getattr(row, f"set_margin_{side}")(15 if side == "top" else 8)
+    row.set_margin_bottom(6)
     row.pack_start(report, False, False, 0)
     row.pack_start(note, True, True, 0)
-    page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-    page.pack_start(row, False, False, 0)
-    page.pack_start(text_page(markup), True, True, 0)
-    return page
+    return help_pages.page(markup, PROBLEMS_TITLE, _on_link, above=[row])
 
 
 def _add_sections(notebook, sections):
@@ -84,9 +60,11 @@ def _add_sections(notebook, sections):
         if title == PROBLEMS_TITLE:
             page = _problems_page(markup)
         elif title == COMMANDS_TITLE:
-            page = commands_cards.all_groups_page(markup, help_text.COMMANDS_EXAMPLES)
+            commands = help_pages.parse(markup)
+            page = commands_cards.all_groups_page(
+                commands.title, commands.parts[0].intro, help_text.COMMANDS_EXAMPLES)
         else:
-            page = text_page(markup)
+            page = help_pages.page(markup, title, _on_link)
         notebook.append_page(page, Gtk.Label(label=title))
 
 

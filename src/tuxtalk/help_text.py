@@ -133,7 +133,7 @@ def _values():
     if not is_flatpak:
         from .control import shortcut_command
         shortcut_line = (
-            "\n\n<b>Your own shortcut</b>\nA desktop shortcut or script can run "
+            "\n\n### Your own shortcut\nA desktop shortcut or script can run "
             f"<tt>{GLib.markup_escape_text(shortcut_command())}</tt> (or --start, --stop). "
             "It starts TuxTalk if needed and waits until the speech model is loaded.")
 
@@ -154,7 +154,7 @@ def _values():
     kde_notice = ""
     if is_flatpak and "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", ""):
         kde_notice = (
-            "\n\n<b>Turning off KDE's per-dictation popup</b>\n"
+            "\n\n### Turning off KDE's per-dictation popup\n"
             "KDE shows a \"Remote control session started\" popup each time TuxTalk "
             "types. To stop it, use the <b>🔔</b> button in <b>Preferences → General</b>, "
             "or: click the sliders icon on that popup → under <b>Started Remote "
@@ -194,7 +194,7 @@ def _values():
 
     # The Flatpak's shortcuts portal never hears Esc.
     esc_tip = "" if is_flatpak else (
-        "<b>Changed your mind as you let go</b>\n"
+        "### Changed your mind as you let go\n"
         f"Press <b>Esc</b> right after you let go of <b>{hold}</b>: nothing more is typed,\n"
         "and nothing is sent after it. Esc can only stop what hasn't happened yet: on a\n"
         "fast graphics card a short dictation is usually in before you can reach it.\n"
@@ -215,8 +215,9 @@ def _values():
             "CUDA_SIZE_TEXT": CUDA_SIZE_TEXT}
 
 
-START_HERE = '''<span size="large"><b>Dictating in Three Steps</b></span>
+START_HERE = '''# Dictating in Three Steps
 
+### How to dictate
 1. Click where you want the text.
 2. Hold <b>{hold}</b> and talk.
 3. Let go: your words are typed where the cursor is.
@@ -224,22 +225,22 @@ START_HERE = '''<span size="large"><b>Dictating in Three Steps</b></span>
 Say punctuation as you go: <b>period</b>, <b>comma</b>, <b>question mark</b>,
 <b>new line</b>. Help's Commands tab has them all.
 
-<b>Without holding a key</b>
+### Without holding a key
 Tap <b>{toggle}</b> to start, talk as long as you like, and tap it again to stop.
 The Hands-free section has a way to make it stop by itself when you stop talking.
 
-<b>How you know it's listening</b>
+### How you know it's listening
 • A beep when it starts and when it stops.
 • The recording indicator, an orb on the screen while it records. Change its
   look and place in <b>Preferences → Audio → Customize…</b>
 • If the microphone heard nothing but silence, TuxTalk says so and types nothing.
 
-<b>Music, videos and calls</b>
+### Music, videos and calls
 While you talk, TuxTalk pauses music and videos and plays them again after.
 <b>Preferences → Audio → Other sound while you dictate</b> can turn other sounds
 down instead (Discord calls, games), do both, or leave them alone.
 
-<b>Where things are</b>
+### Where things are
 • <b>The TuxTalk menu</b>: the tray icon, TuxTalk in GNOME's top bar, or open TuxTalk
   again from your apps. It has Preferences, Help, Recent Dictations and Fix a Word,
   and the line under the switch says which speech model runs, and where.
@@ -248,15 +249,15 @@ down instead (Discord calls, games), do both, or leave them alone.
   it's faster) for the language you speak. "Change model, device or language" is
   there if you ever want something else.'''
 
-CHATTING = '''<span size="large"><b>Chats and Messages</b></span>
+CHATTING = '''# Chats and Messages
 
-<b>Sending a message</b>
+### Sending a message
 Hold <b>{hold}</b>, say your message ending with <b>press enter</b>, let go:
 "see you at noon, press enter" types "See you at noon." and presses Enter, which
 sends it. Hold <b>{hold}</b> and say only "press enter" to just press Enter.
 <b>new line</b> starts a new line and never sends anything.
 
-<b>Optional: send every dictation</b>
+### Optional: send every dictation
 <b>Preferences → Advanced → Send each dictation automatically.</b> TuxTalk waits
 2 seconds (you can pick none to four) and counts down over the window, then
 presses Enter.
@@ -272,38 +273,39 @@ presses Enter.
   • If what you said ends on a word like "and" or "the", it was probably cut
     off, so it isn't sent.
 
-<b>Changing it before it's sent</b> 🧪 Labs
+### 🧪 Changing it before it's sent
 With voice editing on, right after you dictate: hold <b>{hold}</b>, say <b>edit that,
 make it friendlier</b>, let go. TuxTalk selects what it just typed and rewrites it.
 A message that was already sent can't be changed, so with the automatic send:
   1. Tap <b>{hold}</b> during the countdown, so it isn't sent.
   2. Hold <b>{hold}</b>, say <b>edit that, make it friendlier</b>, let go.
   3. Press Enter when it reads right.
+
 The Writing section has more.
 
-<b>On a call</b>
+### On a call
 <b>Preferences → Audio → Other sound while you dictate → Turn everything down</b>
 lowers the call while you talk, and puts it back after. The call still hears
 your microphone, so mute yourself there.
 
-<b>It went into the wrong window</b>
+### It went into the wrong window
 {paste_tip}<b>Recent Dictations</b> in the TuxTalk menu keeps your last 20:
 hover over one to read it, click to copy it, then paste with Ctrl+V.'''
 
-WRITING = '''<span size="large"><b>Documents and Email</b></span>
+WRITING = '''# Documents and Email
 
-<b>Punctuation and paragraphs</b>
+### Punctuation and paragraphs
 Say <b>period</b>, <b>comma</b>, <b>question mark</b>, <b>new line</b>, <b>new paragraph</b>
 and so on. TuxTalk adds the capitals, and a period at the end if the speech model
 forgot one. Help's Commands tab has them all.
 
-<b>Numbers</b>
+### Numbers
 <b>Preferences → Advanced → Numbers</b>: as the speech model writes them, as digits
 ("twenty-five chickens" → 25 chickens), or digits from 10 up ("three cats",
 "25 chickens"). With digits, "seven thirty" after at becomes 7:30 and "october
 fifteenth" becomes october 15th; "one of them" and fractions stay words.
 
-<b>Taking it back</b>
+### Taking it back
 Each of these is a dictation of its own, said right after the one it takes back.
 Hold <b>{hold}</b>, say "meet me at noon", let go: it's typed. Changed your mind?
 Hold <b>{hold}</b> again, say <b>delete last sentence</b>, let go: it's gone.
@@ -312,7 +314,7 @@ Hold <b>{hold}</b> again, say <b>delete last sentence</b>, let go: it's gone.
   • Ctrl+Z in the app works too.
   • <b>delete everything</b> clears the whole box, text you typed yourself included.
 
-<b>Filling in a form</b>
+### Filling in a form
 One box at a time, each box a dictation of its own:
   1. Click into the first box.
   2. Hold <b>{hold}</b>, say "John Smith, press tab", let go: John Smith is typed,
@@ -332,7 +334,7 @@ One box at a time, each box a dictation of its own:
   • In a password box TuxTalk types nothing. Type the password yourself, then hold
     <b>{hold}</b>, say only "press tab", let go: the cursor moves to the next box.
 
-<b>Optional: cleaner text</b> (Preferences → Advanced)
+### Optional: cleaner text (Preferences → Advanced)
   • <b>Remove "um", "uh" and accidentally repeated words.</b> Instant, nothing
     to download.
   • <b>Fix self-corrections with AI.</b> "meet at 3, no wait, 4" types "meet at 4".
@@ -341,7 +343,7 @@ One box at a time, each box a dictation of its own:
     correction, your words are typed exactly as you said them.
   • Smart quotes, the closing period and spacing are under Fine-tuning.
 
-<b>TuxTalk Labs</b>
+### TuxTalk Labs
 Labs features are experimental: they work, but they're still being refined, may
 change, and won't always get it right. Turn them on in <b>Preferences → Advanced →
 TuxTalk Labs</b>. Voice editing, select and move, opening apps (and windows and keys),
@@ -349,10 +351,10 @@ and the indicator that follows your window are below; Type at pause is in the
 Hands-free section. Your feedback decides what gets finished:
 <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>.
 
-<span size="large">🧪 <b>Voice Editing</b></span>
+## 🧪 Voice Editing
 Change text by saying how you want it changed.
 
-<b>How to use it</b>
+### How to use it
 1. Turn it on once: <b>Preferences → Advanced → TuxTalk Labs → Voice editing</b>. The first
    time, it downloads the AI ({AI_SIZE_TEXT}), unless self-corrections already did.
 2. Select some text in any app: a sentence, a paragraph, a list.
@@ -362,7 +364,7 @@ Change text by saying how you want it changed.
 4. A moment later the selection is replaced with the rewritten text.
 5. Not what you wanted? Press <b>Ctrl+Z</b> in the app to get your original back.
 
-<b>Without the keys: "edit that"</b>
+### Without the keys: "edit that"
 Right after a dictation, say the change as your next one, all in one go: hold <b>{hold}</b>,
 say <b>edit that, make it shorter</b>, let go. TuxTalk selects what it just typed and
 rewrites it, with no Shift needed. Saying only "edit that" gets a reminder to say what to
@@ -371,7 +373,7 @@ With hands-free (double-tap {toggle}) and Type at pause, you can say a message, 
 over, say <b>edit that, make it friendlier</b>, then <b>press enter</b> to send it, all
 without touching the keyboard.
 
-<b>What to say</b>
+### What to say
 Say it in your own words; there's no fixed list. Some that work well:
   • <b>make this more formal</b>  •  <b>make it friendlier</b>
   • <b>make it sound more professional</b>
@@ -386,7 +388,7 @@ These are done exactly, without the AI, so they always come out right:
   • <b>make this a bulleted list</b> or <b>a numbered list</b> (several lines: one point per line)
   • <b>indent this</b>  •  <b>remove the indent</b>  •  <b>delete this</b>
 
-<b>Two or three changes at once</b>
+### Two or three changes at once
 Join changes with "and" or "then": <b>make this formal and remove the commas</b>, or
 <b>translate this to Spanish, then make it shorter</b>. They're done one after the other,
 up to three. Each one has to start like a command (make, remove, add, change...), so
@@ -394,14 +396,14 @@ up to three. Each one has to start like a command (make, remove, add, change...)
 Bold, italics, underline and delete press keys in the app, so they can't be combined with
 other changes: do those as an edit of their own.
 
-<b>Bold, italics and underline</b>
+### Bold, italics and underline
 Say <b>make this bold</b>, <b>italicize this</b> or <b>underline this</b> in LibreOffice and
 other word processors, and TuxTalk presses the app's own Ctrl+B, Ctrl+I or
 Ctrl+U for you.
 Plain-text apps like KWrite and Kate have no formatting to apply. Font, size and color
 can't be changed by voice.
 
-<b>What it's good at, and what it isn't</b>
+### What it's good at, and what it isn't
   • Quick, clear changes to your own text work best: tone, length, grammar, lists.
   • Several lines stay several lines. If the AI runs them together when you didn't
     ask for that, TuxTalk does the edit again one line at a time.
@@ -412,7 +414,7 @@ can't be changed by voice.
     talks about itself has nothing to cut down to.
   • Up to about 3,000 characters at a time (roughly a page).
 
-<b>Good to know</b>
+### Good to know
   • Your clipboard is put back afterwards, the way you left it.
   • The rewrite is also saved in <b>Recent Dictations</b>, and Paste Last
     Dictation types it again.
@@ -420,7 +422,8 @@ can't be changed by voice.
   • It uses the same small AI as <b>Fix self-corrections with AI</b>: one download of
     about {AI_SIZE_TEXT}, shared. Everything runs on this computer; nothing is sent online.
 
-<b>If nothing happens</b>, TuxTalk tells you why in a notification:
+### If nothing happens
+TuxTalk tells you why in a notification:
   • <i>Select the text to change first</i>: nothing was selected.
   • <i>I didn't catch what to change</i>: it heard no instruction. Hold the keys while you talk.
   • <i>The AI is still starting</i>: right after turning it on or starting TuxTalk, wait
@@ -428,25 +431,27 @@ can't be changed by voice.
   • <i>No change</i>: the text may already read that way ("make it formal" on a
     sentence that's formal already). Try other words.
   • <i>You switched windows</i>: the rewrite wasn't typed; it's in Recent Dictations.
-<span size="large">🧪 <b>Select and Move by Voice</b></span>
+## 🧪 Select and Move by Voice
 Select text or move the cursor by saying so. When a dictation is <b>only</b> one of these
 commands, TuxTalk does it instead of typing it: hold <b>{hold}</b>, say only <b>select the
 last word</b>, let go. Said inside a longer sentence, the words are typed as usual.
 Counts go up to 10 ("three" or "3").
 
-<b>What you just said</b>: these work <b>right after you dictate</b>, on what you just said.
+### What you just said
+These work <b>right after you dictate</b>, on what you just said.
   • <b>select that</b>  •  <b>select what I said</b>
   • <b>select the last sentence</b>  •  <b>select the last word</b>
   • <b>select the last 3 words</b>
+
   For any other text, use the commands below (<b>select the previous 3 words</b>,
   <b>select the line</b>) or the mouse.
-<b>Around the cursor</b>
+### Around the cursor
   • <b>select all</b>  •  <b>select the line</b>
   • <b>select the next word</b>  •  <b>select the previous 2 words</b>
   • <b>select the next line</b>
   • <b>select to the end of the line</b>  •  <b>select to the start of the line</b>
   • <b>select to the end</b>  •  <b>select to the top</b>
-<b>Moving</b>
+### Moving
   • <b>go to the end</b>  •  <b>go to the top</b>  •  <b>go to the end of the line</b>
   • <b>go to the start of the line</b>
   • <b>go back 3 words</b>  •  <b>go forward a word</b>
@@ -454,7 +459,7 @@ Counts go up to 10 ("three" or "3").
   • <b>go back 5 letters</b>  •  <b>go up 2 lines</b>  •  <b>go down a line</b>
   • <b>unselect</b>
 
-<b>Good to know</b>
+### Good to know
   • With voice editing on, Shift+{hold} understands these too, so you can do it all on one
     key: Shift+{hold} <i>"select the last sentence"</i>, then
     Shift+{hold} <i>"make it more formal"</i>.
@@ -464,14 +469,14 @@ Counts go up to 10 ("three" or "3").
   • After a select or move, <b>delete last word</b> won't run, since the cursor is
     somewhere else now. Use Ctrl+Z in the app instead.
 
-<span size="large">🧪 <b>Apps, Windows and Keys by Voice</b></span>
+## 🧪 Apps, Windows and Keys by Voice
 Open apps, close or switch windows, snap and move them, press everyday keys, change
 desktops and volume, control music, lock or take a screenshot, go to an address or search
 the web, all by saying it. Turn it on in
 <b>Preferences → Advanced → TuxTalk Labs → Apps, windows and keys by voice</b>.
 The Commands tab lists every one of these commands.
 
-<b>How to use it</b>
+### How to use it
 Hold <b>{hold}</b>, say <b>open Firefox</b>, let go. Firefox opens, or comes to the front
 if it's already open. Nothing is typed. <b>launch</b> and <b>start</b> work like <b>open</b>,
 and the name is whatever the app is called in your menu: <b>open the calculator</b>,
@@ -484,7 +489,7 @@ and the name is whatever the app is called in your menu: <b>open the calculator<
     other.
   • <b>literal open Firefox</b> types the words "open Firefox".
 
-<b>Windows</b>
+### Windows
 Hold <b>{hold}</b>, say <b>close Firefox</b>, let go. Nothing is typed.
   • <b>close Firefox</b> closes its front window (the one you used last), <b>close all
     Firefox</b> closes every one, <b>close window</b> closes the one you're in.
@@ -494,7 +499,7 @@ Hold <b>{hold}</b>, say <b>close Firefox</b>, let go. Nothing is typed.
     so; say <b>open Firefox</b> to start it.
   • <b>minimize window</b>, <b>maximize window</b> and <b>restore window</b>.
 
-<b>Snapping and moving windows</b>
+### Snapping and moving windows
 Hold <b>{hold}</b>, say <b>snap left</b>, let go. The window you're in fills that side.
   • Halves: <b>snap left</b>, <b>snap right</b>, <b>snap top</b>, <b>snap bottom</b>
   • Quarters: <b>snap top left</b>, <b>snap top right</b>, <b>snap bottom left</b>,
@@ -505,12 +510,12 @@ Hold <b>{hold}</b>, say <b>snap left</b>, let go. The window you're in fills tha
   • <b>minimize Firefox</b>, <b>maximize Firefox</b>, <b>restore Firefox</b>: any open app by
     name.
 
-<b>Desktops</b>
+### Desktops
 Hold <b>{hold}</b>, say <b>show desktop</b>, let go. Say it again and the windows come back.
   • <b>show all windows</b> spreads them out so you can pick one.
   • <b>next desktop</b>, <b>previous desktop</b>, <b>switch to desktop two</b> (one to nine).
 
-<b>Sound and music</b>
+### Sound and music
 Hold <b>{hold}</b>, say <b>volume up</b>, let go.
   • <b>volume up</b>, <b>volume down</b>; add a number for more: <b>volume up 3</b>.
   • <b>mute sound</b> mutes the computer, TuxTalk's beeps too. Say <b>unmute sound</b> to undo.
@@ -519,22 +524,25 @@ Hold <b>{hold}</b>, say <b>volume up</b>, let go.
   • <b>pause music</b> pauses every player that is playing. With two players paused,
     <b>play music</b> names them in a note and starts neither: you pick one.
 
-<b>Lock, screenshot and help</b>
+### Lock, screenshot and help
 Hold <b>{hold}</b>, say <b>lock screen</b>, let go. Your desktop's own lock comes up, so you
 need your password to come back. TuxTalk then checks that the computer says it's locked:
 the ready beep means it is. If that can't be confirmed, a note says so: check the screen.
+
 Hold <b>{hold}</b>, say <b>take a screenshot</b>, let go. On KDE it is saved in
 Pictures/Screenshots; elsewhere, where your desktop keeps them. GNOME may ask once.
+
 Hold <b>{hold}</b>, say <b>take a screenshot of this window</b>, let go. Just the window
 you're working in is saved. On GNOME and Pop!_OS your desktop's screenshot tool opens
 instead: choose Window in it (on GNOME, press W), click the window, then press Enter.
 Where a desktop can't take just one window, a note says so.
 In a hands-free or Type at pause recording, the recording indicator may show in either
 picture.
+
 Hold <b>{hold}</b>, say <b>what can I say</b>, let go. The Voice Commands window opens with
 this list.
 
-<b>Keys</b>
+### Keys
 Hold <b>{hold}</b>, say <b>new tab</b>, let go. The key is pressed in the window you're in.
   • Tabs: <b>new tab</b>, <b>close tab</b>, <b>next tab</b>, <b>previous tab</b>,
     <b>reopen tab</b>
@@ -545,17 +553,18 @@ Hold <b>{hold}</b>, say <b>new tab</b>, let go. The key is pressed in the window
   • Editing: <b>find on page</b>, <b>save the file</b>, <b>select all</b>,
     <b>copy the selection</b>, <b>paste it</b> (or <b>paste that</b>), <b>press escape</b>
 
-<b>Addresses and web search</b>
+### Addresses and web search
 Hold <b>{hold}</b>, say <b>go to youtube.com</b> (or <b>open youtube dot com</b>), let go.
 In a browser it uses the address bar, so it replaces the page you're on; anywhere else
 your default browser opens it.
+
 Hold <b>{hold}</b>, say <b>web search cheap tires</b>, let go: your browser's own search
 engine shows the results. In a browser that replaces the page you're on too; from any
 other app a new tab opens.
 
 Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>.
 
-<b>Good to know</b>
+### Good to know
   • Only a dictation that is just the command counts. "I opened Firefox yesterday" and
     "open the door and come in" are typed as usual.
   • A name that fits no app is typed as usual, so a sentence like "Start over." is never
@@ -583,10 +592,11 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
     voice command here, whatever language you dictate in. App names can be said as the
     menu shows them.
 
-<span size="large">🧪 <b>Indicator Follows Your Window</b></span>
+## 🧪 Indicator Follows Your Window
 The recording indicator shows up in the window you're dictating into, wherever
 that window is on the screen, instead of always in the same spot.
 
+### How it works
   • Turn it on in <b>Preferences → Advanced → TuxTalk Labs</b>.
   • It's placed each time you start talking, so it goes wherever your window is.
   • The position you pick in <b>Preferences → Audio → Customize…</b> (bottom center, top
@@ -598,55 +608,55 @@ that window is on the screen, instead of always in the same spot.
     and on X11 desktops like Cinnamon and XFCE. On a scaled screen it may sit
     a little off.'''
 
-TERMINALS = '''<span size="large"><b>Terminals and Code Editors</b></span>
+TERMINALS = '''# Terminals and Code Editors
 
-<b>Plain text, by itself</b>
+### Plain text, by itself
 In a terminal a dictation starts without a capital and ends without a period, so
 "git status" is typed as git status. In code editors (VS Code, Zed, JetBrains
 IDEs…) no period is added at the end. Everywhere else, chat apps included,
 punctuation is as usual. (Preferences → Advanced → Fine-tuning → Plain text in
 terminals and code editors.)
 
-<b>Running a command</b>
+### Running a command
 Hold <b>{hold}</b>, say <b>git status, press enter</b>, let go: the command is typed and
 run. Send each dictation automatically doesn't press Enter in a terminal, so nothing
 runs before you've read it: end with <b>press enter</b> when you want it to run.
 
-<b>Long commands</b>
+### Long commands
 Snippets: say a short phrase and TuxTalk types the full text. Add one in
 <b>Preferences → Words → Add Snippet</b>, then hold <b>{hold}</b>, say its phrase, let go.
 Wrap the text in "quotes" to type it exactly as written, without capitals or a
 period.
 
-<b>What's different in a terminal</b>
+### What's different in a terminal
   • <b>delete everything</b> clears the line you're typing (Ctrl+E, Ctrl+U).
   • Select and move and voice editing don't work there: a terminal has no
     selection to change, and those keys mean other things.
   • Pasting uses Shift+Ctrl+V, which TuxTalk picks by itself.{ctrl_space_line}{shortcut_line}'''
 
-HANDS_FREE = '''<span size="large"><b>Hands-free and Long Talks</b></span>
+HANDS_FREE = '''# Hands-free and Long Talks
 
-<b>Double-tap {toggle}</b>
+### Double-tap {toggle}
 Turn it on in Preferences → General ("Double-tap {toggle} for hands-free"). Then
 double-tap the toggle key, talk, and when you stop talking the recording ends and
 your text is typed. A short high beep confirms the double-tap. Say nothing at all
 for 10 seconds and it stops without typing anything. A single tap stays a plain
 on/off toggle. The seconds box beside it sets how long a pause ends it.
 
-<span size="large">🧪 <b>Type at Pause</b></span>
+## 🧪 Type at Pause
 Each phrase is typed as soon as you pause, while you go on talking, instead of
 all of it when you stop. Nothing that was typed changes afterwards.
 Turn it on in <b>Preferences → Advanced → TuxTalk Labs → Type at pause</b>. Then hold
 <b>{hold}</b> (or double-tap <b>{toggle}</b>), say "see you at noon", pause: it's typed, and
 you can go on talking.
 
-<b>How it works</b>
+### How it works
   • A pause of about a second ends a phrase, and it's typed right away.
   • Whether that pause ends a sentence is decided once your next words are heard:
     then a period goes in, or a comma, or the sentence just carries on.
   • "delete last sentence" and the other commands work on the phrase before them.
 
-<b>Fine-tuning</b> (under Type at pause → Adjust Settings)
+### Fine-tuning (under Type at pause → Adjust Settings)
   • <b>Pause length</b>: how long a silence ends a phrase. A dryer, a fan or a busy
     kitchen doesn't count as talking, so the pause is still heard; other people
     talking nearby does.
@@ -657,7 +667,9 @@ you can go on talking.
     you're still talking, make the pause longer; if it never flashes when you pause,
     make it shorter.
 
-<span size="large"><b>Transcribe a File</b></span> (TuxTalk menu → Transcribe a File...)
+## Transcribe a File
+
+### Turning a recording into text (TuxTalk menu → Transcribe a File...)
   • Turns a recording or a video into text: MP3, M4A, OGG, WAV, FLAC, MP4, MKV, WebM
     and more.
   • Choose a file or drop one on the window. It uses the model and device you
@@ -668,9 +680,9 @@ you can go on talking.
     what's done.
   • Nothing leaves your computer.'''
 
-MISTAKES = '''<span size="large"><b>Fixing Mistakes</b></span>
+MISTAKES = '''# Fixing Mistakes
 
-<b>A word it keeps getting wrong</b>
+### A word it keeps getting wrong
   • Right after a dictation, hold <b>{hold}</b>, say only <b>fix that word</b>, let go:
     Fix a Word opens over your window on what you just said.
   • Or TuxTalk menu → Fix a Word..., or Preferences → Words → Fix a Word...
@@ -679,7 +691,7 @@ MISTAKES = '''<span size="large"><b>Fixing Mistakes</b></span>
     speech model. Handy for names, brands and technical terms, like
     "bamboo studio" → BambuStudio.
 
-<b>Your Words: names and terms spelled your way</b>
+### Your Words: names and terms spelled your way
 In <b>Preferences → Words</b>.
   • Whisper models are told about them before they listen.
   • Parakeet leans toward them while it listens, on the processor and the
@@ -690,15 +702,15 @@ In <b>Preferences → Words</b>.
     ClaudeClaw) and it fixes that too, whatever the model.
   • Fix a Word adds to this list: the word, and what it heard.
 
-<b>Snippets</b>
+### Snippets
 Say a short phrase and TuxTalk types the full text: "my email" →
 user@example.com. Add your own in <b>Preferences → Words → Add Snippet</b>, then hold
 <b>{hold}</b>, say the phrase, let go.
 
-{esc_tip}<b>Getting it back</b>
+{esc_tip}### Getting it back
 <b>Recent Dictations</b> in the TuxTalk menu keeps your last 20. {paste_tip}
 
-<b>When it mishears a lot</b>
+### When it mishears a lot
   • Speak at a normal pace, with the microphone close and the room quiet.
   • Check the microphone: <b>Preferences → Audio</b>, Start Recording, and talk. The
     level should move well past the middle. Input Volume there is the same as your
@@ -711,23 +723,23 @@ user@example.com. Add your own in <b>Preferences → Words → Add Snippet</b>, 
     → Change model, device or language → Language: pick yours, or "Several
     languages" to tick the ones you speak (Whisper models).'''
 
-PROBLEMS = '''<span size="large"><b>When Something's Wrong</b></span>
+PROBLEMS = '''# When Something's Wrong
 
-<b>No key works (dictation never starts)</b>
+### No key works (dictation never starts)
 {no_hotkey_block}
 
-<b>"No sound from the microphone"</b>
+### "No sound from the microphone"
 The microphone sent nothing but silence: it's muted, turned all the way down, or
 it's the wrong one. Check its mute switch, then <b>Preferences → Audio →
 Microphone</b> and the test beside it.
 
-<b>Nothing gets typed</b>
+### Nothing gets typed
   • Click into a text box first, and give the app a moment to take the focus.
   • <b>Preferences → Advanced → System check</b> opens by itself when typing needs
     fixing; its button fixes it.
   • {typing_para}
 
-<b>Letters come out wrong</b>
+### Letters come out wrong
   • Capitals and small letters swapped ("hELLO"): Caps Lock is on. TuxTalk can't
     see it, so turn it off before dictating.
   • On COSMIC with more than one keyboard layout, TuxTalk types for the first one
@@ -738,7 +750,7 @@ Microphone</b> and the test beside it.
     of your kanata config and restart kanata. If the config lists its keyboards
     with <tt>linux-dev</tt>, leave TuxTalk's out of that list instead.
 
-<b>Too slow</b>
+### Too slow
   • Use your graphics card: TuxTalk menu → Performance → Recommended for this
     computer, or Use Recommended in Preferences → General.
   • <b>Vulkan (any GPU)</b>: AMD, Intel or NVIDIA, a {ENGINE_SIZE_TEXT} download. It's the
@@ -752,14 +764,14 @@ Microphone</b> and the test beside it.
     TuxTalk lets the speech model rest. Your keys keep working; the first dictation
     after a break takes a few seconds longer. Preferences → General → Power Saving.
 
-<b>Performance presets</b> (TuxTalk menu → Performance)
+### Performance presets (TuxTalk menu → Performance)
   • <b>Recommended for this computer:</b> the setup TuxTalk picks for your graphics
     card and language, usually Parakeet on your graphics card.
   • <b>Lightest:</b> Whisper Base on the processor, a small download and little work.
   • <b>Battery saver:</b> Whisper Tiny on the processor, and the speech model rests
     after 2 idle minutes (choosing another preset puts that back).
 
-<b>Speech models</b> (Preferences → General → Change model, device or language)
+### Speech models (Preferences → General → Change model, device or language)
 Sizes are the download for the processor; on a graphics card (Vulkan) the Whisper
 models are about half that.
   • <b>Parakeet (670 MB)</b>: NVIDIA's engine. Very accurate for English and 24 European
@@ -769,27 +781,28 @@ models are about half that.
     faster and less accurate as they get smaller. Small is a good start on the processor.
   • <b>Whisper medium (1.5 GB)</b> and <b>large-v3 (3.1 GB)</b>: more accurate and slower;
     large-v3 wants a graphics card.
+
 <b>What works with what?</b>, in the same place, shows which models run on the
 processor, Vulkan and CUDA, and which of those your computer has.
 
-<b>Dictation stopped working</b>
+### Dictation stopped working
 Choose <b>Restart Service</b> in the TuxTalk menu, or turn dictation off and on
 again there. The log is {log_path}.{kde_notice}
 
-<b>A settings change went wrong</b>
+### A settings change went wrong
 <b>Preferences → Updates &amp; Backup → Earlier settings</b> lists the copies TuxTalk
 saves by itself when it starts (your last 10 settings changes) and your own
 backups. Restore goes back to one. <b>Save Backup</b> puts your settings, snippets,
 Your Words and stats in one file, to keep or to load on another computer with
 <b>Load Backup</b>; the next backup goes to the same folder.
 
-<b>Updates</b>
+### Updates
   • Check for updates: the TuxTalk menu, or Preferences → Updates &amp; Backup.
   • {update_block}
   • <b>Config files:</b> {cfg_dir}
   • <b>AI models:</b> {cache_dir}
 
-<b>Privacy</b>
+### Privacy
 Everything runs on your computer; nothing you say is sent anywhere. Your Stats keeps
 only numbers (words, dictations, time), never the text. Recent Dictations keeps
 your last 20 in memory, gone when you log out. The log has your words only if you
@@ -797,7 +810,7 @@ turn on "Log transcribed text" (Preferences → Advanced → Fine-tuning), for a
 report; then it has what you said in a password box too, though nothing was
 typed there.
 
-<b>Password fields</b>
+### Password fields
 TuxTalk doesn't type into a password box. Hold <b>{hold}</b> and talk there, let go: you
 hear the low beep, "TuxTalk doesn't type into password fields" shows over the window,
 and nothing is typed or kept in Recent Dictations. Type passwords on the keyboard.
@@ -810,7 +823,7 @@ Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in 
   • The desktop's own prompt, when an app asks for your admin password, counts too.
     A terminal asking for one (sudo) doesn't tell it: there, don't dictate.
 
-<b>Bug reports and feedback</b>
+### Bug reports and feedback
   • <b>Something not working?</b> <a href="{REPORT_LINK}">Report a problem</a> gathers
     what helps find it: your system, your settings, and the end of TuxTalk's log
     and of its hotkey helper's.
@@ -820,7 +833,7 @@ Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in 
     <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>
   • <b>Log file:</b> {log_path}'''
 
-_COMMANDS_INTRO = '''<span size="large"><b>Voice Commands Reference</b></span>
+_COMMANDS_INTRO = '''# Voice Commands Reference
 
 There are two kinds:
 • <b>Inside what you say</b>: punctuation and formatting, said as you talk. Hold your
@@ -828,6 +841,7 @@ There are two kinds:
 • <b>On their own</b>: <b>delete last sentence</b>, <b>edit that</b>…, <b>fix that word</b>. Say
   them right after the dictation they're about, as a dictation by themselves: hold
   your dictation key, say only the command, let go.
+
 The commands are English words, whatever language you dictate in. The same list,
 a tab per group, is in the TuxTalk menu → Voice Commands..., or, with <b>Apps, windows
 and keys by voice</b> ticked in TuxTalk Labs, say <b>what can I say</b>.'''
@@ -841,9 +855,9 @@ Result: First sentence.
 Second sentence!'''
 
 
-TIPS = '''<span size="large"><b>Tips</b></span>
+TIPS = '''# Tips
 
-<b>Getting good results</b>
+### Getting good results
   • Have the microphone close to your mouth, or use a headset, above all in a noisy
     room (a fan, a dryer, a busy street). Nothing helps more.
   • Turn off noise filters on the microphone for dictation (noise suppression in
@@ -853,17 +867,17 @@ TIPS = '''<span size="large"><b>Tips</b></span>
   • To check your room: <b>Preferences → Audio</b>, Start Recording, talk, Stop. The
     test says when the room is noisy for your voice.
 
-<b>Names and unusual words</b>
+### Names and unusual words
   • Add them in <b>Preferences → Words → Add Word</b>, and they're spelled your way.
   • One came out wrong? Right after, hold <b>{hold}</b>, say only <b>fix that word</b>, let go.
 
-<b>Easier on the hands</b>
+### Easier on the hands
   • {key_choice_tip}
   • Hands-free: turn on "Double-tap {toggle} for hands-free" in <b>Preferences →
     General</b>. Then double-tap <b>{toggle}</b> and talk without holding a key, and it
     stops when you do.
 
-<b>Everyday shortcuts</b>
+### Everyday shortcuts
   • To send a message: hold <b>{hold}</b>, say it and end with <b>press enter</b>, let go.
     "see you at noon, press enter" is typed and sent.
   • To fill in a form box by box: hold <b>{hold}</b>, say what goes in the box and end

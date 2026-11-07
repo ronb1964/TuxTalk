@@ -1,22 +1,17 @@
-"""The voice commands as cards, for Help's Commands tab and the Voice Commands
-window: one card per section of commands_reference, with a coloured heading
-band, an icon from the desktop's icon theme, a Labs tag where the commands
-need TuxTalk Labs, and two columns, what to say and what it does. A run of
-plain lines let the eye slide past every heading; a band of colour per
-group, the same in both windows, stops it at each one.
+"""The voice commands as cards (cards.py), for Help's Commands tab and the
+Voice Commands window: one card per section of commands_reference, in its
+group's colour, the same in both windows, with two columns, what to say and
+what it does.
 
 Each card takes the keyboard focus, so Tab goes card by card, and a screen
 reader hears its heading and its commands.
-
-The look is in prefs_style.css (the tt-* classes); the windows using these
-pages carry its class (ui_style.use_tuxtalk_style).
 """
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Atk, GLib, Gtk, Pango
+from gi.repository import Gtk
 
+from . import cards
 from . import commands_reference as ref
-from . import ui_style
 
 # Each group's class in prefs_style.css (its colours) and its icon.
 GROUP_LOOK = {
@@ -37,57 +32,24 @@ def labs_line(sections):
     boxes = dict.fromkeys(s.labs for s in sections if s.labs)
     if not boxes:
         return ""
-    need = " and ".join(f"<b>{_escape(box)}</b>" for box in boxes)
+    need = " and ".join(f"<b>{cards.escape(box)}</b>" for box in boxes)
     return (f"<b>Labs</b>: the cards tagged Labs need {need} ticked in "
             "<b>Preferences → Advanced → TuxTalk Labs</b>.")
-
-
-def _escape(text):
-    return GLib.markup_escape_text(text)
-
-
-def _plain(markup):
-    """*markup* as the words a screen reader says."""
-    return Pango.parse_markup(markup, -1, "\0")[2]
-
-
-def _label(markup, style, wrap=True):
-    """A left-aligned label of *markup* carrying the class *style*."""
-    label = Gtk.Label(xalign=0)
-    label.set_markup(markup)
-    label.set_line_wrap(wrap)
-    label.get_style_context().add_class(style)
-    return label
-
-
-def paragraph(markup):
-    """A paragraph over or between the cards. It takes the keyboard focus, as
-    Help's other pages do, so Tab and a screen reader reach it too."""
-    label = _label(markup, "tt-intro")
-    ui_style.selectable_text(label)
-    return label
-
-
-def _heading(markup, style):
-    """A label a screen reader announces as a heading."""
-    label = _label(markup, style, wrap=False)
-    label.get_accessible().set_role(Atk.Role.HEADING)
-    return label
 
 
 def _row(command, say_width):
     """One command: the ways to say it, bold, beside what it does (and its
     note under that)."""
-    said = ", ".join(f"<b>{_escape(p)}</b>" for p in command.said)
-    say = _label(said, "tt-say")
+    said = ", ".join(f"<b>{cards.escape(p)}</b>" for p in command.said)
+    say = cards.label(said, "tt-say")
     say.set_width_chars(_SAY_CHARS)
     say.set_max_width_chars(_SAY_CHARS)
     say.set_valign(Gtk.Align.START)
     say_width.add_widget(say)
     does = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-    does.pack_start(_label(command.result, "tt-does"), False, False, 0)
+    does.pack_start(cards.label(command.result, "tt-does"), False, False, 0)
     if command.note:
-        does.pack_start(_label(command.note, "tt-note"), False, False, 0)
+        does.pack_start(cards.label(command.note, "tt-note"), False, False, 0)
     row = Gtk.Box(spacing=16)
     row.get_style_context().add_class("tt-card-row")
     row.pack_start(say, False, False, 0)
@@ -98,10 +60,10 @@ def _row(command, say_width):
 def _spoken(section):
     """What a screen reader says on *section*'s card: each command, what it
     does, and the notes, the text the card shows."""
-    lines = [f"{', '.join(c.said)}: {_plain(c.result)}"
-             + (f". {_plain(c.note)}" if c.note else "") for c in section.commands]
+    lines = [f"{', '.join(c.said)}: {cards.plain(c.result)}"
+             + (f". {cards.plain(c.note)}" if c.note else "") for c in section.commands]
     if section.note:
-        lines.append(_plain(ref.section_note(section)))
+        lines.append(cards.plain(ref.section_note(section)))
     return ".\n".join(lines)
 
 
@@ -111,27 +73,13 @@ def section_card(section, say_width):
     The card takes the keyboard focus, named for a screen reader by its
     heading and read out as its commands: its rows are labels no key reaches."""
     look, icon = GROUP_LOOK[section.group]
-    head = Gtk.Box(spacing=10)
-    for style in ("tt-card-head", f"tt-{look}"):
-        head.get_style_context().add_class(style)
-    head.pack_start(Gtk.Image.new_from_icon_name(icon, Gtk.IconSize.LARGE_TOOLBAR),
-                    False, False, 0)
-    head.pack_start(_heading(f'<span size="large"><b>{_escape(section.title)}</b></span>',
-                             "tt-card-title"), False, False, 0)
-    name = section.title
-    if section.labs:
-        tag = _label("Labs", "tt-labs", wrap=False)
-        tag.set_tooltip_text(f"Needs {section.labs} ticked in "
-                             "Preferences → Advanced → TuxTalk Labs")
-        head.pack_end(tag, False, False, 0)
-        name += f", needs Labs: {section.labs}"
-    rows = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-    rows.get_style_context().add_class("tt-card")
-    rows.pack_start(head, False, False, 0)
+    labs = (f"Needs {section.labs} ticked in Preferences → Advanced → TuxTalk Labs"
+            if section.labs else "")
+    rows = cards.card_box(cards.card_head(section.title, look, icon, labs=labs))
     for command in section.commands:
         rows.pack_start(_row(command, say_width), False, False, 0)
     if section.note:
-        note = _label(ref.section_note(section), "tt-note")
+        note = cards.label(ref.section_note(section), "tt-note")
         note.get_style_context().add_class("tt-card-row")
         rows.pack_start(note, False, False, 0)
     # Windowless: an EventBox with its own window drops the card's margin
@@ -139,27 +87,10 @@ def section_card(section, say_width):
     card = Gtk.EventBox(visible_window=False, can_focus=True)
     card.get_style_context().add_class("tt-card-focus")
     card.add(rows)
+    name = section.title + (f", needs Labs: {section.labs}" if section.labs else "")
     card.get_accessible().set_name(name)
     card.get_accessible().set_description(_spoken(section))
     return card
-
-
-def _page(children):
-    """A scrolling page of *children*, top to bottom. Tab moves through its
-    cards and paragraphs, scrolling to each, and the arrow keys, Page Up and
-    Down, Home and End scroll it, as on Help's other pages: without
-    scroll_with_keys an arrow would hop to the next card."""
-    column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-    for side in ("top", "bottom", "start", "end"):
-        getattr(column, f"set_margin_{side}")(12)
-    scrolled = Gtk.ScrolledWindow()
-    scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-    for child in children:
-        column.pack_start(child, False, False, 0)
-        if child.get_can_focus():
-            child.connect("key-press-event", ui_style.scroll_with_keys, scrolled)
-    scrolled.add(column)
-    return scrolled
 
 
 def _group_children(group, say_width):
@@ -167,7 +98,7 @@ def _group_children(group, say_width):
     sections = [s for s in ref.SECTIONS if s.group == group]
     children = [section_card(s, say_width) for s in sections]
     if line := labs_line(sections):
-        children.insert(0, paragraph(line))
+        children.insert(0, cards.paragraph(line))
     return children
 
 
@@ -176,21 +107,17 @@ def group_page(group, extra=None):
     (markup)."""
     children = _group_children(group, Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL))
     if extra:
-        children.append(paragraph(extra))
-    return _page(children)
+        children.append(cards.paragraph(extra))
+    return cards.page(children)
 
 
-def all_groups_page(intro, outro):
-    """Help's Commands tab: *intro* (markup), then each group under its own
-    title in its colour, then *outro*."""
+def all_groups_page(title, intro, outro):
+    """Help's Commands tab: its *title*, *intro* (markup), then each group
+    under its own title in its colour, then *outro*."""
     say_width = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL)
-    children = [paragraph(intro)]
+    children = [cards.page_title(title), cards.paragraph(intro)]
     for group in ref.GROUPS:
-        look, _icon = GROUP_LOOK[group]
-        title = _heading(f'<span size="x-large"><b>{_escape(group)}</b></span>',
-                         "tt-group-title")
-        title.get_style_context().add_class(f"tt-{look}")
-        children.append(title)
+        children.append(cards.group_title(group, GROUP_LOOK[group][0]))
         children.extend(_group_children(group, say_width))
-    children.append(paragraph(outro))
-    return _page(children)
+    children.append(cards.paragraph(outro))
+    return cards.page(children)

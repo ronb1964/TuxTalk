@@ -119,8 +119,10 @@ def shown_help(monkeypatch):
 
 
 def _page_text(notebook):
+    """The open section's first text Tab reaches (its first card's), and
+    the page's scrolling."""
     page = notebook.get_nth_page(notebook.get_current_page())
-    label = next(w for w in widgets(page) if isinstance(w, Gtk.Label))
+    label = next(w for w in widgets(page) if isinstance(w, Gtk.Label) and w.get_can_focus())
     return label, page.get_vadjustment()
 
 
@@ -174,7 +176,7 @@ def test_tab_goes_card_by_card_on_the_commands_tab(shown_help):
     scroll = notebook.get_nth_page(notebook.get_current_page()).get_vadjustment()
     _press(dialog, Gdk.KEY_Tab)
     intro = dialog.get_focus()
-    assert isinstance(intro, Gtk.Label) and "Voice Commands Reference" in intro.get_text()
+    assert isinstance(intro, Gtk.Label) and "There are two kinds" in intro.get_text()
     start = scroll.get_value()
     _press(dialog, Gdk.KEY_Page_Down)
     assert scroll.get_value() > start + scroll.get_page_size() / 2

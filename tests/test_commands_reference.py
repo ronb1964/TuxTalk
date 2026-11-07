@@ -9,7 +9,7 @@ import re
 import pytest
 
 from tuxtalk import (ai_cleanup, app_commands, app_finder, command_phrases, commands_cards,
-                     commands_reference, explain, help_text, key_commands, normalize,
+                     commands_reference, explain, help_pages, help_text, key_commands, normalize,
                      spoken_quotes, undo, voice_commands, voice_edit_rules, voice_navigation)
 
 PHRASES = [(c.kind, phrase) for s in commands_reference.SECTIONS for c in s.commands
@@ -260,8 +260,10 @@ def test_every_command_phrase_help_spells_out_works(monkeypatch):
     monkeypatch.setattr(config, "load_config", lambda: config.Settings(hotkey="F6"))
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     writing = next(text for title, text in help_text.tabs() if title == "Writing")
-    part = writing.split("Snapping and moving windows", 1)[1].split("<b>Keys</b>", 1)[0]
-    body = re.sub(r"(?m)^<b>[^<]+</b>$", "", part)         # the part headings
+    shown = ("Snapping and moving windows", "Desktops", "Sound and music",
+             "Lock, screenshot and help")
+    body = "\n".join(s.body for part in help_pages.parse(writing).parts
+                     for s in part.sections if s.title in shown)
     phrases = [p for p in re.findall(r"<b>([^<]+)</b>", body) if p != "F6"]
     assert len(phrases) > 20
     for phrase in phrases:

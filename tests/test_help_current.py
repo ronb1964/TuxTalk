@@ -205,7 +205,10 @@ def test_help_spells_out_windows_keys_and_addresses_with_your_own_hold_key(monke
 
 
 def test_labs_intro_lists_opening_apps(monkeypatch):
-    assert "opening apps" in _writing(monkeypatch).split("<b>TuxTalk Labs</b>", 1)[1][:500]
+    from tuxtalk import help_pages
+    labs = next(s.body for part in help_pages.parse(_writing(monkeypatch)).parts
+                for s in part.sections if s.title == "TuxTalk Labs")
+    assert "opening apps" in labs
 
 
 def _terminals(monkeypatch, hold, toggle="F9"):
