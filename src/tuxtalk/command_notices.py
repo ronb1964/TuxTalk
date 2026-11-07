@@ -161,6 +161,10 @@ NOTES = {
         "Say a number first",
         "There's more than one screen, so say the number of a cell, or \"click\" and "
         "the number."),
+    "nudge_needs_a_number": (
+        "Say a number first",
+        "Say the number of a part first, then \"left\", \"right\", \"up\" or \"down\" "
+        "to move the dot."),
     "smallest": (
         "That's as small as it goes",
         "The cells can't get any smaller. Say \"click\" to click the middle, or "

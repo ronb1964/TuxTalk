@@ -121,3 +121,66 @@ def test_the_calibration_spots_are_on_a_monitor_and_apart(monitors):
     first, last = Grid(monitors).calibration_spots()
     assert _on_a_monitor(first, monitors) and _on_a_monitor(last, monitors)
     assert first[0] != last[0] and first[1] != last[1]
+
+
+def test_the_spot_starts_at_the_parts_centre():
+    grid = Grid([SCREEN])
+    assert grid.spot is None
+    grid.zoom(5)
+    assert grid.spot == (960, 540)
+    assert grid.target(None) == (960, 540)
+
+
+def test_left_3_moves_the_spot_15_px():
+    grid = Grid([SCREEN])
+    grid.zoom(5)
+    assert grid.nudge("left", 3) == "ok"
+    assert grid.spot == (945, 540)
+    grid.nudge("down", 2)
+    grid.nudge("up", 1)
+    grid.nudge("right", 1)
+    assert grid.spot == (950, 545)
+
+
+def test_a_nudge_stops_at_the_parts_edge():
+    grid = Grid([SCREEN])
+    grid.zoom(5)
+    grid.nudge("right", 99)
+    grid.nudge("up", 99)
+    assert grid.spot == (1280, 360)
+
+
+def test_a_new_number_puts_the_spot_back_in_the_middle():
+    grid = Grid([SCREEN])
+    grid.zoom(5)
+    grid.nudge("left", 9)
+    grid.zoom(1)
+    assert grid.spot == grid.region.center
+
+
+def test_a_nudge_at_the_top_level_asks_for_a_number():
+    grid = Grid([SCREEN])
+    assert grid.nudge("left", 1) == "nudge_needs_a_number"
+    assert grid.spot is None
+
+
+def test_click_with_no_number_clicks_the_nudged_spot():
+    grid = Grid([SCREEN])
+    grid.zoom(5)
+    grid.nudge("down", 4)
+    assert grid.target(None) == (960, 560)
+
+
+def test_cells_are_small_at_1920x1080_after_one_number():
+    grid = Grid([SCREEN])
+    assert not grid.cells_are_small()
+    grid.zoom(5)
+    assert grid.cells_are_small()
+
+
+def test_cells_are_small_on_3840x2160_only_after_two_numbers():
+    grid = Grid([Rect(0, 0, 3840, 2160)])
+    grid.zoom(5)
+    assert not grid.cells_are_small()
+    grid.zoom(5)
+    assert grid.cells_are_small()

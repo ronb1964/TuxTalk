@@ -14,6 +14,16 @@ MIN_CELL_PX = 8
 
 SPLIT = 3
 
+# One nudge step, in desktop pixels: a few of them at the 3x desktop zoom
+# are a visible move.
+NUDGE_PX = 5
+
+# Cells narrower or lower than this are too small to read the screen through,
+# so the desktop is zoomed to show them bigger.
+ZOOM_BELOW_PX = 150
+
+_NUDGES = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
+
 
 class Rect(NamedTuple):
     """A rectangle in desktop pixels."""
@@ -54,6 +64,9 @@ class Grid:
                      for cell in _split(m, i * SPLIT * SPLIT + 1)]
         self.region: Rect | None = None
         self._zoomed: list[Cell] = []
+        # Where a click with no number lands: the part's centre, moved by
+        # nudges. None until a number has been said.
+        self.spot: tuple[float, float] | None = None
 
     @property
     def cells(self) -> list[Cell]:
@@ -92,17 +105,34 @@ class Grid:
             return "smallest"
         self.region = cell.rect
         self._zoomed = _split(cell.rect, 1)
+        self.spot = cell.rect.center
         return "ok"
+
+    def nudge(self, direction: str, steps: int) -> str:
+        """Move the click spot *steps* steps, staying inside the part shown:
+        "ok", or "nudge_needs_a_number" when no part has been chosen yet."""
+        if self.region is None or self.spot is None:
+            return "nudge_needs_a_number"
+        dx, dy = _NUDGES[direction]
+        x, y = self.spot[0] + dx * NUDGE_PX * steps, self.spot[1] + dy * NUDGE_PX * steps
+        region = self.region
+        self.spot = (min(max(x, region.x), region.x + region.width),
+                     min(max(y, region.y), region.y + region.height))
+        return "ok"
+
+    def cells_are_small(self) -> bool:
+        """Whether the cells shown are too small to see well without zooming."""
+        return any(min(c.rect.width, c.rect.height) < ZOOM_BELOW_PX for c in self.cells)
 
     def target(self, number: int | None) -> tuple[float, float] | str:
         """Where to click: a cell's centre, or with no number the zoomed
-        region's (a lone monitor's, at the top). "say_a_number" when that
+        spot (a lone monitor's centre, at the top). "say_a_number" when that
         would be a guess between monitors, "no_cell" for a number not shown."""
         if number is not None:
             cell = self._cell(number)
             return cell.rect.center if cell else "no_cell"
-        if self.region:
-            return self.region.center
+        if self.spot:
+            return self.spot
         if len(self.monitors) == 1:
             return self.monitors[0].center
         return "say_a_number"

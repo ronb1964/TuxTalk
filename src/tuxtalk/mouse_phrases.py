@@ -18,11 +18,12 @@ MAX_NUMBER = 99
 @dataclass(frozen=True)
 class MouseRequest:
     action: str   # "grid", "zoom", "click", "double click", "right click",
-                  # "middle click", "move" or "cancel"
-    number: int | None = None   # the grid cell; None: the pointer's own spot
+                  # "middle click", "move", "nudge" or "cancel"
+    number: int | None = None   # the grid cell, or a nudge's steps; None: the spot
     # Heard while a grid showed, so one of its commands: never done without
     # it, should the grid close before the request is acted on.
     in_grid: bool = False
+    direction: str | None = None   # a nudge's "left", "right", "up" or "down"
 
 
 _GRID = frozenset({"mouse grid", "show grid", "show mouse grid"})
@@ -32,6 +33,7 @@ _CLICKS = {"left click": "click", "right click": "right click",
            "double click": "double click", "middle click": "middle click"}
 _CLICK = re.compile(r"(click|left click|right click|double click|middle click)"
                     r"(?: (?P<cell>.+))?")
+_NUDGE = re.compile(r"(?P<direction>left|right|up|down)(?: (?P<steps>.+))?")
 _MOVE = re.compile(r"move (?:to )?(?P<cell>.+)")
 
 
@@ -65,6 +67,15 @@ def _click(said: str, grid: bool) -> MouseRequest | None:
     return MouseRequest(_CLICKS.get(word, "click"), number, in_grid=True) if number else None
 
 
+def _nudge(said: str) -> MouseRequest | None:
+    """"left", "up two": move the click spot, one step when no count is said."""
+    m = _NUDGE.fullmatch(said)
+    if not m:
+        return None
+    steps = 1 if m["steps"] is None else _number(m["steps"])
+    return MouseRequest("nudge", steps, in_grid=True, direction=m["direction"]) if steps else None
+
+
 def parse(said: str, grid: bool) -> MouseRequest | None:
     """The mouse request *said* (command_phrases' normalized form) is, or None."""
     if said in _GRID:
@@ -80,5 +91,7 @@ def parse(said: str, grid: bool) -> MouseRequest | None:
     if m := _MOVE.fullmatch(said):
         number = _number(m["cell"])
         return MouseRequest("move", number, in_grid=True) if number else None
+    if request := _nudge(said):
+        return request
     number = _number(said)
     return MouseRequest("zoom", number, in_grid=True) if number else None

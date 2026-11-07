@@ -94,3 +94,26 @@ def test_a_grid_leaves_other_commands_as_they_were(said):
 
 def test_close_grid_is_not_a_window_request():
     assert parse("close grid", grid=True) == MouseRequest("cancel", in_grid=True)
+
+
+@pytest.mark.parametrize("said, direction, steps", [
+    ("left", "left", 1), ("Left.", "left", 1), ("left 3", "left", 3),
+    ("left three", "left", 3), ("up two", "up", 2), ("down too", "down", 2),
+    ("Right 10.", "right", 10)])
+def test_with_a_grid_a_direction_nudges(said, direction, steps):
+    assert parse(said, grid=True) == MouseRequest(
+        "nudge", steps, direction=direction, in_grid=True)
+
+
+@pytest.mark.parametrize("said", ["left", "up two", "down 3"])
+def test_nudge_words_are_words_without_a_grid(said):
+    assert parse(said, grid=False) is None
+
+
+def test_move_left_is_not_a_nudge():
+    assert parse("move left", grid=True) is None
+
+
+def test_left_click_still_clicks_with_and_without_a_grid():
+    assert parse("left click", grid=True) == MouseRequest("click", in_grid=True)
+    assert parse("left click", grid=False) == MouseRequest("click")
