@@ -11,8 +11,8 @@ import pytest
 from evdev import ecodes as e
 
 from conftest import FakeClock
-from tuxtalk import (beeps, dictation_worker, modifier_hotkeys, mouse_grid, mouse_grid_window,
-                     notices, service_tick, voice_actions, virtual_pointer)
+from tuxtalk import (beeps, dictation_worker, keyboard_output, modifier_hotkeys, mouse_grid,
+                     mouse_grid_window, notices, service_tick, voice_actions, virtual_pointer)
 from tuxtalk import live_settings as live
 from tuxtalk.mouse_grid_model import Rect
 from tuxtalk.mouse_phrases import MouseRequest
@@ -366,6 +366,27 @@ def test_a_plain_click_with_a_key_held_down_says_so(rig, monkeypatch):
     assert act("right click") is False
     assert rig.pointer.events == []
     assert rig.notes == ["Not clicked: a dictation key stayed down"]
+
+
+def test_esc_before_a_plain_click_clicks_nothing(rig, monkeypatch):
+    monkeypatch.setattr(keyboard_output, "esc_cancelled", lambda: True)
+    assert act("click") is False
+    assert rig.pointer.events == [] and rig.notes == [] and rig.beeps == []
+
+
+def test_esc_between_the_clicks_of_a_double_click_stops_the_second(rig, monkeypatch):
+    act("grid")
+    escaped = []
+    monkeypatch.setattr(keyboard_output, "esc_cancelled", lambda: bool(escaped))
+    sleep = rig.pointer.clock.sleep
+
+    def gap_then_esc(seconds):
+        if seconds == virtual_pointer.DOUBLE_CLICK_GAP_S:
+            escaped.append(True)
+        sleep(seconds)
+    monkeypatch.setattr(rig.pointer.clock, "sleep", gap_then_esc)
+    assert act("double click", 5) is False
+    assert rig.buttons() == LEFT_CLICK and rig.notes == []
 
 
 def test_a_pointer_that_cant_be_made_says_so(rig, monkeypatch):

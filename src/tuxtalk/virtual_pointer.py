@@ -16,7 +16,7 @@ import time
 
 from . import modifier_hotkeys
 from .logger import setup_logger
-from .virtual_keyboard import write_only_device
+from .virtual_keyboard import GaveUp, write_only_device
 
 logger = setup_logger(__name__)
 
@@ -99,11 +99,12 @@ def move_to(fx: float, fy: float) -> bool:
     return True
 
 
-def click(button: str = "left", count: int = 1) -> bool:
+def click(button: str = "left", count: int = 1, stopped=None) -> bool:
     """Click *button* ("left", "right" or "middle") *count* times (2 is a
     double click) where the pointer is. False when the pointer can't be made
-    or failed. Raises GaveUp("key_held") before a press when a dictation key
-    held down made it wait too long."""
+    or failed. Raises GaveUp before a press: "key_held" when a dictation key
+    held down made it wait too long, "cancelled" when *stopped*(), asked
+    right before each press, says Esc came."""
     from evdev import ecodes
     code = getattr(ecodes, BUTTONS[button])
     with _lock:
@@ -114,6 +115,8 @@ def click(button: str = "left", count: int = 1) -> bool:
         if turn:
             time.sleep(DOUBLE_CLICK_GAP_S)
         _wait_while_held()
+        if stopped is not None and stopped():
+            raise GaveUp("cancelled")
         if not _press_and_release(code):
             return False
     return True

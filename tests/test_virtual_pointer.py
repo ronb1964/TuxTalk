@@ -87,6 +87,26 @@ def test_a_click_that_had_to_give_up_waiting_presses_nothing(pointer, monkeypatc
     assert pointer.events == []
 
 
+def test_esc_between_the_two_clicks_stops_the_second(pointer):
+    """*stopped* is asked right before each press: Esc in the gap of a double
+    click keeps its second click."""
+    answers = iter([False, True])
+    with pytest.raises(GaveUp) as stop:
+        virtual_pointer.click("left", 2, stopped=lambda: next(answers))
+    assert stop.value.reason == "cancelled"
+    assert pointer.events == [(e.BTN_LEFT, 1), ("SYN", 0), (e.BTN_LEFT, 0), ("SYN", 0)]
+
+
+def test_esc_while_the_new_device_settles_clicks_nothing(pointer):
+    """The first click waits for the desktop to take the new device; Esc
+    meanwhile stops it."""
+    escaped = []
+    pointer.clock.sleep = lambda seconds: escaped.append(seconds)
+    with pytest.raises(GaveUp):
+        virtual_pointer.click(stopped=lambda: bool(escaped))
+    assert escaped and pointer.events == []
+
+
 def test_the_button_is_released_even_when_writing_fails_midway(pointer):
     virtual_pointer.move_to(0.5, 0.5)
     pointer.fail_after = len(pointer.events) + 2        # the press and its SYN go through

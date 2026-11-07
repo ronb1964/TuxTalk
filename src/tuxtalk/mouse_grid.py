@@ -80,8 +80,9 @@ def act(request, beeps_on: bool) -> bool | None:
         command_notices.say("pointer_failed", beeps_on)
         return False
     except GaveUp as stop:
-        logger.warning(f"Mouse: not clicked: {stop.reason}")
-        command_notices.say("click_key_held", beeps_on)
+        if stop.reason != "cancelled":      # Esc: esc_stopped logged it
+            logger.warning(f"Mouse: not clicked: {stop.reason}")
+            command_notices.say("click_key_held", beeps_on)
         return False
 
 
@@ -288,12 +289,7 @@ def _point(session: _Session, request) -> bool:
     if request.action == "move":
         logger.info(f"Mouse grid: moved to {where}")
     else:
-        if keyboard_output.esc_stopped("clicked"):
-            return False
-        button, count, done = _CLICKS[request.action]
-        if not virtual_pointer.click(button, count):
-            raise _PointerFailed
-        logger.info(f"Mouse grid: {done} {where}")
+        logger.info(f"Mouse grid: {_click(request.action)} {where}")
     beeps.beep(session.beeps_on, *beeps.READY_BEEP)
     return True
 
@@ -312,12 +308,19 @@ def _lands_on(session: _Session, target) -> bool:
 
 def _click_here(action: str, beeps_on: bool) -> bool:
     """"left click" and the others with no grid: a click where the pointer is."""
-    button, count, done = _CLICKS[action]
-    if not virtual_pointer.click(button, count):
-        raise _PointerFailed
-    logger.info(f"Mouse: {done} where the pointer is")
+    logger.info(f"Mouse: {_click(action)} where the pointer is")
     beeps.beep(beeps_on, *beeps.READY_BEEP)
     return True
+
+
+def _click(action: str) -> str:
+    """The click *action* asks for, where the pointer is, and its word for
+    the log. Esc is looked at before each press (a double click has two)."""
+    button, count, done = _CLICKS[action]
+    if not virtual_pointer.click(button, count,
+                                 stopped=lambda: keyboard_output.esc_stopped("clicked")):
+        raise _PointerFailed
+    return done
 
 
 def _spot_name(session: _Session, number: int | None) -> str:
