@@ -89,7 +89,7 @@ def test_a_click_that_had_to_give_up_waiting_presses_nothing(pointer, monkeypatc
 
 def test_esc_between_the_two_clicks_stops_the_second(pointer):
     """*stopped* is asked right before each press: Esc in the gap of a double
-    click keeps its second click."""
+    click prevents its second click."""
     answers = iter([False, True])
     with pytest.raises(GaveUp) as stop:
         virtual_pointer.click("left", 2, stopped=lambda: next(answers))
