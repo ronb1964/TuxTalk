@@ -247,6 +247,22 @@ The Hands-free section has a way to make it stop by itself when you stop talking
   look and place in <b>Preferences → Audio → Customize…</b>
 • If the microphone heard nothing but silence, TuxTalk says so and types nothing.
 
+### Indicator Follows Your Window
+The recording indicator shows up in the window you're dictating into, wherever
+that window is on the screen, instead of always in the same spot. It's on from
+the start.
+• It's placed each time you start talking, so it goes wherever your window is.
+• The position you pick in <b>Preferences → Audio → Customize…</b> (bottom center, top
+  right, center…) applies inside the window. The offset there is for the whole screen,
+  so it's skipped.
+• To keep it in one place on the screen, untick <b>Follows the window you're dictating
+  into</b> in that same window.
+• When TuxTalk can't tell where the window is, the indicator uses its usual
+  position from <b>Preferences → Audio → Customize…</b>.
+• Works on KDE, on GNOME with the TuxTalk extension, on Sway and Hyprland,
+  and on X11 desktops like Cinnamon and XFCE. On a scaled screen it may sit
+  a little off.
+
 ### Music, videos and calls
 While you talk, TuxTalk pauses music and videos and plays them again after.
 <b>Preferences → Audio → Other sound while you dictate</b> can turn other sounds
@@ -359,8 +375,8 @@ One box at a time, each box a dictation of its own:
 ### TuxTalk Labs
 Labs features are experimental: they work, but they're still being refined, may
 change, and won't always get it right. Turn them on in <b>Preferences → Advanced →
-TuxTalk Labs</b>. Voice editing, select and move, opening apps (and windows and keys),
-and the indicator that follows your window are below; Type at pause is in the
+TuxTalk Labs</b>. Voice editing, select and move, and opening apps (and windows, keys
+and the mouse) are below; Type at pause is in the
 Hands-free section. Your feedback decides what gets finished:
 <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>.
 
@@ -633,23 +649,7 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
     or AppImageLauncher makes one).
   • The command words (open, close, new tab, web search, literal…) are English, like every
     voice command here, whatever language you dictate in. App names can be said as the
-    menu shows them.
-
-## 🧪 Indicator Follows Your Window
-The recording indicator shows up in the window you're dictating into, wherever
-that window is on the screen, instead of always in the same spot.
-
-### How it works
-  • Turn it on in <b>Preferences → Advanced → TuxTalk Labs</b>.
-  • It's placed each time you start talking, so it goes wherever your window is.
-  • The position you pick in <b>Preferences → Audio → Customize…</b> (bottom center, top
-    right, center…) applies inside the window. The offset there is for the whole screen,
-    so it's skipped.
-  • When TuxTalk can't tell where the window is, the indicator uses its usual
-    position from <b>Preferences → Audio → Customize…</b>.
-  • Works on KDE, on GNOME with the TuxTalk extension, on Sway and Hyprland,
-    and on X11 desktops like Cinnamon and XFCE. On a scaled screen it may sit
-    a little off.'''
+    menu shows them.'''
 
 TERMINALS = '''# Terminals and Code Editors
 

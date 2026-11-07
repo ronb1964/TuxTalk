@@ -139,6 +139,10 @@ def prefs_folds(run):
         problems.append("no “Show fine position” in the Recording Indicator window")
     elif "not moved" not in (run.vm.ui("texts", indicator) or []):
         problems.append("“not moved” isn't beside “Show fine position”")
+    follows = run.vm.ui("find", "check box", "Follows the window you’re dictating into",
+                        indicator, timeout=5)
+    if follows is None or "checked" not in follows["states"]:
+        problems.append("“Follows the window you’re dictating into” isn't ticked by default")
     run.vm.ui("click", "button", "Done", indicator)
     run.vm.ui("tab", "Advanced", PREFS)
     return verdict(problems, "Show fine-tuning, System check, Show more shortcuts, Change model, "
@@ -149,17 +153,17 @@ def prefs_folds(run):
 def prefs_labs(run):
     names = {w["name"]: w for w in widgets(run)}
     wanted_buttons = ["How these work", "Send feedback", "Show tips again"]
-    wanted_boxes = ["Follows the window you’re dictating into", "Type each phrase when you pause"]
+    wanted_boxes = ["Type each phrase when you pause"]
     prefixes = ["Voice editing:", "Select and move:", "Apps, windows, keys and the mouse by voice:"]
     problems = [f"no “{b}” button" for b in wanted_buttons if b not in names]
     boxes = wanted_boxes + [n for n in names for p in prefixes if n.startswith(p)]
-    if len(boxes) != 5:
+    if len(boxes) != 4:
         problems.append(f"Labs options found: {boxes}")
     problems += [f"“{b[:30]}” is on" for b in boxes
                  if "checked" in names.get(b, {}).get("states", [])]
     return verdict(problems, "Voice editing, Select and move, Apps, windows, keys and the mouse, "
-                             "Type at pause, "
-                             "Indicator follows the window: all off; How these work and "
+                             "Type at pause: "
+                             "all off; How these work and "
                              "Send feedback present")
 
 

@@ -338,7 +338,7 @@ class AdvancedTab(Tab):
         self.type_at_pause = TypeAtPause(self.win)
         row = self.type_at_pause.build(grid, row)
 
-        self._labs_indicator_and_links(grid, row)
+        self._labs_links(grid, row)
 
     def _labs_editing(self, grid, row):
         """Editing by voice: voice editing, select and move, Show tips again;
@@ -420,7 +420,7 @@ class AdvancedTab(Tab):
         The setting keeps its old name, `open_apps`, so saved configs and
         backups keep their meaning.
         """
-        grid.attach(subheading("Apps, windows and keys"), 0, row, 2, 1)
+        grid.attach(subheading("Apps, windows, keys and the mouse"), 0, row, 2, 1)
         row += 1
         hold = self.config.get("hotkey") or "F8"      # the key Help names too
         check = Gtk.CheckButton(
@@ -479,26 +479,8 @@ class AdvancedTab(Tab):
         grid.attach(check, 0, row, 2, 1)
         return row + 1
 
-    def _labs_indicator_and_links(self, grid, row):
-        """The indicator following the window, then How these work and Send feedback."""
-        # Follows the window being dictated into (recording_indicator.
-        # _follow_target), placed as the floating messages are.
-        grid.attach(subheading("Recording indicator"), 0, row, 2, 1)
-        row += 1
-        follow_check = Gtk.CheckButton(
-            label="Follows the window you\u2019re dictating into")
-        follow_check.set_active(bool(self.config.get("indicator_follow_window", False)))
-        follow_check.set_tooltip_text(
-            "Shows the recording indicator in the window you're dictating into, wherever it\n"
-            "is on the screen. The position set on the Audio tab (bottom center, top right...)\n"
-            "applies inside that window; the offset doesn't. When TuxTalk can't tell where\n"
-            "the window is, the usual position and offset are used.")
-        follow_check.connect("toggled", lambda c: self.update_config(
-            "indicator_follow_window", c.get_active()))
-        follow_check.set_margin_start(LABS_INDENT)
-        grid.attach(follow_check, 0, row, 2, 1)
-        row += 1
-
+    def _labs_links(self, grid, row):
+        """How these work and Send feedback, at the end of Labs."""
         # How these work (Help, on its Writing tab) and Send feedback.
         from .help_dialog import FEEDBACK_URL, show_help_dialog
         labs_links = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)

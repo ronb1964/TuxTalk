@@ -143,7 +143,7 @@ def settings_in(cfg) -> dict:
             "offset_x": cfg.indicator_offset_x, "offset_y": cfg.indicator_offset_y,
             "style": cfg.indicator_style, "color_mode": cfg.indicator_color_mode,
             "custom_color": cfg.indicator_color, "sensitivity": cfg.indicator_sensitivity,
-            "follow_window": cfg.indicator_follow_window}
+            "follow_window": cfg.indicator_follows_window}
 
 
 class RecordingIndicator(Gtk.Window):

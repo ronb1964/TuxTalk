@@ -250,8 +250,8 @@ class Settings:
     indicator_color_mode: str = "custom"  # system / custom (governs every style)
     indicator_color: str = CLASSIC_CYAN_HEX  # the chosen color; defaults to classic cyan
     indicator_sensitivity: float = 1.0  # scales how strongly audio drives the animation (0.5-2.0)
-    # TuxTalk Labs: show near the bottom of the window being dictated into
-    indicator_follow_window: bool = False
+    # show in the window being dictated into, not at a fixed spot on the screen
+    indicator_follows_window: bool = True
     voice_commands_hotkey: str = "Ctrl+Alt+V"  # hotkey combo to open voice commands quick reference
     # hotkey combo that types the last dictation again ("" = off)
     paste_last_hotkey: str = "Ctrl+Alt+P"
@@ -910,7 +910,7 @@ LIVE_APPLIED_KEYS = {
     "indicator_color_mode",
     "indicator_color",
     "indicator_sensitivity",
-    "indicator_follow_window",
+    "indicator_follows_window",
 
     # The dictation service never reads these at all — they belong to
     # Preferences and the tray. Listing them stops a "Launch at login" toggle

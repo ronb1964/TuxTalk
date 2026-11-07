@@ -5,6 +5,10 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- The recording indicator now shows in the window you're dictating into, out
+  of Labs and on for everyone, including anyone who tried it in Labs and
+  turned it off. To keep it in one place on the screen, untick "Follows the
+  window you're dictating into" under Preferences → Audio → Customize….
 - You can use the mouse by voice. Hold your dictation key, say "mouse grid",
   let go, and numbers 1 to 9 appear over your screen (a second screen carries
   on from 10). Say a number to zoom into that part, as often as you like,

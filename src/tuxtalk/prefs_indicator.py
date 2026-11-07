@@ -73,6 +73,7 @@ class IndicatorSettings(Tab):
         row = self._build_color(grid, row)
         row = self._build_response(grid, row)
         row = self._build_position(grid, row, can_move)
+        row = self._build_follow_window(grid, row, can_move)
         self._build_fine_position(grid, row, can_move)
         return grid
 
@@ -252,6 +253,22 @@ class IndicatorSettings(Tab):
         warning.get_style_context().add_class("dim-label")
         grid.attach(warning, 0, row + 1, 2, 1)
         return row + 2
+
+    def _build_follow_window(self, grid, row, can_move):
+        """Show it in the window being dictated into (recording_indicator.
+        _follow_target), greyed with Position. Returns the next row."""
+        check = Gtk.CheckButton(label="Follows the window you\u2019re dictating into")
+        check.set_active(bool(self.config.get("indicator_follows_window", True)))
+        check.set_tooltip_text(
+            "Shows the recording indicator in the window you're dictating into, wherever it\n"
+            "is on the screen. The position above applies inside that window; the offset\n"
+            "doesn't. When TuxTalk can't tell where the window is, the usual position and\n"
+            "offset are used.")
+        check.connect("toggled", lambda c: self.update_config(
+            "indicator_follows_window", c.get_active()))
+        check.set_sensitive(can_move)
+        grid.attach(check, 0, row, 2, 1)
+        return row + 1
 
     def _build_fine_position(self, grid, row, can_move):
         """The offsets from the chosen position and Reset to 0. So rarely

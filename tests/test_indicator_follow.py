@@ -1,4 +1,4 @@
-"""TuxTalk Labs: the recording indicator follows the window you're dictating
+"""The recording indicator follows the window you're dictating
 into, centred near its bottom edge. Uses the same active-window position as
 the floating messages (window_geometry).
 """
@@ -74,12 +74,19 @@ def test_switched_off_never_asks(monkeypatch):
 
 # --- the setting ------------------------------------------------------------------------------
 
-def test_off_by_default():
-    assert config.Settings().indicator_follow_window is False
+def test_a_new_config_has_the_indicator_following_the_window():
+    assert config.Settings().indicator_follows_window is True
+
+
+def test_an_old_config_with_the_labs_setting_off_gets_it_on():
+    """The Labs setting had another name, so what an old file says is not read."""
+    cfg = config.Settings()
+    config.apply_toml(cfg, {"indicator_follow_window": False})
+    assert cfg.indicator_follows_window is True
 
 
 def test_the_service_passes_it_to_the_indicator(service_main):
-    started = service_main(recording_indicator=True, indicator_follow_window=True)
+    started = service_main(recording_indicator=True, indicator_follows_window=True)
     options = next(step[1] for step in started if step[0] == "shows the indicator")
     assert options["follow_window"] is True
 
@@ -87,35 +94,62 @@ def test_the_service_passes_it_to_the_indicator(service_main):
 def test_a_changed_setting_reaches_the_running_indicator(monkeypatch):
     applied = []
     indicator = types.SimpleNamespace(apply_settings=lambda *a, **k: applied.append(k))
-    monkeypatch.setattr(service_tick, "load_config", lambda: config.Settings(indicator_follow_window=True))
+    monkeypatch.setattr(service_tick, "load_config", lambda: config.Settings(indicator_follows_window=True))
     service_tick._reload_live_settings(config.Settings(), indicator)
     assert applied[0]["follow_window"] is True
 
 
-def test_it_is_a_labs_switch(prefs_window):
+def _follow_box(window):
+    """The tickbox in the Recording Indicator window, and the window's grid."""
+    from gi.repository import Gtk
+    from gtk_text import find
+    grid = window.audio_tab.indicator.grid
+    box = find(grid, Gtk.CheckButton, FOLLOW_LABEL)
+    return box, grid
+
+
+FOLLOW_LABEL = "Follows the window you\u2019re dictating into"
+
+
+def test_the_tickbox_is_in_the_indicator_window_not_labs(prefs_window):
     from gi.repository import Gtk
     from gtk_text import below, find
     window = prefs_window()
+    box, grid = _follow_box(window)
+    assert box.get_active()
     labs = below(find(window.window, Gtk.Label, "🧪 TuxTalk Labs"))
-    switch = next(w for w in labs if isinstance(w, Gtk.CheckButton)
-                  and w.get_label() == "Follows the window you\u2019re dictating into")
-    assert not switch.get_active()
-    switch.set_active(True)
-    assert window.config["indicator_follow_window"] is True
+    assert not [w for w in labs if isinstance(w, Gtk.CheckButton)
+                and w.get_label() == FOLLOW_LABEL]
+    with pytest.raises(LookupError):
+        find(window.window, Gtk.Label, "Recording indicator")
+    box.set_active(False)
+    assert window.config["indicator_follows_window"] is False
 
 
-def test_the_labs_help_page_explains_it():
+def test_the_tickbox_sits_under_position_and_goes_grey_with_it(prefs_window, monkeypatch):
+    from tuxtalk import recording_indicator
+    monkeypatch.setattr(recording_indicator, "positioning_available", lambda: False)
+    box, grid = _follow_box(prefs_window())
+    assert not box.get_sensitive()
+    monkeypatch.setattr(recording_indicator, "positioning_available", lambda: True)
+    box, grid = _follow_box(prefs_window())
+    assert box.get_sensitive()
+    assert grid.child_get_property(box, "top-attach") == 6
+
+
+def test_start_here_explains_it_and_where_to_turn_it_off():
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
     from gtk_text import find, shown_text
     from tuxtalk import help_dialog
-    dialog = help_dialog.show_help_dialog(tab="writing")
+    dialog = help_dialog.show_help_dialog(tab="start")
     try:
         notebook = find(dialog, Gtk.Notebook)
         page = notebook.get_nth_page(notebook.get_current_page())
         text = " ".join(shown_text(page))
         assert "Indicator Follows Your Window" in text
+        assert "Labs" not in text.split("Indicator Follows Your Window", 1)[1][:600]
     finally:
         dialog.destroy()
 

@@ -95,7 +95,7 @@ class TestReloadLiveSettings:
     def test_the_indicators_look_and_follow_setting_reach_it(self, app, monkeypatch):
         fresh = _settings(indicator_style="orb", indicator_color_mode="custom",
                           indicator_color="#ff5522", indicator_sensitivity=1.5,
-                          indicator_follow_window=True)
+                          indicator_follows_window=True)
         monkeypatch.setattr(service_tick, "load_config", lambda: fresh)
         indicator = StubIndicator()
 
