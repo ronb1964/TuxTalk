@@ -143,7 +143,7 @@ def _wait_while_held() -> None:
     down, and a Compose it began is ended (modifier_hotkeys.wait_while_held):
     the app would see a Ctrl-click. Without the lock, so quitting meanwhile
     doesn't wait for the key to come up."""
-    before_press = modifier_hotkeys.wait_while_held()
+    before_press = modifier_hotkeys.wait_while_held(gave_up="the click wasn't made")
     while before_press is not None and (wait := before_press()):
         wait()
 

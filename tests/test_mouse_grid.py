@@ -11,9 +11,9 @@ import pytest
 from evdev import ecodes as e
 
 from conftest import FakeClock, esc
-from tuxtalk import (beeps, dictation_worker, focused_window, keyboard_output, modifier_hotkeys,
-                     mouse_grid, mouse_grid_window, notices, service_tick, voice_actions,
-                     virtual_pointer)
+from tuxtalk import (beeps, command_notices, dictation_worker, focused_window, keyboard_output,
+                     modifier_hotkeys, mouse_grid, mouse_grid_window, notices, service_tick,
+                     voice_actions, virtual_pointer)
 from tuxtalk import live_settings as live
 from tuxtalk.mouse_grid_model import Rect, close_enough
 from tuxtalk.mouse_phrases import MouseRequest
@@ -416,7 +416,7 @@ def _key_stays_down(monkeypatch):
     """A dictation key held past modifier_hotkeys' limit: the wait gives up."""
     def wait():
         raise GaveUp("key_held")
-    monkeypatch.setattr(modifier_hotkeys, "wait_while_held", lambda: lambda: wait)
+    monkeypatch.setattr(modifier_hotkeys, "wait_while_held", lambda **_: lambda: wait)
 
 
 def test_a_key_held_down_says_so_and_clicks_nothing(rig, monkeypatch):
@@ -426,6 +426,13 @@ def test_a_key_held_down_says_so_and_clicks_nothing(rig, monkeypatch):
     assert act("click", 5) is False
     assert rig.buttons() == []
     assert rig.notes == ["Not clicked: a dictation key stayed down"]
+
+
+def test_the_held_key_note_fits_every_dictation_key():
+    """Left Ctrl+Space is a dictation key too: the note mustn't name keys
+    its user never touched."""
+    sentence = command_notices.NOTES["click_key_held"][1]
+    assert "dictation key" in sentence and "Right" not in sentence
 
 
 def test_a_plain_click_with_a_key_held_down_says_so(rig, monkeypatch):

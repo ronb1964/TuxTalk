@@ -627,6 +627,19 @@ def test_a_stuck_right_ctrl_stops_typing_after_a_while(keyboard, stuck_right_ctr
     assert "Right Ctrl has been down" in caplog.text
 
 
+def test_a_stuck_right_ctrl_logs_a_click_as_a_click(pointer, stuck_right_ctrl, caplog):
+    """A click has no dictation to find in Recent Dictations: the log says
+    the click wasn't made."""
+    from tuxtalk import virtual_pointer
+    from tuxtalk.virtual_keyboard import GaveUp
+    stuck_right_ctrl()
+    with caplog.at_level("WARNING", logger="tuxtalk.modifier_hotkeys"), pytest.raises(GaveUp):
+        virtual_pointer.click()
+    assert pointer.events == []
+    assert "Right Ctrl has been down for 30 s, so the click wasn't made" in caplog.text
+    assert "Recent Dictations" not in caplog.text
+
+
 def test_a_key_stuck_partway_lets_go_of_shift_and_says_partway(keyboard, stuck_right_ctrl):
     """The first letter went out, so the caller must not type it all again,
     and the Shift held for the capital doesn't stay down."""

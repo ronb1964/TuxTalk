@@ -41,7 +41,7 @@ def _held_until_waited(on_wait):
         on_wait()
         held[0] = False
 
-    return lambda: (lambda: wait if held[0] else None)
+    return lambda **_: (lambda: wait if held[0] else None)
 
 
 def test_a_click_waits_while_the_dictation_modifier_is_held(pointer, monkeypatch):
@@ -70,7 +70,7 @@ def test_waiting_for_the_key_leaves_the_pointer_free(pointer, monkeypatch):
 def test_each_click_of_a_double_click_checks_the_key(pointer, monkeypatch):
     checks = []
 
-    def wait_while_held():
+    def wait_while_held(**_):
         checks.append(len(pointer.events))
         return lambda: None
     monkeypatch.setattr(modifier_hotkeys, "wait_while_held", wait_while_held)
@@ -81,7 +81,7 @@ def test_each_click_of_a_double_click_checks_the_key(pointer, monkeypatch):
 def test_a_click_that_had_to_give_up_waiting_presses_nothing(pointer, monkeypatch):
     def give_up():
         raise GaveUp("key_held")
-    monkeypatch.setattr(modifier_hotkeys, "wait_while_held", lambda: lambda: give_up)
+    monkeypatch.setattr(modifier_hotkeys, "wait_while_held", lambda **_: lambda: give_up)
     with pytest.raises(GaveUp):
         virtual_pointer.click()
     assert pointer.events == []

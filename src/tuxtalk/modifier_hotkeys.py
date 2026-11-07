@@ -220,7 +220,8 @@ def _keyboards():
     return [d for d in list(devices) if is_keyboard_device(d)]
 
 
-def wait_while_held(destination=None):
+def wait_while_held(destination=None,
+                    gave_up="typing stopped; the dictation is in Recent Dictations"):
     """A check for virtual_keyboard.send to make before each key: None when
     no dictation modifier (note) the desktop can see is down and no compose
     one began is left to end, otherwise a function that waits until none is
@@ -236,7 +237,7 @@ def wait_while_held(destination=None):
     GaveUp("moved") stops the typing if the answers differ in a part both
     know (focused_window.changed): the checks made before typing began are
     out of date by then, and the user may have clicked into a password
-    field meanwhile."""
+    field meanwhile. *gave_up* says in the log what giving up stopped."""
     devices, modifiers = _noted
     if not modifiers and _compose is None:
         return None
@@ -257,7 +258,7 @@ def wait_while_held(destination=None):
         give_up_at = time.monotonic() + HELD_LIMIT_S
         while still := held():
             if still & _stuck or time.monotonic() >= give_up_at:
-                _give_up(still)
+                _give_up(still, gave_up)
             time.sleep(0.02)
         _stuck.clear()
         if destination and focused_window.changed(where, destination()):
@@ -444,11 +445,10 @@ def _guard_if_alone(keyboards) -> None:
         guard_alt_tap()
 
 
-def _give_up(held) -> None:
+def _give_up(held, what: str) -> None:
     if not held & _stuck:
         names = " and ".join(sorted(_NAMES.get(code, str(code)) for code in held))
-        logger.warning(f"{names} has been down for {HELD_LIMIT_S:g} s, so typing stopped; "
-                       "the dictation is in Recent Dictations")
+        logger.warning(f"{names} has been down for {HELD_LIMIT_S:g} s, so {what}")
         _stuck.update(held)
     raise virtual_keyboard.GaveUp("key_held")
 
