@@ -42,7 +42,8 @@ def _number(words: str) -> int | None:
         number = NUMBER_WORDS[words]
     else:
         digits = words if words.isdigit() else spoken_numbers.to_digits(words, "en")
-        if not (digits.isdigit() and len(digits) < 4):
+        # isdigit() also accepts "²" and other digits int() refuses.
+        if not (digits.isascii() and digits.isdigit() and len(digits) < 4):
             return None
         number = int(digits)
     return number if 1 <= number <= MAX_NUMBER else None

@@ -71,3 +71,18 @@ def test_literal_types_a_mouse_command():
                                   "move here now", "five buttons", "cancel my order"])
 def test_a_sentence_is_never_a_mouse_command(said):
     assert parse(said, grid=True) is None
+
+
+@pytest.mark.parametrize("said", ["²", "five²", "move ²", "click ٣"])
+def test_odd_digits_are_words_not_a_crash(said):
+    assert parse(said, grid=True) is None
+
+
+@pytest.mark.parametrize("said", ["new tab", "close Firefox", "go to youtube dot com",
+                                  "select the last word", "volume up"])
+def test_a_grid_leaves_other_commands_as_they_were(said):
+    assert parse(said, grid=True) == parse(said, grid=False) is not None
+
+
+def test_close_grid_is_not_a_window_request():
+    assert parse("close grid", grid=True) == MouseRequest("cancel")
