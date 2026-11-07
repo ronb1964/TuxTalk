@@ -1,10 +1,11 @@
 """
 The voice commands, in one table that Help's Commands tab and the Voice
-Commands window both show, each in its own layout.
+Commands window both show, as cards (commands_cards).
 
 Two hand-written lists had drifted apart: each knew phrases the other didn't.
 tests/test_commands_reference.py checks every phrase here against the code
-that recognises it, so a command can't be listed that doesn't work.
+that recognises it, and every rule of that code against the phrases here: a
+command can't be listed that doesn't work, nor work without being listed.
 
 Each command is checked by its *kind*: "inline" (normalize_text turns it into
 punctuation or formatting mid-sentence), "key" (a closing "press enter",
@@ -19,7 +20,6 @@ from typing import NamedTuple
 
 from .normalize import LITERAL_REPLACEMENTS
 
-_LABS = "TuxTalk Labs: turn on in Preferences → Advanced"
 
 
 class Command(NamedTuple):
@@ -236,50 +236,6 @@ SECTIONS = (
 )
 
 
-def _said(command):
-    return " / ".join(f"<b>{phrase}</b>" for phrase in command.said)
-
-
-def _title(section, colon=""):
-    """The section's heading; a Labs one says so in brackets before the colon."""
-    if section.labs:
-        return f"<b>{section.title}</b> ({_LABS}){colon}"
-    return f"<b>{section.title}{colon}</b>"
-
-
-def _note(section):
+def section_note(section):
     from .ai_download import DOWNLOAD_SIZE_TEXT
     return section.note.format(ai_size=DOWNLOAD_SIZE_TEXT)
-
-
-def help_markup():
-    """Help's layout: a bullet per command, with its longer note."""
-    blocks = []
-    for section in SECTIONS:
-        lines = [_title(section, ":")]
-        for command in section.commands:
-            lines.append(f"• {_said(command)} → {command.result}")
-            if command.note:
-                lines.append(f"  {command.note}")
-        if section.note:
-            lines.append(_note(section))
-        blocks.append("\n".join(lines))
-    return "\n\n".join(blocks)
-
-
-def short_markup():
-    """The Voice Commands window's layout: an indented line per command, two
-    to a line where they're short (without their notes, for the room), and
-    each other note under its command."""
-    blocks = []
-    for section in SECTIONS:
-        lines = []
-        for command in section.commands:
-            lines.append(f"{_said(command)} → {command.result}")
-            if command.note:
-                lines.append(f"  {command.note}")
-        lines = [_title(section)] + [f"  {line}" for line in lines]
-        if section.note:
-            lines.append(_note(section))
-        blocks.append("\n".join(lines))
-    return "\n\n".join(blocks)

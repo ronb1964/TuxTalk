@@ -1,16 +1,16 @@
-"""
-TuxTalk Voice Commands Quick Reference — a compact cheat sheet popup.
+"""The Voice Commands window: every voice command, a tab per group, in the
+same cards as Help's Commands tab (commands_cards), so each group's heading
+stands out and nothing has to be scrolled past to find it.
 
-Triggered via tray menu → "Voice Commands..." or a configurable hotkey.
-Designed to be glanceable: organized by category with clear formatting.
+Opened from the tray menu → Voice Commands..., its key, or by saying "what
+can I say".
 """
 
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib
 
-from . import commands_reference
-from .help_dialog import text_page
+from . import commands_cards, commands_reference, ui_style
 from .logger import setup_logger
 from .ui_style import close_on_escape
 
@@ -29,8 +29,9 @@ def show_voice_commands_dialog():
         raise_window(_active_dialog)
         return None
 
-    dialog = Gtk.Dialog(title="Voice Commands — Quick Reference")
-    dialog.set_default_size(520, 580)
+    dialog = Gtk.Dialog(title="Voice Commands")
+    dialog.set_default_size(900, 640)
+    ui_style.use_tuxtalk_style(dialog)
     dialog.set_resizable(True)
     dialog.set_modal(False)
     dialog.set_position(Gtk.WindowPosition.CENTER)
@@ -42,9 +43,12 @@ def show_voice_commands_dialog():
     content.set_margin_bottom(8)
     content.set_margin_start(12)
     content.set_margin_end(12)
-    # Help's page: the text takes the focus, so the keys scroll it and a
-    # screen reader reads it; Close is the only other thing to focus.
-    content.pack_start(text_page(_build_markup()), True, True, 0)
+    intro = Gtk.Label(xalign=0)
+    intro.set_markup(INTRO)
+    intro.set_line_wrap(True)
+    intro.set_margin_bottom(8)
+    content.pack_start(intro, False, False, 0)
+    content.pack_start(_group_tabs(), True, True, 0)
 
     hint = Gtk.Label()
     hint.set_markup(f'<span size="small" color="#888888">{_hint_markup()}</span>')
@@ -80,15 +84,20 @@ def _hint_markup():
     return "Tip: Set a hotkey in Preferences → General to open this with a keypress"
 
 
-def _build_markup():
-    """The cheat sheet: the shared command table (commands_reference) in its
-    short layout, then snippets."""
-    return f'''<span size="large"><b>Voice Commands</b></span>
-The commands are English words, whatever language you dictate in.
+INTRO = ("Hold your dictation key, say the command, let go. The commands are English "
+         "words, whatever language you dictate in.")
+SNIPPETS = ("<b>Snippets</b>: say a short phrase, get the full text. Add your own in "
+            "<b>Preferences → Words</b>; wrap the text in <b>\"quotes\"</b> to type it "
+            "exactly as written.")
 
-{commands_reference.short_markup()}
 
-<b>Snippets</b>
-Say a short phrase, get the full text. Add your own in Preferences → Words.
-  Wrap the text in <b>"quotes"</b> to type it exactly as written
-  (bypasses auto-capitalization and punctuation).'''
+def _group_tabs():
+    """A tab per group of commands, as Help's tabs look; the Dictation tab
+    ends with how snippets work."""
+    tabs = Gtk.Notebook()
+    tabs.set_scrollable(True)
+    tabs.get_accessible().set_name("Voice command groups")
+    for group in commands_reference.GROUPS:
+        extra = SNIPPETS if group == commands_reference.DICTATION else None
+        tabs.append_page(commands_cards.group_page(group, extra), Gtk.Label(label=group))
+    return tabs

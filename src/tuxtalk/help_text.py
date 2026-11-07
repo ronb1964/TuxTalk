@@ -19,7 +19,6 @@ import os
 
 from gi.repository import GLib
 
-from . import commands_reference
 from .ai_download import DOWNLOAD_SIZE_TEXT as AI_SIZE_TEXT
 from .config import CTRL_SPACE
 from .cuda_download import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
@@ -33,6 +32,9 @@ ISSUES_URL = "https://github.com/ronb1964/TuxTalk/issues"
 REPORT_LINK = "tuxtalk:report"
 # The section that opens with a Report a Problem button (help_dialog).
 PROBLEMS_TITLE = "Problems"
+# Help's Commands tab is drawn as cards (commands_cards): its intro here, the
+# cards from commands_reference, then COMMANDS_EXAMPLES.
+COMMANDS_TITLE = "Commands"
 
 
 def install_facts():
@@ -108,7 +110,7 @@ def _ctrl_space_line(keys):
 def tabs():
     """[(title, Pango markup)] for each of Help's sections, in order."""
     values = _values()
-    return [(title, text() if callable(text) else text.format(**values))
+    return [(title, text.format(**values))
             for title, text in _TABS]
 
 
@@ -218,7 +220,7 @@ START_HERE = '''<span size="large"><b>Dictating in Three Steps</b></span>
 3. Let go: your words are typed where the cursor is.
 
 Say punctuation as you go: <b>period</b>, <b>comma</b>, <b>question mark</b>,
-<b>new line</b>. The Commands list, last in Help, has them all.
+<b>new line</b>. Help's Commands tab has them all.
 
 <b>Without holding a key</b>
 Tap <b>{toggle}</b> to start, talk as long as you like, and tap it again to stop.
@@ -291,7 +293,7 @@ WRITING = '''<span size="large"><b>Documents and Email</b></span>
 <b>Punctuation and paragraphs</b>
 Say <b>period</b>, <b>comma</b>, <b>question mark</b>, <b>new line</b>, <b>new paragraph</b>
 and so on. TuxTalk adds the capitals, and a period at the end if the speech model
-forgot one. The Commands list, last in Help, has them all.
+forgot one. Help's Commands tab has them all.
 
 <b>Numbers</b>
 <b>Preferences → Advanced → Numbers</b>: as the speech model writes them, as digits
@@ -465,6 +467,7 @@ Open apps, close or switch windows, snap and move them, press everyday keys, cha
 desktops and volume, control music, lock or take a screenshot, go to an address or search
 the web, all by saying it. Turn it on in
 <b>Preferences → Advanced → TuxTalk Labs → Apps, windows and keys by voice</b>.
+The Commands tab lists every one of these commands.
 
 <b>How to use it</b>
 Hold <b>{hold}</b>, say <b>open Firefox</b>, let go. Firefox opens, or comes to the front
@@ -823,22 +826,16 @@ There are two kinds:
 • <b>On their own</b>: <b>delete last sentence</b>, <b>edit that</b>…, <b>fix that word</b>. Say
   them right after the dictation they're about, as a dictation by themselves: hold
   your dictation key, say only the command, let go.
-The commands are English words, whatever language you dictate in. A shorter list
-is in the TuxTalk menu → Voice Commands....'''
+The commands are English words, whatever language you dictate in. The same list,
+a tab per group, is in the TuxTalk menu → Voice Commands..., or say <b>what can I say</b>.'''
 
-_COMMANDS_EXAMPLES = '''<b>Usage Examples:</b>
+COMMANDS_EXAMPLES = '''<b>Usage Examples:</b>
 Say: <i>Hello world comma how are you question mark</i>
 Result: Hello world, how are you?
 
 Say: <i>First sentence period new line Second sentence exclamation point</i>
 Result: First sentence.
 Second sentence!'''
-
-
-def _commands():
-    """The Commands tab: the shared table (commands_reference) between the
-    explanation of the two kinds and examples."""
-    return "\n\n".join((_COMMANDS_INTRO, commands_reference.help_markup(), _COMMANDS_EXAMPLES))
 
 
 TIPS = '''<span size="large"><b>Tips</b></span>
@@ -870,8 +867,11 @@ TIPS = '''<span size="large"><b>Tips</b></span>
     with <b>press tab</b>, let go (Writing → Filling in a form).
   • {paste_line}<b>Recent Dictations</b> in the TuxTalk menu keeps your last 20.'''
 
+# Commands right after Start Here: once someone can dictate, "what can I
+# say?" comes next. Problems last.
 _TABS = [
     ("Start Here", START_HERE),
+    (COMMANDS_TITLE, _COMMANDS_INTRO),
     ("Chatting", CHATTING),
     ("Writing", WRITING),
     ("Terminals", TERMINALS),
@@ -879,5 +879,4 @@ _TABS = [
     ("Mistakes", MISTAKES),
     ("Tips", TIPS),
     (PROBLEMS_TITLE, PROBLEMS),
-    ("Commands", _commands),
 ]

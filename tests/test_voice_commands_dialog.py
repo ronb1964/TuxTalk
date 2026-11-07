@@ -6,38 +6,48 @@ whatever language you dictate in.
 """
 import re
 
-from tuxtalk import ai_cleanup, normalize, undo
-from tuxtalk.voice_commands_dialog import _build_markup
+import pytest
 
-TEXT = re.sub(r"<[^>]+>", "", _build_markup()).lower()
+from tuxtalk import ai_cleanup, normalize, undo, voice_commands_dialog
 
 
-def test_self_corrections_are_listed():
+@pytest.fixture
+def text():
+    """Every tab of the Voice Commands window, as one lower-case text."""
+    from gtk_text import tree_text
+    dialog = voice_commands_dialog.show_voice_commands_dialog()
+    try:
+        return "\n".join(tree_text(dialog)).lower()
+    finally:
+        dialog.destroy()
+
+
+def test_self_corrections_are_listed(text):
     for phrase in ("no wait", "i mean", "make that", "scratch that", "or rather"):
-        assert phrase in TEXT, phrase
+        assert phrase in text, phrase
         assert ai_cleanup._RE_CORRECTION.search(f"at 3, {phrase}, 4"), phrase
-    assert "fix self-corrections with ai" in TEXT     # it only works with that on
+    assert "fix self-corrections with ai" in text     # it only works with that on
 
 
-def test_every_clear_everything_phrase_is_listed():
+def test_every_clear_everything_phrase_is_listed(text):
     for phrase in undo.EVERYTHING_PATTERNS:
-        assert phrase in TEXT, phrase
+        assert phrase in text, phrase
 
 
-def test_alternate_wordings_are_listed_and_work():
+def test_alternate_wordings_are_listed_and_work(text):
     for phrase in ("exclamation mark", "paragraph break", "newline"):
-        assert phrase in TEXT, phrase
+        assert phrase in text, phrase
         assert phrase in normalize.LITERAL_REPLACEMENTS
     assert undo.detect_undo_command("remove last word") == ("word", 1)
-    assert "remove last" in TEXT
+    assert "remove last" in text
 
 
-def test_literal_names_words_it_really_covers():
+def test_literal_names_words_it_really_covers(text):
     """Not "any punctuation or formatting word": brackets, em dash and full
     stop are not covered ("literal open parenthesis" types "("). The words it
     names as examples must all work with "literal"."""
-    assert "any punctuation" not in TEXT
-    assert "the word" in TEXT
+    assert "any punctuation" not in text
+    assert "the word" in text
     for word in ("period", "comma", "quote", "dash", "new line"):
         assert word in normalize.LITERAL_REPLACEMENTS, word
 
@@ -49,12 +59,12 @@ def test_help_lists_exactly_the_literal_words(help_pages):
     commands = re.sub(r"<[^>]+>", "", commands)
     listed = re.search(r"It works with: ([^.]*)\.", commands).group(1).split(", ")
     assert sorted(listed) == sorted(normalize.LITERAL_REPLACEMENTS)
-    assert 'literal new line / the word new line → "new line"' in commands
+    assert 'literal new line, the word new line\n"new line" (not a line break)' in commands
     assert normalize.normalize_text("literal new line").lower().startswith("new line")
 
 
-def test_says_commands_are_english_words():
-    assert "english words" in TEXT
+def test_says_commands_are_english_words(text):
+    assert "english words" in text
 
 
 def test_a_settings_error_is_logged_not_shown_as_no_key(monkeypatch, caplog):
@@ -95,18 +105,32 @@ def _key(widget, keyval):
     return widget.emit("key-press-event", event)
 
 
-def test_the_cheat_sheet_scrolls_from_the_keyboard(monkeypatch):
-    """Its text takes the focus, so Page Down and the arrows scroll it and a
-    screen reader can read it, as in Help. Before, only Close could be
-    focused and a keyboard user saw the first third."""
+def test_each_tab_scrolls_from_the_keyboard(monkeypatch):
+    """Each tab's page takes the focus, so Page Down and the arrows scroll
+    it, as in Help. Before, only Close could be focused and a keyboard user
+    saw the first third."""
     from gi.repository import Gdk, Gtk
     from gtk_text import widgets
     dialog = _open_window(monkeypatch)
     try:
-        text = next(w for w in widgets(dialog)
-                    if isinstance(w, Gtk.Label) and "Voice Commands" in w.get_label())
-        assert text.get_selectable() and text.get_can_focus()
-        assert _key(text, Gdk.KEY_Page_Down) is True
+        tabs = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
+        for number in range(tabs.get_n_pages()):
+            page = next(w for w in widgets(tabs.get_nth_page(number))
+                        if isinstance(w, Gtk.EventBox) and w.get_can_focus())
+            assert _key(page, Gdk.KEY_Page_Down) is True
+    finally:
+        dialog.destroy()
+
+
+def test_the_tabs_are_the_groups_of_commands(monkeypatch):
+    from gi.repository import Gtk
+    from gtk_text import widgets
+    from tuxtalk import commands_reference
+    dialog = _open_window(monkeypatch)
+    try:
+        tabs = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
+        titles = [tabs.get_tab_label_text(tabs.get_nth_page(n)) for n in range(tabs.get_n_pages())]
+        assert titles == list(commands_reference.GROUPS)
     finally:
         dialog.destroy()
 

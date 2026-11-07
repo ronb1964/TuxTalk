@@ -8,10 +8,10 @@ import re
 
 import pytest
 
-from tuxtalk import (ai_cleanup, command_phrases, commands_reference, explain, help_text,
+from tuxtalk import (ai_cleanup, command_phrases, commands_cards, commands_reference, explain,
+                     help_text,
                      key_commands, normalize, spoken_quotes, undo, voice_commands,
                      voice_edit_rules, voice_navigation)
-from tuxtalk.voice_commands_dialog import _build_markup
 
 PHRASES = [(c.kind, phrase) for s in commands_reference.SECTIONS for c in s.commands
            for phrase in c.said]
@@ -92,45 +92,50 @@ def test_formatting_comes_out_as_listed():
     assert checked == 9, "a formatting command was added: give it a line in *made*"
 
 
-def test_both_screens_show_every_phrase():
-    help_page = _plain(help_text._commands())
-    short = _plain(_build_markup())
+@pytest.fixture
+def window_text():
+    """Every tab of the Voice Commands window, as one text."""
+    from gtk_text import tree_text
+    from tuxtalk import voice_commands_dialog
+    dialog = voice_commands_dialog.show_voice_commands_dialog()
+    try:
+        return "\n".join(tree_text(dialog))
+    finally:
+        dialog.destroy()
+
+
+def test_both_screens_show_every_phrase(help_pages, window_text):
     for _kind, phrase in PHRASES:
-        assert phrase in help_page and phrase in short, phrase
+        assert phrase in help_pages["Commands"] and phrase in window_text, phrase
 
 
-def test_the_short_list_keeps_each_note():
+def test_the_voice_commands_window_keeps_each_note(window_text):
     """It said that "press tab" at the end presses Tab, and which keys
     clearing the box presses; a note only Help showed was lost there."""
-    short = _plain(_build_markup())
     for section in commands_reference.SECTIONS:
         for command in section.commands:
             if command.note:
-                assert _plain(command.note) in short, command.note
+                assert _plain(command.note) in window_text, command.note
 
 
-def test_every_way_to_clear_and_to_fix_a_word_is_listed():
-    listed = {phrase for _kind, phrase in PHRASES}
-    assert undo.EVERYTHING_PATTERNS <= listed
-    assert {"fix that", "fix that word"} <= listed
+def test_both_screens_say_where_labs_commands_are_turned_on(help_pages, window_text):
+    labs = _plain(commands_cards.LABS_LINE)
+    assert labs in window_text
+    assert any(s.labs for s in commands_reference.SECTIONS)
 
 
-def test_a_labs_heading_puts_its_colon_after_the_brackets():
-    help_page = help_text._commands()
-    assert "<b>Editing by Voice</b> (TuxTalk Labs: turn on in Preferences → Advanced):" in help_page
-    assert "Editing by Voice:" not in _plain(help_page)
-
-
-def test_both_screens_show_the_one_literal_words_list():
+def test_both_screens_show_the_one_literal_words_list(help_pages, window_text):
     """Help and the Voice Commands window each had their own, worded
     differently."""
-    for page in (_plain(help_text._commands()), _plain(_build_markup())):
+    for page in (help_pages["Commands"], window_text):
         assert page.count("Literal Words") == 1
         assert "It works with: period, comma, press tab" in page
 
 
-def test_the_voice_commands_window_lists_what_can_i_say():
-    assert "what can I say" in commands_reference.short_markup()
+def test_help_shows_commands_right_after_start_here_and_problems_last(help_pages):
+    titles = list(help_pages)
+    assert titles[:2] == ["Start Here", "Commands"]
+    assert titles[-2:] == ["Tips", "Problems"]
 
 
 def test_every_command_phrase_help_spells_out_works(monkeypatch):

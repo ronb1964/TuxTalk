@@ -149,6 +149,29 @@ def use_tuxtalk_style(window):
     window.get_style_context().add_class(STYLE_CLASS)
 
 
+# The keys that scroll a page while something on it has the focus. A
+# selectable label would move its cursor on most of them, or move the focus
+# away.
+_SCROLL_KEYS = {
+    Gdk.KEY_Page_Down: Gtk.ScrollType.PAGE_FORWARD,
+    Gdk.KEY_Page_Up: Gtk.ScrollType.PAGE_BACKWARD,
+    Gdk.KEY_Down: Gtk.ScrollType.STEP_FORWARD,
+    Gdk.KEY_Up: Gtk.ScrollType.STEP_BACKWARD,
+    Gdk.KEY_End: Gtk.ScrollType.END,
+    Gdk.KEY_Home: Gtk.ScrollType.START,
+}
+
+
+def scroll_with_keys(_widget, event, scrolled):
+    """A key-press handler: a scrolling key scrolls *scrolled* (a page of
+    Help or of the Voice Commands window, whose text has the focus)."""
+    scroll = _SCROLL_KEYS.get(event.keyval)
+    if scroll is None or event.state & Gdk.ModifierType.CONTROL_MASK:
+        return False
+    scrolled.emit("scroll-child", scroll, False)
+    return True
+
+
 # For a theme that names no accent: a plain green, the same in the recording
 # indicator and in Preferences' preview of it.
 FALLBACK_ACCENT = (0x4c / 255, 0xaf / 255, 0x50 / 255)

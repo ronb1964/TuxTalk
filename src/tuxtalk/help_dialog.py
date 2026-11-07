@@ -7,10 +7,10 @@ row wider; on a screen too narrow for it the row scrolls with arrows.
 """
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gdk, Gtk, Pango
+from gi.repository import Gtk, Pango
 
-from . import help_text, ui_style
-from .help_text import FEEDBACK_URL, PROBLEMS_TITLE, REPORT_LINK
+from . import commands_cards, help_text, ui_style
+from .help_text import COMMANDS_TITLE, FEEDBACK_URL, PROBLEMS_TITLE, REPORT_LINK
 
 # Help's text is broken by hand at about 85 characters, so the page is this
 # many of the font's characters wide, and the window that plus _FRAME_PX of
@@ -20,27 +20,6 @@ _FRAME_PX = 60
 HEIGHT = 600
 # Room left beside Help on a screen too narrow for it.
 _SCREEN_MARGIN_PX = 40
-
-# The keys that scroll a page while its text has the focus. A selectable
-# label would move its cursor on most of them, or move the focus away.
-_SCROLL_KEYS = {
-    Gdk.KEY_Page_Down: Gtk.ScrollType.PAGE_FORWARD,
-    Gdk.KEY_Page_Up: Gtk.ScrollType.PAGE_BACKWARD,
-    Gdk.KEY_Down: Gtk.ScrollType.STEP_FORWARD,
-    Gdk.KEY_Up: Gtk.ScrollType.STEP_BACKWARD,
-    Gdk.KEY_End: Gtk.ScrollType.END,
-    Gdk.KEY_Home: Gtk.ScrollType.START,
-}
-
-
-def _scroll(label, event, scrolled):
-    """A scrolling key pressed in a page's text: scroll the page."""
-    scroll = _SCROLL_KEYS.get(event.keyval)
-    if scroll is None or event.state & Gdk.ModifierType.CONTROL_MASK:
-        return False
-    scrolled.emit("scroll-child", scroll, False)
-    return True
-
 
 def _open_report(_widget):
     """Open Report a Problem (a window of its own; see problem_report_window)."""
@@ -76,7 +55,7 @@ def text_page(markup_text):
     label.connect_after("grab-focus", lambda lbl: lbl.select_region(0, 0))
     for side in ("top", "bottom", "start", "end"):
         getattr(label, f"set_margin_{side}")(15 if side in ("top", "bottom") else 8)
-    label.connect("key-press-event", _scroll, scrolled)
+    label.connect("key-press-event", ui_style.scroll_with_keys, scrolled)
     scrolled.add(label)
     return scrolled
 
@@ -106,7 +85,12 @@ def _problems_page(markup):
 def _add_sections(notebook, sections):
     """A page in *notebook* for each of *sections*, help_text.tabs()' list."""
     for title, markup in sections:
-        page = _problems_page(markup) if title == PROBLEMS_TITLE else text_page(markup)
+        if title == PROBLEMS_TITLE:
+            page = _problems_page(markup)
+        elif title == COMMANDS_TITLE:
+            page = commands_cards.all_groups_page(markup, help_text.COMMANDS_EXAMPLES)
+        else:
+            page = text_page(markup)
         notebook.append_page(page, Gtk.Label(label=title))
 
 

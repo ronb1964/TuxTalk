@@ -13,8 +13,8 @@
  * tests/test_prefs_stylesheet.py.
  */
 
-/* Window background - clean dark */
-window.talktype-prefs {
+/* Window background - clean dark (a Gtk.Dialog's node is "dialog") */
+window.talktype-prefs, dialog.talktype-prefs {
     background: #1e1e1e;
 }
 
@@ -354,3 +354,55 @@ window.talktype-prefs {
     border: none;
     box-shadow: none;
 }
+
+/* Voice command cards (commands_cards.py): Help's Commands tab and the Voice
+   Commands window. One colour per group, the same in both, so each group's
+   heading stands out from the commands under it. */
+.talktype-prefs .tt-card {
+    background: #252525;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
+    margin-bottom: 12px;
+}
+
+.talktype-prefs .tt-card-head {
+    border-radius: 9px 9px 0 0;
+    padding: 8px 14px;
+}
+
+.talktype-prefs .tt-card-row {
+    border-top: 1px solid #333333;
+    padding: 6px 14px;
+}
+
+.talktype-prefs .tt-say { color: #f2f2f2; }
+.talktype-prefs .tt-does { color: #b4b4b4; }
+.talktype-prefs .tt-note { color: #969696; font-size: 92%; }
+.talktype-prefs .tt-intro { margin-bottom: 8px; }
+.talktype-prefs .tt-group-title { margin: 14px 0 6px 2px; }
+
+.talktype-prefs .tt-labs {
+    border: 1px solid alpha(#ffffff, 0.35);
+    border-radius: 6px;
+    padding: 1px 8px;
+    font-size: 88%;
+}
+
+.talktype-prefs .tt-card-head.tt-dictation { background: #1d3a5c; }
+.talktype-prefs .tt-card-head.tt-fixing { background: #4a3410; }
+.talktype-prefs .tt-card-head.tt-editing { background: #24401a; }
+.talktype-prefs .tt-card-head.tt-apps { background: #362c5c; }
+.talktype-prefs .tt-card-head.tt-keys { background: #12443b; }
+.talktype-prefs .tt-card-head.tt-sound { background: #4d2416; }
+.talktype-prefs .tt-dictation label, .talktype-prefs .tt-dictation image,
+.talktype-prefs label.tt-dictation { color: #9ec9f5; }
+.talktype-prefs .tt-fixing label, .talktype-prefs .tt-fixing image,
+.talktype-prefs label.tt-fixing { color: #f5c87a; }
+.talktype-prefs .tt-editing label, .talktype-prefs .tt-editing image,
+.talktype-prefs label.tt-editing { color: #a8d88a; }
+.talktype-prefs .tt-apps label, .talktype-prefs .tt-apps image,
+.talktype-prefs label.tt-apps { color: #c3b8f5; }
+.talktype-prefs .tt-keys label, .talktype-prefs .tt-keys image,
+.talktype-prefs label.tt-keys { color: #8fdcc5; }
+.talktype-prefs .tt-sound label, .talktype-prefs .tt-sound image,
+.talktype-prefs label.tt-sound { color: #f3a98d; }

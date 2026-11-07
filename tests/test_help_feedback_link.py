@@ -151,8 +151,8 @@ def test_tab_from_the_tabs_goes_into_the_open_sections_text(shown_help):
     dialog = shown_help()
     notebook = _notebook(dialog)
     assert dialog.get_focus() is notebook
-    _press(dialog, Gdk.KEY_Right)
-    _press(dialog, Gdk.KEY_Right)
+    for _tab in range(3):           # past Commands and Chatting
+        _press(dialog, Gdk.KEY_Right)
     assert _title(notebook) == "Writing"
     _press(dialog, Gdk.KEY_Tab)
     label, _ = _page_text(notebook)
