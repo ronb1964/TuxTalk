@@ -11,10 +11,9 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
 from stand_ins import tabbed_window
-from gtk_text import find, shown_text, widgets
+from gtk_text import find, shown_text, tree_text, widgets
 from tuxtalk import custom_words
 from tuxtalk.prefs import PreferencesWindow
-from tuxtalk.voice_commands_dialog import _build_markup
 
 
 def shown_buttons(root):
@@ -55,11 +54,17 @@ def test_every_old_tab_name_opens_words():
 
 
 def test_help_and_quick_reference_say_words(help_pages):
-    for name, text in (("Help", "\n".join(help_pages.values())),
-                       ("Voice Commands", _build_markup())):
+    """Preferences' Words tab was once Snippets, and before that Commands.
+    (Help's own Commands tab is a different thing, and named.)"""
+    from tuxtalk import voice_commands_dialog
+    dialog = voice_commands_dialog.show_voice_commands_dialog()
+    try:
+        window = "\n".join(tree_text(dialog))
+    finally:
+        dialog.destroy()
+    for name, text in (("Help", "\n".join(help_pages.values())), ("Voice Commands", window)):
         assert "Preferences → Words" in text, name
         assert "Preferences → Snippets" not in text, name
-        assert "Commands tab" not in text, name
         assert "Preferences → Commands" not in text, name
 
 
