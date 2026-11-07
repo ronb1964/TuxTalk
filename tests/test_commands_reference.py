@@ -105,7 +105,7 @@ def test_the_short_list_keeps_each_note():
     short = _plain(_build_markup())
     for section in commands_reference.SECTIONS:
         for command in section.commands:
-            if command.note and not section.pairs:
+            if command.note:
                 assert _plain(command.note) in short, command.note
 
 
@@ -145,3 +145,69 @@ def test_every_command_phrase_help_spells_out_works(monkeypatch):
     assert len(phrases) > 20
     for phrase in phrases:
         assert command_phrases.parse(phrase, navigation=False, actions=True), phrase
+
+
+# Every command TuxTalk understands is listed: each rule of the parsers is
+# shown by at least one phrase here, so a command added without a line in
+# Help and the Voice Commands window fails these.
+
+def _listed(kind):
+    return [p for s in commands_reference.SECTIONS for c in s.commands if c.kind == kind
+            for p in c.said]
+
+
+def _requests():
+    return [command_phrases.parse(p, navigation=False, actions=True) for p in _listed("action")]
+
+
+def test_every_select_and_move_command_is_listed():
+    listed = _listed("select")
+    missing = [pattern.pattern for pattern, _build in voice_navigation._COMPILED
+               if not any(pattern.match(phrase) for phrase in listed)]
+    assert missing == []
+
+
+def test_every_key_command_is_listed():
+    keys = {r.name for r in _requests() if isinstance(r, command_phrases.KeyRequest)}
+    assert keys == set(command_phrases.KEY_PHRASES.values()) | {"scroll up", "scroll down"}
+
+
+def test_every_desktop_command_is_listed():
+    actions = {r.action for r in _requests() if isinstance(r, command_phrases.DesktopRequest)}
+    assert actions == command_phrases.DESKTOP_ACTIONS
+
+
+def test_every_sound_music_and_system_command_is_listed():
+    made = {(type(r).__name__, r.action) for r in _requests()
+            if isinstance(r, (command_phrases.SoundRequest, command_phrases.MusicRequest,
+                              command_phrases.SystemRequest))}
+    assert made == {("SoundRequest", a) for a in ("volume up", "volume down", "mute", "unmute")} \
+        | {("MusicRequest", a) for a in ("pause", "play", "next", "previous")} \
+        | {("SystemRequest", a) for a in ("lock", "screenshot", "window screenshot", "commands")}
+
+
+def test_every_fixed_command_phrasing_is_listed():
+    """Each way the parser takes a fixed phrase ("turn down the volume")."""
+    listed = [p.lower() for p in _listed("action")]
+    missing = [pattern.pattern for pattern, _build in command_phrases._FIXED
+               if not any(pattern.fullmatch(phrase) for phrase in listed)]
+    assert missing == []
+
+
+def test_every_window_command_is_listed():
+    windows = {(r.action, r.app is not None, r.every) for r in _requests()
+               if isinstance(r, command_phrases.WindowRequest)}
+    assert windows == {("close", False, False), ("minimize", False, False),
+                       ("maximize", False, False), ("unmaximize", False, False),
+                       ("close", True, False), ("close", True, True),
+                       ("minimize", True, False), ("maximize", True, False),
+                       ("restore", True, False), ("switch", True, False)}
+
+
+def test_opening_an_address_and_a_web_search_are_listed():
+    kinds = {type(r).__name__ for r in _requests()}
+    assert {"OpenRequest", "AddressRequest", "SearchRequest"} <= kinds
+
+
+def test_each_section_is_in_one_of_the_groups():
+    assert {s.group for s in commands_reference.SECTIONS} == set(commands_reference.GROUPS)

@@ -31,12 +31,19 @@ class Command(NamedTuple):
 
 
 class Section(NamedTuple):
-    """A heading's commands; *pairs* puts two on a line in the short list."""
+    """A heading's commands, shown in *group* (a tab of the Voice Commands
+    window, a run of cards in Help); *labs* says it needs TuxTalk Labs."""
     title: str
+    group: str
     commands: tuple
     labs: bool = False
-    pairs: bool = False
     note: str = ""
+
+
+# The groups, in the order the window's tabs and Help's cards show them.
+DICTATION, FIXING, EDITING = "Dictation", "Fixing", "Editing"
+APPS, KEYS, SOUND = "Apps and Windows", "Keys and Web", "Sound and System"
+GROUPS = (DICTATION, FIXING, EDITING, APPS, KEYS, SOUND)
 
 
 def _inline(*said, result, note=""):
@@ -49,7 +56,7 @@ def _literal(word, result, *said):
 
 
 SECTIONS = (
-    Section("Punctuation", pairs=True, commands=(
+    Section("Punctuation", DICTATION, commands=(
         _inline("comma", result=","),
         _inline("period", "full stop", result="."),
         _inline("question mark", result="?"),
@@ -70,7 +77,7 @@ SECTIONS = (
         _inline("em dash", result="—"),
         _inline("dot dot dot", "ellipsis", result="…"),
     )),
-    Section("Brackets", pairs=True, commands=(
+    Section("Brackets", DICTATION, commands=(
         _inline("open parenthesis", result="("),
         _inline("close parenthesis", result=")"),
         _inline("open bracket", result="["),
@@ -78,7 +85,7 @@ SECTIONS = (
         _inline("open brace", result="{"),
         _inline("close brace", result="}"),
     )),
-    Section("Formatting", commands=(
+    Section("Formatting", DICTATION, commands=(
         _inline("new line", "newline", "return", "line break", result="line break"),
         _inline("new paragraph", "paragraph break", result="double line break"),
         _inline("press tab", result="tab character (just <b>tab</b> is the word)"),
@@ -91,7 +98,7 @@ SECTIONS = (
                 "key", "It sends a chat message or runs a command. <b>literal press enter</b> "
                        "types the words"),
     )),
-    Section("Undo", commands=(
+    Section("Undo", FIXING, commands=(
         Command(("delete last word", "undo last word", "remove last word"),
                 "delete the last word you dictated", "undo"),
         Command(("delete last sentence", "undo last sentence"),
@@ -101,19 +108,19 @@ SECTIONS = (
         Command(("delete last 3 words", "undo last two sentences"),
                 "counted undo (1 to 10, in words or digits)", "undo"),
     )),
-    Section("Clear the Whole Box", commands=(
+    Section("Clear the Whole Box", FIXING, commands=(
         Command(("delete everything", "delete all", "clear everything", "clear all",
                  "undo everything", "undo all"),
                 "empty the whole box, including text TuxTalk didn't type; in a terminal, "
                 "the line you're typing", "undo",
                 "It presses Ctrl+A then Backspace; in a terminal, Ctrl+E then Ctrl+U"),
     )),
-    Section("Fixing a Word", commands=(
+    Section("Fixing a Word", FIXING, commands=(
         Command(("fix that word", "fix that"),
                 "open Fix a Word on what you just said, to teach TuxTalk the right spelling "
                 "for next time", "fix"),
     )),
-    Section("Editing by Voice", labs=True, commands=(
+    Section("Editing by Voice", EDITING, labs=True, commands=(
         Command(("make this more formal", "fix the grammar", "make this all caps",
                  "remove the commas"),
                 "changes the selected text: hold Shift with your dictation key as you "
@@ -121,41 +128,99 @@ SECTIONS = (
         Command(("edit that, make it shorter",), "right after dictating, no keys: changes it",
                 "edit"),
     )),
-    Section("Select and Move", labs=True, commands=(
-        Command(("select that", "select the last sentence", "select the last 3 words"),
-                "select what you just said", "select"),
+    Section("Select and Move", EDITING, labs=True, commands=(
+        Command(("select that", "select the last sentence", "select the last 3 words",
+                 "select the last paragraph"), "select what you just said", "select"),
         Command(("select all", "select the line", "select the next word",
-                 "select to the end of the line"), "select on the screen", "select"),
-        Command(("go to the end", "go to the start of the line", "go back 3 words",
-                 "go up 2 lines"), "move the cursor", "select"),
-        Command(("unselect",), "drop the selection", "select"),
+                 "select the previous 2 words", "select the next line",
+                 "select the previous line"), "select on the screen", "select"),
+        Command(("select to the end of the line", "select to the start of the line",
+                 "select to the end", "select to the top"),
+                "select from the cursor to there", "select"),
+        Command(("go to the end of the line", "go to the start of the line",
+                 "go to the end", "go to the start"), "move the cursor there", "select"),
+        Command(("go back 3 words", "go forward a word", "next word", "previous word",
+                 "go back 2 letters", "go forward 4 characters", "go up 2 lines",
+                 "go down a line"), "move the cursor", "select"),
+        Command(("unselect", "clear the selection"), "drop the selection", "select"),
     )),
-    Section("Changing Your Mind", note="Needs <b>Fix self-corrections with AI</b> turned on "
+    Section("Changing Your Mind", FIXING, note="Needs <b>Fix self-corrections with AI</b> turned on "
                                        "in Preferences → Advanced (a one-time download of "
                                        "about {ai_size})", commands=(
         Command(("no wait", "I mean", "make that", "scratch that", "or rather"),
                 'correct yourself mid-sentence: "meet at 3, no wait, 4" → "meet at 4"',
                 "correction"),
     )),
-    Section("Apps, Windows and Desktop", labs=True, commands=(
-        Command(("open Firefox", "close Firefox", "switch to Firefox"),
-                "open, close or bring an app forward", "action"),
-        Command(("new tab", "go back", "scroll down", "copy the selection", "paste it"),
-                "press that key in the window you're in", "action"),
-        Command(("snap left", "snap top right", "center window"),
-                "place the window", "action"),
-        Command(("show desktop", "next desktop", "switch to desktop two"),
-                "desktops", "action"),
-        Command(("move window to desktop two", "move window to the other screen"),
-                "move the window", "action"),
-        Command(("volume up", "mute sound", "pause music", "next track"),
-                "sound and music", "action"),
-        Command(("lock screen", "take a screenshot", "what can I say"),
-                "lock, screenshot, this list", "action"),
-        Command(("take a screenshot of this window",), "just the window", "action"),
-    ), note="One word alone (copy, pause, next) is typed. <b>literal</b> before a command "
-            "types the words. <b>centre window</b> works too."),
-    Section("Literal Words",
+    Section("Apps", APPS, labs=True, commands=(
+        Command(("open Firefox",), "opens it, or brings its window to the front", "action"),
+        Command(("switch to Firefox",), "brings its window to the front", "action"),
+        Command(("close Firefox", "close all Firefox"),
+                "closes its window (all of them); it asks to save first", "action"),
+        Command(("minimize Firefox", "maximize Firefox", "restore Firefox"),
+                "its window, by name", "action"),
+    ), note="Any app on the computer, by the name in its menu entry."),
+    Section("The Window You're In", APPS, labs=True, commands=(
+        Command(("close window", "close this window"), "closes it; it asks to save first",
+                "action"),
+        Command(("minimize window", "maximize window", "restore window"),
+                "hides it, fills the screen, or puts it back", "action"),
+        Command(("snap left", "snap right", "snap top", "snap bottom",
+                 "move window to the left"), "fills that half of the screen", "action"),
+        Command(("snap top left", "snap top right", "snap bottom left", "snap bottom right"),
+                "fills that quarter", "action"),
+        Command(("center window", "centre window", "move window to the center"),
+                "moves it to the middle", "action"),
+        Command(("move window to the other screen",), "with two screens", "action"),
+    )),
+    Section("Desktops", APPS, labs=True, commands=(
+        Command(("show desktop",), "hides the windows; say it again to bring them back",
+                "action"),
+        Command(("show all windows",), "every window at once, to pick one", "action"),
+        Command(("next desktop", "previous desktop", "switch to desktop two",
+                 "go to desktop three"), "changes the desktop (one to nine)", "action"),
+        Command(("move window to desktop two", "move window to the next desktop",
+                 "move window to the previous desktop"),
+                "sends the window you're in there", "action"),
+    )),
+    Section("Tabs and Pages", KEYS, labs=True, commands=(
+        Command(("new tab", "close tab", "next tab", "previous tab", "reopen tab"),
+                "in a browser or any app with tabs", "action"),
+        Command(("go back", "go forward", "reload the page", "refresh the page"),
+                "back, forward, reload", "action"),
+        Command(("page up", "page down", "go to the top", "go to the bottom"),
+                "a screen at a time, or all the way", "action"),
+        Command(("scroll down", "scroll up", "scroll down 5"),
+                "scrolls what's under the mouse pointer; a number scrolls more", "action"),
+        Command(("find on page",), "opens the page's search", "action"),
+    )),
+    Section("Everyday Keys", KEYS, labs=True, commands=(
+        Command(("save the file", "select all", "copy the selection", "paste it",
+                 "press escape"), "presses the key in the window you're in", "action"),
+    ), note="One word alone (copy, paste, save) is typed: people say those as answers."),
+    Section("Addresses and Search", KEYS, labs=True, commands=(
+        Command(("go to youtube dot com",), "opens the address; in a browser, in that tab",
+                "action"),
+        Command(("web search cheap tires",), "your browser's own search", "action"),
+    )),
+    Section("Sound and Music", SOUND, labs=True, commands=(
+        Command(("volume up", "volume down", "volume up 3", "turn down the volume"),
+                "louder or quieter; a number for more steps", "action"),
+        Command(("mute sound", "unmute sound"), "turns the sound off or on", "action"),
+        Command(("pause music", "play music", "resume the music"),
+                "the player that's playing", "action"),
+        Command(("next track", "previous track", "next song"), "in that player", "action"),
+    )),
+    Section("Lock, Screenshots and Help", SOUND, labs=True, commands=(
+        Command(("lock screen", "lock the computer"),
+                "your desktop's own lock; the ready beep means it's locked", "action"),
+        Command(("take a screenshot",), "the whole screen, into Pictures/Screenshots",
+                "action"),
+        Command(("take a screenshot of this window", "screenshot this window"),
+                "just the window you're in (GNOME: pick it in the screenshot tool)",
+                "action"),
+        Command(("what can I say",), "opens this list", "action"),
+    ), note="<b>literal</b> before any of these types the words instead."),
+    Section("Literal Words", DICTATION,
             note="Say <b>literal</b> or <b>the word</b> before a punctuation or line-break "
                  "word to type the word itself. It works with: "
                  + ", ".join(LITERAL_REPLACEMENTS) + ".",
@@ -207,15 +272,11 @@ def short_markup():
     each other note under its command."""
     blocks = []
     for section in SECTIONS:
-        if section.pairs:
-            entries = [f"{_said(c)} → {c.result}" for c in section.commands]
-            lines = ["    ".join(entries[i:i + 2]) for i in range(0, len(entries), 2)]
-        else:
-            lines = []
-            for command in section.commands:
-                lines.append(f"{_said(command)} → {command.result}")
-                if command.note:
-                    lines.append(f"  {command.note}")
+        lines = []
+        for command in section.commands:
+            lines.append(f"{_said(command)} → {command.result}")
+            if command.note:
+                lines.append(f"  {command.note}")
         lines = [_title(section)] + [f"  {line}" for line in lines]
         if section.note:
             lines.append(_note(section))
