@@ -18,6 +18,7 @@ from . import (
     keyboard_output,
     last_dictation,
     modifier_hotkeys,
+    mouse_grid,
     notices,
     recording,
     resampling,
@@ -548,8 +549,14 @@ def stop_recording(
     message = rec.message
     if rec.edit_mode:
         where = focused_window.look()       # the window the edit is for
-        _finish(message, lambda: voice_edit.transcribe_and_edit(
-            frames, rec_sr, beeps_on, language, injection_mode, message, where))
+
+        def edit():
+            # A voice edit is never one of the mouse grid's words, so it
+            # closes the grid as every other dictation does (_ran_as_command).
+            mouse_grid.close("a voice edit")
+            voice_edit.transcribe_and_edit(frames, rec_sr, beeps_on, language,
+                                           injection_mode, message, where)
+        _finish(message, edit)
         return
     # Type at pause: the rest is the recording's last phrase, typed after
     # those already queued.

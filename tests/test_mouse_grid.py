@@ -22,8 +22,8 @@ LEFT_CLICK = [(e.BTN_LEFT, 1), ("SYN", 0), (e.BTN_LEFT, 0), ("SYN", 0)]
 
 
 class FakeWindows:
-    """The grid's windows: where the recording pointer was last sent, in
-    screen pixels, seen as a motion event once it changes (Rig.landing)."""
+    """The grid's windows: each move of the recording pointer since they
+    showed is a motion event when it changes where the pointer is, as on X."""
 
     def __init__(self, rig, on_real_click):
         self.rig = rig
@@ -31,8 +31,12 @@ class FakeWindows:
         self.showing = False
         self.drawn = []
         self._seen = None       # (time, position) of the last motion
+        self._moves = 0         # the moves already looked at
+        self._at = None         # where the pointer is
 
     def show(self, grid):
+        landings = self.rig.landings()
+        self._moves, self._at = len(landings), (landings[-1] if landings else None)
         self.showing = True
         self.drawn.append(grid.region)
         return self.rig.has_x
@@ -44,9 +48,12 @@ class FakeWindows:
         self.showing = False
 
     def pointer_since(self, after):
-        spot = self.rig.landing()
-        if spot is not None and (self._seen is None or self._seen[1] != spot):
-            self._seen = (self.rig.clock.now, spot)
+        landings = self.rig.landings()
+        for spot in landings[self._moves:]:
+            if spot != self._at:
+                self._seen = (self.rig.clock.now, spot)
+            self._at = spot
+        self._moves = len(landings)
         if self._seen and self._seen[0] > after:
             return self._seen[1]
         return None
@@ -69,18 +76,26 @@ class Rig:
         self.beeps = []
         self.notes = []
 
-    def landing(self):
-        """Where the pointer was sent last, in screen pixels, or None."""
-        sent = {}
+    def landings(self):
+        """Where each move sent the pointer, in screen pixels, in order; none
+        while the pointer is off the grid (*visible* off)."""
+        if not self.visible:
+            return []
+        right = max(s.x + s.width for s in self.screens)
+        bottom = max(s.y + s.height for s in self.screens)
+        sent, spots = {}, []
         for code, value in self.pointer.events:
             if code in (e.ABS_X, e.ABS_Y):
                 sent[code] = value
-        if not self.visible or len(sent) < 2:
-            return None
-        right = max(s.x + s.width for s in self.screens)
-        bottom = max(s.y + s.height for s in self.screens)
-        return (round(sent[e.ABS_X] / virtual_pointer.MAX * right) + self.offset,
-                round(sent[e.ABS_Y] / virtual_pointer.MAX * bottom))
+            elif code == "SYN" and len(sent) == 2:
+                spots.append((round(sent[e.ABS_X] / virtual_pointer.MAX * right) + self.offset,
+                              round(sent[e.ABS_Y] / virtual_pointer.MAX * bottom)))
+        return spots
+
+    def landing(self):
+        """Where the pointer was sent last, in screen pixels, or None."""
+        landings = self.landings()
+        return landings[-1] if landings else None
 
     def _first_press(self):
         return next((i for i, ev in enumerate(self.pointer.events)
@@ -222,12 +237,10 @@ def test_a_calibration_that_never_arrives_refuses(rig):
 def test_a_pointer_already_on_the_spot_is_still_seen_to_arrive(rig):
     """A move onto the spot the pointer is on sends no motion: the grid moves
     it a pixel aside and back to see it."""
-    act("grid")
-    act("move", 5)
-    act("grid")      # the calibration's first spot isn't where the pointer is
-    rig.pointer.events.clear()
-    assert act("move", 5) is True
-    assert rig.notes == []
+    virtual_pointer.move_to(*mouse_grid.CALIBRATION[0])     # where the first move goes
+    assert act("grid") is True and rig.notes == []
+    aside = round((mouse_grid.CALIBRATION[0][0] + 1 / SCREEN.width) * virtual_pointer.MAX)
+    assert (e.ABS_X, aside) in rig.pointer.events
 
 
 def test_no_x_display_says_so_and_shows_nothing(rig):
@@ -347,6 +360,21 @@ def test_literal_and_a_grid_word_types_it_and_closes_the_grid(grid_on_screen, ac
     say("Literal five.")
     assert [text for text, _ in chat[2]] == ["Five."]
     assert not mouse_grid.showing()
+
+
+def test_a_voice_edit_closes_the_grid(grid_on_screen, monkeypatch):
+    """Shift and the dictation key: the edit's recording goes to voice
+    editing, not through the voice commands, and closes the grid too."""
+    from tuxtalk import pipeline, recording, voice_edit
+    from tuxtalk import recording_state as rs
+    edited = []
+    monkeypatch.setattr(rs.state.current, "edit_mode", True)
+    monkeypatch.setattr(recording, "finish_capture", lambda rec, beeps, notify: ([b""], 16000))
+    monkeypatch.setattr(voice_edit, "transcribe_and_edit",
+                        lambda *a: edited.append(mouse_grid.showing()))
+    pipeline.stop_recording(False, False, False)
+    dictation_worker.drain(5)
+    assert edited == [False] and not grid_on_screen.windows[0].showing
 
 
 def test_quitting_with_a_grid_open_closes_it(grid_on_screen, monkeypatch):
