@@ -32,10 +32,6 @@ POLL_S = 0.02
 # so the click lands on the app under it.
 GONE_S = 0.05
 
-# Where the pointer goes when the grid opens, as fractions of the screens'
-# box: from where it lands there, the fit for every cell is worked out.
-CALIBRATION = ((0.25, 0.25), (0.75, 0.75))
-
 # A click request's action -> the button, how many clicks, and the word for the log.
 _CLICKS = {"click": ("left", 1, "clicked"), "double click": ("left", 2, "double-clicked"),
            "right click": ("right", 1, "right-clicked"),
@@ -201,26 +197,26 @@ def _open(beeps_on: bool) -> bool:
 
 def _calibrate(session: _Session) -> Fit | None:
     """The fit from screen points to the tablet's fractions, from where the
-    pointer lands at the two CALIBRATION spots; None if it doesn't show up
-    there or the landings can't be fitted. The plain mapping over the
+    pointer lands at the grid's two calibration spots; None if it doesn't
+    show up there or the landings can't be fitted. The plain mapping over the
     screens' box when both landings agree with it: it's exact, where the
     landings are rounded to whole pixels."""
-    bounds = session.grid.bounds
-    plain = [(bounds.x + fx * bounds.width, bounds.y + fy * bounds.height)
-             for fx, fy in CALIBRATION]
+    straight = Fit.straight(session.grid.bounds)
+    spots = session.grid.calibration_spots()
+    fractions = [straight.fraction(spot) for spot in spots]
     arrivals = []
-    for fraction in CALIBRATION:
+    for spot, fraction in zip(spots, fractions, strict=True):
         arrived = _move_and_see(session, fraction)
         if arrived is None:
-            logger.warning(f"Mouse grid: the pointer sent to {_xy(plain[len(arrivals)])} "
-                           f"never showed up on the grid; screens {_layout(session)}")
+            logger.warning(f"Mouse grid: the pointer sent to {_xy(spot)} never showed up "
+                           f"on the grid; screens {_layout(session)}")
             return None
         arrivals.append(arrived)
-    if all(close_enough(p, a) for p, a in zip(plain, arrivals, strict=True)):
-        return Fit.straight(bounds)
+    if all(close_enough(s, a) for s, a in zip(spots, arrivals, strict=True)):
+        return straight
     logger.info(f"Mouse grid: the pointer lands off the plain mapping ({_xy(arrivals[0])}, "
-                f"{_xy(arrivals[1])} for {_xy(plain[0])}, {_xy(plain[1])}); fitted to it")
-    return Fit.measured(CALIBRATION, (arrivals[0], arrivals[1]))
+                f"{_xy(arrivals[1])} for {_xy(spots[0])}, {_xy(spots[1])}); fitted to it")
+    return Fit.measured((fractions[0], fractions[1]), (arrivals[0], arrivals[1]))
 
 
 def _move_and_see(session: _Session, fraction):

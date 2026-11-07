@@ -68,6 +68,15 @@ class Grid:
         bottom = max(m.y + m.height for m in self.monitors)
         return Rect(left, top, right - left, bottom - top)
 
+    def calibration_spots(self) -> tuple[tuple[float, float], tuple[float, float]]:
+        """Where the pointer is sent when the grid opens, to see how it lands:
+        the centres of the first monitor's cell 1 and of the last one's cell
+        9. Both are on a screen, which a spot fixed in the box around all of
+        them needn't be (the desktop would hold the pointer at an edge); on
+        one screen and in the usual layouts they differ on both axes too,
+        which Fit.measured needs."""
+        return self._top[0].rect.center, self._top[-1].rect.center
+
     def _cell(self, number: int) -> Cell | None:
         return next((c for c in self.cells if c.number == number), None)
 

@@ -91,9 +91,18 @@ class Rig:
             if code in (e.ABS_X, e.ABS_Y):
                 sent[code] = value
             elif code == "SYN" and len(sent) == 2:
-                spots.append((round(sent[e.ABS_X] / virtual_pointer.MAX * right) + self.offset,
-                              round(sent[e.ABS_Y] / virtual_pointer.MAX * bottom)))
+                spots.append(self._onto_a_screen(
+                    round(sent[e.ABS_X] / virtual_pointer.MAX * right) + self.offset,
+                    round(sent[e.ABS_Y] / virtual_pointer.MAX * bottom)))
         return spots
+
+    def _onto_a_screen(self, x, y):
+        """Where the desktop puts a pointer sent off every screen: the nearest
+        point of the nearest screen."""
+        def clamped(s):
+            return (min(max(x, s.x), s.x + s.width - 1), min(max(y, s.y), s.y + s.height - 1))
+        return min((clamped(s) for s in self.screens),
+                   key=lambda p: (p[0] - x) ** 2 + (p[1] - y) ** 2)
 
     def landing(self):
         """Where the pointer was sent last, in screen pixels, or None."""
@@ -260,9 +269,9 @@ def test_a_calibration_that_never_arrives_refuses(rig):
 def test_a_pointer_already_on_the_spot_is_still_seen_to_arrive(rig):
     """A move onto the spot the pointer is on sends no motion: the grid moves
     it a pixel aside and back to see it."""
-    virtual_pointer.move_to(*mouse_grid.CALIBRATION[0])     # where the first move goes
+    virtual_pointer.move_to(1 / 6, 1 / 6)       # cell 1's centre, where the first move goes
     assert act("grid") is True and rig.notes == []
-    aside = round((mouse_grid.CALIBRATION[0][0] + 1 / SCREEN.width) * virtual_pointer.MAX)
+    aside = round((1 / 6 + 1 / SCREEN.width) * virtual_pointer.MAX)
     assert (e.ABS_X, aside) in rig.pointer.events
 
 
@@ -302,6 +311,16 @@ def test_the_second_screens_cells_go_on_from_ten(rig):
     act("grid")
     assert act("click", 14) is True
     assert rig.landing() == (1920 + 960, 540) and rig.buttons() == LEFT_CLICK
+
+
+def test_two_screens_that_dont_fill_their_box_still_click(rig):
+    """A 4K screen with a 1080p one to its right, tops aligned: a calibration
+    spot below the small screen came back held at its edge, and the fit from
+    it refused every click."""
+    rig.screens = [Rect(0, 0, 3840, 2160), Rect(3840, 0, 1920, 1080)]
+    assert act("grid") is True
+    assert act("click", 14) is True and rig.notes == []
+    assert rig.landing() == (3840 + 960, 540) and rig.buttons() == LEFT_CLICK
 
 
 def test_the_grid_closes_by_itself_after_a_minute(rig, caplog):

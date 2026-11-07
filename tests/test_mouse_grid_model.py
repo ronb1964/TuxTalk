@@ -98,3 +98,23 @@ def test_close_enough_is_three_pixels():
 
 def test_a_fit_from_one_sent_fraction_is_refused():
     assert Fit.measured(((0.5, 0.2), (0.5, 0.8)), ((300, 100), (900, 900))) is None
+
+
+def _on_a_monitor(point, monitors):
+    x, y = point
+    return any(m.x <= x < m.x + m.width and m.y <= y < m.y + m.height for m in monitors)
+
+
+@pytest.mark.parametrize("monitors", [
+    [SCREEN],
+    # A 4K screen with a 1080p one to its right, tops aligned: the box around
+    # both has a hole below the small one.
+    [Rect(0, 0, 3840, 2160), Rect(3840, 0, 1920, 1080)],
+    [Rect(1920, 0, 1920, 1080), Rect(0, 600, 1920, 1080)],
+])
+def test_the_calibration_spots_are_on_a_monitor_and_apart(monitors):
+    """Sent off every screen, the pointer stops at an edge, and a fit from
+    there would refuse every click."""
+    first, last = Grid(monitors).calibration_spots()
+    assert _on_a_monitor(first, monitors) and _on_a_monitor(last, monitors)
+    assert first[0] != last[0] and first[1] != last[1]
