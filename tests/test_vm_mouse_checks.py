@@ -6,7 +6,7 @@ and so is each played phrase being the command the check expects.
 import pytest
 from conftest import import_vm_tool
 
-from tuxtalk import command_phrases
+from tuxtalk import command_phrases, desktop_zoom, mouse_grid_model
 from tuxtalk.mouse_phrases import MouseRequest
 
 pytest.importorskip("tomllib", reason="the VM harness needs Python 3.11 or newer")
@@ -85,26 +85,39 @@ def test_a_nudged_click_must_land_the_steps_from_the_part_centre():
 
 
 def test_the_grid_shows_where_each_nudge_goes():
-    assert mouse.NUDGE_PX == 5
-    assert mouse.nudge_offset("right", 4) == (20, 0)
-    assert mouse.nudge_offset("up", 2) == (0, -10)
+    step = mouse_grid_model.NUDGE_PX
+    assert mouse.nudge_offset("right", 4) == (4 * step, 0)
+    assert mouse.nudge_offset("up", 2) == (0, -2 * step)
 
 
-@pytest.mark.parametrize("log, expects, problem", [
-    ("Mouse grid: zoomed the desktop in 3.0x (GNOME's magnifier, proportional)\n"
-     "Mouse grid: put the desktop zoom back\n", True, None),
-    ("Mouse grid: zoomed into cell 7, level 2\n", False, None),
-    ("Desktop zoom: KDE's Zoom effect is off\n", True, "didn't zoom"),
-    ("Desktop zoom: the GNOME's magnifier is a lens or covers part of the screen; not used\n",
-     True, None),
-    ("Mouse grid: the desktop didn't zoom in; the grid goes on without it\n", True,
+def test_the_check_zooms_as_far_as_tuxtalk_does():
+    assert mouse.ZOOM_FACTOR == desktop_zoom.ZOOM
+
+
+LENS = "Desktop zoom: the GNOME magnifier is a lens or covers part of the screen; not used\n"
+
+
+@pytest.mark.parametrize("log, desktop, problem", [
+    ("Mouse grid: zoomed the desktop in 3.0x (GNOME magnifier, proportional)\n"
+     "Mouse grid: put the desktop zoom back\n", "gnome", None),
+    ("Mouse grid: zoomed the desktop in 3.0x (KDE zoom, proportional)\n"
+     "Mouse grid: put the desktop zoom back\n", "kde", None),
+    ("Mouse grid: zoomed into cell 7, level 2\n", None, None),
+    ("Desktop zoom: KDE's Zoom effect is off\n", "kde", "didn't zoom"),
+    (LENS, "gnome", None),
+    (LENS, "kde", "didn't zoom"),
+    ("Mouse grid: zoomed the desktop in 3.0x (GNOME magnifier, proportional)\n"
+     "Mouse grid: put the desktop zoom back\n", "kde", "KDE's zoom"),
+    ("Mouse grid: the desktop didn't zoom in; the grid goes on without it\n", "kde",
      "didn't zoom"),
-    ("Mouse grid: zoomed the desktop in 3.0x (KWin, centered)\n", True, "not put back"),
+    ("Mouse grid: zoomed the desktop in 3.0x (KDE zoom, centered)\n", "kde", "not put back"),
+    ("Mouse grid: zoomed the desktop in 3.0x (KDE zoom, centered)\n"
+     "Mouse grid: couldn't put the desktop zoom back\n", "kde", "not put back"),
     ("Mouse grid: put the desktop zoom back\n"
-     "Mouse grid: zoomed the desktop in 3.0x (KWin, centered)\n", True, "not put back"),
+     "Mouse grid: zoomed the desktop in 3.0x (KDE zoom, centered)\n", "kde", "not put back"),
 ])
-def test_the_desktop_zoom_must_come_on_and_be_put_back(log, expects, problem):
-    found = mouse.zoom_problem(log, expects)
+def test_the_desktop_zoom_must_come_on_and_be_put_back(log, desktop, problem):
+    found = mouse.zoom_problem(log, desktop)
     assert (found is None) if problem is None else (problem in found)
 
 
@@ -121,4 +134,5 @@ def test_the_magnifier_is_read_from_gsettings_and_must_come_back_as_it_was():
     assert "back" in mouse.magnifier_problem((False, 2.0), (True, 3.0), (True, 3.0))
     assert "back" in mouse.magnifier_problem((True, 2.0), (True, 3.0), (False, 1.0))
     assert mouse.magnifier_problem((True, 2.0), (True, 3.0), (True, 2.0)) is None
-    assert mouse.magnifier_problem(None, None, None) is None
+    # A GNOME or Cinnamon VM whose gsettings gave no answer can't pass.
+    assert "couldn't read" in mouse.magnifier_problem(None, (True, 3.0), None)

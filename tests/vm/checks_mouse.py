@@ -13,13 +13,18 @@ judge is Ron's: two screens, his own screen scale, and how it feels.
 import contextlib
 import json
 import re
+import sys
 import time
 from collections import namedtuple
+from pathlib import Path
 
 import voices
 from checks_desktop_commands import _said
 from harness import Outcome, check, squash
 from vmlib import REMOTE
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from tuxtalk.mouse_grid_model import NUDGE_PX  # noqa: E402
 
 SECTION = "Mouse by voice"
 BUTTONS = "TT Buttons"
@@ -31,8 +36,7 @@ TOLERANCE_PX = 3
 AIM_TOLERANCE = 0.005
 SHOWN = "Mouse grid: shown on"
 ZOOMED = "Mouse grid: zoomed into cell"
-# The step of mouse_grid_model.NUDGE_PX, and the log lines of the desktop zoom.
-NUDGE_PX = 5
+# The log lines of the nudges and the desktop zoom.
 NUDGED = "Mouse grid: moved the dot"
 DESKTOP_ZOOMED = "Mouse grid: zoomed the desktop in"
 DESKTOP_UNZOOMED = "Mouse grid: put the desktop zoom back"
@@ -40,10 +44,12 @@ NOT_ZOOMED = "Mouse grid: the desktop didn't zoom in"
 # Not an error: the user's own magnifier is a lens or part of the screen.
 ZOOM_NOT_USED = "covers part of the screen; not used"
 # Desktops whose zoom TuxTalk drives, and their magnifier's gsettings schema
-# (KDE's has none to read: its Zoom effect shows in the log only).
+# (KDE's has none to read: its Zoom effect shows in the log only, so there
+# the log must name KDE's zoom).
 ZOOM_DESKTOPS = ("kde", "gnome", "cinnamon")
 MAGNIFIER_SCHEMAS = {"gnome": "org.gnome.desktop.a11y", "cinnamon": "org.cinnamon.desktop.a11y"}
-ZOOM_FACTOR = 3.0
+KDE_ZOOMED = "(KDE zoom,"
+ZOOM_FACTOR = 3.0       # desktop_zoom.ZOOM
 # The step of each phrase that is not a number: its log line.
 STEP_LINES = {"mouse_right_four": NUDGED}
 _STEP_DIRECTIONS = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
@@ -128,18 +134,22 @@ def zoomed_in(log):
     return DESKTOP_ZOOMED in (log or "")
 
 
-def zoom_problem(log, expects_zoom):
-    """What is wrong with the desktop zoom the *log* shows. A desktop where
-    zoom is *expects_zoom* must have zoomed, unless the user's own magnifier
-    is a lens; every zoom must be put back."""
+def zoom_problem(log, desktop):
+    """What is wrong with the desktop zoom the *log* shows on *desktop* (one
+    of ZOOM_DESKTOPS, else None). There the desktop must have zoomed, unless
+    the user's own GNOME or Cinnamon magnifier is a lens; on KDE, whose zoom
+    can't be read, the log must say KDE's zoom came on. Every zoom must be
+    put back."""
     log = log or ""
     if NOT_ZOOMED in log:
         return "the desktop didn't zoom in, though the grid asked for it"
     zoomed = log.count(DESKTOP_ZOOMED)
     if not zoomed:
-        if expects_zoom and ZOOM_NOT_USED not in log:
+        if desktop and not (desktop != "kde" and ZOOM_NOT_USED in log):
             return "the desktop didn't zoom in; the log says nothing about a zoom"
         return None
+    if desktop == "kde" and KDE_ZOOMED not in log:
+        return "the log doesn't say KDE's zoom came on"
     if log.count(DESKTOP_UNZOOMED) != zoomed or log.rfind(DESKTOP_UNZOOMED) < log.rfind(
             DESKTOP_ZOOMED):
         return "the desktop zoom was not put back after the click"
@@ -157,10 +167,11 @@ def parse_magnifier(enabled, factor):
 
 def magnifier_problem(before, during, after):
     """What is wrong with the magnifier settings read (on, factor) before
-    the grid, while it was zoomed and after the click; None when it came on
-    at the zoom factor and is exactly as it was after."""
+    the grid, while it was zoomed and after the click, on a desktop that has
+    one to read; None when it came on at the zoom factor and is exactly as
+    it was after."""
     if before is None:
-        return None
+        return "couldn't read the magnifier's settings before the grid"
     if during != (True, ZOOM_FACTOR):
         return f"the magnifier wasn't on at {ZOOM_FACTOR:g}x while the grid was zoomed: {during}"
     if after != before:
@@ -292,13 +303,15 @@ def mouse_grid_zoom(run):
                        ("left", "G"), (5 / 18, 13 / 18), "mouse-zoom")
 
 
+def _zoom_desktop(run):
+    """The VM's desktop if it is one of ZOOM_DESKTOPS, else None."""
+    return next((t for t in run.vm.spec.tags if t in ZOOM_DESKTOPS), None)
+
+
 def _magnifier(run):
-    """The desktop magnifier's (on, factor) in the VM, None where there is
-    none to read (KDE, other desktops)."""
-    schema = next((MAGNIFIER_SCHEMAS[t] for t in run.vm.spec.tags if t in MAGNIFIER_SCHEMAS),
-                  None)
-    if schema is None:
-        return None
+    """The desktop magnifier's (on, factor) in the VM, None when gsettings
+    gave no answer. Only for a desktop in MAGNIFIER_SCHEMAS."""
+    schema = MAGNIFIER_SCHEMAS[_zoom_desktop(run)]
 
     def get(schema_id, key):
         return run.vm.session("gsettings", "get", schema_id, key, check=False).stdout
@@ -309,28 +322,34 @@ def _magnifier(run):
 @check(SECTION, "mouse_grid_desktop_zoom",
        "The desktop zooms in for a small cell and is put back after the click")
 def mouse_grid_desktop_zoom(run):
-    expects = bool(set(ZOOM_DESKTOPS) & set(run.vm.spec.tags))
-    before, during, mark = _magnifier(run), [], run.log_mark()
+    desktop = _zoom_desktop(run)
+    readable = desktop in MAGNIFIER_SCHEMAS
+    before, during = _magnifier(run) if readable else None, []
+    marks = []
 
     def read_while_zoomed():
-        run.wait_log(mark, DESKTOP_ZOOMED, NOT_ZOOMED, "Desktop zoom:", timeout=10)
-        time.sleep(1)
-        during.append(_magnifier(run))
+        if readable:
+            run.wait_log(marks[0], DESKTOP_ZOOMED, NOT_ZOOMED, "Desktop zoom:", timeout=10)
+            time.sleep(1)
+            during.append(_magnifier(run))
     with _mouse_on(run):
+        # Taken here, after the settings change: a "Desktop zoom:" line of
+        # the service's start mustn't end the wait before the zoom.
+        marks.append(run.log_mark())
         bad, saw, shot = _grid_click(
             run, ["mouse_seven", "mouse_three", "mouse_click"],
             "Mouse grid: clicked the middle of cell 3, level 3,", ("left", "G"),
             (5 / 18, 13 / 18), "mouse-desktop-zoom", while_zoomed=read_while_zoomed)
     if bad:
         return bad
-    log = run.log_since(mark)
-    if problem := zoom_problem(log, expects):
+    log = run.log_since(marks[0])
+    if problem := zoom_problem(log, desktop):
         return Outcome("fail", problem, screenshot=shot)
     if not zoomed_in(log):
         return Outcome("pass", f"no desktop zoom here; the grid still clicked: {saw}",
                        screenshot=shot)
     time.sleep(1)
-    if problem := magnifier_problem(before, during[0], _magnifier(run)):
+    if readable and (problem := magnifier_problem(before, during[0], _magnifier(run))):
         return Outcome("fail", problem, screenshot=shot)
     return Outcome("pass", f"The desktop zoomed in {ZOOM_FACTOR:g}x and was put back; {saw}",
                    screenshot=shot)
