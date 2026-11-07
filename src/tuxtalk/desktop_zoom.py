@@ -42,6 +42,12 @@ RESTORE_FILE = "zoom-to-restore-{}.json"     # by desktop: kde, gnome, cinnamon
 # restore from GTK's thread for long.
 _DBUS_TIMEOUT_S = 1.0
 
+# The waiting pointer stays this far in from a monitor's edges: a corner or
+# an edge can be a hot corner or a screen-edge action (KDE's, GNOME's
+# Activities), which the pointer parked there would set off. The view moves
+# by less than this, a few pixels of the part's outer edge.
+EDGE_MARGIN_PX = 8
+
 _KWIN_STEP_DEFAULT = 1.2
 # A ZoomFactor just above 1 would take hundreds of D-Bus steps each way.
 _KWIN_MAX_STEPS = 12
@@ -455,7 +461,8 @@ def _gsettings_put_back(desktop: str, enabled: bool, factor: float) -> bool:
 def parking_spot(part: Rect, monitor: Rect, canvas: Rect, view: View) -> tuple[float, float]:
     """Where the pointer goes so the zoomed desktop shows *part* centred on
     *monitor*, *canvas* being all monitors' bounding box (both compositors
-    magnify that as one). Kept on *monitor*, so the pointer never leaves it.
+    magnify that as one). Kept EDGE_MARGIN_PX inside *monitor*, so the
+    pointer never leaves it nor touches an edge or a hot corner.
 
     Proportional tracking shows, per axis, the point
     roi(c) = c * (1 - k) + k * W / 2 at the monitor's centre (c the
@@ -495,4 +502,5 @@ def _wanted_roi(middle: float, screen_middle: float, origin: float, size: float,
 
 
 def _clamp(value: float, start: float, length: float) -> float:
-    return min(max(value, start), start + length - 1)
+    """*value* kept EDGE_MARGIN_PX inside start .. start + length."""
+    return min(max(value, start + EDGE_MARGIN_PX), start + length - 1 - EDGE_MARGIN_PX)

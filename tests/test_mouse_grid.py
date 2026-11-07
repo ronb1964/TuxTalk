@@ -766,12 +766,13 @@ def test_the_pointer_parks_where_the_part_shows_centred(rig, magnifier, screens,
     assert back == rig.landing() and aside == (back[0] + 1, back[1])
 
 
-def test_cell_one_parks_the_pointer_in_the_corner_on_kde(rig, magnifier):
+def test_cell_one_parks_the_pointer_near_the_corner_on_kde(rig, magnifier):
     """The spike's check: the pointer at 0,0 and a 3x zoom show cell 1 filling
-    the screen."""
+    the screen; it waits a few pixels in from the hot corner."""
     act("grid")
     act("zoom", 1)
-    assert rig.landing() == (0, 0)
+    margin = desktop_zoom.EDGE_MARGIN_PX
+    assert rig.landing() == (margin, margin)
 
 
 def test_a_second_number_re_aims_without_zooming_again(rig, magnifier, caplog):

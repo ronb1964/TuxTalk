@@ -153,10 +153,23 @@ def _left_over(data, desktop=None):
 # Where the pointer waits so the chosen part shows centred
 
 
-def test_kde_parks_at_the_corner_for_the_top_left_part():
+def test_kde_parks_near_the_corner_for_the_top_left_part_but_off_the_hot_corner():
+    """The view wants the pointer at 0,0 for the top-left part; it waits a
+    few pixels in, so a hot corner there (KDE's, GNOME's Activities) isn't
+    set off."""
     view = desktop_zoom.View(KDE_STEPS_TO_3X, "proportional", False)
     x, y = desktop_zoom.parking_spot(Rect(0, 0, 640, 360), FULL_HD, FULL_HD, view)
-    assert x == pytest.approx(0, abs=1) and y == pytest.approx(0, abs=1)
+    margin = desktop_zoom.EDGE_MARGIN_PX
+    assert (x, y) == (margin, margin)
+
+
+def test_the_waiting_pointer_never_touches_an_edge_of_its_screen():
+    view = desktop_zoom.View(KDE_STEPS_TO_3X, "proportional", False)
+    margin = desktop_zoom.EDGE_MARGIN_PX
+    for left in (0, 640, 1280):
+        for top in (0, 360, 720):
+            x, y = desktop_zoom.parking_spot(Rect(left, top, 640, 360), FULL_HD, FULL_HD, view)
+            assert margin <= x <= 1919 - margin and margin <= y <= 1079 - margin
 
 
 def test_gnome_padding_parks_where_the_spike_measured():
@@ -184,7 +197,8 @@ def test_the_spot_stays_on_the_parts_monitor():
                  desktop_zoom.View(3.0, "proportional", True),
                  desktop_zoom.View(3.0, "centered", False)):
         x, y = desktop_zoom.parking_spot(part, right, canvas, view)
-        assert 1920 <= x <= 3839 and 0 <= y <= 1079
+        margin = desktop_zoom.EDGE_MARGIN_PX
+        assert 1920 + margin <= x <= 3839 - margin and margin <= y <= 1079 - margin
 
 
 def _shown_at(point, roi, canvas_middle, zoom):
