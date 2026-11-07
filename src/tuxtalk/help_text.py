@@ -118,6 +118,15 @@ def tabs():
             for title, text in _TABS]
 
 
+def _mouse_tip(hold: str, is_flatpak: bool) -> str:
+    """Tips' line on the mouse grid, with its line break; none on the
+    Flatpak, which has no TuxTalk Labs to turn it on in."""
+    if is_flatpak:
+        return ""
+    return (f"  • No mouse? Hold <b>{hold}</b>, say <b>mouse grid</b>, let go, then say a "
+            "number and\n    <b>click</b> (Writing → The mouse).\n")
+
+
 def _values():
     """What the sections' {placeholders} say on this computer."""
     f = install_facts()
@@ -208,6 +217,7 @@ def _values():
     return {"hold": hold, "toggle": toggle, "paste_tip": paste_tip, "esc_tip": esc_tip,
             "ctrl_space_line": _ctrl_space_line(keys),
             "paste_line": paste_line, "key_choice_tip": key_choice_tip,
+            "mouse_tip": _mouse_tip(hold, is_flatpak),
             "shortcut_line": shortcut_line, "typing_para": typing_para,
             "no_hotkey_block": no_hotkey_block, "kde_notice": kde_notice,
             "update_block": update_block, "log_path": f["log_path"],
@@ -901,9 +911,7 @@ TIPS = '''# Tips
 
 ### Easier on the hands
   • {key_choice_tip}
-  • No mouse? Hold <b>{hold}</b>, say <b>mouse grid</b>, let go, then say a number and
-    <b>click</b> (Writing → The mouse).
-  • Hands-free: turn on "Double-tap {toggle} for hands-free" in <b>Preferences →
+{mouse_tip}  • Hands-free: turn on "Double-tap {toggle} for hands-free" in <b>Preferences →
     General</b>. Then double-tap <b>{toggle}</b> and talk without holding a key, and it
     stops when you do.
 

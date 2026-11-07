@@ -117,6 +117,14 @@ def test_tips_leave_out_what_a_setting_turned_off_or_the_flatpak_lacks(monkeypat
     assert "Right Alt" not in tips and "System Settings → Keyboard → Shortcuts" in tips
 
 
+def test_only_tips_where_the_mouse_by_voice_can_be_turned_on_suggest_it(monkeypatch):
+    """The Flatpak has no Labs, so it can't turn the mouse grid on."""
+    assert "<b>mouse grid</b>" in _tips(monkeypatch)
+    tips = _tips(monkeypatch, flatpak=True)
+    assert "mouse grid" not in tips and "No mouse?" not in tips
+    assert "\n\n  • Hands-free" not in tips          # no gap where the line was
+
+
 def test_problems_explains_letters_that_come_out_wrong(help_pages):
     """Caps Lock swaps every case, and TuxTalk can't read its state; COSMIC
     doesn't say which of several layouts is on. Neither can be fixed from
