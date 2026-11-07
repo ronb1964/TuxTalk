@@ -547,11 +547,14 @@ Hold <b>{hold}</b>, say <b>snap left</b>, let go. The window you're in fills tha
 ### The mouse
 Hold <b>{hold}</b>, say <b>mouse grid</b>, let go. Numbers 1 to 9 appear over the screen.
   • Say a number, like <b>five</b>: that part fills with a new grid. Say another to go
-    in further. On KDE, GNOME and Cinnamon the whole desktop zooms in on that part, so
-    you can see what you are aiming at. It goes back to normal after the click, or when
-    the grid closes.
-  • From the second grid on, thin lines mark the parts, their numbers sit small in the
-    corners, out of the way, and a dot marks where a click will land.
+    in further. Where the desktop's own zoom can be used (KDE's Zoom effect, or the
+    whole-screen magnifier on GNOME and Cinnamon), the whole desktop zooms in about
+    three times on that part, so you can see what you are aiming at. It goes back to
+    normal after the click, or when the grid closes.
+  • The pointer hides while the grid shows, so it doesn't cover a number, and comes
+    back when the grid closes. From the second grid on, thin lines mark the parts, their
+    numbers sit small in the corners, out of the way, and a dot marks where a click will
+    land.
   • Say <b>left</b>, <b>right</b>, <b>up</b> or <b>down</b> to move the dot a little, or
     add a number, like <b>left 3</b>, to move it more. Say a number first.
   • Say <b>click</b> to click the middle of what the grid shows. <b>right click</b>,
