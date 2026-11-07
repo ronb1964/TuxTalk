@@ -533,7 +533,8 @@ Hold <b>{hold}</b>, say <b>mouse grid</b>, let go. Numbers 1 to 9 appear over th
     is typed as a word then. <b>literal mouse grid</b> and <b>literal left click</b> type
     the words; while a grid shows, <b>literal five</b> and <b>literal click</b> do too.
   • If TuxTalk can't put the pointer exactly there, nothing is clicked and a note says
-    so. On Wayland desktops the grid needs X (XWayland), which most have.
+    so. On Wayland desktops the grid needs X (XWayland), which most have, and on X11
+    a desktop that draws see-through windows (compositing).
 
 ### Desktops
 Hold <b>{hold}</b>, say <b>show desktop</b>, let go. Say it again and the windows come back.

@@ -1,7 +1,7 @@
 """The see-through numbered grid of "mouse by voice", drawn over each monitor.
 
 One borderless popup per monitor, with an RGBA visual so the desktop shows
-through. Popups are override-redirect windows (XWayland on a Wayland
+through; without a compositor that draws it see-through, no grid shows. Popups are override-redirect windows (XWayland on a Wayland
 desktop, as with the recording indicator), so they go exactly where they're
 put and never take the keyboard from the app being controlled. A zoomed grid
 shows one region, outlined and left clear, with the rest dimmed more.
@@ -92,9 +92,7 @@ class _MonitorWindow(Gtk.Window):
     def __init__(self, area: Rect, on_motion, on_press):
         super().__init__(type=Gtk.WindowType.POPUP)
         self.area = area
-        visual = self.get_screen().get_rgba_visual()
-        if visual:
-            self.set_visual(visual)
+        self.set_visual(self.get_screen().get_rgba_visual())     # show() checked it's there
         self.move(round(area.x), round(area.y))
         self.set_default_size(round(area.width), round(area.height))
         self.resize(round(area.width), round(area.height))
@@ -187,22 +185,29 @@ class GridWindows:
             return self._pointer[1]
         return None
 
-    def show(self, grid: Grid) -> bool:
-        """Put the grid on every monitor; False when there is no X display
-        to place popups on (a plain Wayland session)."""
+    def show(self, grid: Grid) -> str | None:
+        """Put the grid on every monitor. None when it shows, else the
+        command_notices kind saying why not: "grid_needs_x" with no X display
+        to place popups on (a plain Wayland session), "grid_needs_compositing"
+        when nothing draws windows see-through (X without a compositor, where
+        the tint would cover the whole screen)."""
         display = Gdk.Display.get_default()
         if display is None or not ui_style.is_x11(display):
             logger.info("No grid shown: this desktop has no X display to put it on")
-            return False
+            return "grid_needs_x"
+        screen = display.get_default_screen()
+        if not screen.is_composited() or screen.get_rgba_visual() is None:
+            logger.info("No grid shown: this desktop doesn't draw see-through windows")
+            return "grid_needs_compositing"
         self.hide()
-        _load_css_once(display.get_default_screen())
+        _load_css_once(screen)
         self._pointer = None
         self._windows = [_MonitorWindow(area, self._on_motion, self._on_press)
                          for area in monitors()]
         self.redraw(grid)
         for window in self._windows:
             window.show()
-        return True
+        return None
 
     def redraw(self, grid: Grid):
         for window in self._windows:

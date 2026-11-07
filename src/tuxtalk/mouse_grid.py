@@ -166,12 +166,14 @@ def _timed_out(session: _Session) -> bool:
 
 
 def _put_up(windows):
-    """On GTK's thread: the grid over every monitor, as (grid, monitors), or
-    None when there is no X display for its windows."""
+    """On GTK's thread: the grid over every monitor, as (grid, monitors,
+    None), or (None, None, the command_notices kind saying why) when it
+    can't be shown."""
     from . import mouse_grid_window
     screens = mouse_grid_window.monitors()
     grid = Grid(screens)
-    return (grid, screens) if windows.show(grid) else None
+    refused = windows.show(grid)
+    return (None, None, refused) if refused else (grid, screens, None)
 
 
 def _open(beeps_on: bool) -> bool:
@@ -181,11 +183,11 @@ def _open(beeps_on: bool) -> bool:
     from . import mouse_grid_window
     close("a new grid")
     windows = mouse_grid_window.GridWindows(lambda: close("a real mouse click"))
-    shown = gtk_loop.call(_put_up, windows)
-    if shown is None:
-        command_notices.say("grid_needs_x", beeps_on)
+    grid, screens, refused = gtk_loop.call(_put_up, windows)
+    if refused:
+        command_notices.say(refused, beeps_on)
         return False
-    session = _Session(windows, *shown, beeps_on)
+    session = _Session(windows, grid, screens, beeps_on)
     with _lock:
         _session = session
     session.fit = _calibrate(session)

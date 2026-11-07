@@ -149,6 +149,11 @@ NOTES = {
         "The mouse grid needs X (XWayland) here",
         "This desktop has no X display for TuxTalk to draw the grid on. \"Left click\" and "
         "\"right click\" still click where the pointer is."),
+    "grid_needs_compositing": (
+        "The mouse grid needs see-through windows here",
+        "This desktop isn't drawing windows see-through (compositing is off), so the grid "
+        "would hide the screen. Turn compositing on in the desktop's settings. \"Left "
+        "click\" and \"right click\" still click where the pointer is."),
     "no_cell": (
         "No cell {number} here",
         "The grid has no cell {number}. Say one of the numbers on the screen."),

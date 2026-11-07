@@ -19,10 +19,11 @@ before 0.15.0, so older entries use that name.
   can't put the pointer exactly where the grid shows, nothing is clicked and
   a note says so.
 - It works on KDE, GNOME, COSMIC and X11 desktops like Cinnamon and Xfce; on
-  the Wayland ones the grid needs XWayland. It is in the same Labs tickbox as
-  the other desktop commands ("Apps, windows and keys by voice"), so it is
-  off until you tick it. Help, on the Writing page, has the steps, and the
-  Voice Commands list has a card for it.
+  the Wayland ones the grid needs XWayland, and on X11 compositing (Xfce and
+  Cinnamon have it on unless you turned it off). It is in the same Labs
+  tickbox as the other desktop commands ("Apps, windows and keys by voice"),
+  so it is off until you tick it. Help, on the Writing page, has the steps,
+  and the Voice Commands list has a card for it.
 - Left Ctrl+Space is a new dictation key, for anyone whose F-keys need Fn
   or who just likes it. Hold Left Ctrl, then Space, talk, and let go of
   either one to stop. As the toggle key, one tap starts and the next stops.

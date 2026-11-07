@@ -18,7 +18,10 @@ from tuxtalk.mouse_grid_model import Grid  # noqa: E402
 
 
 @pytest.fixture
-def windows():
+def windows(monkeypatch):
+    """The grid's windows, on a screen taken for a composited desktop: Xvfb
+    has no compositor, where the grid refuses to show."""
+    monkeypatch.setattr(Gdk.Screen, "is_composited", lambda screen: True)
     clicks = []
     shown = mgw.GridWindows(lambda: clicks.append(1))
     shown.clicks = clicks
@@ -50,7 +53,7 @@ def _flush(window):
 
 def test_one_popup_per_monitor_covering_it(windows):
     screen = mgw.monitors()[0]
-    assert windows.show(Grid([screen]))
+    assert windows.show(Grid([screen])) is None
     window = windows._windows[0]
     _flush(window)
     assert len(windows._windows) == 1
@@ -79,7 +82,15 @@ def test_after_a_zoom_the_numbers_are_inside_the_cell(windows):
 
 def test_without_an_x_display_nothing_shows(windows, monkeypatch):
     monkeypatch.setattr(mgw.ui_style, "is_x11", lambda display: False)
-    assert windows.show(Grid([mgw.monitors()[0]])) is False
+    assert windows.show(Grid([mgw.monitors()[0]])) == "grid_needs_x"
+    assert not windows.showing
+
+
+def test_without_compositing_nothing_shows(windows, monkeypatch):
+    """With no compositor the see-through tint is drawn solid: the grid
+    would hide the whole screen."""
+    monkeypatch.setattr(Gdk.Screen, "is_composited", lambda screen: False)
+    assert windows.show(Grid([mgw.monitors()[0]])) == "grid_needs_compositing"
     assert not windows.showing
 
 

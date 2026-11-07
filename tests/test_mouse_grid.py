@@ -40,7 +40,7 @@ class FakeWindows:
         self._moves, self._at = len(landings), (landings[-1] if landings else None)
         self.showing = True
         self.drawn.append(grid.region)
-        return self.rig.has_x
+        return self.rig.refused
 
     def redraw(self, grid):
         self.drawn.append(grid.region)
@@ -64,12 +64,12 @@ class FakeWindows:
 class Rig:
     """The stand-ins' settings and what came out. *offset* puts the landing
     that many pixels to the right; with *visible* off no motion comes at all
-    (the pointer is off every grid window); without *has_x* no grid shows."""
+    (the pointer is off every grid window); *refused* is why no grid shows."""
 
     def __init__(self, pointer):
         self.pointer = pointer
         self.clock = FakeClock()
-        self.has_x = True
+        self.refused = None
         self.visible = True
         self.offset = 0
         self.screens = [SCREEN]
@@ -266,10 +266,13 @@ def test_a_pointer_already_on_the_spot_is_still_seen_to_arrive(rig):
     assert (e.ABS_X, aside) in rig.pointer.events
 
 
-def test_no_x_display_says_so_and_shows_nothing(rig):
-    rig.has_x = False
+@pytest.mark.parametrize("why, note", [
+    ("grid_needs_x", "The mouse grid needs X (XWayland) here"),
+    ("grid_needs_compositing", "The mouse grid needs see-through windows here")])
+def test_a_grid_that_cant_show_says_why_and_moves_nothing(rig, why, note):
+    rig.refused = why
     assert act("grid") is False
-    assert rig.notes == ["The mouse grid needs X (XWayland) here"]
+    assert rig.notes == [note]
     assert not mouse_grid.showing() and rig.pointer.events == []
 
 
