@@ -65,6 +65,16 @@ def test_one_popup_per_monitor_covering_it(windows):
     assert all(label.get_allocation().height < screen.height / 6 for label in labels)
 
 
+def test_no_pointer_is_drawn_over_the_grid(windows):
+    """The real pointer waits where the zoom needs it, often over a number;
+    over the grid it isn't drawn, and the dot shows the spot instead."""
+    windows.show(Grid([mgw.monitors()[0]]))
+    window = windows._windows[0]
+    _flush(window)
+    cursor = window.get_window().get_cursor()
+    assert cursor is not None and cursor.get_cursor_type() == Gdk.CursorType.BLANK_CURSOR
+
+
 def test_after_a_zoom_the_numbers_are_inside_the_cell(windows):
     grid = Grid([mgw.monitors()[0]])
     windows.show(grid)

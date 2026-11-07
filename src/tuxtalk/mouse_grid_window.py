@@ -129,6 +129,15 @@ def _corner_label(cell: Cell, px: int) -> Gtk.Label:
     return label
 
 
+def _hide_the_pointer(window: Gtk.Window) -> None:
+    """No pointer drawn over the grid: the real one waits wherever the zoom
+    needs it and would cover a number; the dot shows where a click lands.
+    It comes back with the grid's windows gone, before any click."""
+    gdk_window = window.get_window()
+    gdk_window.set_cursor(Gdk.Cursor.new_for_display(gdk_window.get_display(),
+                                                     Gdk.CursorType.BLANK_CURSOR))
+
+
 class _MonitorWindow(Gtk.Window):
     """The popup over one monitor, holding that monitor's boxes and badges."""
 
@@ -143,6 +152,7 @@ class _MonitorWindow(Gtk.Window):
         self.add_events(Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.BUTTON_PRESS_MASK)
         self.connect("motion-notify-event", on_motion)
         self.connect("button-press-event", on_press)
+        self.connect("realize", _hide_the_pointer)
         self._fixed = Gtk.Fixed()
         self.add(self._fixed)
 
