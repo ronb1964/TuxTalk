@@ -10,10 +10,12 @@ screen-magnifier-enabled and mag-factor are ever written, and only for a
 full-screen magnifier, not a lens.
 
 Before changing anything, what puts it back is written to
-zoom-to-restore.json in TuxTalk's data folder and removed once it's put
-back, so a service that stopped while zoomed puts it back at its next start
-(restore_left_over): a user left at 3x who doesn't know the desktop's own
-zoom keys is the worst outcome here.
+zoom-to-restore-<desktop>.json in TuxTalk's data folder and removed once
+it's put back, so a service that stopped while zoomed puts it back at its
+next start (restore_left_over): a user left at 3x who doesn't know the
+desktop's own zoom keys is the worst outcome here. A file per desktop: a
+KDE zoom left on waits for the next KDE session (KWin keeps its zoom),
+and a GNOME session in between zooms without touching it.
 
 parking_spot is the arithmetic: where the pointer waits so the desktop
 shows a chosen part centred on its monitor, by how each desktop's view
@@ -35,7 +37,7 @@ from .mouse_grid_model import Rect
 log = logging.getLogger(__name__)
 
 ZOOM = 3.0
-RESTORE_FILE = "zoom-to-restore.json"
+RESTORE_FILE = "zoom-to-restore-{}.json"     # by desktop: kde, gnome, cinnamon
 # Each zoom step is a D-Bus call; a KWin that hangs must not hold up a
 # restore from GTK's thread for long.
 _DBUS_TIMEOUT_S = 1.0
@@ -75,6 +77,7 @@ class Magnifier:
 
     name: str       # for the log: "KDE zoom", "GNOME magnifier", ...
     view: View
+    _desktop: str   # whose restore file it keeps: "kde", "gnome" or "cinnamon"
 
     def __init__(self):
         self._lock = threading.Lock()
@@ -92,7 +95,7 @@ class Magnifier:
             if self._owes():
                 log.warning(f"Desktop zoom: not zooming, the {self.name} isn't put back yet")
                 return False
-            if not _nothing_left_on_disk():
+            if not _nothing_left_on_disk(self._desktop):
                 return False
             self._zoomed = self._zoom()
             return self._zoomed
@@ -116,13 +119,14 @@ class Magnifier:
         raise NotImplementedError
 
 
-def _nothing_left_on_disk() -> bool:
-    """Whether no restore file is left from an earlier zoom (another
-    magnifier's put-back that failed, or one the start couldn't do), after
-    trying once more to put it back."""
-    if os.path.exists(_restore_path()):
-        restore_left_over()
-    if os.path.exists(_restore_path()):
+def _nothing_left_on_disk(desktop: str) -> bool:
+    """Whether *desktop* has no restore file left from an earlier zoom
+    (another magnifier's put-back that failed, or one the start couldn't
+    do), after trying once more to put it back. Another desktop's file
+    isn't this zoom's to put back, and stays as it is."""
+    if os.path.exists(_restore_path(desktop)):
+        _restore_left_over(desktop)
+    if os.path.exists(_restore_path(desktop)):
         log.warning("Desktop zoom: not zooming, a zoom left on earlier isn't put back yet")
         return False
     return True
@@ -151,6 +155,7 @@ class KWinZoom(Magnifier):
     (their zoom times this); the put-back, counted in steps, is exact."""
 
     name = "KDE zoom"
+    _desktop = "kde"
 
     def __init__(self, step: float, tracking: str):
         super().__init__()
@@ -178,7 +183,7 @@ class KWinZoom(Magnifier):
             _save_restore({"desktop": "kde", "steps": left})
             return
         self._owed = None
-        _remove_restore()
+        _remove_restore(self._desktop)
 
     def _owes(self) -> bool:
         return self._owed is not None
@@ -267,7 +272,7 @@ class GSettingsMagnifier(Magnifier):
             log.warning(f"Desktop zoom: couldn't put the {self.name} back")
             return
         self._before = None
-        _remove_restore()
+        _remove_restore(self._desktop)
 
     def _owes(self) -> bool:
         return self._before is not None
@@ -336,34 +341,42 @@ def _write_enabled(switch, enabled: bool) -> bool:
 # What to put back, kept on disk while zoomed
 
 
-def _restore_path() -> str:
-    return os.path.join(config.get_data_dir(), RESTORE_FILE)
+def _restore_path(desktop: str) -> str:
+    return os.path.join(config.get_data_dir(), RESTORE_FILE.format(desktop))
 
 
 def _save_restore(data: dict) -> bool:
     try:
-        config.write_text_atomic(_restore_path(), json.dumps(data), keep_backup=False)
+        config.write_text_atomic(_restore_path(data["desktop"]), json.dumps(data),
+                                 keep_backup=False)
         return True
     except OSError as e:
         log.warning(f"Desktop zoom: couldn't save how to put the zoom back: {e}")
         return False
 
 
-def _remove_restore() -> None:
+def _remove_restore(desktop: str) -> None:
     try:
-        os.remove(_restore_path())
+        os.remove(_restore_path(desktop))
     except FileNotFoundError:
         pass
     except OSError as e:
-        log.warning(f"Desktop zoom: couldn't remove {_restore_path()}: {e}")
+        log.warning(f"Desktop zoom: couldn't remove {_restore_path(desktop)}: {e}")
 
 
 def restore_left_over() -> None:
-    """Put back a zoom a service that stopped while zoomed left on, from the
-    restore file. A file that makes no sense is deleted; one that can't be
-    read or acted on now is kept for later. Never raises."""
+    """Put back a zoom a service that stopped while zoomed left on, from
+    each desktop's restore file. A file that makes no sense is deleted; one
+    that can't be read or acted on now is kept for later. Never raises."""
+    for desktop in ("kde", *_GSETTINGS_ROOTS):
+        _restore_left_over(desktop)
+
+
+def _restore_left_over(desktop: str) -> None:
+    """restore_left_over for *desktop*'s file alone; zoom_in's retry of a
+    put-back owed on its own desktop."""
     try:
-        with open(_restore_path(), "rb") as f:
+        with open(_restore_path(desktop), "rb") as f:
             text = f.read()
     except FileNotFoundError:
         return
@@ -371,27 +384,26 @@ def restore_left_over() -> None:
         log.warning(f"Desktop zoom: couldn't read the restore file, kept for later: {e}")
         return
     try:
-        put_back = _left_over_put_back(json.loads(text))
+        put_back = _left_over_put_back(desktop, json.loads(text))
     except ValueError as e:
         log.warning(f"Desktop zoom: deleted a restore file that made no sense: {e}")
-        _remove_restore()
+        _remove_restore(desktop)
         return
     if put_back is None:
         log.info("Desktop zoom: a KDE zoom was left on; it's put back at a start on KDE")
         return
     if put_back():
-        _remove_restore()
+        _remove_restore(desktop)
         log.info("Desktop zoom: put back a zoom TuxTalk left on")
 
 
-def _left_over_put_back(data):
-    """What puts back the zoom *data* (the restore file) describes, as a
-    function answering whether it did; None for KDE's zoom off KDE, where
-    KWin isn't there to take it. Raises ValueError when *data* isn't a
-    restore file."""
-    desktop = data.get("desktop") if isinstance(data, dict) else None
-    if not isinstance(desktop, str):
-        raise ValueError(f"desktop {desktop!r}")
+def _left_over_put_back(desktop: str, data):
+    """What puts back the zoom *data* (*desktop*'s restore file) describes,
+    as a function answering whether it did; None for KDE's zoom off KDE,
+    where KWin isn't there to take it. Raises ValueError when *data* isn't
+    a restore file of *desktop*'s."""
+    if not isinstance(data, dict) or data.get("desktop") != desktop:
+        raise ValueError(f"not a restore file of {desktop}'s: {data!r}")
     if desktop == "kde":
         steps = data.get("steps")
         if type(steps) is not int or steps < 1:
@@ -399,12 +411,10 @@ def _left_over_put_back(data):
         if desktop_detect.get_desktop_environment() != "kde":
             return None
         return lambda: _kwin_steps("view_zoom_out", steps) == 0
-    if desktop in _GSETTINGS_ROOTS:
-        enabled, factor = data.get("enabled"), data.get("mag_factor")
-        if type(enabled) is not bool or type(factor) not in (int, float):
-            raise ValueError(f"enabled {enabled!r}, mag_factor {factor!r}")
-        return lambda: _gsettings_put_back(desktop, enabled, float(factor))
-    raise ValueError(f"desktop {desktop!r}")
+    enabled, factor = data.get("enabled"), data.get("mag_factor")
+    if type(enabled) is not bool or type(factor) not in (int, float):
+        raise ValueError(f"enabled {enabled!r}, mag_factor {factor!r}")
+    return lambda: _gsettings_put_back(desktop, enabled, float(factor))
 
 
 def _gsettings_put_back(desktop: str, enabled: bool, factor: float) -> bool:

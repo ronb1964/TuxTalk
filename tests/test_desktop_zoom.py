@@ -138,13 +138,14 @@ def _kwinrc(text):
         f.write(text)
 
 
-def _restore_file():
-    return os.path.join(config.get_data_dir(), "zoom-to-restore.json")
+def _restore_file(desktop="kde"):
+    return os.path.join(config.get_data_dir(), f"zoom-to-restore-{desktop}.json")
 
 
-def _left_over(data):
+def _left_over(data, desktop=None):
+    """Leaves *data* in a restore file: *desktop*'s, or the one it names."""
     os.makedirs(config.get_data_dir(), exist_ok=True)
-    with open(_restore_file(), "w", encoding="utf-8") as f:
+    with open(_restore_file(desktop or data["desktop"]), "w", encoding="utf-8") as f:
         f.write(data if isinstance(data, str) else json.dumps(data))
 
 
@@ -244,7 +245,7 @@ def test_gnome_magnifier_is_put_back_exactly(desktop, gsettings, name, root, lab
     assert gsettings.magnifier(root) == (True, 3.0)
     zoom.restore()
     assert gsettings.magnifier(root) == (enabled, 2.0)
-    assert not os.path.exists(_restore_file())
+    assert not os.path.exists(_restore_file(name))
 
 
 def test_a_second_zoom_in_keeps_what_to_put_back(desktop, gsettings):
@@ -303,7 +304,7 @@ def test_a_failing_zoom_call_leaves_nothing_changed_and_logs_on_gnome(desktop, g
     gsettings.locked.add("screen-magnifier-enabled")
     assert not desktop_zoom.find().zoom_in()
     assert gsettings.magnifier("org.gnome.desktop.a11y") == (False, 2.0)
-    assert not os.path.exists(_restore_file())
+    assert not os.path.exists(_restore_file("gnome"))
     assert "Desktop zoom" in caplog.text
 
 
@@ -367,7 +368,7 @@ def test_the_next_grid_never_takes_a_half_put_back_magnifier_for_the_users(deskt
     first.restore()                 # refused: still on at 3x
 
     assert not desktop_zoom.find().zoom_in()
-    with open(_restore_file(), encoding="utf-8") as f:
+    with open(_restore_file("gnome"), encoding="utf-8") as f:
         assert json.load(f) == {"desktop": "gnome", "enabled": False, "mag_factor": 2.0}
 
     gsettings.locked.clear()
@@ -386,7 +387,7 @@ def test_a_zoom_left_on_is_put_back_at_start(kwin, gsettings, caplog):
     _left_over({"desktop": "gnome", "enabled": False, "mag_factor": 2.0})
     desktop_zoom.restore_left_over()
     assert gsettings.magnifier("org.gnome.desktop.a11y") == (False, 2.0)
-    assert not os.path.exists(_restore_file())
+    assert not os.path.exists(_restore_file("gnome"))
     assert "Desktop zoom: put back a zoom TuxTalk left on" in caplog.text
 
     _left_over({"desktop": "kde", "steps": 6})
@@ -395,14 +396,17 @@ def test_a_zoom_left_on_is_put_back_at_start(kwin, gsettings, caplog):
     assert not os.path.exists(_restore_file())
 
 
-@pytest.mark.parametrize("damaged", [
-    "{not json", '{"desktop": "kde", "steps": "six"}', '{"desktop": "kde", "steps": true}',
-    '{"desktop": "beos"}', '["kde"]', '{"desktop": "gnome", "enabled": "no", "mag_factor": 2}'])
-def test_a_damaged_restore_file_is_deleted_with_a_warning(kwin, gsettings, caplog, damaged):
+@pytest.mark.parametrize("desktop_file, damaged", [
+    ("kde", "{not json"), ("kde", '{"desktop": "kde", "steps": "six"}'),
+    ("kde", '{"desktop": "kde", "steps": true}'), ("kde", '{"desktop": "beos"}'),
+    ("kde", '["kde"]'), ("kde", '{"desktop": "gnome", "enabled": false, "mag_factor": 2}'),
+    ("gnome", '{"desktop": "gnome", "enabled": "no", "mag_factor": 2}')])
+def test_a_damaged_restore_file_is_deleted_with_a_warning(kwin, gsettings, caplog,
+                                                         desktop_file, damaged):
     gsettings.add_magnifier("org.gnome.desktop.a11y")
-    _left_over(damaged)
+    _left_over(damaged, desktop_file)
     desktop_zoom.restore_left_over()
-    assert not os.path.exists(_restore_file())
+    assert not os.path.exists(_restore_file(desktop_file))
     assert kwin.shortcuts == []
     assert "WARNING" in caplog.text and "Desktop zoom" in caplog.text
 
@@ -415,6 +419,27 @@ def test_a_kde_zoom_left_on_waits_for_kde(kwin, desktop, gsettings, caplog):
     assert kwin.calls == 0
     assert os.path.exists(_restore_file())
     assert "put back at a start on KDE" in caplog.text
+    assert "WARNING" not in caplog.text
+
+
+def test_a_gnome_zoom_leaves_a_kde_zoom_waiting_alone(kwin, desktop, gsettings, caplog):
+    caplog.set_level(logging.INFO)
+    _left_over({"desktop": "kde", "steps": 6})
+    desktop("gnome")
+    root = "org.gnome.desktop.a11y"
+    gsettings.add_magnifier(root, enabled=False, factor=2.0)
+    desktop_zoom.restore_left_over()          # the service's start: one info line
+
+    zoom = desktop_zoom.find()
+    assert zoom.zoom_in()
+    assert gsettings.magnifier(root) == (True, 3.0)
+    zoom.restore()
+    assert gsettings.magnifier(root) == (False, 2.0)
+    assert not os.path.exists(_restore_file("gnome"))
+    with open(_restore_file("kde"), encoding="utf-8") as f:
+        assert json.load(f) == {"desktop": "kde", "steps": 6}
+    assert kwin.calls == 0
+    assert caplog.text.count("put back at a start on KDE") == 1
     assert "WARNING" not in caplog.text
 
 
