@@ -391,15 +391,6 @@ def test_punctuation_from_context_comes_first(win):
     assert win.tap_fine.get_child_at(0, 0) is win.tap_context_check
 
 
-def _listen(win, seconds=1.5):
-    """Feed the running test room noise through its callback, then draw."""
-    callback = win.streams[-1].kwargs["callback"]
-    noise = np.random.default_rng(4).normal(0, 380, int(seconds * 16000)).astype(np.int16)
-    for i in range(0, len(noise), 320):
-        callback(noise[i:i + 320].reshape(-1, 1), 320, None, None)
-    win._tap_show(win._pause_test)
-
-
 def test_the_title_follows_the_settings(win):
     win.tap_check.set_active(True)
     win.tap_pause_spin.set_value(1.2)

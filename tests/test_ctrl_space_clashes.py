@@ -200,17 +200,21 @@ def test_another_hold_key_asks_nobody(watch, monkeypatch):
 
 
 def test_a_slow_lookup_does_not_hold_up_the_hotkeys(watch, monkeypatch):
-    release = threading.Event()
-    started = threading.Event()
+    release, started, finished = threading.Event(), threading.Event(), threading.Event()
 
     def stuck():
         started.set()
         release.wait(5)
+        finished.set()
         return []
     monkeypatch.setattr(csc, "clashes", stuck)
-    watch(ecodes.KEY_SPACE)         # returns while the lookup is still waiting
-    assert started.wait(2)
-    release.set()
+    try:
+        watch(ecodes.KEY_SPACE)
+        # Watching came back while the lookup still waits to be let go.
+        assert not finished.is_set()
+        assert started.wait(2)
+    finally:
+        release.set()
 
 
 def test_the_same_keys_are_looked_at_once_and_a_change_looks_again(watch, monkeypatch):

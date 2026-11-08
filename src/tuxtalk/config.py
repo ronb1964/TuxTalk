@@ -213,7 +213,8 @@ class Settings:
     numbers_small_as_words: bool = False
     # TuxTalk Labs: "select the last sentence", "go to the end" (voice_navigation.py)
     voice_navigation: bool = False
-    # TuxTalk Labs: "open Firefox" (open_app.py)
+    # TuxTalk Labs: apps, windows, keys and the mouse by voice ("open Firefox",
+    # "close window", "new tab", "mouse grid"); the name is from when it only opened apps
     open_apps: bool = False
     # No closing period in terminals and code editors, no starting capital in terminals
     adapt_to_app: bool = True
@@ -222,7 +223,7 @@ class Settings:
     # ...after this many seconds, so a tap of the hotkey can hold it (0-4)
     press_enter_delay: float = 2.0
     mode: str = "hold"          # "hold" or "toggle"
-    # used only when mode="toggle" (empty until user picks during onboarding)
+    # the tap-to-start, tap-to-stop key, on beside the hold key (empty: none)
     toggle_hotkey: str = ""
     mic: str = ""               # substring to match input device (empty = default)
     notify: bool = False        # desktop notifications
