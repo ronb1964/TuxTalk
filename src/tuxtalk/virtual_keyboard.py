@@ -229,17 +229,17 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
 def press(code: int, value: int, wanted=None) -> bool:
     """One key going down (1) or up (0), and left so: Left Ctrl held for the
     desktop past any send (ctrl_kept). It waits for the keyboard, so never
-    lands between two events of a send; *wanted*, if given, is asked once it
-    has the keyboard, and nothing is sent if it says no. False when nothing
+    lands between two events of a send; *wanted*, if given, is asked right
+    before the write, and nothing is sent if it says no. False when nothing
     was sent, or the keyboard isn't there or failed: closing it lets go of
     every key it held."""
     with _lock:
-        if wanted is not None and not wanted():
-            return False
         device = _open()
         if device is None:
             return False
         time.sleep(max(0.0, _ready_at - time.monotonic()))
+        if wanted is not None and not wanted():
+            return False
         try:
             _write(device, code, value)
             device.syn()
