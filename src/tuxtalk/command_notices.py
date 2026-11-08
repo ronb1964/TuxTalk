@@ -18,7 +18,7 @@ NOTES = {
         "This key doesn't apply in a terminal. Use the terminal's own keys."),
     "no_window": (
         "{app} has no open window",
-        "{app} is running but has no window to use. Open one, then try again."),
+        "There's no {app} window open to do that to. Open one, then try again."),
     "not_running": (
         "{app} isn't open",
         "There is no {app} running to do that to. Say \"open {app}\" first."),
@@ -96,8 +96,8 @@ NOTES = {
     # about the screens.
     "desktop_no_answer": (
         "The desktop didn't answer",
-        "The desktop didn't answer in time, so nothing was done. Say it again in a "
-        "moment."),
+        "The desktop didn't answer in time. It may still have done it: look before you "
+        "say it again."),
     "no_sound_control": (
         "Couldn't change the volume",
         "TuxTalk couldn't reach the sound system (PipeWire or PulseAudio). Use your "
@@ -187,6 +187,11 @@ NOTES = {
         "happening, open Preferences, Advanced, Show system check."),
 }
 
+# Slips while finding a way around the mouse grid, which stays up: the beep
+# and the label over the window say it, and a notification each time would
+# cover the zoomed view and fill the history.
+_GRID_SLIPS = frozenset({"no_cell", "say_a_number", "nudge_needs_a_number", "smallest"})
+
 # kind -> label, for a command that was done but whose result the user may
 # not see (the volume level, the player paused), filled as say()'s are.
 DONE: dict[str, str] = {
@@ -201,10 +206,12 @@ DONE: dict[str, str] = {
 def say(kind: str, beeps_on: bool, **names) -> None:
     """Tell the user the command of *kind* (a NOTES key) wasn't done: the
     cancel beep, the label over the window and the sentence in a
-    notification. *names* fill the {app}, {number} or {players} in the texts."""
+    notification, but for a slip in the mouse grid (_GRID_SLIPS). *names*
+    fill the {app}, {number} or {players} in the texts."""
     label, sentence = NOTES[kind]
     logger.info(f"Voice command not done: {kind}")
-    notices.command_refused(label.format(**names), sentence.format(**names), beeps_on)
+    notices.command_refused(label.format(**names), sentence.format(**names), beeps_on,
+                            notify=kind not in _GRID_SLIPS)
 
 
 def tell(kind: str, beeps_on: bool, **names) -> None:

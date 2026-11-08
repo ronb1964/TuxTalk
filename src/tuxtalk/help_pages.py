@@ -71,6 +71,8 @@ def page(text, tab, on_link, above=()):
         if part.intro:
             intro = cards.paragraph(part.intro)
             intro.connect("activate-link", on_link)
+            # It takes the focus: a screen reader names the feature before it.
+            _labelled_by(intro, part_labels)
             children.append(intro)
         children.extend(_card(s, look, icon, on_link, part_labels) for s in part.sections)
     return cards.page(children)

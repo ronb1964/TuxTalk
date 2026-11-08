@@ -56,7 +56,10 @@ _STEP_DIRECTIONS = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0,
 # Where a plain "left click" is tried: inside button C of the maximized
 # window on every VM's screen, panels and docks allowed for.
 PLAIN_CLICK_AT = (0.8, 0.25)
+# KDE's screen scale for the scaled-screen check: a fractional one, the kind
+# that rounds pixels.
 SCALE = 1.25
+
 
 Press = namedtuple("Press", "button letter x y")
 

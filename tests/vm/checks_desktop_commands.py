@@ -1,6 +1,6 @@
-"""Desktop voice commands (TuxTalk Labs, the one "Open apps" tickbox): "snap
-left", "centre window", "show desktop", "go to desktop two", "move
-window to desktop two", "show all windows", "volume down", "mute sound",
+"""Desktop voice commands (TuxTalk Labs, the "Apps, windows, keys and the
+mouse by voice" tickbox): "snap left", "centre window", "show desktop", "go
+to desktop two", "move window to desktop two", "show all windows", "volume down", "mute sound",
 "pause music", "lock screen", "take a screenshot", "what can I say" and
 "minimize the text editor". Only a real desktop can say whether a window
 landed where it was told, a desktop was reached, the volume moved, a lock

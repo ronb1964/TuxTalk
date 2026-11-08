@@ -6,8 +6,8 @@ recording indicator (it's a cyan orb by default), Fix a Word under a
 "Voice Commands" tab (it's "Commands"), tray items that no longer exist, a
 "Fast & Accurate" preset, and setting names that were never real.
 """
-import re
 import pathlib
+import re
 
 import pytest
 
@@ -178,7 +178,7 @@ def _writing(monkeypatch, **settings):
 
 def test_help_spells_out_the_desktop_commands_with_your_own_hold_key(monkeypatch):
     writing = _writing(monkeypatch, hotkey="F6")
-    section = writing.split("Apps, Windows and Keys by Voice", 1)[1]
+    section = writing.split("Apps, Windows, Keys and the Mouse by Voice", 1)[1]
     assert "Hold <b>F6</b>, say <b>snap left</b>, let go" in section
     for said in ("show desktop", "switch to desktop two", "move window to the other screen",
                  "volume up", "pause music", "lock screen", "take a screenshot", "what can I say",
@@ -191,7 +191,7 @@ def test_help_spells_out_opening_apps_with_your_own_hold_key(monkeypatch):
     """Opening apps is a Labs feature: Help says where to turn it on, the
     steps with the key from the settings, and what it can't do."""
     writing = _writing(monkeypatch, hotkey="F6")
-    opening = writing.split("Apps, Windows and Keys by Voice", 1)[1]
+    opening = writing.split("Apps, Windows, Keys and the Mouse by Voice", 1)[1]
     assert "Preferences → Advanced → TuxTalk Labs" in opening
     assert "Hold <b>F6</b>, say <b>open Firefox</b>, let go" in opening
     assert "F8" not in opening
@@ -203,7 +203,7 @@ def test_help_spells_out_opening_apps_with_your_own_hold_key(monkeypatch):
 
 def test_help_spells_out_windows_keys_and_addresses_with_your_own_hold_key(monkeypatch):
     writing = _writing(monkeypatch, hotkey="F6")
-    section = writing.split("Apps, Windows and Keys by Voice", 1)[1]
+    section = writing.split("Apps, Windows, Keys and the Mouse by Voice", 1)[1]
     assert "Hold <b>F6</b>, say <b>new tab</b>, let go" in section
     for said in ("close Firefox", "go to youtube.com", "web search", "terminal", "log out",
                  "copy the selection", "paste it", "save the file", "press escape"):

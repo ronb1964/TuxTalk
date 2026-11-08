@@ -356,8 +356,8 @@ window.talktype-prefs, dialog.talktype-prefs {
 }
 
 /* Cards (cards.py): every tab of Help and the Voice Commands window. One
-   colour per group of commands and per Help tab, so each heading stands out
-   from what's under it. */
+   colour per group of commands, which each Help tab borrows (help_pages.TAB_LOOK:
+   some tabs share one), so each heading stands out from what's under it. */
 .talktype-prefs .tt-card {
     background: #252525;
     border: 1px solid #3a3a3a;

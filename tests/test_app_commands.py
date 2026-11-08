@@ -4,7 +4,8 @@ from tuxtalk.app_commands import parse, OpenRequest
 
 def test_open_launch_and_start_name_an_app():
     for said in ("Open Firefox.", "launch firefox", "Start Firefox please"):
-        assert parse(said) == OpenRequest("firefox")
+        request = parse(said)
+        assert (request.name, request.new, request.install) == ("firefox", False, "")
 
 
 def test_new_and_another_start_a_second_one():

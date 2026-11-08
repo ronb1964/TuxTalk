@@ -12,7 +12,8 @@ terminal.
 # All other apps get plain Ctrl+V — works in chat/editor/browser inputs and
 # avoids a Chromium/Electron regression that mishandles synthetic Ctrl+Shift+V.
 _TERMINAL_WM_CLASSES = frozenset({
-    "org.gnome.Ptyxis", "Ptyxis",
+    # Ptyxis's Flathub build keeps the id it had before GNOME adopted it.
+    "org.gnome.Ptyxis", "Ptyxis", "app.devsuite.Ptyxis",
     # GNOME Shell reports GNOME Terminal (Ubuntu 24.04, Zorin 18, Debian) by
     # its server process: without this one, Ctrl+V typed a raw ^V there.
     "org.gnome.Terminal", "Gnome-terminal", "gnome-terminal-server",
@@ -35,6 +36,10 @@ _TERMINAL_WM_CLASSES = frozenset({
     "st", "st-256color", "sakura", "Termite", "contour",
     # X11 desktops (XFCE, MATE, Cinnamon...) report these WM_CLASS names.
     "Guake", "Tilda", "Roxterm", "cool-retro-term", "Eterm",
+    # elementary OS's own, Black Box (Flathub), Deepin's, and the
+    # cross-platform ones (Electron, Rust), by their app ids and classes.
+    "io.elementary.terminal", "com.raggesilver.BlackBox", "deepin-terminal",
+    "tabby", "Hyper", "dev.warp.Warp", "waveterm", "rio",
 })
 
 # Lower-cased once, because the class arrives from several independent sources

@@ -79,7 +79,7 @@ def test_select_and_move_still_runs_before_new_commands(actions_on, chat, say, k
     assert "Voice command: go to the top" in caplog.text
 
 
-@pytest.mark.parametrize("command", ["Paste it.", "Select all.", "Go back."])
+@pytest.mark.parametrize("command", ["Paste it.", "Select all.", "Go back a page."])
 def test_a_key_command_forgets_the_last_dictation_for_undo(actions_on, chat, say, keyboard,
                                                            monkeypatch, command):
     """What the keys did leaves nothing of the dictation to erase."""

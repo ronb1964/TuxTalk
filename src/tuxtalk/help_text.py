@@ -247,7 +247,7 @@ The Hands-free section has a way to make it stop by itself when you stop talking
   look and place in <b>Preferences → Audio → Customize…</b>
 • If the microphone heard nothing but silence, TuxTalk says so and types nothing.
 
-### Indicator Follows Your Window
+### Indicator follows your window
 The recording indicator shows up in the window you're dictating into, wherever
 that window is on the screen, instead of always in the same spot. It's on from
 the start.
@@ -502,7 +502,7 @@ These work <b>right after you dictate</b>, on what you just said.
   • After a select or move, <b>delete last word</b> won't run, since the cursor is
     somewhere else now. Use Ctrl+Z in the app instead.
 
-## 🧪 Apps, Windows and Keys by Voice
+## 🧪 Apps, Windows, Keys and the Mouse by Voice
 Open apps, close or switch windows, snap and move them, press everyday keys, change
 desktops and volume, control music, lock or take a screenshot, go to an address or search
 the web, all by saying it. Turn it on in
@@ -608,7 +608,8 @@ this list.
 Hold <b>{hold}</b>, say <b>new tab</b>, let go. The key is pressed in the window you're in.
   • Tabs: <b>new tab</b>, <b>close tab</b>, <b>next tab</b>, <b>previous tab</b>,
     <b>reopen tab</b>
-  • Pages: <b>go back</b>, <b>go forward</b>, <b>reload the page</b> (or <b>refresh the page</b>),
+  • Pages: <b>go back a page</b>, <b>go forward a page</b>, <b>reload the page</b> (or
+    <b>refresh the page</b>),
     <b>page down</b>, <b>page up</b>, <b>go to the top</b>, <b>go to the bottom</b>
   • Scrolling: <b>scroll down</b>, <b>scroll up</b>; add a number to scroll more:
     <b>scroll down 5</b>. It scrolls what's under the mouse pointer, like your own wheel.
@@ -621,19 +622,23 @@ In a browser it uses the address bar, so it replaces the page you're on; anywher
 your default browser opens it.
 
 Hold <b>{hold}</b>, say <b>web search cheap tires</b>, let go: your browser's own search
-engine shows the results. In a browser that replaces the page you're on too; from any
-other app a new tab opens.
+engine shows the results in a new tab, so the page you were on stays as it was, a form
+you were filling in included.
 
 Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>.
 
 ### Good to know
   • Only a dictation that is just the command counts. "I opened Firefox yesterday" and
     "open the door and come in" are typed as usual.
-  • A name that fits no app is typed as usual, so a sentence like "Start over." is never
-    lost. Two apps that fit equally well: the cancel beep sounds, a note floats over your
+  • A name that fits no app is typed as usual. The start of a name, or a close spelling,
+    counts only when you say the name alone, and the start of a name only after "open" or
+    "launch": <b>open thunder</b> opens Thunderbird, while "Open the file.", "Start work."
+    and "Start over." are typed. A sentence that says an app's whole name
+    still opens it ("Open the maps."); put <b>literal</b> first to type it. Two apps that
+    fit equally well (<b>open libre</b>): the cancel beep sounds, a note floats over your
     window naming them, and nothing opens.
-  • Where it works: KDE has everything. GNOME has it with the TuxTalk extension (log out and
-    back in once after updating). X11 desktops like Cinnamon and Xfce have all but
+  • Where it works: KDE Plasma 6 has everything. GNOME has it with the TuxTalk extension
+    (log out and back in once after updating). X11 desktops like Cinnamon and Xfce have all but
     <b>show all windows</b>. On COSMIC, Sway and Hyprland, windows and desktops can't be
     done (TuxTalk says so; use the window's own buttons), and an open app is started
     again, which most then answer by showing the window they already have. Sound, music,
@@ -643,8 +648,8 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
     as answers in chats.
   • Closing asks to save unsaved work, just like clicking the X.
   • Apps open in a terminal too. The keys are the terminal's own there, so <b>select all</b>,
-    <b>save the file</b>, <b>find on page</b>, <b>reopen tab</b>, <b>go back</b>,
-    <b>go forward</b> and <b>reload the page</b> don't apply in a terminal. On GNOME
+    <b>save the file</b>, <b>find on page</b>, <b>reopen tab</b>, <b>go back a page</b>,
+    <b>go forward a page</b> and <b>reload the page</b> don't apply in a terminal. On GNOME
     without the TuxTalk extension, TuxTalk can't tell a terminal, so those and copy, paste
     and the tab keys aren't pressed.
   • <b>go to</b> needs a real web address, like youtube.com. Only <b>web search</b> searches.

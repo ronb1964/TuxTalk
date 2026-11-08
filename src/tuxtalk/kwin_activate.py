@@ -192,7 +192,12 @@ def ask(build, plugin_name: str, path: str, timeout: float) -> bool | None:
 
 def activate(desktop_file: str, classes, timeout: float) -> bool:
     """Bring forward the app's window (build_script says which). True when
-    KWin said it had one within *timeout* seconds of starting the script.
-    Raises when KWin refuses the script."""
-    return bool(ask(lambda reply_to: build_script(desktop_file, classes, reply_to),
-                    SCRIPT_PLUGIN_NAME, script_path("tuxtalk-activate.js"), timeout))
+    KWin said it had one, False when it had none. Raises when KWin refuses
+    the script, and TimeoutError when it doesn't answer within *timeout*
+    seconds of starting it (it may have brought the window forward all the
+    same)."""
+    answer = ask(lambda reply_to: build_script(desktop_file, classes, reply_to),
+                 SCRIPT_PLUGIN_NAME, script_path("tuxtalk-activate.js"), timeout)
+    if answer is None:
+        raise TimeoutError("KWin didn't answer in time")
+    return answer

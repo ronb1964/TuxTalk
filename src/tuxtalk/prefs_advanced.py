@@ -439,7 +439,7 @@ class AdvancedTab(Tab):
             "  \u201crestore window\u201d\n"
             "\u2022 \u201cnew tab\u201d, \u201cclose tab\u201d, \u201cnext tab\u201d, "
             "\u201cprevious tab\u201d,\n"
-            "  \u201creopen tab\u201d, \u201cgo back\u201d, \u201cgo forward\u201d, "
+            "  \u201creopen tab\u201d, \u201cgo back a page\u201d, \u201cgo forward a page\u201d, "
             "\u201creload the page\u201d,\n"
             "  \u201cscroll up\u201d, \u201cscroll down\u201d (add a number for more),\n"
             "  \u201cpage up\u201d, \u201cpage down\u201d, \u201cgo to the top\u201d, "
@@ -467,7 +467,8 @@ class AdvancedTab(Tab):
             "  \u201cleft 3\u201d, \u201cup\u201d\u2026 move the dot\n"
             "\u2022 \u201cgo to youtube.com\u201d: opens the address\n"
             "  (in a browser, replaces the page)\n"
-            "\u2022 \u201cweb search cheap tires\u201d: your browser\u2019s own search\n"
+            "\u2022 \u201cweb search cheap tires\u201d: your browser\u2019s own search,\n"
+            "  in a new tab\n"
             "\u2022 \u201cliteral open Firefox\u201d: \u201cliteral\u201d before\n"
             "  any of these types the words instead\n\n"
             "Inside a longer sentence the words are typed as usual.\n"
@@ -493,7 +494,6 @@ class AdvancedTab(Tab):
                                        "(TuxTalk Discussions on GitHub)")
         labs_links.pack_start(labs_feedback, False, False, 0)
         grid.attach(labs_links, 0, row, 2, 1)
-        row += 1
 
     def _swiss_spelling_check(self):
         """The "Swiss German spelling" checkbox, bound to swiss_spelling."""

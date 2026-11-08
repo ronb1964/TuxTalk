@@ -14,6 +14,12 @@ pytest.importorskip("tomllib", reason="the VM harness needs Python 3.11 or newer
 run = import_vm_tool("run")
 
 
+def test_every_check_run_again_with_the_gnome_extension_exists():
+    """A check renamed or removed would drop out of the extension's run
+    without a word."""
+    assert set(run.checks_extension.AGAIN) <= {c.id for c in run.CHECKS}
+
+
 def test_a_check_id_that_doesnt_exist_is_refused():
     assert run.selection_problem(["kde"], {"basic_typo"}) == "no check called basic_typo"
 

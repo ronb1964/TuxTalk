@@ -266,6 +266,8 @@ def _calibrate(session: _Session) -> Fit | None:
     for spot, fraction in zip(spots, fractions, strict=True):
         arrived = _move_and_see(session, fraction)
         if arrived is None:
+            if _session is not session:     # closed meanwhile (Esc, a real click)
+                return None
             logger.warning(f"Mouse grid: the pointer sent to {_xy(spot)} never showed up "
                            f"on the grid; screens {_layout(session)}")
             return None
@@ -279,12 +281,14 @@ def _calibrate(session: _Session) -> Fit | None:
 
 def _move_and_see(session: _Session, fraction):
     """Move the pointer to *fraction* of the screens' box and return where the
-    grid saw it land, or None if it never did. A move onto the spot the
-    pointer is already on sends no motion, so with none in time it goes a
-    pixel aside and back."""
+    grid saw it land, or None if it never did, or the grid closed first: then
+    the pointer is the user's again and stays where they put it. A move onto
+    the spot the pointer is already on sends no motion, so with none in time
+    it goes a pixel aside and back."""
     for route in ([fraction], [_aside(session, fraction), fraction]):
         since = time.monotonic()
-        _move_through(route)
+        if not _move_while_showing(session, route):
+            return None
         if (arrived := _arrival(session, since)) is not None:
             return arrived
     return None
@@ -479,6 +483,8 @@ def _lands_on(session: _Session, target) -> bool:
     arrived = _move_and_see(session, session.fit.fraction(target))
     if arrived is not None and close_enough(target, arrived):
         return True
+    if _session is not session:         # closed meanwhile: nothing to log
+        return False
     landed = _xy(arrived) if arrived else "nowhere on the grid"
     logger.warning(f"Mouse grid: not clicked: the pointer sent to {_xy(target)} landed at "
                    f"{landed}; screens {_layout(session)}")

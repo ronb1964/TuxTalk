@@ -18,7 +18,8 @@ phrases), "edit" ("edit that, ..."), "select" (voice_navigation),
 "instruction" (an example of what to tell the AI; any wording works),
 "exact" (an edit done in code, voice_edit_rules), "format" (a word
 processor's own shortcut),
-"action" (command_phrases.parse: the Labs apps, windows, desktops and sound), or
+"action" (command_phrases.parse: the Labs apps, windows, desktops and sound),
+"mouse" (mouse_phrases: while a grid shows, or for the clicks at any time), or
 "literal" (normalize_text types the word after "literal" or "the word").
 """
 from typing import NamedTuple
@@ -252,7 +253,7 @@ SECTIONS = (
     Section("Tabs and Pages", KEYS, labs=LABS_ACTIONS, commands=(
         Command(("new tab", "close tab", "next tab", "previous tab", "reopen tab"),
                 "in a browser or any app with tabs", "action"),
-        Command(("go back", "go forward", "reload the page", "refresh the page"),
+        Command(("go back a page", "go forward a page", "reload the page", "refresh the page"),
                 "back, forward, reload", "action"),
         Command(("page up", "page down", "go to the top", "go to the bottom"),
                 "a screen at a time, or all the way", "action"),
@@ -267,7 +268,8 @@ SECTIONS = (
     Section("Addresses and Search", KEYS, labs=LABS_ACTIONS, commands=(
         Command(("go to youtube dot com",), "opens the address; in a browser, in that tab",
                 "action"),
-        Command(("web search cheap tires",), "your browser's own search", "action"),
+        Command(("web search cheap tires",), "your browser's own search, in a new tab",
+                "action"),
     )),
     Section("Sound and Music", SOUND, labs=LABS_ACTIONS, commands=(
         Command(("volume up", "volume down", "volume up 3", "turn down the volume"),

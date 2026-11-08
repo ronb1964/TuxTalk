@@ -15,10 +15,15 @@ from .undo import NUMBER_WORDS
 MAX_NUMBER = 99
 
 
+# What a MouseRequest can ask for: the grid shown, a cell zoomed into, a
+# click of each kind, a move, the dot nudged, the grid closed.
+ACTIONS = ("grid", "zoom", "click", "double click", "right click", "middle click", "move",
+           "nudge", "cancel")
+
+
 @dataclass(frozen=True)
 class MouseRequest:
-    action: str   # "grid", "zoom", "click", "double click", "right click",
-                  # "middle click", "move", "nudge" or "cancel"
+    action: str   # one of ACTIONS
     number: int | None = None   # the grid cell, or a nudge's steps; None: the spot
     # Heard while a grid showed, so one of its commands: never done without
     # it, should the grid close before the request is acted on.

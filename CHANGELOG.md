@@ -22,11 +22,12 @@ before 0.15.0, so older entries use that name.
   while a grid shows, so do "literal five" and "literal click". If TuxTalk
   can't put the pointer exactly where the grid shows, nothing is clicked and
   a note says so.
-- It works on KDE, GNOME, COSMIC and X11 desktops like Cinnamon and Xfce; on
-  the Wayland ones the grid needs XWayland, and on X11 compositing (Xfce and
-  Cinnamon have it on unless you turned it off). It is in the same Labs
-  tickbox as the other desktop commands, now called "Apps, windows, keys and
-  the mouse by voice", so it is off until you tick it. Help, on the Writing
+- The grid works on KDE, GNOME, COSMIC and X11 desktops like Cinnamon and
+  Xfce; on the Wayland ones it needs XWayland, and on X11 compositing (Xfce
+  and Cinnamon have it on unless you turned it off). It is in TuxTalk Labs:
+  tick Preferences → Advanced → TuxTalk Labs → "Apps, windows, keys and the
+  mouse by voice", which also turns on the app, window, key and desktop
+  commands below. It is off until you tick it. Help, on the Writing
   page, has the steps, and the Voice Commands list has a card for it.
 - Where the desktop's own zoom can be used (KDE with its Zoom effect on, or
   GNOME and Cinnamon with the magnifier set to the whole screen), the whole
@@ -46,7 +47,7 @@ before 0.15.0, so older entries use that name.
   either one to stop. As the toggle key, one tap starts and the next stops.
   Pick it in Preferences, General, under Hold Hotkey or Toggle Hotkey. It
   was asked for in Discussion #28.
-- It costs you Ctrl+Space in your apps while dictation is on, and Right
+- Left Ctrl+Space costs you Ctrl+Space in your apps while dictation is on, and Right
   Ctrl+Space too, because a desktop can't tell the two Ctrl keys apart. Code
   completion on that shortcut waits until dictation is off. Preferences says
   so when you pick it, and warns you if IBus, Fcitx 5, GNOME or your keyboard
@@ -58,9 +59,8 @@ before 0.15.0, so older entries use that name.
   asks to update it, with one password prompt and no restart.
 - You can open an app by saying its name. Hold your dictation key, say "open
   Firefox", let go. Firefox opens, or comes to the front if it's already
-  open, and nothing is typed. "launch" and "start" work too. It's in
-  Preferences, Advanced, TuxTalk Labs, Open apps, and it's off until you
-  turn it on.
+  open, and nothing is typed. "launch" and "start" work too. It's the same
+  Labs tickbox, "Apps, windows, keys and the mouse by voice".
 - "open new Firefox" or "open another Firefox" starts a second one. "open the
   browser", "open email", "open files", "open the text editor" and "open the
   terminal" open the app your desktop uses for that. "open Firefox Flatpak"
@@ -68,27 +68,34 @@ before 0.15.0, so older entries use that name.
   Firefox" types the words.
 - Only a dictation that is just the command opens something. "I opened
   Firefox yesterday" is typed as usual, and so is a short one that names no
-  app, like "Start over.", so no sentence is lost. If two apps fit equally
-  well, a note floats over your window naming them, the cancel beep sounds
-  and nothing opens.
+  app. The start of a name or a close spelling counts only when the name is
+  said alone, and the start of a name only after "open" or "launch": "open
+  thunder" opens Thunderbird, while "Open the file.", "Start work." and
+  "Start over." are typed. A short sentence that says an app's whole name
+  still opens it ("Open the maps."); "literal" first types it. If two apps
+  fit equally well ("open libre"), a note floats over your window naming
+  them, the cancel beep sounds and nothing opens.
 - Bringing an open app to the front works on KDE, on GNOME with the TuxTalk
   extension and on X11 desktops like Cinnamon and Xfce. On COSMIC, Sway and
   Hyprland the app is started again. In a hands-free or Type at pause
   recording, opening an app ends the recording. An AppImage with no menu
   entry can't be found. The words open, launch and start are English.
 - Help, on the Writing page, has the steps.
-- The same Labs tickbox now does more, and is called "Apps, windows, keys and
-  the mouse by voice". Hold your dictation key, say it, let go, and nothing is typed:
+- The same tickbox does windows, keys and the web. Hold your dictation key,
+  say it, let go, and nothing is typed:
   "close Firefox", "close all Firefox", "close window", "switch to Firefox",
   "minimize window", "maximize window" and "restore window"; "new tab", "close
-  tab", "next tab", "previous tab", "reopen tab", "go back", "go forward",
+  tab", "next tab", "previous tab", "reopen tab", "go back a page", "go
+  forward a page",
   "reload the page", "scroll down" (or "scroll down 5", which scrolls what is
   under the mouse pointer), "page up", "go to the top", "find on page", "save
   the file", "select all", "copy the selection", "paste it" and "press
   escape"; "go to youtube.com", which uses your browser's address bar or opens
   your default browser; and "web search cheap tires", which uses your
-  browser's own search engine. In a terminal the keys are the terminal's
-  own, and select all, save, find on page, reopen tab, go back, go forward
+  browser's own search engine, always in a new tab, so the page you were
+  on stays as it was. In a terminal the keys are the terminal's
+  own, and select all, save, find on page, reopen tab, go back a page, go
+  forward a page
   and reload the page don't apply there.
   "literal" before any of them types the words. "close Firefox" closes the
   Firefox window you used last, and one word of an open app's name is
@@ -98,7 +105,7 @@ before 0.15.0, so older entries use that name.
   minimizing and switching work on KDE, on GNOME with the TuxTalk extension
   (log out and back in once after updating) and on X11 desktops. On COSMIC,
   Sway and similar, TuxTalk says it can't do that on this desktop.
-- The same Labs tickbox now runs your desktop too. Hold your dictation key,
+- The same tickbox runs your desktop. Hold your dictation key,
   say it, let go, and nothing is typed. Windows: "snap left", "snap top
   right", "center window", "move window to desktop two", "move window to the
   other screen", "minimize Firefox", "maximize Firefox", "restore Firefox"
@@ -108,7 +115,7 @@ before 0.15.0, so older entries use that name.
   a number for more), "mute sound". Music: "pause music", "play music",
   "next track", "previous track", for the player that is playing. Also "lock
   screen", "take a screenshot" and "what can I say", which opens the Voice
-  Commands window. It is still off until you tick it.
+  Commands window.
 - "Take a screenshot of this window" saves just the window you're working
   in. On KDE, Cinnamon (Linux Mint) and Xfce it's taken straight away; on
   GNOME and Pop!_OS the desktop's own screenshot tool opens, where you
@@ -121,7 +128,7 @@ before 0.15.0, so older entries use that name.
   system they locked.
 - One word alone (copy, pause, next) is typed as a word, and "literal"
   before any command types the words.
-- Where it works: KDE has all of it. GNOME has it with the TuxTalk extension
+- Where it works: KDE Plasma 6 has all of it. GNOME has it with the TuxTalk extension
   (log out and back in once after updating). X11 desktops like Cinnamon and
   Xfce have all but "show all windows". On COSMIC, Sway and Hyprland windows
   and desktops can't be done and TuxTalk says so; sound, music, the lock and

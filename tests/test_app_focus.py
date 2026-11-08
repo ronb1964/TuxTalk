@@ -5,8 +5,10 @@ starts the app.
 
 The desktops are stand-ins (desktop_fakes.py): nothing here touches the real one.
 """
+import pytest
+
 from desktop_fakes import FakeShell, set_desktop
-from tuxtalk import app_focus
+from tuxtalk import app_focus, kwin_activate
 from tuxtalk.app_finder import AppEntry
 
 
@@ -166,15 +168,30 @@ def test_the_script_is_taken_out_of_kwin_afterwards(kde, fake_kwin):
     assert fake_kwin.methods == ["unloadScript", "loadScript", "start", "unloadScript"]
 
 
-def test_an_answer_from_an_earlier_script_never_counts(kde, fake_kwin):
+def test_a_kwin_that_doesnt_answer_in_time_is_never_told_as_no_window(kde, fake_kwin):
+    """It may have brought the window forward all the same."""
+    fake_kwin.silent = True
+    with pytest.raises(TimeoutError):
+        kwin_activate.activate("firefox", {"firefox"}, 0.05)
+
+
+def test_an_answer_from_an_earlier_script_never_counts(kde, fake_kwin, monkeypatch):
     """Each attempt listens on a connection of its own: a slow script's late
     "yes" goes to a name that's gone, not to the next attempt."""
     fake_kwin.windows = ['makeWindow("firefox", "{f}", 0, 0, 800, 600)']
-    app_focus.focus_running(FIREFOX)
-    first = fake_kwin.scripts[-1]
     fake_kwin.silent = True
-    app_focus.focus_running(FIREFOX, timeout=0.05)
-    assert fake_kwin.scripts[-1] != first
+    assert app_focus.focus_running(FIREFOX, timeout=0.05) is False
+    late = fake_kwin.scripts[-1]
+    start_next = fake_kwin.call
+
+    def call(method, *args):
+        result = start_next(method, *args)
+        if method == "start":
+            fake_kwin._run(late)        # the first script answers only now
+        return result
+    monkeypatch.setattr(fake_kwin, "call", call)
+    with pytest.raises(TimeoutError):
+        kwin_activate.activate("firefox", {"firefox"}, 0.2)
 
 
 # --- GNOME ------------------------------------------------------------------------------

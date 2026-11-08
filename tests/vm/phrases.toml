@@ -146,7 +146,7 @@ say = "Restore the window."
 say = "New tab."
 
 [go_back]
-say = "Go back."
+say = "Go back a page."
 
 [go_to_example]
 say = "Go to example dot com."
@@ -169,6 +169,9 @@ say = "Search for cheap tires."
 
 [sentence_copy]
 say = "Copy that."
+
+[sentence_go_back]
+say = "Go back."
 
 [sentence_close_door]
 say = "Close the door."

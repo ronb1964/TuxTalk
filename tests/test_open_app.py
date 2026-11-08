@@ -230,6 +230,8 @@ def test_a_sentence_about_opening_is_typed(desktop, say):
                                           "Start with the introduction"),
                                          ("open fierfox zz", "Open fierfox zz")])
 def test_a_short_sentence_naming_no_app_is_typed(desktop, say, said, typed):
+    desktop.apps.append(AppEntry("overgrive.desktop", "Overgrive", "Overgrive", "",
+                                 "overgrive", ""))
     say(said)
     assert desktop.chat[2][0][0].startswith(typed)
     assert desktop.launched == [] and desktop.floated == [] and desktop.beeps == []

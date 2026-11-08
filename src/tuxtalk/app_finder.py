@@ -4,8 +4,11 @@
 default apps, so tests drive it with lists. `installed_apps` and `default_apps`
 are the thin readers of the desktop (GLib's app list, KDE's terminal setting).
 
-A weak match is never reported as "one": a wrong app opening is worse than a
-message saying nothing fit.
+A weak match (the start of a name's word, a sound-alike, a close spelling)
+counts only for a bare name, one said with no article and none of the small
+words sentences are made of: "open thunder" opens Thunderbird and "start
+console" Konsole, while "Open the file." and "Start over." are typed. A wrong
+app opening is worse than the words typed.
 """
 import configparser
 import difflib
@@ -33,6 +36,14 @@ _NOISE_WORDS = ("the", "app")
 _DETERMINERS = frozenset({"the", "a", "an", "my", "this", "that", "your"})
 # Words that are some of an app's name ("Passwords and Keys") but never name it.
 _FUNCTION_WORDS = frozenset({"and", "or", "to", "of", "for", "in", "on", "with", "your", "my"})
+# Words that make a short dictation a sentence ("Start over.", "Open it up."),
+# never an app's nickname: with one of them, or an article, only a name said
+# whole counts.
+_SENTENCE_WORDS = _DETERMINERS | _FUNCTION_WORDS | frozenset({
+    "some", "any", "every", "all", "our", "his", "her", "their", "it", "them", "me", "us",
+    "you", "him", "over", "up", "down", "out", "off", "back", "again", "now", "here",
+    "there", "away", "later", "today", "together", "is", "are", "be", "at", "by", "from",
+})
 
 # What people say for "the app I use for this", mapped to the kind
 # `default_apps` reports.
@@ -144,29 +155,41 @@ def _fuzzy(letters, indexed):
     return [item for score, item in scored if score == best]
 
 
-def _candidates(words, indexed, strict=False):
+def _candidates(words, indexed, strict=False, bare=True, whole_words=False):
     """The entries the first matching rule finds, rules in the spec's order.
     *strict*: only the rules that take the name as said, never the start of
     a word, a sound or a close spelling, for a window command, where "Close
     the fire." must not close Firefox: the whole name, its letters (or its
-    program's) and the generic name."""
+    program's) and the generic name. Not *bare* (_bare): a sound-alike of
+    the whole name counts too ("Open the console." for Konsole), never the
+    start of a word or a close spelling ("Open the file."). *whole_words*:
+    never the start of a word (OpenRequest.whole_words)."""
     said = " ".join(words)
     letters = said.replace(" ", "")
     sounds = _sounds(letters) if len(letters) >= MIN_SOUND_LETTERS else ""
-    # Sounding alike comes after every rule that matches what was said, so
-    # "open contact" stays Contacts and never becomes Kontact.
-    rules = (
+    rules = [
         lambda i: said in i.names,
         lambda i: letters in i.letters,
         lambda i: said in i.labels,
-        lambda i: i.starts_name(words),
-        lambda i: bool(sounds) and sounds in i.sounds,
-    )
-    for rule in rules[:3] if strict else rules:
+    ]
+    if not strict:
+        if bare and not whole_words:
+            rules.append(lambda i: i.starts_name(words))
+        # Sounding alike comes after every rule that matches what was said,
+        # so "open contact" stays Contacts and never becomes Kontact.
+        rules.append(lambda i: bool(sounds) and sounds in i.sounds)
+    for rule in rules:
         hits = [i for i in indexed if rule(i)]
         if hits:
             return hits
-    return [] if strict else _fuzzy(letters, indexed)
+    return _fuzzy(letters, indexed) if bare and not strict else []
+
+
+def _bare(request) -> bool:
+    """Whether *request*'s name was said bare, with no article and no word
+    a sentence is made of ("thunder", "libre writer"): only then may the
+    start of a name or a close spelling name the app."""
+    return not _SENTENCE_WORDS.intersection(normalize(request.name).split())
 
 
 def _some_name_words(request, words, indexed):
@@ -236,28 +259,37 @@ def _one_of_each_app(hits, entries, install):
     return tuple(chosen)
 
 
+def _default_app(request, words, entries, defaults):
+    """The entry of the default app *words* name ("browser", "email"), the
+    copy the request asks for if it names one; None when they name none, or
+    the default isn't installed."""
+    kind = _DEFAULT_WORDS.get(" ".join(words))
+    default_id = defaults.get(kind) if kind else None
+    match = [e for e in entries if e.app_id == default_id] if default_id else []
+    if not match:
+        return None
+    # The user's own choice, unless the request names another copy.
+    return next((c for c in copies(match[0], entries)
+                 if request.install and c.install == request.install), match[0])
+
+
 def find(request, entries, defaults, strict=False):
     """The Found result for *request* among *entries*.
 
     *defaults* maps "browser", "email", "files", "text editor" and "terminal"
     to app ids; saying one of those words opens the default app. *strict*:
     the name as said only (_candidates), else some whole words of it, then
-    Found.partial (_some_name_words).
+    Found.partial (_some_name_words). A request that isn't _bare, or says
+    "start", is matched by fewer rules (_candidates).
     """
     words = _clean(request.name)
     if not words:
         return _NONE
-    kind = _DEFAULT_WORDS.get(" ".join(words))
-    default_id = defaults.get(kind) if kind else None
-    if default_id:
-        match = [e for e in entries if e.app_id == default_id]
-        if match:
-            # The user's own choice, unless the request names another copy.
-            chosen = next((c for c in copies(match[0], entries)
-                           if request.install and c.install == request.install), match[0])
-            return Found("one", (chosen,))
+    default = _default_app(request, words, entries, defaults)
+    if default is not None:
+        return Found("one", (default,))
     indexed = [_Indexed(e) for e in entries]
-    hits = _candidates(words, indexed, strict)
+    hits = _candidates(words, indexed, strict, _bare(request), request.whole_words)
     partial = strict and not hits
     if partial:
         hits = _some_name_words(request, words, indexed)

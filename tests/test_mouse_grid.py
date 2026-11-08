@@ -123,6 +123,7 @@ class Rig:
         self.timers = []         # [id, callback, args, removed]
         self.beeps = []
         self.notes = []
+        self.notified = []      # the notes also sent as a desktop notification
 
     def landings(self):
         """Where each move sent the pointer, in screen pixels, in order; none
@@ -206,8 +207,11 @@ def rig(pointer, monkeypatch):
     monkeypatch.setattr(mouse_grid.GLib, "timeout_add_seconds", add_timer)
     monkeypatch.setattr(mouse_grid.GLib, "source_remove", remove_timer)
     monkeypatch.setattr(beeps, "beep", lambda on, freq, length: rig.beeps.append((freq, length)))
-    monkeypatch.setattr(notices, "command_refused",
-                        lambda label, sentence, beeps_on: rig.notes.append(label))
+    def refused(label, sentence, beeps_on, notify=True):
+        rig.notes.append(label)
+        if notify:
+            rig.notified.append(label)
+    monkeypatch.setattr(notices, "command_refused", refused)
     monkeypatch.setattr(mouse_grid, "_session", None)
     yield rig
     mouse_grid.close("the test is over")
@@ -1022,3 +1026,55 @@ def test_a_real_click_as_soon_as_the_grid_shows_closes_it(rig, monkeypatch):
     monkeypatch.setattr(FakeWindows, "pointer_since", click_then_look)
     assert act("grid") is False
     assert not mouse_grid.showing() and not rig.windows[0].showing
+
+
+def _esc_while_it_waits_for_the_pointer(monkeypatch):
+    """Esc (or a real click) while the grid waits to see the pointer land,
+    with the pointer off every grid window, so a move a pixel aside comes
+    next; returns how many pointer events had gone out at the close."""
+    closed_at = []
+    real_pointer_since = FakeWindows.pointer_since
+
+    def esc_then_look(self, after):
+        if self.showing and not closed_at:
+            closed_at.append(len(self.rig.pointer.events))
+            mouse_grid.close("Esc")
+        return real_pointer_since(self, after)
+    monkeypatch.setattr(FakeWindows, "pointer_since", esc_then_look)
+    return closed_at
+
+
+def test_esc_while_the_grid_measures_the_pointer_leaves_it_alone(rig, monkeypatch, caplog):
+    rig.visible = False
+    closed_at = _esc_while_it_waits_for_the_pointer(monkeypatch)
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert act("grid") is False
+    assert len(rig.pointer.events) == closed_at[0]
+    assert rig.notes == [] and "never showed up" not in caplog.text
+
+
+def test_esc_while_a_click_checks_the_landing_leaves_the_pointer_alone(rig, monkeypatch,
+                                                                       caplog):
+    act("grid")
+    rig.visible = False
+    closed_at = _esc_while_it_waits_for_the_pointer(monkeypatch)
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert act("click", 5) is False
+    assert len(rig.pointer.events) == closed_at[0] and rig.buttons() == []
+    assert rig.notes == [] and "not clicked" not in caplog.text
+
+
+def test_a_slip_in_the_grid_floats_its_note_and_sends_no_notification(rig):
+    """The grid stays up: the beep and the label say it, and a notification
+    each time would cover the zoomed view and fill the history."""
+    act("grid")
+    act("nudge", 3, direction="left")
+    act("zoom", 12)
+    assert rig.notes == ["Say a number first", "No cell 12 here"]
+    assert rig.notified == []
+
+
+def test_a_grid_that_closes_on_a_refusal_still_notifies(rig):
+    rig.visible = False
+    assert act("grid") is False
+    assert rig.notified == ["Can't place the pointer exactly on this screen setup"]

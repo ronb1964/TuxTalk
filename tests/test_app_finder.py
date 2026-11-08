@@ -65,6 +65,78 @@ def test_generic_names_and_word_starts(apps):
     assert ids(find(parse("open calc"), apps, {})) == ["libreoffice-calc.desktop"]
 
 
+# Apps whose names a short sentence's words start, or come close to.
+SENTENCE_MENU = [
+    entry("overgrive.desktop", "Overgrive", program="overgrive"),
+    entry("rover.desktop", "Rover", program="rover"),
+    entry("org.gnome.Nautilus.desktop", "Files", "File Manager", "nautilus"),
+    entry("org.gnome.FileRoller.desktop", "File Roller", "Archive Manager", "file-roller"),
+    entry("bookworm.desktop", "Bookworm", "eBook Reader", "bookworm"),
+    entry("org.gnome.Maps.desktop", "Maps", program="gnome-maps"),
+    entry("org.kde.showfoto.desktop", "Showfoto", program="showfoto"),
+    entry("us.zoom.Zoom.desktop", "Zoom Workplace", program="zoom"),
+    entry("chatgpt.desktop", "ChatGPT", program="chatgpt"),
+    entry("org.kde.konsole.desktop", "Konsole", "Terminal", "konsole"),
+]
+
+
+@pytest.mark.parametrize("said", ["Start over.", "Open the file.", "Launch the file.",
+                                  "Open the books.", "Open the map.", "Start the show.",
+                                  "Start again.", "Open it up.", "Start work.",
+                                  "Start chat."])
+def test_a_short_sentence_is_never_taken_for_an_app_it_only_starts_like(said):
+    """With an article, or a word sentences are made of, only a name said
+    whole counts: the start of one or a close spelling doesn't."""
+    assert find(parse(said), SENTENCE_MENU, {}).kind == "none"
+
+
+def test_a_sentence_that_says_an_apps_whole_name_still_opens_it():
+    assert ids(find(parse("Open the maps."), SENTENCE_MENU, {})) == ["org.gnome.Maps.desktop"]
+
+
+def test_a_name_said_with_an_article_may_still_sound_like_the_app():
+    """Speech models write "console" for Konsole, and people say "the"."""
+    assert ids(find(parse("Open the console."), SENTENCE_MENU, {})) == [
+        "org.kde.konsole.desktop"]
+
+
+def test_open_takes_the_start_of_a_name_and_start_does_not():
+    """"start" goes with any noun in a sentence ("Start work."); "open" with
+    the start of an app's name is the command ("open chat" for ChatGPT)."""
+    assert ids(find(parse("open chat"), SENTENCE_MENU, {})) == ["chatgpt.desktop"]
+    assert find(parse("start chat"), SENTENCE_MENU, {}).kind == "none"
+
+
+@pytest.mark.parametrize("said, app", [
+    ("open thunder", "org.mozilla.Thunderbird.desktop"),
+    ("open prusa", "PrusaSlicer.desktop"),
+    ("open orca", "OrcaSlicer.desktop"),
+    ("open spot", "spotify.desktop"),
+    ("open git", "github-desktop.desktop"),
+    ("start console", "org.kde.konsole.desktop"),
+    ("start fierfox", "firefox.desktop"),
+])
+def test_a_bare_name_cut_short_or_misheard_opens_its_app(said, app):
+    menu = [entry("org.mozilla.Thunderbird.desktop", "Thunderbird", "Mail Client", "thunderbird"),
+            entry("PrusaSlicer.desktop", "PrusaSlicer", program="prusa-slicer"),
+            entry("OrcaSlicer.desktop", "OrcaSlicer", program="orca-slicer"),
+            entry("spotify.desktop", "Spotify", "Music Player", "spotify"),
+            entry("github-desktop.desktop", "GitHub Desktop", program="github-desktop"),
+            entry("org.kde.konsole.desktop", "Konsole", "Terminal", "konsole"),
+            entry("firefox.desktop", "Firefox", "Web Browser", "firefox")]
+    assert ids(find(parse(said), menu, {})) == [app]
+
+
+def test_a_bare_name_several_apps_start_with_names_them_all():
+    """"open libre" and "open calc" give the note naming the apps, not one of them."""
+    menu = [entry("libreoffice-writer.desktop", "LibreOffice Writer", program="libreoffice"),
+            entry("libreoffice-calc.desktop", "LibreOffice Calc", program="libreoffice"),
+            entry("org.gnome.Calculator.desktop", "Calculator", "Calculator", "gnome-calculator")]
+    assert find(parse("open libre"), menu, {}).kind == "tie"
+    assert ids(find(parse("open calc"), menu, {})) == ["libreoffice-calc.desktop",
+                                                       "org.gnome.Calculator.desktop"]
+
+
 def test_the_name_wins_over_a_program_shared_by_other_apps(apps):
     # Both LibreOffice entries run "libreoffice"; the program name only counts
     # when no app is called that.
