@@ -3,7 +3,7 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [Unreleased]
+## [0.22.0] - 2026-11-07
 
 - The recording indicator now shows in the window you're dictating into, out
   of Labs and on for everyone, including anyone who tried it in Labs and

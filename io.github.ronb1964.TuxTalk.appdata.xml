@@ -95,6 +95,20 @@
   </screenshots>
 
   <releases>
+    <release version="0.22.0" date="2026-11-07">
+      <description>
+        <p>Run your apps, windows, desktop and mouse by voice (TuxTalk Labs)</p>
+        <ul>
+          <li>Open apps, switch, close and snap windows, change tabs and pages, go to an address or search the web by voice</li>
+          <li>Show the desktop, change the volume, play or pause music, lock the screen or take a screenshot by voice</li>
+          <li>Click anything with the mouse grid: say a number or two and "click", with the desktop zoomed in on KDE, GNOME and Cinnamon</li>
+          <li>Left Ctrl+Space as a dictation key, for keyboards whose F-keys need Fn</li>
+          <li>The recording indicator follows the window you dictate into</li>
+          <li>Help redone as cards, with every command in one place</li>
+          <li>Send each dictation automatically no longer presses Enter in a terminal</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.21.0" date="2026-11-04">
       <description>
         <p>Install TuxTalk from its source code, and Esc stops what's left after you let go</p>
