@@ -149,10 +149,12 @@ def entries(obj):
 
 
 def press(obj):
+    # Qt names its action "Press", GTK "click": a match by case alone left
+    # every Qt button unpressed (KWrite's Discard, so KWrite stayed open).
     if obj.get_action_iface() is None:
         return False
     for i in range(obj.get_n_actions()):
-        if obj.get_action_name(i) in PRESS_ACTIONS:
+        if (obj.get_action_name(i) or "").lower() in PRESS_ACTIONS:
             return obj.do_action(i)
     return False
 

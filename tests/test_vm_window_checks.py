@@ -207,3 +207,49 @@ def test_no_change_in_the_editor_is_said_before_any_close(monkeypatch):
     monkeypatch.setattr(actions.time, "sleep", lambda _seconds: None)
     problem = actions._unsaved_change(_Editor(takes_typing=False), "kwrite")
     assert problem.startswith("couldn't make an unsaved change in kwrite")
+
+
+def _guest_ui():
+    """guest/ui.py, which runs inside the VMs, loaded under a name of its own."""
+    import importlib.util
+    import pathlib
+    pytest.importorskip("gi")
+    path = pathlib.Path(__file__).parent / "vm" / "guest" / "ui.py"
+    spec = importlib.util.spec_from_file_location("tt_guest_ui", path)
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except ValueError:          # no Atspi typelib here
+        pytest.skip("AT-SPI isn't installed")
+    return module
+
+
+class _Button:
+    """An AT-SPI button offering *actions*, recording the one done."""
+
+    def __init__(self, *actions):
+        self.actions, self.done = actions, None
+
+    def get_action_iface(self):
+        return self if self.actions else None
+
+    def get_n_actions(self):
+        return len(self.actions)
+
+    def get_action_name(self, i):
+        return self.actions[i]
+
+    def do_action(self, i):
+        self.done = self.actions[i]
+        return True
+
+
+@pytest.mark.parametrize("actions, done", [
+    (("click",), "click"),                 # GTK
+    (("Press", "SetFocus"), "Press"),      # Qt: KWrite's Discard was never pressed
+    (("SetFocus",), None),
+])
+def test_a_button_is_pressed_by_its_toolkits_own_action_name(actions, done):
+    button = _Button(*actions)
+    assert _guest_ui().press(button) is (done is not None)
+    assert button.done == done
