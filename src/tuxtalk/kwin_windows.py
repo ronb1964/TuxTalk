@@ -28,14 +28,18 @@ _ACTIONS = {
 }
 
 
-def build_script(action: str, desktop_file: str, classes, every: bool, reply_to: str) -> str:
+def build_script(action: str, desktop_file: str, classes, every: bool, reply_to: str,
+                 window: str = "") -> str:
     """The KWin script: do *action* ("close", "minimize", "maximize",
     "unmaximize" or "restore"; "find" only looks, touching no window) to the app's
     windows, matched as kwin_activate matches them: the topmost one, or
     every one with *every*. With no
     *desktop_file* and no *classes* it acts on the active window instead,
-    an app's window or its dialog, never the desktop or a panel. It answers
-    to the connection *reply_to* whether it acted on any.
+    an app's window or its dialog, never the desktop or a panel; with
+    *window*, KWin's internalId of the window the command was heard in, on
+    that window, active or not: the focus can move to another while KWin
+    loads the script. It answers to the connection *reply_to* whether it
+    acted on any.
 
     Every value goes in through json.dumps: a menu entry's name comes from
     a file anyone can install. A failure inside the script is told as one
@@ -48,12 +52,18 @@ def build_script(action: str, desktop_file: str, classes, every: bool, reply_to:
     var classes = {json.dumps(sorted(classes))};
     var every = {json.dumps(every)};
     var reply = {json.dumps(reply_to)};
+    var heardIn = {json.dumps(window)};
     var named = desktopFile !== "" || classes.length > 0;
     var targets = [];
     try {{
         var windows = workspace.stackingOrder || [];
         if (!named) {{
             var active = workspace.activeWindow;
+            if (heardIn !== "") {{
+                active = windows.filter(function (w) {{
+                    return String(w.internalId) === heardIn;
+                }})[0];
+            }}
             if (active && (active.normalWindow || active.dialog) && !active.deleted) {{
                 targets.push(active);
             }}
@@ -81,10 +91,16 @@ def build_script(action: str, desktop_file: str, classes, every: bool, reply_to:
 """
 
 
-def act(action: str, desktop_file: str, classes, every: bool, timeout: float) -> bool:
+def act(action: str, desktop_file: str, classes, every: bool, timeout: float,
+        window: str = "") -> bool:
     """Do *action* to the app's windows or the active one (build_script
-    says which). True when KWin acted on a window within *timeout*
-    seconds. Raises when KWin refuses the script or it fails."""
-    return bool(kwin_activate.ask(
-        lambda reply_to: build_script(action, desktop_file, classes, every, reply_to),
-        SCRIPT_PLUGIN_NAME, kwin_activate.script_path("tuxtalk-windows.js"), timeout))
+    says which, and what *window* is). True when KWin acted on a window,
+    False when it found none. Raises when KWin refuses the script or it
+    fails, and TimeoutError when it doesn't answer within *timeout* seconds:
+    the script may have run all the same, so that is never "no window"."""
+    answer = kwin_activate.ask(
+        lambda reply_to: build_script(action, desktop_file, classes, every, reply_to, window),
+        SCRIPT_PLUGIN_NAME, kwin_activate.script_path("tuxtalk-windows.js"), timeout)
+    if answer is None:
+        raise TimeoutError("KWin didn't answer in time")
+    return answer

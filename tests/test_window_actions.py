@@ -63,11 +63,13 @@ def apps(monkeypatch):
 
 @pytest.fixture
 def kwin_calls(monkeypatch):
-    """kwin_windows.act's stand-in: (action, desktop file, classes, every)."""
+    """kwin_windows.act's stand-in: (action, desktop file, classes, every);
+    *window* keeps the window id it was last given."""
     calls = Asked()
 
-    def act(action, desktop_file, classes, every, timeout):
+    def act(action, desktop_file, classes, every, timeout, window=""):
         calls.append((action, desktop_file, frozenset(classes), every))
+        calls.window = window
         return calls.answer
     monkeypatch.setattr(kwin_windows, "act", act)
     return calls
@@ -173,19 +175,32 @@ def test_a_failing_kwin_script_never_says_kde_cant(kde, apps, actions_on, monkey
     assert "maximize" in caplog.text and "script failed: TypeError" in caplog.text
 
 
-@pytest.mark.parametrize("error", [TimeoutError("KWin didn't answer in time"),
-                                   dbus.exceptions.DBusException(
-                                       "Did not receive a reply",
-                                       name="org.freedesktop.DBus.Error.NoReply")])
-def test_a_slow_kwin_is_told_as_one_and_is_logged(kde, apps, actions_on, monkeypatch, caplog,
-                                                  error):
-    def slow(*_args):
-        raise error
-    monkeypatch.setattr(kwin_windows, "act", slow)
+def test_a_kwin_script_that_doesnt_answer_in_time_is_told_as_a_slow_desktop(
+        kde, apps, actions_on, fake_kwin, monkeypatch, caplog):
+    """Never "Firefox has no open window": the script may be closing it."""
+    fake_kwin.silent = True
+    monkeypatch.setattr(window_actions, "TIMEOUT_S", 0.05)
     with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert window_actions.run(close("firefox"), CHAT_WINDOW, False) is False
         assert window_actions.run(close(), CHAT_WINDOW, False) is False
+    assert actions_on == ["The desktop didn't answer"] * 2
+    assert "Voice command close not done: KWin didn't answer in time" in caplog.text
+
+
+def test_a_kwin_call_that_times_out_is_told_as_a_slow_desktop(kde, apps, actions_on, monkeypatch):
+    def slow(*_args):
+        raise dbus.exceptions.DBusException("Did not receive a reply",
+                                            name="org.freedesktop.DBus.Error.NoReply")
+    monkeypatch.setattr(kwin_windows, "act", slow)
+    assert window_actions.run(close(), CHAT_WINDOW, False) is False
     assert actions_on == ["The desktop didn't answer"]
-    assert "Voice command close not done" in caplog.text
+
+
+def test_close_window_on_kde_names_the_window_it_was_heard_in(kde, apps, kwin_calls, chat):
+    assert window_actions.run(close(), CHAT_WINDOW, False) is True
+    assert kwin_calls.window == "{5c1d0e2a}"
+    window_actions.run(close("firefox"), CHAT_WINDOW, False)
+    assert kwin_calls.window == ""
 
 
 def test_a_slow_gnome_shell_is_told_as_one(gnome, apps, actions_on, monkeypatch):
@@ -460,7 +475,7 @@ def open_windows(monkeypatch):
     action asked for, the "find" that only looks left out."""
     state = types.SimpleNamespace(open=set(), done=[])
 
-    def act(action, desktop_file, classes, every, timeout):
+    def act(action, desktop_file, classes, every, timeout, window=""):
         if action != "find":
             state.done.append((action, desktop_file))
         return desktop_file in state.open

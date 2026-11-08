@@ -122,7 +122,7 @@ def _act(request: WindowRequest, entry, exact: bool, where, beeps_on: bool) -> b
             # Never starts the app: "switch to" one that isn't open gets a note.
             acted = app_focus.bring_forward(entry, TIMEOUT_S, exact)
         else:
-            acted = _ask_desktop(request, entry, exact)
+            acted = _ask_desktop(request, entry, exact, where)
     except Exception as e:      # each desktop fails its own way
         logger.info(f"Voice command {request.action} not done: {e}")
         command_notices.say(refusal(_cant(request.action), e), beeps_on)
@@ -146,10 +146,12 @@ def _say_nothing_to_act_on(action: str, entry, beeps_on: bool) -> None:
         command_notices.say("no_window", beeps_on, app=entry.name)
 
 
-def _ask_desktop(request: WindowRequest, entry, exact: bool):
+def _ask_desktop(request: WindowRequest, entry, exact: bool, where=None):
     """This desktop's answer: whether it acted on a window, or None where
     nothing can be asked. False, with nobody asked, for an app with no
-    identity: sent on, it would mean the focused window."""
+    identity: sent on, it would mean the focused window. *where*, the look
+    the command was heard in, binds "close window" to that window on KDE,
+    where the tray knows it by KWin's own id."""
     action, every = request.action, request.every
     desktop_file = app_focus.desktop_file(entry) if entry else ""
     names = app_focus.window_names(entry, exact) if entry else frozenset()
@@ -158,7 +160,8 @@ def _ask_desktop(request: WindowRequest, entry, exact: bool):
         return False
     desktop = desktop_detect.get_desktop_environment()
     if desktop == "kde":
-        return kwin_windows.act(action, desktop_file, names, every, TIMEOUT_S)
+        return kwin_windows.act(action, desktop_file, names, every, TIMEOUT_S,
+                                _kwin_window(where) if entry is None else "")
     if desktop == "gnome":
         app_id = entry.app_id if entry else ""
         return bool(app_focus.call_extension("WindowAction", "ssb", (action, app_id, every),
@@ -166,6 +169,13 @@ def _ask_desktop(request: WindowRequest, entry, exact: bool):
     if desktop_detect.is_x11_session(os.environ):
         return x11_windows.act(action, desktop_file, names, every)
     return None
+
+
+def _kwin_window(where) -> str:
+    """KWin's internalId of the window in the look *where*, "" when the
+    tray didn't tell it."""
+    window = where[1] if where else None
+    return window[1] if window and window[0] == "tray" and window[1] else ""
 
 
 def refusal(cant: str, error: Exception) -> str:

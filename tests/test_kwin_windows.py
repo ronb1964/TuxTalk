@@ -40,6 +40,29 @@ def test_kde_close_window_closes_the_active_one(kde, fake_kwin):
     assert fake_kwin.closed == [True, False]
 
 
+def test_kde_close_window_closes_the_window_it_was_heard_in_after_a_focus_change(kde, fake_kwin):
+    """The focus moved to Firefox while KWin loaded the script: Konsole,
+    where "close window" was said, is closed, and Firefox is left alone."""
+    fake_kwin.windows = [KONSOLE, FIREFOX]
+    fake_kwin.active = 1
+    assert kwin_windows.act("close", "", set(), False, 1.0, window="{k}") is True
+    assert fake_kwin.closed == [True, False]
+
+
+def test_kde_close_window_heard_in_a_window_since_closed_closes_nothing(kde, fake_kwin):
+    fake_kwin.windows = [KONSOLE, FIREFOX]
+    fake_kwin.active = 1
+    assert kwin_windows.act("close", "", set(), False, 1.0, window="{gone}") is False
+    assert fake_kwin.closed == [False, False]
+
+
+def test_a_kwin_that_doesnt_answer_in_time_is_never_told_as_no_window(kde, fake_kwin):
+    fake_kwin.windows = [FIREFOX]
+    fake_kwin.silent = True
+    with pytest.raises(TimeoutError):
+        kwin_windows.act("close", "firefox", {"firefox"}, False, 0.05)
+
+
 def test_kde_close_window_closes_a_focused_dialog(kde, fake_kwin):
     """A "Save changes?" question is the window the user is in."""
     fake_kwin.windows = [KONSOLE, 'Object.assign(makeWindow("org.kde.kwrite", "{d}", 0, 0, 9, 9),'
