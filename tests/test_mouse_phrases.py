@@ -26,6 +26,7 @@ def test_a_request_heard_with_a_grid_says_so():
 def test_the_grid_opens_from_any_state(grid):
     assert parse("Mouse grid.", grid) == MouseRequest("grid")
     assert parse("Show grid", grid) == MouseRequest("grid")
+    assert parse("Mouse grip.", grid) == MouseRequest("grid")      # as Parakeet heard it
 
 
 @pytest.mark.parametrize("said, number", [

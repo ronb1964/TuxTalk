@@ -26,7 +26,9 @@ class MouseRequest:
     direction: str | None = None   # a nudge's "left", "right", "up" or "down"
 
 
-_GRID = frozenset({"mouse grid", "show grid", "show mouse grid"})
+# "mouse grip" is how Parakeet sometimes writes "mouse grid"; said alone it
+# can't mean anything else.
+_GRID = frozenset({"mouse grid", "show grid", "show mouse grid", "mouse grip"})
 _CANCEL = frozenset({"cancel", "close grid", "hide grid"})
 # A click word to its action; "click" alone is a word in chat, so it needs a grid.
 _CLICKS = {"left click": "click", "right click": "right click",
