@@ -1022,3 +1022,39 @@ def test_a_real_click_as_soon_as_the_grid_shows_closes_it(rig, monkeypatch):
     monkeypatch.setattr(FakeWindows, "pointer_since", click_then_look)
     assert act("grid") is False
     assert not mouse_grid.showing() and not rig.windows[0].showing
+
+
+def _esc_while_it_waits_for_the_pointer(monkeypatch):
+    """Esc (or a real click) while the grid waits to see the pointer land,
+    with the pointer off every grid window, so a move a pixel aside comes
+    next; returns how many pointer events had gone out at the close."""
+    closed_at = []
+    real_pointer_since = FakeWindows.pointer_since
+
+    def esc_then_look(self, after):
+        if self.showing and not closed_at:
+            closed_at.append(len(self.rig.pointer.events))
+            mouse_grid.close("Esc")
+        return real_pointer_since(self, after)
+    monkeypatch.setattr(FakeWindows, "pointer_since", esc_then_look)
+    return closed_at
+
+
+def test_esc_while_the_grid_measures_the_pointer_leaves_it_alone(rig, monkeypatch, caplog):
+    rig.visible = False
+    closed_at = _esc_while_it_waits_for_the_pointer(monkeypatch)
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert act("grid") is False
+    assert len(rig.pointer.events) == closed_at[0]
+    assert rig.notes == [] and "never showed up" not in caplog.text
+
+
+def test_esc_while_a_click_checks_the_landing_leaves_the_pointer_alone(rig, monkeypatch,
+                                                                       caplog):
+    act("grid")
+    rig.visible = False
+    closed_at = _esc_while_it_waits_for_the_pointer(monkeypatch)
+    with caplog.at_level(logging.INFO, logger="tuxtalk"):
+        assert act("click", 5) is False
+    assert len(rig.pointer.events) == closed_at[0] and rig.buttons() == []
+    assert rig.notes == [] and "not clicked" not in caplog.text
