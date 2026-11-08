@@ -246,6 +246,9 @@ def _required_step(title, explain, status, action, details, button_label, toolti
     status_label = Gtk.Label()
     status_label.set_markup(status)
     status_label.set_halign(Gtk.Align.START)
+    status_label.set_xalign(0)
+    status_label.set_line_wrap(True)
+    status_label.set_max_width_chars(60)
     status_label.set_margin_start(15)
     status_label.set_margin_top(8)
     box.pack_start(status_label, False, False, 0)
@@ -262,6 +265,11 @@ def _required_step(title, explain, status, action, details, button_label, toolti
         label = Gtk.Label()
         label.set_markup(detail)
         label.set_halign(Gtk.Align.START)
+        label.set_xalign(0)
+        # Wrapped: the hotkey helper's line runs to 240 characters, and one
+        # line that long made the window wider than a 1280-pixel screen.
+        label.set_line_wrap(True)
+        label.set_max_width_chars(60)
         label.set_opacity(0.9)
         details_box.pack_start(label, False, False, 0)
     box.pack_start(details_box, False, False, 0)

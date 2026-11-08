@@ -334,3 +334,16 @@ def test_first_run_offers_an_update_for_a_helper_too_old_for_the_keyboard(
         shown = " ".join(tree_text(d.dialog))
         assert "Hotkey Helper Update Required" in shown and "can only be read" in shown
         assert d.fix_typing_button.get_label() == "🔧 Update Helper"
+
+
+def test_a_setup_step_with_a_long_line_fits_a_small_screen():
+    """The hotkey helper's 240-character line made the welcome window 1567
+    pixels wide, its close button off a 1280-pixel screen."""
+    long_line = "x " * 130
+    step = wd._required_step("Typing Setup", "Why", long_line, "Fix Typing",
+                             [long_line], "Fix Typing", "tip", lambda *_: None)
+    window = Gtk.OffscreenWindow()
+    window.add(step.box)
+    window.show_all()
+    assert step.box.get_preferred_width().natural_width < 800
+    window.destroy()
