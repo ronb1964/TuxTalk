@@ -84,7 +84,8 @@ before 0.15.0, so older entries use that name.
   say it, let go, and nothing is typed:
   "close Firefox", "close all Firefox", "close window", "switch to Firefox",
   "minimize window", "maximize window" and "restore window"; "new tab", "close
-  tab", "next tab", "previous tab", "reopen tab", "go back", "go forward",
+  tab", "next tab", "previous tab", "reopen tab", "go back a page", "go
+  forward a page",
   "reload the page", "scroll down" (or "scroll down 5", which scrolls what is
   under the mouse pointer), "page up", "go to the top", "find on page", "save
   the file", "select all", "copy the selection", "paste it" and "press
@@ -92,7 +93,8 @@ before 0.15.0, so older entries use that name.
   your default browser; and "web search cheap tires", which uses your
   browser's own search engine, always in a new tab, so the page you were
   on stays as it was. In a terminal the keys are the terminal's
-  own, and select all, save, find on page, reopen tab, go back, go forward
+  own, and select all, save, find on page, reopen tab, go back a page, go
+  forward a page
   and reload the page don't apply there.
   "literal" before any of them types the words. "close Firefox" closes the
   Firefox window you used last, and one word of an open app's name is

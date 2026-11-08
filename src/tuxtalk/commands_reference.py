@@ -253,7 +253,7 @@ SECTIONS = (
     Section("Tabs and Pages", KEYS, labs=LABS_ACTIONS, commands=(
         Command(("new tab", "close tab", "next tab", "previous tab", "reopen tab"),
                 "in a browser or any app with tabs", "action"),
-        Command(("go back", "go forward", "reload the page", "refresh the page"),
+        Command(("go back a page", "go forward a page", "reload the page", "refresh the page"),
                 "back, forward, reload", "action"),
         Command(("page up", "page down", "go to the top", "go to the bottom"),
                 "a screen at a time, or all the way", "action"),

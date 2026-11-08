@@ -439,7 +439,7 @@ class AdvancedTab(Tab):
             "  \u201crestore window\u201d\n"
             "\u2022 \u201cnew tab\u201d, \u201cclose tab\u201d, \u201cnext tab\u201d, "
             "\u201cprevious tab\u201d,\n"
-            "  \u201creopen tab\u201d, \u201cgo back\u201d, \u201cgo forward\u201d, "
+            "  \u201creopen tab\u201d, \u201cgo back a page\u201d, \u201cgo forward a page\u201d, "
             "\u201creload the page\u201d,\n"
             "  \u201cscroll up\u201d, \u201cscroll down\u201d (add a number for more),\n"
             "  \u201cpage up\u201d, \u201cpage down\u201d, \u201cgo to the top\u201d, "

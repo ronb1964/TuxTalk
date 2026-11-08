@@ -82,7 +82,8 @@ class SearchRequest:
 
 
 # A word like "copy", "paste" or "save" alone is an answer in a chat, so each key
-# phrase needs a noun and the bare word is typed ("copy that" means "understood").
+# phrase needs a noun and the bare word is typed ("copy that" means "understood");
+# "Go back." is an answer too, so the page commands say "a page".
 KEY_PHRASES = {
     **dict.fromkeys(("new tab", "open new tab", "open a new tab"), "new tab"),
     **dict.fromkeys(("close tab", "close the tab", "close this tab"), "close tab"),
@@ -90,8 +91,8 @@ KEY_PHRASES = {
     "previous tab": "previous tab",
     **dict.fromkeys(("reopen tab", "reopen the tab", "reopen closed tab",
                      "reopen the closed tab"), "reopen tab"),
-    "go back": "go back",
-    "go forward": "go forward",
+    **dict.fromkeys(("go back a page", "go back one page"), "go back"),
+    **dict.fromkeys(("go forward a page", "go forward one page"), "go forward"),
     **dict.fromkeys(("reload the page", "refresh the page", "reload page",
                      "refresh page"), "reload"),
     "page up": "page up",

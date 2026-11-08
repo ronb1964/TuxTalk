@@ -1,6 +1,6 @@
 """Voice commands for windows, keys and addresses (TuxTalk Labs, the one
 "Open apps" tickbox): "close the text editor", "switch to ...", "minimize
-window", "new tab", "go back", "go to example dot com", "web search cheap
+window", "new tab", "go back a page", "go to example dot com", "web search cheap
 tires" and "scroll down". These need a real desktop: only it has a window
 that asks to save, a title bar to minimize, a browser with an address bar.
 
@@ -58,7 +58,7 @@ user_pref("browser.navigation.requireUserInteraction", false);
 """
 # Firefox's address bar: a "combo box" in newer versions, an "entry" before.
 ADDRESS_BAR = "combo box|entry"
-# Page one sends the tab on to page two once, so that "go back" has somewhere
+# Page one sends the tab on to page two once, so that "go back a page" has somewhere
 # to go and does not bounce forward again. Firefox leaves a page nobody
 # clicked or typed in out of the back button's history unless
 # browser.navigation.requireUserInteraction is off (FIREFOX_PREFS), and
@@ -513,7 +513,7 @@ def _no_firefox(run):
     return None
 
 
-@check(SECTION, "firefox_go_back", "“go back” goes to the page before")
+@check(SECTION, "firefox_go_back", "“go back a page” goes to the page before")
 def firefox_go_back(run):
     if skip := _no_firefox(run):
         return skip
@@ -524,7 +524,7 @@ def firefox_go_back(run):
             return Outcome("skip", "Firefox never got to the second test page")
         if not _until(5, firefox.can_go_back):
             return Outcome("fail", "the test made no history: Firefox's Back button is "
-                           "disabled on the second page, so “go back” can't be judged",
+                           "disabled on the second page, so “go back a page” can't be judged",
                            screenshot=run.shot("go-back"))
         run.vm.click_centre()
         _typed, _heard, mark = run.say("go_back", wait=False)
@@ -533,9 +533,9 @@ def firefox_go_back(run):
         back = firefox.title("TT Page One", 10)
         shot = run.shot("go-back")
         if back is None:
-            return Outcome("fail", "the window never showed “TT Page One” after “go back”",
+            return Outcome("fail", "the window never showed “TT Page One” after “go back a page”",
                            screenshot=shot)
-        return Outcome("pass", "“go back” showed the first page again", screenshot=shot)
+        return Outcome("pass", "“go back a page” showed the first page again", screenshot=shot)
 
 
 @check(SECTION, "firefox_new_tab", "“new tab” opens a tab")
@@ -741,6 +741,7 @@ SENTENCES = (("sentence_new_tab", "I opened a new tab yesterday.", True),
              ("sentence_go_to", "Go to the store.", True),
              ("sentence_search", "Search for cheap tires.", True),
              ("sentence_copy", "Copy that.", True),
+             ("sentence_go_back", "Go back.", True),
              ("sentence_close_door", "Close the door.", True),
              ("sentence_switch_decaf", "Switch to decaf.", True),
              # Only the words are pinned: how the marks are spaced is spoken_quotes' own test.

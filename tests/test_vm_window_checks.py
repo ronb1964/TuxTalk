@@ -107,6 +107,19 @@ def test_the_window_phrases_are_window_commands(phrase, action):
     assert request.action == action
 
 
+def test_the_go_back_phrase_is_the_command_and_the_sentence_is_typed():
+    """The VM says "Go back a page." for the command, and "Go back." among
+    the sentences that must be typed."""
+    from tuxtalk import command_phrases
+    phrases = voices.load_phrases()
+    command = command_phrases.parse(phrases["go_back"]["say"], navigation=True, actions=True)
+    assert command == command_phrases.KeyRequest("go back")
+    sentences = {phrase for phrase, _expected, _exact in actions.SENTENCES}
+    assert "sentence_go_back" in sentences
+    assert command_phrases.parse(phrases["sentence_go_back"]["say"], navigation=True,
+                                 actions=True) is None
+
+
 class _KdeAfterMinimize:
     """A stand-in KDE Wayland VM after "minimize the window": the test
     window still says it's shown and focused, as it does there, and KWin's

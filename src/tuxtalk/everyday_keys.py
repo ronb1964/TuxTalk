@@ -1,4 +1,4 @@
-"""Everyday keys by voice (TuxTalk Labs): "new tab", "go back", "reload",
+"""Everyday keys by voice (TuxTalk Labs): "new tab", "go back a page", "reload",
 "scroll down 3", "copy". The keys differ in a terminal, where Ctrl+C stops the
 running program and Ctrl+Shift+C copies, so the focused window's class picks
 the set, and the keys go only into the window the command was checked against."""

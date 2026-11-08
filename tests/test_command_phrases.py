@@ -44,9 +44,17 @@ def test_key_phrases_with_a_noun(said, name):
     assert P(said) == KeyRequest(name)
 
 @pytest.mark.parametrize("said", ["Copy.", "Paste.", "Save.", "Find.", "Reload.", "Refresh.",
-                                  "Escape.", "copy that", "Copy that."])
+                                  "Escape.", "copy that", "Copy that.", "Go back.",
+                                  "Go forward.", "go back"])
 def test_bare_key_words_are_dictation(said):
     assert P(said) is None
+
+@pytest.mark.parametrize("said, name", [("Go back a page.", "go back"),
+                                        ("go back one page", "go back"),
+                                        ("Go forward a page.", "go forward")])
+def test_the_page_commands_say_a_page(said, name):
+    """"Go back." alone answers a question in a chat: the page needs saying."""
+    assert P(said) == KeyRequest(name)
 
 def test_scroll_counts():
     assert P("scroll down") == KeyRequest("scroll down")
@@ -111,8 +119,9 @@ def test_open_still_opens():
     assert P("open Firefox") == OpenRequest("firefox")
     assert P("open youtube.com") == AddressRequest("https://youtube.com")
 
-EVERY_COMMAND = ["new tab", "close tab", "next tab", "previous tab", "reopen tab", "go back",
-    "go forward", "reload the page", "refresh page", "scroll down", "page up", "page down",
+EVERY_COMMAND = ["new tab", "close tab", "next tab", "previous tab", "reopen tab",
+    "go back a page", "go forward a page", "reload the page", "refresh page", "scroll down",
+    "page up", "page down",
     "find on page", "save the file", "copy the selection", "paste it", "press escape",
     "close Firefox", "close all Firefox",
     "close window",

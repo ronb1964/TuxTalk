@@ -608,7 +608,8 @@ this list.
 Hold <b>{hold}</b>, say <b>new tab</b>, let go. The key is pressed in the window you're in.
   • Tabs: <b>new tab</b>, <b>close tab</b>, <b>next tab</b>, <b>previous tab</b>,
     <b>reopen tab</b>
-  • Pages: <b>go back</b>, <b>go forward</b>, <b>reload the page</b> (or <b>refresh the page</b>),
+  • Pages: <b>go back a page</b>, <b>go forward a page</b>, <b>reload the page</b> (or
+    <b>refresh the page</b>),
     <b>page down</b>, <b>page up</b>, <b>go to the top</b>, <b>go to the bottom</b>
   • Scrolling: <b>scroll down</b>, <b>scroll up</b>; add a number to scroll more:
     <b>scroll down 5</b>. It scrolls what's under the mouse pointer, like your own wheel.
@@ -646,8 +647,8 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
     as answers in chats.
   • Closing asks to save unsaved work, just like clicking the X.
   • Apps open in a terminal too. The keys are the terminal's own there, so <b>select all</b>,
-    <b>save the file</b>, <b>find on page</b>, <b>reopen tab</b>, <b>go back</b>,
-    <b>go forward</b> and <b>reload the page</b> don't apply in a terminal. On GNOME
+    <b>save the file</b>, <b>find on page</b>, <b>reopen tab</b>, <b>go back a page</b>,
+    <b>go forward a page</b> and <b>reload the page</b> don't apply in a terminal. On GNOME
     without the TuxTalk extension, TuxTalk can't tell a terminal, so those and copy, paste
     and the tab keys aren't pressed.
   • <b>go to</b> needs a real web address, like youtube.com. Only <b>web search</b> searches.
