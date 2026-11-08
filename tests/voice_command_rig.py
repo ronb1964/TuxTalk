@@ -1,6 +1,7 @@
-"""Voice commands through the real dictation pipeline, shared by
-test_voice_actions.py and test_window_actions.py: the setting on, and a
-whole dictation said. Registered as a plugin in conftest.py."""
+"""Voice commands through the real dictation pipeline, shared by the voice
+command tests (windows, desktops, sound, music, screenshots, the lock, web
+commands, the mouse grid): the setting on, and a whole dictation said.
+Registered as a plugin in conftest.py."""
 import pytest
 
 from tuxtalk import notify, screen_message
