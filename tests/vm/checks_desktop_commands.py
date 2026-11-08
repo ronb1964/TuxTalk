@@ -946,10 +946,14 @@ def music_commands(run):
 
 
 def _session_id(run):
-    """This login session's id: the one the desktop's own programs run in."""
+    """This login session's id: the one the desktop's own programs run in.
+    GNOME 46's shell runs as a systemd service without XDG_SESSION_ID, so
+    logind's graphical session of the user is asked for. Never the first
+    row of list-sessions: it sorts the ids as text, so the ssh session the
+    command runs in ("17") can come before the desktop's ("4"), and its
+    LockedHint is never "yes"."""
     sid = _session_tool(run, "printenv", "XDG_SESSION_ID").strip()
-    return sid or run.vm.ssh("loginctl list-sessions --no-legend | "
-                             "awk -v u=$(id -un) '$3==u{print $1; exit}'",
+    return sid or run.vm.ssh("loginctl show-user $(id -un) -p Display --value",
                              check=False).stdout.strip()
 
 

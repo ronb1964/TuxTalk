@@ -93,8 +93,10 @@ def set_up_vm(vm, appimage):
     vm.put(tone, f"{REMOTE}/tone.wav")
     vm.ssh(f"~/{REMOTE}/vmic.sh")
     os_name = vm.ssh(". /etc/os-release; echo $PRETTY_NAME", check=False).stdout.strip()
+    # The user's graphical session, not list-sessions' first row: that can
+    # be this ssh login's own ("tty"), since the ids sort as text.
     session = vm.ssh("loginctl show-session -p Type --value "
-                     "$(loginctl list-sessions --no-legend | awk '$3==\"ron\"{print $1; exit}')",
+                     "$(loginctl show-user $(id -un) -p Display --value)",
                      check=False).stdout.strip()
     return {"key": vm.spec.key, "label": vm.spec.domain, "os": os_name,
             "desktop": f"{vm.spec.tags[0]} on {session or 'unknown session'}", "gallery": []}
