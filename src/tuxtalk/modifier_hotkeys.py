@@ -168,6 +168,15 @@ def _hidden_now():
     return codes if all(getattr(k, "hidden", True) for k in keyboards) else frozenset()
 
 
+def hidden_till_pressed_again(code) -> bool:
+    """Whether a grab TuxTalk holds itself (the input group) hides *code*.
+    The desktop then takes it to be up until it's pressed again, even after
+    the grab lets go. The hotkey helper presses a hidden Left Ctrl that's
+    still held again when it gives the keyboard back (its press_again)."""
+    _codes, keyboards = _hidden
+    return code in _hidden_now() and not any(hasattr(k, "held_now") for k in keyboards)
+
+
 def note_released(code) -> None:
     """The hotkey loop read *code* come up. A key typing had found stuck
     isn't any more: the next typing waits for it again rather than giving

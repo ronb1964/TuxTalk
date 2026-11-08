@@ -270,7 +270,7 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
     shift = _held_shift(held_modifiers) if live.voice_editing else set()
     pair = ctrl_space.held_with(hold_key)
     keyboard_grab.grab_keyboards_hiding(devices, {hold_key, *pair, *shift})
-    if pair:
+    if pair and modifier_hotkeys.hidden_till_pressed_again(ctrl_space.MODIFIER):
         _ctrl_space.modifier_hidden()
     rec = recording.start_recording(cfg.beeps, cfg.notify, input_device_idx,
                                     edit_mode=bool(shift), held_send=held)

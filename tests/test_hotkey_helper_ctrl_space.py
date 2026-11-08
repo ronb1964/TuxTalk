@@ -1,14 +1,18 @@
-"""Left Ctrl+Space as a dictation key (hotkey helper 1.14): Space is reported
-while Left Ctrl is held, and Left Ctrl's own press and release to the client
-that watches that pair. No other key is ever reported under Left Ctrl, and
-Space never on its own.
+"""Left Ctrl+Space as a dictation key (hotkey helper 1.14, and 1.15 for a
+Left Ctrl kept down after a hold): Space is reported while Left Ctrl is
+held, and Left Ctrl's own press and release to the client that watches that
+pair. No other key is ever reported under Left Ctrl, and Space never on its
+own.
 
 Keyboards are pipes, as in test_hotkey_helper.py (hotkey_helper_fakes).
 """
+import time
+
 import pytest
 
 from hotkey_helper_fakes import FakeKeyboard, ready_client
 from tuxtalk import hotkey_helper as hh
+from tuxtalk import secure_input
 
 SPACE, LCTRL, RCTRL, LALT, LSHIFT, A = 57, 29, 97, 56, 42, 30
 WITH_PAIR = "66 67 1 CA:25 L:57"
@@ -50,8 +54,11 @@ def test_left_ctrl_unlocks_space_and_nothing_else(spec):
         hh.parse_spec(spec)
 
 
-def test_the_helper_says_it_is_1_14():
-    assert hh.VERSION == "1.14"
+def test_the_helper_reports_every_key_tuxtalk_offers():
+    """A key needing a newer helper than the one TuxTalk brings could never work."""
+    newest = secure_input._version(hh.VERSION)
+    assert all(secure_input._version(since) <= newest
+               for since in secure_input.KEYS_SINCE.values())
 
 
 # --- what is reported -----------------------------------------------------------------
@@ -326,3 +333,124 @@ def test_a_hide_naming_left_ctrl_twice_lets_it_up_once(setup):
     assert heard(sock) == ["OK HIDE"]
     assert kb.calls.count(("inject", LCTRL, 0)) == 1
     assert kb.calls.count(("inject", LCTRL, 1)) == 1
+
+
+# --- Left Ctrl kept down after a hold -------------------------------------------------
+
+def _hold_the_pair(kb, connect, say, heard):
+    """Hold Left Ctrl, then Space, as a hold dictation hidden from the
+    desktop; the client's socket, with what the keyboard was asked forgotten."""
+    kb.monotonic = True         # its events carry the kernel's time (was_injected)
+    sock = _ready(connect, say, heard)
+    kb.press(LCTRL)
+    kb.press(SPACE)
+    heard(sock)
+    say(sock, "HIDE 57 29")
+    assert heard(sock) == ["OK HIDE"]
+    kb.calls.clear()
+    return sock
+
+
+def test_a_left_ctrl_still_held_after_the_hold_is_pressed_again(setup):
+    """Space let go first, Ctrl kept down: the hide told the desktop Ctrl
+    went up, so without pressing it again Ctrl+Z typed "z"."""
+    helper, kb, connect, say, heard, _seat = setup
+    sock = _hold_the_pair(kb, connect, say, heard)
+    kb.press(SPACE, 0)
+    say(sock, "UNHIDE")
+    assert heard(sock) == ["UP 57", "OK UNHIDE"]
+    assert kb.calls == [("grab", False), ("inject", LCTRL, 0), ("inject", LCTRL, 1)]
+    assert LCTRL in kb.kernel and helper.injected == []
+    kb.press(LCTRL, 0)                  # and its release is the user's
+    assert heard(sock) == ["UP 29"]
+
+
+def test_the_same_left_ctrl_starts_the_next_left_ctrl_space(setup):
+    _helper, kb, connect, say, heard, _seat = setup
+    sock = _hold_the_pair(kb, connect, say, heard)
+    kb.press(SPACE, 0)
+    say(sock, "UNHIDE")
+    heard(sock)
+    kb.press(SPACE)
+    assert heard(sock) == ["DOWN 57 29"]
+    say(sock, "HIDE 57 29")
+    assert heard(sock) == ["OK HIDE"]
+
+
+def test_a_left_ctrl_let_go_during_the_hold_isnt_pressed_again(setup):
+    _helper, kb, connect, say, heard, _seat = setup
+    sock = _hold_the_pair(kb, connect, say, heard)
+    kb.press(LCTRL, 0)
+    kb.press(SPACE, 0)
+    say(sock, "UNHIDE")
+    assert heard(sock) == ["UP 29", "UP 57", "OK UNHIDE"]
+    assert ("inject", LCTRL, 1) not in kb.calls and LCTRL not in kb.kernel
+
+
+def test_a_left_ctrl_let_go_as_it_is_pressed_again_is_put_back_up(setup):
+    """It comes up after the helper looked and before its "up", which the
+    kernel then drops: the "down" after it would leave Ctrl held for the
+    desktop, every key after it a Ctrl shortcut."""
+    helper, kb, connect, say, heard, _seat = setup
+    sock = _hold_the_pair(kb, connect, say, heard)
+    real_kernel_down = kb.kernel_down
+
+    def releasing_kernel_down():
+        down = real_kernel_down()
+        kb.kernel_down = real_kernel_down
+        kb.press(LCTRL, 0)              # the user lets go right now
+        time.sleep(0.001)               # the kernel stamps it before the helper's events
+        return down
+    kb.kernel_down = releasing_kernel_down
+    kb.press(SPACE, 0)
+    assert heard(sock) == ["UP 57", "UP 29"]
+    assert LCTRL not in kb.kernel and kb.calls[-1] == ("inject", LCTRL, 0)
+    assert helper.injected == []
+
+
+def test_without_the_kernels_times_left_ctrl_isnt_pressed_again(setup):
+    """A release can't be told from the helper's own "up" then."""
+    _helper, kb, connect, say, heard, _seat = setup
+    sock = _hold_the_pair(kb, connect, say, heard)
+    kb.monotonic = False
+    kb.press(SPACE, 0)
+    say(sock, "UNHIDE")
+    assert kb.calls == [("grab", False)]
+
+
+def test_left_ctrl_is_pressed_again_when_tuxtalk_goes_away_mid_hold(setup):
+    helper, kb, connect, say, heard, _seat = setup
+    sock = _hold_the_pair(kb, connect, say, heard)
+    sock.close()
+    for _ in range(4):
+        helper.run_once(timeout=0)
+    assert helper.hide is None and helper.clients == {}
+    assert kb.calls == [("grab", False), ("inject", LCTRL, 0), ("inject", LCTRL, 1)]
+
+
+def test_a_left_ctrl_that_cant_be_pressed_again_is_left_up(setup, monkeypatch):
+    """The desktop then takes it to be up, as before 1.15: Space under it
+    types a space there, so it isn't the pair either."""
+    _helper, kb, connect, say, heard, _seat = setup
+    sock = _hold_the_pair(kb, connect, say, heard)
+    monkeypatch.setattr(kb, "inject", lambda code, *values: False)
+    kb.press(SPACE, 0)
+    say(sock, "UNHIDE")
+    assert heard(sock) == ["UP 57", "OK UNHIDE"]
+    kb.press(SPACE)
+    assert heard(sock) == []
+
+
+def test_a_shift_held_for_a_voice_edit_isnt_pressed_again(setup):
+    """TuxTalk's Ctrl+C after a voice edit would be Ctrl+Shift+C."""
+    _helper, kb, connect, say, heard, _seat = setup
+    kb.monotonic = True
+    sock = _ready(connect, say, heard, "66")
+    kb.press(LSHIFT)
+    kb.press(66)
+    assert heard(sock) == ["DOWN 66 42"]
+    say(sock, "HIDE 66 42")
+    assert heard(sock) == ["OK HIDE"]
+    kb.press(66, 0)
+    say(sock, "UNHIDE")
+    assert ("inject", LSHIFT, 1) not in kb.calls[kb.calls.index(("grab", False)):]

@@ -61,11 +61,12 @@ class FakeKeyboard(hh.Keyboard):
         self.grabbed = on
         return True
 
-    def inject(self, code, value):
-        self.calls.append(("inject", code, value))
-        if (value == 1) != (code in self.kernel):
-            (self.kernel.add if value == 1 else self.kernel.discard)(code)
-            self._event(code, value)
+    def inject(self, code, *values):
+        for value in values:
+            self.calls.append(("inject", code, value))
+            if (value == 1) != (code in self.kernel):
+                (self.kernel.add if value == 1 else self.kernel.discard)(code)
+                self._event(code, value)
         return True
 
 

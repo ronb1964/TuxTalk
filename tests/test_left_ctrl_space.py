@@ -132,10 +132,10 @@ def test_shift_with_the_pair_is_a_voice_edit_when_voice_editing_is_on(service, s
 
 
 def test_after_a_hold_space_again_needs_left_ctrl_pressed_again(service, svc):
-    """The hold told the desktop Left Ctrl went up, so a Space pressed again
-    under it reaches the app as a space, and the hotkey helper doesn't
-    report it: it mustn't start a dictation as well. Left Ctrl pressed
-    again is the pair again."""
+    """TuxTalk's own grab (the input group) told the desktop Left Ctrl went
+    up, so a Space pressed again under it reaches the app as a space: it
+    mustn't start a dictation as well. Left Ctrl pressed again is the pair
+    again."""
     held = set()
     for code, value in ((LCTRL, 1), (SPACE, 1), (SPACE, 0), (SPACE, 1), (SPACE, 0)):
         ev(code, value, held, svc)
@@ -143,6 +143,20 @@ def test_after_a_hold_space_again_needs_left_ctrl_pressed_again(service, svc):
     for code, value in ((LCTRL, 0), (LCTRL, 1), (SPACE, 1)):
         ev(code, value, held, svc)
     assert service[-2:] == ["grab", "start"]
+
+
+def test_a_left_ctrl_the_grab_left_to_the_desktop_makes_the_pair_again(service, svc,
+                                                                       monkeypatch):
+    """Held on a keyboard that's a mouse too, which no grab takes, the
+    desktop saw Left Ctrl down all along: Space again under it is the pair."""
+    def grab_shows_ctrl(devices, codes):
+        service.append("grab")
+        modifier_hotkeys.note_hidden(set(codes) - {LCTRL})
+    monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", grab_shows_ctrl)
+    held = set()
+    for code, value in ((LCTRL, 1), (SPACE, 1), (SPACE, 0), (SPACE, 1)):
+        ev(code, value, held, svc)
+    assert service == ["grab", "start", "let go", "stop", "grab", "start"]
 
 
 def test_the_toggle_starts_and_stops_and_hides_nothing(service, svc, monkeypatch):
@@ -187,6 +201,23 @@ def test_through_the_helper_left_ctrl_up_ends_the_hold(service, svc, tmp_path):
     assert service == ["grab", "start", "let go", "stop"]
     said(kb, "UP 57", held, svc)
     assert service == ["grab", "start", "let go", "stop"]
+
+
+def test_through_the_helper_space_again_under_the_same_left_ctrl_dictates(service, svc,
+                                                                          tmp_path,
+                                                                          monkeypatch):
+    """The hotkey helper presses a hidden Left Ctrl again as it gives the
+    keyboard back, and reports Space under it only as the pair."""
+    kb, held = helper(tmp_path), set()
+    kb.hidden = True                            # the helper said OK to the HIDE
+
+    def helper_hides(devices, codes):
+        service.append("grab")
+        modifier_hotkeys.note_hidden(codes, [kb])
+    monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", helper_hides)
+    for line in ("DOWN 29 -", "DOWN 57 29", "UP 57", "DOWN 57 29"):
+        said(kb, line, held, svc)
+    assert service == ["grab", "start", "let go", "stop", "grab", "start"]
 
 
 def test_through_the_helper_a_space_without_left_ctrl_dictates_nothing(service, svc,

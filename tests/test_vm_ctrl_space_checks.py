@@ -12,9 +12,10 @@ checks = import_vm_tool("checks_hotkeys")
 harness = import_vm_tool("harness")
 voices = import_vm_tool("voices")
 
-IDS = {"ctrl_space_helper_only_the_pair", "ctrl_space_hold", "ctrl_space_toggle",
-       "ctrl_space_terminal", "ctrl_space_input_method_log", "ctrl_space_quiet_helper_update"}
-HEARD_OK = ["HELLO 1 1.14 keyboards=1", "OK WATCH"]
+IDS = {"ctrl_space_helper_only_the_pair", "ctrl_space_hold", "ctrl_space_ctrl_kept",
+       "ctrl_space_toggle", "ctrl_space_terminal", "ctrl_space_input_method_log",
+       "ctrl_space_quiet_helper_update"}
+HEARD_OK = ["HELLO 1 1.15 keyboards=1", "OK WATCH"]
 
 
 def test_every_ctrl_space_check_is_registered_in_the_hotkeys_section():
@@ -70,8 +71,8 @@ def test_a_space_without_left_ctrl_is_a_problem():
 
 def test_a_silent_listener_is_a_problem_not_a_pass():
     assert checks.helper_report_problem([], []) is not None
-    assert checks.helper_report_problem(["HELLO 1 1.14 keyboards=1"], []) is not None
-    assert checks.helper_report_problem(["HELLO 1 1.14 keyboards=1", "ERR bad spec"], []) \
+    assert checks.helper_report_problem(["HELLO 1 1.15 keyboards=1"], []) is not None
+    assert checks.helper_report_problem(["HELLO 1 1.15 keyboards=1", "ERR bad spec"], []) \
         is not None
 
 
@@ -101,7 +102,7 @@ class _Guest:
         if action == "find":
             return self.question
         if action == "texts":
-            return ["✓ Ready", "(1.13 → 1.14)"]
+            return ["✓ Ready", "(1.13 → 1.15)"]
         return "found"
 
 

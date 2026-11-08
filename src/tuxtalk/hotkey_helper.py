@@ -68,7 +68,7 @@ are never reported, so even a hostile program that connects learns nothing
 about what is typed beyond when an AltGr, Compose or layout-switch key went
 down (Right Alt, Right Ctrl, and Left Ctrl to a client watching Left
 Ctrl+Space). Each client may ask for four shortcuts at most; TuxTalk asks
-for two.
+for three at most.
 
 Hiding a held hotkey
 --------------------
@@ -83,7 +83,10 @@ that's a mouse as well (a Logitech one: see check_keyboard) moves no pointer
 while it's held, and one holding a modifier for a hotkey pressed elsewhere
 isn't held: that HIDE is refused. It ends by itself as soon as that key
 comes up there, when someone else's session comes to the front, when the
-program that asked goes away, or after 15 minutes at most. A press's release
+program that asked goes away, or after 15 minutes at most. A Left Ctrl it
+hid that is still held then is pressed again, so the desktop sees Ctrl down
+while the user holds it (press_again); a Shift stays up for the desktop
+until it's let go. A press's release
 is reported from the keyboard it was pressed on, so holding the same key on
 another keyboard can't keep a recording or a grab going. Left Ctrl's own
 release waits for the last keyboard of its group holding it: the desktop
@@ -118,7 +121,8 @@ client -> helper
                                a key reported on its own are ignored
   HIDE <code> [<code>...]      hide these held keys from the desktop and keep
                                their keyboard until UNHIDE or they're let go
-  UNHIDE                       give the keyboard back
+  UNHIDE                       give the keyboard back (since 1.15 pressing again
+                               a Left Ctrl it hid that is still held)
 helper -> client
   DOWN <code> <mods>           a watched key went down; mods = the modifier
                                codes held with it, comma-separated, or "-"
@@ -131,6 +135,7 @@ helper -> client
 Codes are Linux evdev key codes (linux/input-event-codes.h).
 """
 import array
+import contextlib
 import errno
 import fcntl
 import os
@@ -142,7 +147,7 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.14"
+VERSION = "1.15"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"
@@ -162,14 +167,12 @@ UHID_SYS = "/sys/devices/virtual/misc/uhid/"
 
 EV_SYN, EV_KEY, EV_REL = 0, 1, 2
 SYN_REPORT, SYN_DROPPED = 0, 3
-REL_X = 0
-BTN_LEFT = 0x110
+REL_X, BTN_LEFT = 0, 0x110
 # The keyboard TuxTalk types with (virtual_keyboard.NAME): never read.
 OWN_KEYBOARD_NAME = "TuxTalk virtual keyboard"
 KEY_MAX = 0x2FF
 KEY_ESC, KEY_SCROLLLOCK, KEY_PAUSE = 1, 70, 119
-KEY_LEFTCTRL, KEY_RIGHTCTRL, KEY_RIGHTALT = 29, 97, 100
-KEY_SPACE = 57
+KEY_LEFTCTRL, KEY_RIGHTCTRL, KEY_RIGHTALT, KEY_SPACE = 29, 97, 100, 57
 BUS_VIRTUAL = 0x06
 
 F_KEYS = frozenset(list(range(59, 69)) + [87, 88] + list(range(183, 195)))   # F1-F24
@@ -186,8 +189,7 @@ UNLOCKERS = {
     "A": frozenset({56}),           # Left Alt
     "S": frozenset({42, 54}),       # Shift
     "M": frozenset({125, 126}),     # Meta / Super
-    # Left Ctrl alone, for Space only (see parse_spec and the rule at the top).
-    "L": frozenset({KEY_LEFTCTRL}),
+    "L": frozenset({KEY_LEFTCTRL}),  # Left Ctrl alone, for Space only (parse_spec)
 }
 LEFT_CTRL = "L"
 SHORTCUT_LETTERS = frozenset("CAM")
@@ -248,7 +250,7 @@ LISTEN_BACKLOG = 64           # connections waiting to be let in or turned away
 ACCEPTS_PER_PASS = 64
 MAX_LINE = 512
 MAX_SPECS = 32
-MAX_COMBOS = 4                # shortcuts per client; TuxTalk watches two
+MAX_COMBOS = 4                # shortcuts per client; TuxTalk watches three at most
 MAX_COMBO_KEYS_PER_HOLD = 2   # different shortcut keys while the modifiers stay down
 MAX_OUTBUF = 64 * 1024
 MAX_KEYBOARDS = 48
@@ -320,14 +322,11 @@ def bits(buffer):
 def read_active_uid(seat_file):
     """The uid of the user whose session is in front on seat0, or None.
     logind keeps it in a plain file; no answer means nobody gets anything."""
-    try:
-        with open(seat_file) as f:
-            for line in f:
-                key, _, value = line.strip().partition("=")
-                if key == "ACTIVE_UID" and value.isdigit():
-                    return int(value)
-    except OSError:
-        pass
+    with contextlib.suppress(OSError), open(seat_file) as f:
+        for line in f:
+            key, _, value = line.strip().partition("=")
+            if key == "ACTIVE_UID" and value.isdigit():
+                return int(value)
     return None
 
 
@@ -501,6 +500,7 @@ class Keyboard:
         # held the keyboard, or hidden from the desktop by us, waits to be let go.
         self.trusted = set()
         self.grabbed = False
+        self.ctrl_hidden = False   # a hide told the desktop its Left Ctrl went up
         self.dropping = False      # events were lost; skip to the next report, then re-read
         # Events carry CLOCK_MONOTONIC times (see Helper.was_injected).
         self.monotonic = False
@@ -587,20 +587,18 @@ class Keyboard:
         except OSError:
             return False
 
-    def inject(self, code, value):
-        """Send a key event into this keyboard, as if it came from it."""
+    def inject(self, code, *values):
+        """Send *code* going to each of *values*, in one write, as if from this keyboard."""
+        data = b"".join(EVENT.pack(0, 0, EV_KEY, code, value)
+                        + EVENT.pack(0, 0, EV_SYN, SYN_REPORT, 0) for value in values)
         try:
-            os.write(self.fd, EVENT.pack(0, 0, EV_KEY, code, value)
-                     + EVENT.pack(0, 0, EV_SYN, SYN_REPORT, 0))
-            return True
+            return os.write(self.fd, data) == len(data)
         except OSError:
             return False
 
     def close(self):
-        try:
+        with contextlib.suppress(OSError):
             os.close(self.fd)
-        except OSError:
-            pass
 
 
 # --- clients -------------------------------------------------------------------------------
@@ -668,10 +666,8 @@ class Helper:
     # -- setup ------------------------------------------------------------------------
 
     def listen(self):
-        try:
+        with contextlib.suppress(FileNotFoundError):
             os.unlink(self.socket_path)
-        except FileNotFoundError:
-            pass
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM | socket.SOCK_CLOEXEC)
         sock.bind(self.socket_path)
         # Anyone may connect; only the user at the screen is kept (accept).
@@ -874,10 +870,10 @@ class Helper:
                 return True
         return False
 
-    def inject(self, keyboard, code, value):
+    def inject(self, keyboard, code, *values):
         sent = time.monotonic()
-        if keyboard.inject(code, value):
-            self.injected.append((keyboard.path, code, value, sent, sent + INJECTED_TTL_S))
+        if keyboard.inject(code, *values):
+            self.injected += [(keyboard.path, code, v, sent, sent + INJECTED_TTL_S) for v in values]
             return True
         return False
 
@@ -886,9 +882,9 @@ class Helper:
         passed on (it does so at once), so a record still waiting is one it
         dropped and is forgotten, not left to swallow the real event later.
         A flood that outlasts the drain keeps them: they expire by themselves.
-        A key among *codes* that came up meanwhile, but that our own
-        "down again" left down in the kernel, is put up there too (only we
-        see it: the keyboard is held)."""
+        A key among *codes* that came up meanwhile, but that our own "down"
+        left down in the kernel, is put up there too (only we see it while
+        the keyboard is held; once given back, press_again, the desktop too)."""
         dry = self.drain(keyboard)
         if keyboard.path not in self.keyboards:
             return
@@ -1111,13 +1107,11 @@ class Helper:
         None when a key couldn't be hidden (and it isn't held).
 
         The desktop has seen these keys go down: tell it they went up, so it
-        doesn't auto-repeat them, then keep the keyboard, then mark them down
-        again, which only we see, so the real release still reaches us. By
-        the kernel's state, not what's been read, in case a release is on its
-        way. The press's own keyboard (*is_origin*) is kept; another keyboard
-        of its group only has its modifiers hidden the same way. A
-        listen-only keyboard is never held or written to: its keys reach the
-        desktop as they are."""
+        doesn't auto-repeat them, keep the keyboard, then mark them down
+        again, which only we see, so the real release still reaches us; by
+        the kernel's state, in case a release is on its way. The press's own
+        keyboard (*is_origin*) is kept; another of its group only has its
+        modifiers hidden. A listen-only keyboard is never held or written to."""
         if keyboard.listen_only:
             return False            # holds none of them (listen_only_holding)
         if keyboard.mouse and not is_origin:
@@ -1127,16 +1121,16 @@ class Helper:
             return None
         if not (is_origin or released):
             return False
+        # The desktop now believes these are up.
+        keyboard.trusted.difference_update(released)
         if not keyboard.grab(True):
             # Not held, so the desktop would see the keys go down again and
             # repeat them: leave them up for it.
             log(f"couldn't hold keyboard {keyboard.name!r}")
-            keyboard.trusted.difference_update(released)
             self.settle(keyboard, ())
             return False
         down_again = [c for c in released if self.inject(keyboard, c, 1)]
-        # The desktop now believes these are up.
-        keyboard.trusted.difference_update(released)
+        keyboard.ctrl_hidden = KEY_LEFTCTRL in down_again
         self.settle(keyboard, down_again)
         if len(down_again) < len(released):
             # One left up in the kernel would come up unheard, the keyboard
@@ -1189,14 +1183,43 @@ class Helper:
         self.let_go(keyboards)
 
     def let_go(self, keyboards):
-        """Give *keyboards* back to the desktop, closing one that won't let go."""
-        stuck = [k for k in keyboards
-                 if k.path in self.keyboards and k.grabbed and not k.grab(False)]
-        for keyboard in stuck:
-            # Closing the device always ends the kernel's grab; the keyboard
-            # is opened afresh on the next scan.
-            log(f"couldn't let go of {keyboard.name!r}; closing it")
-            self.drop_keyboard(keyboard)
+        """Give *keyboards* back to the desktop, closing one that won't let
+        go, and press again a Left Ctrl still held there (press_again)."""
+        for keyboard in keyboards:
+            if keyboard.path not in self.keyboards or not keyboard.grabbed:
+                continue
+            if keyboard.grab(False):
+                self.press_again(keyboard)
+            else:
+                # Closing the device always ends the kernel's grab; the
+                # keyboard is opened afresh on the next scan.
+                log(f"couldn't let go of {keyboard.name!r}; closing it")
+                self.drop_keyboard(keyboard)
+
+    def press_again(self, keyboard):
+        """*keyboard* was just given back: a Left Ctrl a hide told the desktop
+        went up is pressed again if it's still held, so keys pressed under it
+        are Ctrl shortcuts (Ctrl+Z, not "z") and Space is Left Ctrl+Space.
+
+        Never one that isn't held. A release already waiting is read first;
+        one just before our "up" (which the kernel then drops) is read back
+        stamped earlier (was_injected), and settle puts Ctrl up again. With
+        no such stamps nothing is pressed. One between our "up" and "down",
+        sent in one write, the kernel drops unseen: Ctrl stays down until tapped."""
+        hidden, keyboard.ctrl_hidden = keyboard.ctrl_hidden, False
+        if not (hidden and keyboard.monotonic and self.drain(keyboard)
+                and keyboard.path in self.keyboards and KEY_LEFTCTRL in keyboard.down
+                and KEY_LEFTCTRL in (keyboard.kernel_down() or ())):
+            return
+        # Up first: our "down again" (hide_on) left it down in the kernel,
+        # which passes on only a change.
+        if not self.inject(keyboard, KEY_LEFTCTRL, 0, 1):
+            log(f"couldn't press Left Ctrl again on {keyboard.name!r}")
+            self.resync(keyboard)
+            return
+        self.settle(keyboard, [KEY_LEFTCTRL])
+        if KEY_LEFTCTRL in keyboard.down:
+            keyboard.trusted.add(KEY_LEFTCTRL)      # the desktop saw it go down
 
     def check_hide(self):
         """The safety net: a keyboard is never kept once the hotkey is let go."""
@@ -1252,10 +1275,8 @@ class Helper:
         if self.hide is not None and self.hide["client"] is client:
             self.end_hide("TuxTalk went away")
         self.clients.pop(client.sock.fileno(), None)
-        try:
+        with contextlib.suppress(OSError):
             client.sock.close()
-        except OSError:
-            pass
 
     def send(self, client, line):
         try:
@@ -1449,10 +1470,8 @@ class Helper:
             self.end_hide()
             for keyboard in list(self.keyboards.values()):
                 keyboard.close()
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(self.socket_path)
-            except OSError:
-                pass
 
 
 def main():

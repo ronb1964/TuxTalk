@@ -208,7 +208,7 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False, read_
 def test_only_an_older_helper_needs_an_update():
     """1.9, installed by test builds, and 1.10 are older than 1.11: the
     numbers after the dot are compared as numbers, not as text."""
-    assert hotkey_helper.VERSION == "1.14" and si.NEEDED_HELPER_VERSION == "1.11"
+    assert hotkey_helper.VERSION == "1.15" and si.NEEDED_HELPER_VERSION == "1.11"
     for running, older, needed in (("1.0", True, True), ("1.3", True, True),
                                    ("garbled", True, True), ("1.9", True, True),
                                    ("1.10", True, True), ("1.11", True, False),
@@ -231,9 +231,12 @@ def test_a_helper_only_older_than_the_one_shipped_is_offered_without_a_warning(m
     assert P._typing_state([])[3] is True
 
 
-def test_a_helper_before_1_14_is_offered_the_update_quietly(monkeypatch):
-    _P, prefs = _typing_prefs(monkeypatch, running="1.13")
-    assert "(1.13 → 1.14)" in prefs.typing_status_label.markup
+@pytest.mark.parametrize("running", ["1.13", "1.14"])
+def test_a_helper_before_1_15_is_offered_the_update_quietly(monkeypatch, running):
+    """1.14 came only with test builds, before a Left Ctrl kept down after
+    a hold worked as Ctrl."""
+    _P, prefs = _typing_prefs(monkeypatch, running=running)
+    assert f"({running} → 1.15)" in prefs.typing_status_label.markup
     assert "✓ Ready" in prefs.typing_status_label.markup
 
 
