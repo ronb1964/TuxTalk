@@ -156,6 +156,20 @@ def test_without_the_hotkey_helper_the_notice_names_fix_typing_and_a_restart(mon
 TEST_KEYS = {"hold": "F8", "toggle": "F9"}
 
 
+class _ChangeKey:
+    """A row's Change Key button, for what a screen reader is told."""
+    description = "Seen, not active yet."
+
+    def get_accessible(self):
+        return self
+
+    def get_description(self):
+        return self.description
+
+    def set_description(self, words):
+        self.description = words
+
+
 class _Notice:
     """The dialog's notice label: what it shows, and whether."""
     markup, shown = None, False
@@ -240,14 +254,17 @@ def test_left_ctrl_space_picked_with_a_helper_too_old_for_it_brings_the_notice()
     helper = SimpleNamespace(helper_keyboards=1, helper_version="1.13")
     dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice(),
                              _heard_by_reader=set(), keys=dict(TEST_KEYS), capturing="hold",
-                             rows={"hold": (_Notice(),)}, _reading_now=[helper],
+                             rows={"hold": (_Notice(), _ChangeKey())}, _reading_now=[helper],
                              _show_status=lambda which, key: None, _end_capture=lambda: None)
     dialog._show_reading = lambda kbs: hkd.HotkeyTestDialog._show_reading(dialog, kbs)
+    dialog._announce = lambda which, words: hkd.HotkeyTestDialog._announce(dialog, which, words)
     dialog._show_reading([helper])
     assert not dialog.keyboard_notice.shown
     hkd.HotkeyTestDialog._capture(dialog, CTRL_SPACE)
     assert dialog.keys["hold"] == CTRL_SPACE
     assert dialog.keyboard_notice.shown and "too old" in dialog.keyboard_notice.markup
+    said = dialog.rows["hold"][1].description           # what Orca reads out
+    assert said.startswith("Seen, not active yet.") and "too old" in said
 
 
 def test_the_helpers_count_is_asked_again_while_the_test_is_open(monkeypatch):

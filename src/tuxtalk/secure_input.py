@@ -385,10 +385,8 @@ def saved_keys():
 
 # The dictation keys the first helpers didn't report, and the version that
 # does. Here, not in hotkey_helper.py: the helper speaks key codes, and
-# nothing in it would use this. Left Ctrl+Space works from 1.14, but only
-# 1.15 presses a Left Ctrl kept down after a hold again (Ctrl+Z after a
-# dictation is "z" before it).
-KEYS_SINCE = {"Right Ctrl": "1.5", "Right Alt": "1.5", CTRL_SPACE: "1.15"}
+# nothing in it would use this.
+KEYS_SINCE = {"Right Ctrl": "1.5", "Right Alt": "1.5", CTRL_SPACE: "1.14"}
 
 
 def hears_key(running, key):

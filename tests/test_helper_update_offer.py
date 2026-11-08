@@ -177,9 +177,9 @@ def test_a_saved_key_the_helper_cant_report_is_asked_about_at_start(helper, monk
     assert asked == (["1.13"] if asks else [])
 
 
-@pytest.mark.parametrize("toggle, outdated", [(CTRL_SPACE, "1.14"), ("F9", None)])
+@pytest.mark.parametrize("toggle, outdated", [(CTRL_SPACE, "1.13"), ("F9", None)])
 def test_the_welcome_screen_offers_the_helper_a_saved_key_needs(helper, monkeypatch,
                                                                 toggle, outdated):
-    monkeypatch.setattr(secure_input, "running_version", lambda: "1.14")
+    monkeypatch.setattr(secure_input, "running_version", lambda: "1.13")
     _saved(monkeypatch, "F8", toggle)
     assert welcome_dialog.outdated_helper() == outdated

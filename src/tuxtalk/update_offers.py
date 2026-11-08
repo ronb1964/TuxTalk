@@ -53,9 +53,9 @@ def _offer_in_turn(restart) -> bool:
 def offer_helper_update() -> bool:
     """While the installed hotkey helper is older than the one this TuxTalk
     or a dictation key set needs (secure_input.needs_update), ask to update
-    it, at every start until it is. True when it asked. One only older than the helper this
-    TuxTalk brings is left to System check, which offers it without asking.
-    The Flatpak has no helper to update."""
+    it, at every start until it is. True when it asked. One only older than
+    the helper this TuxTalk brings is left to System check, which offers it
+    without asking. The Flatpak has no helper to update."""
     try:
         from . import secure_input
         if os.environ.get("FLATPAK_ID") or not secure_input.is_installed():

@@ -355,8 +355,13 @@ class HotkeyTestDialog:
         label.set_markup(f'<b>{_TITLES[self.capturing]}:</b> {layout_label(keyname)}')
         self._show_status(self.capturing, keyname)
         if self._reading_now:
-            # A key the helper reading them is too old for brings the notice.
+            # A key the helper reading them is too old for brings the notice,
+            # read out after the row's status (a label isn't).
             self._show_reading(self._reading_now)
+            notice = _reading_notice(self._reading_now, list(self.keys.values()))[0]
+            if notice:
+                status = self.rows[self.capturing][1].get_accessible().get_description()
+                self._announce(self.capturing, f"{status} {notice}")
         self._end_capture()
 
     def _mark_working(self, keyname):

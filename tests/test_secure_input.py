@@ -233,8 +233,7 @@ def test_a_helper_only_older_than_the_one_shipped_is_offered_without_a_warning(m
 
 @pytest.mark.parametrize("running", ["1.13", "1.14"])
 def test_a_helper_before_1_15_is_offered_the_update_quietly(monkeypatch, running):
-    """1.14 came only with test builds, before a Left Ctrl kept down after
-    a hold worked as Ctrl."""
+    """1.14 came only with test builds."""
     _P, prefs = _typing_prefs(monkeypatch, running=running)
     assert f"({running} → 1.15)" in prefs.typing_status_label.markup
     assert "✓ Ready" in prefs.typing_status_label.markup

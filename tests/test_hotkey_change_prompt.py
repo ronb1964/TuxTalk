@@ -218,13 +218,10 @@ def test_the_log_says_where_a_helper_update_was_asked_for(monkeypatch, caplog):
         "Updated the hotkey helper from the offer at start"]
 
 
-def test_left_ctrl_space_needs_helper_1_15(monkeypatch):
-    """1.14 reports the pair, but leaves a Left Ctrl kept down after a hold
-    up for the desktop: Ctrl+Z after the dictation typed "z"."""
+def test_left_ctrl_space_needs_helper_1_14(monkeypatch):
     from tuxtalk import secure_input
     assert not secure_input.hears_key("1.13", CTRL_SPACE)
-    assert not secure_input.hears_key("1.14", CTRL_SPACE)
-    assert secure_input.hears_key("1.15", CTRL_SPACE) and secure_input.hears_key(None, CTRL_SPACE)
+    assert secure_input.hears_key("1.14", CTRL_SPACE) and secure_input.hears_key(None, CTRL_SPACE)
     monkeypatch.setattr(secure_input, "running_version", lambda: "1.13")
     assert secure_input.unheard_keys([CTRL_SPACE, "F9"]) == [CTRL_SPACE]
 

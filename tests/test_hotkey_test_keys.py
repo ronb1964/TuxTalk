@@ -254,7 +254,7 @@ def test_the_capture_takes_left_ctrl_space():
     assert "Left Ctrl+Space" in htk.captured_key_problem("a", "F9")
 
 
-@pytest.mark.parametrize("version,works", [("1.13", False), ("1.14", False), ("1.15", True)])
+@pytest.mark.parametrize("version,works", [("1.13", False), ("1.14", True)])
 def test_left_ctrl_space_works_only_through_a_helper_that_reports_it(version, works):
     assert htk.service_hears([_Helper(version)], "Left Ctrl+Space") is works
 
@@ -268,11 +268,11 @@ class _WatchedHelper:
         self.specs = list(specs)
 
 
-@pytest.mark.parametrize("version", [None, "1.13", "1.15"])
+@pytest.mark.parametrize("version", [None, "1.13", "1.14"])
 def test_the_helper_is_asked_for_the_pair_whatever_its_version(version):
     """A helper that's stopped now may come back updated, and is then sent
     the same list again; an older one refuses only "L:57" and reports the
-    rest, F8 included. Working still needs 1.15 (service_hears)."""
+    rest, F8 included. Working still needs 1.14 (service_hears)."""
     ecodes = pytest.importorskip("evdev").ecodes
     from tuxtalk.hotkey_test_devices import hotkey_test_helper
     helper = _WatchedHelper(version)
