@@ -83,10 +83,7 @@ that's a mouse as well (a Logitech one: see check_keyboard) moves no pointer
 while it's held, and one holding a modifier for a hotkey pressed elsewhere
 isn't held: that HIDE is refused. It ends by itself as soon as that key
 comes up there, when someone else's session comes to the front, when the
-program that asked goes away, or after 15 minutes at most. A Left Ctrl it
-hid that is still held then is pressed again, so the desktop sees Ctrl down
-while the user holds it (press_again); a Shift stays up for the desktop
-until it's let go. A press's release
+program that asked goes away, or after 15 minutes at most. A press's release
 is reported from the keyboard it was pressed on, so holding the same key on
 another keyboard can't keep a recording or a grab going. Left Ctrl's own
 release waits for the last keyboard of its group holding it: the desktop
@@ -121,8 +118,7 @@ client -> helper
                                a key reported on its own are ignored
   HIDE <code> [<code>...]      hide these held keys from the desktop and keep
                                their keyboard until UNHIDE or they're let go
-  UNHIDE                       give the keyboard back (since 1.15 pressing again
-                               a Left Ctrl it hid that is still held)
+  UNHIDE                       give the keyboard back
 helper -> client
   DOWN <code> <mods>           a watched key went down; mods = the modifier
                                codes held with it, comma-separated, or "-"
@@ -500,7 +496,6 @@ class Keyboard:
         # held the keyboard, or hidden from the desktop by us, waits to be let go.
         self.trusted = set()
         self.grabbed = False
-        self.ctrl_hidden = False   # a hide told the desktop its Left Ctrl went up
         self.dropping = False      # events were lost; skip to the next report, then re-read
         # Events carry CLOCK_MONOTONIC times (see Helper.was_injected).
         self.monotonic = False
@@ -587,12 +582,12 @@ class Keyboard:
         except OSError:
             return False
 
-    def inject(self, code, *values):
-        """Send *code* going to each of *values*, in one write, as if from this keyboard."""
-        data = b"".join(EVENT.pack(0, 0, EV_KEY, code, value)
-                        + EVENT.pack(0, 0, EV_SYN, SYN_REPORT, 0) for value in values)
+    def inject(self, code, value):
+        """Send a key event into this keyboard, as if it came from it."""
         try:
-            return os.write(self.fd, data) == len(data)
+            os.write(self.fd, EVENT.pack(0, 0, EV_KEY, code, value)
+                     + EVENT.pack(0, 0, EV_SYN, SYN_REPORT, 0))
+            return True
         except OSError:
             return False
 
@@ -870,10 +865,10 @@ class Helper:
                 return True
         return False
 
-    def inject(self, keyboard, code, *values):
+    def inject(self, keyboard, code, value):
         sent = time.monotonic()
-        if keyboard.inject(code, *values):
-            self.injected += [(keyboard.path, code, v, sent, sent + INJECTED_TTL_S) for v in values]
+        if keyboard.inject(code, value):
+            self.injected.append((keyboard.path, code, value, sent, sent + INJECTED_TTL_S))
             return True
         return False
 
@@ -882,9 +877,9 @@ class Helper:
         passed on (it does so at once), so a record still waiting is one it
         dropped and is forgotten, not left to swallow the real event later.
         A flood that outlasts the drain keeps them: they expire by themselves.
-        A key among *codes* that came up meanwhile, but that our own "down"
-        left down in the kernel, is put up there too (only we see it while
-        the keyboard is held; once given back, press_again, the desktop too)."""
+        A key among *codes* that came up meanwhile, but that our own
+        "down again" left down in the kernel, is put up there too (only we
+        see it: the keyboard is held)."""
         dry = self.drain(keyboard)
         if keyboard.path not in self.keyboards:
             return
@@ -1108,8 +1103,9 @@ class Helper:
 
         The desktop has seen these keys go down: tell it they went up, so it
         doesn't auto-repeat them, keep the keyboard, then mark them down
-        again, which only we see, so the real release still reaches us; by
-        the kernel's state, in case a release is on its way. The press's own
+        again, which only we see, so the real release still reaches us (let_up
+        goes by the kernel's state, not what's been read, in case a release is
+        on its way). The press's own
         keyboard (*is_origin*) is kept; another of its group only has its
         modifiers hidden. A listen-only keyboard is never held or written to."""
         if keyboard.listen_only:
@@ -1130,7 +1126,6 @@ class Helper:
             self.settle(keyboard, ())
             return False
         down_again = [c for c in released if self.inject(keyboard, c, 1)]
-        keyboard.ctrl_hidden = KEY_LEFTCTRL in down_again
         self.settle(keyboard, down_again)
         if len(down_again) < len(released):
             # One left up in the kernel would come up unheard, the keyboard
@@ -1183,43 +1178,18 @@ class Helper:
         self.let_go(keyboards)
 
     def let_go(self, keyboards):
-        """Give *keyboards* back to the desktop, closing one that won't let
-        go, and press again a Left Ctrl still held there (press_again)."""
+        """Give *keyboards* back to the desktop, closing one that won't let go.
+        What came while it was held is read first, as such: a modifier
+        pressed then, which the desktop never saw, isn't trusted."""
         for keyboard in keyboards:
             if keyboard.path not in self.keyboards or not keyboard.grabbed:
                 continue
-            if keyboard.grab(False):
-                self.press_again(keyboard)
-            else:
+            self.drain(keyboard)
+            if keyboard.path in self.keyboards and not keyboard.grab(False):
                 # Closing the device always ends the kernel's grab; the
                 # keyboard is opened afresh on the next scan.
                 log(f"couldn't let go of {keyboard.name!r}; closing it")
                 self.drop_keyboard(keyboard)
-
-    def press_again(self, keyboard):
-        """*keyboard* was just given back: a Left Ctrl a hide told the desktop
-        went up is pressed again if it's still held, so keys pressed under it
-        are Ctrl shortcuts (Ctrl+Z, not "z") and Space is Left Ctrl+Space.
-
-        Never one that isn't held. A release already waiting is read first;
-        one just before our "up" (which the kernel then drops) is read back
-        stamped earlier (was_injected), and settle puts Ctrl up again. With
-        no such stamps nothing is pressed. One between our "up" and "down",
-        sent in one write, the kernel drops unseen: Ctrl stays down until tapped."""
-        hidden, keyboard.ctrl_hidden = keyboard.ctrl_hidden, False
-        if not (hidden and keyboard.monotonic and self.drain(keyboard)
-                and keyboard.path in self.keyboards and KEY_LEFTCTRL in keyboard.down
-                and KEY_LEFTCTRL in (keyboard.kernel_down() or ())):
-            return
-        # Up first: our "down again" (hide_on) left it down in the kernel,
-        # which passes on only a change.
-        if not self.inject(keyboard, KEY_LEFTCTRL, 0, 1):
-            log(f"couldn't press Left Ctrl again on {keyboard.name!r}")
-            self.resync(keyboard)
-            return
-        self.settle(keyboard, [KEY_LEFTCTRL])
-        if KEY_LEFTCTRL in keyboard.down:
-            keyboard.trusted.add(KEY_LEFTCTRL)      # the desktop saw it go down
 
     def check_hide(self):
         """The safety net: a keyboard is never kept once the hotkey is let go."""

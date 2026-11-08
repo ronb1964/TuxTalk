@@ -12,9 +12,11 @@ from tuxtalk import hotkey_helper as hh
 
 
 class FakeKeyboard(hh.Keyboard):
-    """A keyboard made of a pipe. The kernel's view of which keys are down is
-    kept too: an injected event comes back only if it changes that, as with a
-    real evdev device."""
+    """A keyboard made of a pipe. Which keys the user holds (*physical*) is
+    kept apart from which the kernel takes to be down (*kernel*), and an
+    event, the user's or one injected, comes through only if it changes the
+    kernel's, as with a real evdev device: a release while the kernel already
+    takes the key to be up is dropped, seen by nobody."""
 
     made = []                       # every one, so the fixture closes their pipes
 
@@ -24,7 +26,7 @@ class FakeKeyboard(hh.Keyboard):
         os.set_blocking(r, False)
         super().__init__(path, r, "Fake keyboard", set(), False, f"own:{path}")
         self.w = w
-        self.kernel = set()
+        self.physical, self.kernel = set(), set()
         self.calls = []
         # What its node's permissions and udev say now (current_group):
         # None while they say what they said when it was opened.
@@ -39,12 +41,18 @@ class FakeKeyboard(hh.Keyboard):
         os.write(self.w, hh.EVENT.pack(sec, usec, hh.EV_KEY, code, value))
 
     def press(self, code, value=1):
-        """The user presses (1) or lets go of (0) a key."""
-        if value == 1:
-            self.kernel.add(code)
-        elif value == 0:
-            self.kernel.discard(code)
+        """The user presses (1) or lets go of (0) a key, or it repeats (2)."""
+        if value != 2:
+            (self.physical.add if value else self.physical.discard)(code)
+            if not self._changes_kernel(code, value):
+                return
         self._event(code, value)
+
+    def _changes_kernel(self, code, value):
+        if (value == 1) == (code in self.kernel):
+            return False
+        (self.kernel.add if value == 1 else self.kernel.discard)(code)
+        return True
 
     def kernel_down(self):
         return set(self.kernel)
@@ -61,17 +69,15 @@ class FakeKeyboard(hh.Keyboard):
         self.grabbed = on
         return True
 
-    def inject(self, code, *values):
-        for value in values:
-            self.calls.append(("inject", code, value))
-            if (value == 1) != (code in self.kernel):
-                (self.kernel.add if value == 1 else self.kernel.discard)(code)
-                self._event(code, value)
+    def inject(self, code, value):
+        self.calls.append(("inject", code, value))
+        if self._changes_kernel(code, value):
+            self._event(code, value)
         return True
 
 
 @pytest.fixture
-def setup(tmp_path, monkeypatch):
+def setup(tmp_path):
     """A helper listening in *tmp_path* with one FakeKeyboard, the user at
     the screen being this one: (helper, keyboard, connect, say, heard, the
     seat file)."""

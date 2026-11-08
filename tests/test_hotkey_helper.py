@@ -528,7 +528,7 @@ def test_a_virtual_keyboard_still_cant_lend_to_real_ones(setup):
     assert heard(sock) == []
 
 
-def test_holding_the_hotkey_on_a_virtual_keyboard_cant_pin_the_grab(setup, monkeypatch):
+def test_holding_the_hotkey_on_a_virtual_keyboard_cant_pin_the_grab(setup):
     """A program holds F8 on its own virtual keyboard while the user holds
     the real one, then asks for the grab: the real keyboard comes back as
     soon as the user lets go, and TuxTalk hears the release."""
