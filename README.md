@@ -21,7 +21,7 @@
 <p align="center">
   <a href="https://tuxtalk.app/"><b>Website</b></a> &nbsp;&bull;&nbsp;
   <a href="#installation">Install</a> &nbsp;&bull;&nbsp;
-  <a href="#new-in-021">New in 0.21</a> &nbsp;&bull;&nbsp;
+  <a href="#new-in-022">New in 0.22</a> &nbsp;&bull;&nbsp;
   <a href="#what-it-does">What it does</a> &nbsp;&bull;&nbsp;
   <a href="#all-the-features">All the features</a> &nbsp;&bull;&nbsp;
   <a href="#how-its-made">How it's made</a> &nbsp;&bull;&nbsp;
@@ -44,15 +44,31 @@ Claude, Anthropic's AI, writes the code. I test it and use it every day, and I h
 
 ---
 
-## New in 0.21
+## New in 0.22
 
-**Install it from source.** If your distro doesn't have a TuxTalk package, or you'd just rather not use the AppImage, the README has steps under Installation that work on any distro. TuxTalk gets its own Python folder with your distro's GTK bindings and the library versions we test with, plus a tuxtalk command, a menu entry and start at login. Check for Updates shows you the one command for the next version, and Uninstall cleans it all up.
+This is the biggest one yet, and honestly a pretty ambitious one. Up to now TuxTalk typed what you said. Now it can run a good part of your computer too, the mouse included. It's all in TuxTalk Labs, so nothing changes until you turn it on: Preferences, Advanced, TuxTalk Labs, "Apps, windows, keys and the mouse by voice".
 
-**A tuxtalk package on the AUR.** It builds TuxTalk on your computer from the release source, using Arch's own Python packages, which is what the Arch Wiki folks asked for. tuxtalk-appimage is still there and still the quicker install.
+I'm an amateur at this, not some company with a team behind it. With this much new stuff there are going to be bugs I haven't run into yet. If something doesn't work for you, open an issue or say so in Discussions and I'll get it fixed.
 
-**Esc stops more, when there's time.** Esc can only stop what hasn't happened yet. If TuxTalk runs on your processor, or a long paragraph is still being typed, or the AI is rewriting something, there's a second or more after you let go, and in that time Esc now stops a "press enter", a "clear everything" or a voice edit too, not just the words. On a fast graphics card a short dictation is usually in before you can reach Esc, and that's normal. To take one back then, hold F8 and say "delete last sentence", or press Ctrl+Z.
+<p align="center">
+  <img src="screenshots/mouse-grid.gif" alt="Saying mouse grid, then three, one and eight: the screen zooms in on the website's top bar with a finer grid, right four moves the yellow dot, and click lands on the Download button" width="600">
+</p>
 
-**When the keyboard can't be read, it says so.** If the hotkey helper is gone or stopped when TuxTalk starts and nothing else can read your keyboard, you get a notice naming your dictation key and where to fix it, instead of a key that does nothing. The [changelog](CHANGELOG.md) has the rest, Shift+F8 on Logitech keyboards included.
+**Click anything by voice.** Say "mouse grid" and the screen gets nine numbered parts. Say a number and that part gets its own grid, and on KDE, GNOME and Cinnamon the whole desktop zooms in on it about three times so you can actually see the button you're after. "left 3" or "up two" moves the yellow dot a little, and then "click". If TuxTalk can't put the pointer exactly where the grid shows, it doesn't click at all. I tried it on a toolbar button in Brave and it worked better than I expected.
+
+**Open apps and handle your windows.** "open Firefox", "switch to Firefox", "close window", "snap left", "move window to the other screen". Tabs and pages work the same way, "new tab", "go back a page", "scroll down 5", "go to youtube.com" or "web search cheap tires".
+
+**And the rest of the desktop.** "show desktop", "switch to desktop two", "volume down", "pause music", "lock screen", "take a screenshot". If you forget one, say "what can I say" and the whole list comes up.
+
+Only a dictation that's just the command does anything, so "I opened Firefox yesterday" gets typed like always, and "literal" in front of any command types the words. KDE gets all of it. GNOME gets it with the TuxTalk extension, and X11 desktops like Linux Mint get nearly all of it. On COSMIC and Sway the window commands can't be done yet and TuxTalk tells you so.
+
+**Left Ctrl+Space as a dictation key.** For keyboards where the F-keys need Fn. Somebody asked for it in [Discussions](https://github.com/ronb1964/TuxTalk/discussions/28), and it's in Preferences, General.
+
+**The recording indicator follows your window.** It shows up in the window you're talking into, wherever that is on the screen. It was in Labs and I've used it every day since, so it's on for everybody now. You can turn it off under Preferences, Audio, Customize.
+
+**Every command in one place.** Help has a Commands tab with all of them as cards, and the rest of Help got the same look.
+
+One fix worth knowing about. With "Send each dictation automatically" on, TuxTalk doesn't press Enter in a terminal anymore, because "testing 1 2 3" kept coming back "command not found". Say "press enter" when you do want it to run. The [changelog](CHANGELOG.md) has the rest.
 
 ---
 
@@ -139,7 +155,7 @@ You can copy the text or save it as a text file, or as subtitles for the video. 
 
 ### Try what's coming next
 
-TuxTalk Labs is at the bottom of Preferences, Advanced. It's for features that work but aren't finished, like Type at pause and voice editing ("edit that, make it shorter"). They're off until you turn them on, and there's a link right there to tell me how they're working for you.
+TuxTalk Labs is at the bottom of Preferences, Advanced. It's for features that work but aren't finished, like Type at pause, voice editing ("edit that, make it shorter") and running your apps, windows and mouse by voice. They're off until you turn them on, and there's a link right there to tell me how they're working for you.
 
 </td>
 </tr>
@@ -385,7 +401,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 
 ## All the features
 
-- **Two hotkeys, both always on.** Hold F8 to talk, or tap F9 to start and tap again to stop. Pick any keys you like.
+- **Two hotkeys, both always on.** Hold F8 to talk, or tap F9 to start and tap again to stop. Pick any keys you like, including Left Ctrl+Space if your F-keys need Fn.
 - **Hands-free if you want it.** Double-tap F9, talk, and it stops by itself when you go quiet. A single tap still works as a plain on/off switch, so a long dictation with thinking pauses never gets cut off. Say nothing for 10 seconds and it stops without typing anything.
 - **Your choice of speech model.** NVIDIA's Parakeet is the default: fast on any processor, for English and 24 European languages. OpenAI's Whisper covers 99 languages, from Tiny up to Large-v3. Not sure which? **What works with what?** in Preferences lays it out.
 - **Only these languages.** Tick the languages you actually speak and Whisper's auto-detect sticks to those.
@@ -397,6 +413,10 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Plain text in terminals.** No capital at the start and no period at the end when you dictate a command.
 - **Voice editing (Labs).** Select text, hold Shift+F8 and say how to change it. Tone and rewrites go to the AI, while caps, lists, commas and removing a word are done exactly in code. Bold, italics and underline work in LibreOffice and other word processors.
 - **Select and move by voice (Labs).** Say "select the last sentence" or "go to the end" on its own and TuxTalk does it instead of typing it.
+- **Open apps by voice (Labs).** "open Firefox", "open the browser", "open email". If it's already open it just comes to the front.
+- **Windows, tabs and pages by voice (Labs).** "snap left", "switch to Firefox", "close window", "new tab", "go back a page", "scroll down 5", "go to youtube.com" or "web search cheap tires".
+- **The rest of your desktop by voice (Labs).** "show desktop", "switch to desktop two", "volume down", "pause music", "lock screen", "take a screenshot". Forget one and "what can I say" brings up the list.
+- **Mouse by voice (Labs).** "mouse grid", a number or two, then "click". On KDE, GNOME and Cinnamon the desktop zooms in on the part you picked, and "left 3" or "up two" nudges the click a few pixels.
 - **Snippets.** Make a phrase type anything you want, like "my email" for your address.
 - **Your Words.** The names and terms you use, spelled your way.
 - **Fix a Word.** Teach it a name or term it keeps getting wrong. Or just say "fix that word" right after a dictation.
