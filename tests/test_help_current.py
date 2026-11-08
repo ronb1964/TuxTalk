@@ -6,8 +6,8 @@ recording indicator (it's a cyan orb by default), Fix a Word under a
 "Voice Commands" tab (it's "Commands"), tray items that no longer exist, a
 "Fast & Accurate" preset, and setting names that were never real.
 """
-import re
 import pathlib
+import re
 
 import pytest
 

@@ -164,9 +164,11 @@ _SCROLL_KEYS = {
 
 def scroll_with_keys(_widget, event, scrolled):
     """A key-press handler: a scrolling key scrolls *scrolled* (a page of
-    Help or of the Voice Commands window, whose text has the focus)."""
+    Help or of the Voice Commands window, whose text has the focus). With
+    Ctrl or Shift it's the text's own: Shift+Down extends a selection."""
     scroll = _SCROLL_KEYS.get(event.keyval)
-    if scroll is None or event.state & Gdk.ModifierType.CONTROL_MASK:
+    if scroll is None or event.state & (Gdk.ModifierType.CONTROL_MASK
+                                        | Gdk.ModifierType.SHIFT_MASK):
         return False
     scrolled.emit("scroll-child", scroll, False)
     return True

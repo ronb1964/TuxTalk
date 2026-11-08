@@ -9,7 +9,7 @@ class FakePactl:
 
     As on real PipeWire, a sink input carries no process id: its client does
     (a stream's own properties had none, so TuxTalk's beeps were taken for
-    another app's and turned down until silent, 2026-10-17)."""
+    another app's and turned down until silent)."""
 
     def __init__(self, streams):
         # index -> {"pid":, "volumes": [...], "mute":, "app":, "role":}

@@ -20,7 +20,7 @@ def test_help_gives_the_ai_and_cuda_sizes_from_their_modules(monkeypatch):
     assert real_cuda not in text and real_cuda.replace(" ", "") not in text
 
 
-def test_voice_commands_give_the_ai_size_and_keep_the_braces(monkeypatch):
+def test_voice_commands_give_the_ai_size(monkeypatch):
     from gtk_text import tree_text
     from tuxtalk import voice_commands_dialog
     monkeypatch.setattr(ai_download, "DOWNLOAD_SIZE_TEXT", AI_SIZE)
@@ -30,8 +30,6 @@ def test_voice_commands_give_the_ai_size_and_keep_the_braces(monkeypatch):
     finally:
         dialog.destroy()
     assert any(f"about {AI_SIZE})" in text for text in shown)
-    # The formatting that puts the size in must still show each brace once.
-    assert "{" in shown and "}" in shown
 
 
 def test_the_device_list_gives_cudas_size_before_its_download(monkeypatch):

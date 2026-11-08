@@ -166,6 +166,20 @@ def test_the_keys_scroll_the_text(shown_help):
     assert dialog.get_focus() is label
 
 
+def test_shift_with_a_scrolling_key_is_left_to_the_text(shown_help):
+    """Shift+Down and Shift+End extend a selection in the text: the page
+    doesn't scroll instead."""
+    from gi.repository import Gdk
+    dialog = shown_help("writing")
+    notebook = _notebook(dialog)
+    _press(dialog, Gdk.KEY_Tab)
+    _label, scroll = _page_text(notebook)
+    start = scroll.get_value()
+    _press(dialog, Gdk.KEY_Page_Down, Gdk.ModifierType.SHIFT_MASK)
+    _press(dialog, Gdk.KEY_End, Gdk.ModifierType.SHIFT_MASK)
+    assert scroll.get_value() == start
+
+
 def test_tab_goes_card_by_card_on_the_commands_tab(shown_help):
     """Commands is cards, not one text: Tab reaches the text over them, then
     each card in turn, named for a screen reader, the page scrolling to show

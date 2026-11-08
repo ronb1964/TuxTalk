@@ -1,8 +1,7 @@
-"""The desktops the window tests stand in for, shared by test_app_focus.py,
-test_kwin_windows.py, test_x11_windows.py, test_window_actions.py and
-test_desktop_actions.py: KWin (a script run under Node, answering over the
-test's private session bus), GNOME Shell (an object on that bus) and X11 (a
-private Xvfb with a stand-in window manager). Nothing here touches the real
+"""The desktops the window, desktop, screenshot and lock tests stand in
+for: KWin (a script run under Node, answering over the test's private
+session bus), GNOME Shell (an object on that bus) and X11 (a private Xvfb
+with a stand-in window manager). Nothing here touches the real
 desktop. Registered as a plugin in conftest.py.
 """
 import ctypes
@@ -609,7 +608,6 @@ class FakePortal(_BusService):
             results = {"uri": GLib.Variant("s", uri)}
         bus.emit_signal(sender, request, "org.freedesktop.portal.Request", "Response",
                         GLib.Variant("(ua{sv})", (self.code, results)))
-
 
     def _on_close(self, request, invocation):
         self.closed.append(request)
