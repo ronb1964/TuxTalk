@@ -60,9 +60,9 @@ I'm an amateur at this, not some company with a team behind it. With this much n
 
 **And the rest of the desktop.** "show desktop", "switch to desktop two", "volume down", "pause music", "lock screen", "take a screenshot". If you forget one, say "what can I say" and the whole list comes up.
 
-Only a dictation that's just the command does anything, so "I opened Firefox yesterday" gets typed like always, and "literal" in front of any command types the words. KDE gets all of it. GNOME gets it with the TuxTalk extension, and X11 desktops like Linux Mint get nearly all of it. On COSMIC and Sway the window commands can't be done yet and TuxTalk tells you so.
+Only a dictation that's just the command does anything, so "I opened Firefox yesterday" gets typed like always, and "literal" in front of any command types the words. KDE gets all of it. GNOME gets it with the TuxTalk extension (log out and back in once after updating), and X11 desktops like Linux Mint get nearly all of it. On COSMIC and Sway the window commands can't be done yet and TuxTalk tells you so.
 
-**Left Ctrl+Space as a dictation key.** For keyboards where the F-keys need Fn. Somebody asked for it in [Discussions](https://github.com/ronb1964/TuxTalk/discussions/28), and it's in Preferences, General.
+**Left Ctrl+Space as a dictation key.** For keyboards where the F-keys need Fn. Somebody asked for it in [Discussions](https://github.com/ronb1964/TuxTalk/discussions/28), and it's in Preferences, General. Picking it updates the hotkey helper, one password and no restart, and while dictation's on your apps don't get Ctrl+Space, so code completion on that shortcut waits until it's off.
 
 **The recording indicator follows your window.** It shows up in the window you're talking into, wherever that is on the screen. It was in Labs and I've used it every day since, so it's on for everybody now. You can turn it off under Preferences, Audio, Customize.
 
@@ -393,7 +393,7 @@ remapper, for instance). Log out and back in afterwards.
 | **Ctrl+Alt+P** | Types your last dictation again, wherever your cursor is |
 | **Shift+F8** | Voice editing: hold it and say how to change the selected text (turn it on in TuxTalk Labs first) |
 
-No easy F-keys on your keyboard? Preferences → General also lets you pick Right Ctrl, Right Alt or Scroll Lock. Right Ctrl and Right Alt then stop working as Ctrl and Alt.
+No easy F-keys on your keyboard? Preferences → General also lets you pick Right Ctrl, Right Alt, Scroll Lock or Left Ctrl+Space. Right Ctrl and Right Alt then stop working as Ctrl and Alt, and Left Ctrl+Space keeps Ctrl+Space from your apps while dictation's on.
 
 Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--stop`). For the AppImage, use the AppImage file, by its full path, e.g. `/home/you/AppImages/TuxTalk.AppImage --toggle` (GNOME runs a shortcut without a shell, so `~` doesn't work there; Help shows yours). It starts TuxTalk if it isn't running and waits for the speech model to load, so the toggle is never lost.
 
@@ -413,7 +413,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Plain text in terminals.** No capital at the start and no period at the end when you dictate a command.
 - **Voice editing (Labs).** Select text, hold Shift+F8 and say how to change it. Tone and rewrites go to the AI, while caps, lists, commas and removing a word are done exactly in code. Bold, italics and underline work in LibreOffice and other word processors.
 - **Select and move by voice (Labs).** Say "select the last sentence" or "go to the end" on its own and TuxTalk does it instead of typing it.
-- **Open apps by voice (Labs).** "open Firefox", "open the browser", "open email". If it's already open it just comes to the front.
+- **Open apps by voice (Labs).** "open Firefox", "open the browser", "open email". If it's already open it comes to the front, except on COSMIC, Sway and Hyprland, where it starts again.
 - **Windows, tabs and pages by voice (Labs).** "snap left", "switch to Firefox", "close window", "new tab", "go back a page", "scroll down 5", "go to youtube.com" or "web search cheap tires".
 - **The rest of your desktop by voice (Labs).** "show desktop", "switch to desktop two", "volume down", "pause music", "lock screen", "take a screenshot". Forget one and "what can I say" brings up the list.
 - **Mouse by voice (Labs).** "mouse grid", a number or two, then "click". On KDE, GNOME and Cinnamon the desktop zooms in on the part you picked, and "left 3" or "up two" nudges the click a few pixels.
@@ -476,7 +476,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
   <img src="screenshots/help-voice-commands.png" alt="Help, Commands: punctuation and brackets, each with what to say" width="45%">
   <img src="screenshots/help-labs.png" alt="Help, Writing: the TuxTalk Labs part, starting with voice editing" width="45%">
 </p>
-<p align="center"><em>Built-in help, including a page on TuxTalk Labs and voice editing</em></p>
+<p align="center"><em>Built-in help, including the TuxTalk Labs part of Writing, starting with voice editing</em></p>
 
 </details>
 
@@ -621,11 +621,13 @@ windows, so TuxTalk needs a little help to notice F8.
 Older versions put you in the `input` group. That works, but the group lets
 every program you run read every key you press, passwords too. The helper
 fixes that. It runs as a throwaway system user with no network and no access
-to your files, it never reports a letter or a number, only F-keys, Esc and
-shortcuts with Ctrl, Alt or Super, and only to whoever's at the screen.
+to your files, it never reports a letter or a number, only F-keys, Esc,
+Scroll Lock, Right Ctrl and Right Alt and shortcuts with Ctrl, Alt or Super,
+and only to whoever's at the screen.
 `systemd-analyze security tuxtalk-hotkeys` rates it 0.6, "SAFE".
 
-A shortcut that isn't an F-key needs two of Ctrl, Alt and Super, and while
+A shortcut that isn't an F-key needs two of Ctrl, Alt and Super (the one
+exception is Space with Left Ctrl, for Left Ctrl+Space), and while
 those stay held the helper reports two different keys at most, so a stuck
 Ctrl+Alt can't turn your typing into "shortcuts". The check is per user, so
 two logins of the same user both count as the person at the screen.
