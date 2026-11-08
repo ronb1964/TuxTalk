@@ -4,8 +4,11 @@
 default apps, so tests drive it with lists. `installed_apps` and `default_apps`
 are the thin readers of the desktop (GLib's app list, KDE's terminal setting).
 
-A weak match is never reported as "one": a wrong app opening is worse than a
-message saying nothing fit.
+A weak match (the start of a name's word, a sound-alike, a close spelling)
+counts only for a bare name, one said with no article and none of the small
+words sentences are made of: "open thunder" opens Thunderbird and "start
+console" Konsole, while "Open the file." and "Start over." are typed. A wrong
+app opening is worse than the words typed.
 """
 import configparser
 import difflib
@@ -33,6 +36,14 @@ _NOISE_WORDS = ("the", "app")
 _DETERMINERS = frozenset({"the", "a", "an", "my", "this", "that", "your"})
 # Words that are some of an app's name ("Passwords and Keys") but never name it.
 _FUNCTION_WORDS = frozenset({"and", "or", "to", "of", "for", "in", "on", "with", "your", "my"})
+# Words that make a short dictation a sentence ("Start over.", "Open it up."),
+# never an app's nickname: with one of them, or an article, only a name said
+# whole counts.
+_SENTENCE_WORDS = _DETERMINERS | _FUNCTION_WORDS | frozenset({
+    "some", "any", "every", "all", "our", "his", "her", "their", "it", "them", "me", "us",
+    "you", "him", "over", "up", "down", "out", "off", "back", "again", "now", "here",
+    "there", "away", "later", "today", "together", "is", "are", "be", "at", "by", "from",
+})
 
 # What people say for "the app I use for this", mapped to the kind
 # `default_apps` reports.
@@ -119,18 +130,12 @@ def _sounds(letters):
 
 
 def _words_start(said, name_words):
-    """Each said word starts a later word of the name than the one before.
-    One word alone must be most of the name's word ("calc", "clock" of
-    "Clocks"): the last word of a short sentence often starts some app's
-    name ("over" of Overgrive, "show" of Showfoto)."""
-    alone = len(said) == 1
+    """Each said word starts a later word of the name than the one before."""
     position = 0
     for word in said:
         if len(word) < _MIN_SHORT_WORD:
             return False
-        while position < len(name_words) and not (
-                name_words[position].startswith(word)
-                and (not alone or 3 * len(word) >= 2 * len(name_words[position]))):
+        while position < len(name_words) and not name_words[position].startswith(word):
             position += 1
         if position == len(name_words):
             return False
@@ -173,6 +178,13 @@ def _candidates(words, indexed, strict=False):
         if hits:
             return hits
     return [] if strict else _fuzzy(letters, indexed)
+
+
+def _bare(request) -> bool:
+    """Whether *request*'s name was said bare, with no article and no word
+    a sentence is made of ("thunder", "libre writer"): only then may the
+    start of a name, a sound-alike or a close spelling name the app."""
+    return not _SENTENCE_WORDS.intersection(normalize(request.name).split())
 
 
 def _some_name_words(request, words, indexed):
@@ -262,8 +274,8 @@ def find(request, entries, defaults, strict=False):
     *defaults* maps "browser", "email", "files", "text editor" and "terminal"
     to app ids; saying one of those words opens the default app. *strict*:
     the name as said only (_candidates), else some whole words of it, then
-    Found.partial (_some_name_words). A request with name_only ("start")
-    takes the name as said only too, without the whole-words fallback.
+    Found.partial (_some_name_words). A request that isn't _bare takes the
+    name as said only too, without the whole-words fallback.
     """
     words = _clean(request.name)
     if not words:
@@ -272,7 +284,7 @@ def find(request, entries, defaults, strict=False):
     if default is not None:
         return Found("one", (default,))
     indexed = [_Indexed(e) for e in entries]
-    hits = _candidates(words, indexed, strict or request.name_only)
+    hits = _candidates(words, indexed, strict or not _bare(request))
     partial = strict and not hits
     if partial:
         hits = _some_name_words(request, words, indexed)

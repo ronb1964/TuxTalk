@@ -629,10 +629,12 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
 ### Good to know
   • Only a dictation that is just the command counts. "I opened Firefox yesterday" and
     "open the door and come in" are typed as usual.
-  • A name that fits no app is typed as usual, and after <b>start</b> only an app's whole
-    name counts, so a sentence like "Start over." is never lost. Two apps that fit equally
-    well: the cancel beep sounds, a note floats over your window naming them, and nothing
-    opens.
+  • A name that fits no app is typed as usual. The start of a name, or a close spelling,
+    counts only when you say the name alone: <b>open thunder</b> opens Thunderbird, while
+    "Open the file." and "Start over." are typed. A sentence that says an app's whole name
+    still opens it ("Open the maps."); put <b>literal</b> first to type it. Two apps that
+    fit equally well (<b>open libre</b>): the cancel beep sounds, a note floats over your
+    window naming them, and nothing opens.
   • Where it works: KDE Plasma 6 has everything. GNOME has it with the TuxTalk extension
     (log out and back in once after updating). X11 desktops like Cinnamon and Xfce have all but
     <b>show all windows</b>. On COSMIC, Sway and Hyprland, windows and desktops can't be

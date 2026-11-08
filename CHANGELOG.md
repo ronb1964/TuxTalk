@@ -68,10 +68,12 @@ before 0.15.0, so older entries use that name.
   Firefox" types the words.
 - Only a dictation that is just the command opens something. "I opened
   Firefox yesterday" is typed as usual, and so is a short one that names no
-  app, like "Start over.": after "start" only an app's whole name counts, and
-  one word must be most of a name's word, so no sentence is lost. If two
-  apps fit equally well, a note floats over your window naming them, the
-  cancel beep sounds and nothing opens.
+  app. The start of a name or a close spelling counts only when the name is
+  said alone: "open thunder" opens Thunderbird, while "Open the file." and
+  "Start over." are typed. A short sentence that says an app's whole name
+  still opens it ("Open the maps."); "literal" first types it. If two apps
+  fit equally well ("open libre"), a note floats over your window naming
+  them, the cancel beep sounds and nothing opens.
 - Bringing an open app to the front works on KDE, on GNOME with the TuxTalk
   extension and on X11 desktops like Cinnamon and Xfce. On COSMIC, Sway and
   Hyprland the app is started again. In a hands-free or Type at pause
@@ -99,7 +101,7 @@ before 0.15.0, so older entries use that name.
   minimizing and switching work on KDE, on GNOME with the TuxTalk extension
   (log out and back in once after updating) and on X11 desktops. On COSMIC,
   Sway and similar, TuxTalk says it can't do that on this desktop.
-- It runs your desktop too. Hold your dictation key,
+- The same tickbox runs your desktop. Hold your dictation key,
   say it, let go, and nothing is typed. Windows: "snap left", "snap top
   right", "center window", "move window to desktop two", "move window to the
   other screen", "minimize Firefox", "maximize Firefox", "restore Firefox"

@@ -3,10 +3,8 @@ from tuxtalk.app_commands import parse, OpenRequest
 
 
 def test_open_launch_and_start_name_an_app():
-    for said in ("Open Firefox.", "launch firefox"):
+    for said in ("Open Firefox.", "launch firefox", "Start Firefox please"):
         assert parse(said) == OpenRequest("firefox")
-    # "start" begins many sentences: only the name as said counts after it.
-    assert parse("Start Firefox please") == OpenRequest("firefox", name_only=True)
 
 
 def test_new_and_another_start_a_second_one():

@@ -65,26 +65,59 @@ def test_generic_names_and_word_starts(apps):
     assert ids(find(parse("open calc"), apps, {})) == ["libreoffice-calc.desktop"]
 
 
-def test_a_short_sentence_never_opens_an_app_it_only_starts_like():
-    """"Start over." with Overgrive installed, "Start the show." with
-    Showfoto: typed, not opened."""
-    menu = [entry("overgrive.desktop", "Overgrive", program="overgrive"),
-            entry("org.kde.showfoto.desktop", "Showfoto", program="showfoto"),
-            entry("org.gnome.clocks.desktop", "Clocks", program="gnome-clocks"),
-            entry("rover.desktop", "Rover", program="rover"),
+# Apps whose names a short sentence's words start, or come close to.
+SENTENCE_MENU = [
+    entry("overgrive.desktop", "Overgrive", program="overgrive"),
+    entry("rover.desktop", "Rover", program="rover"),
+    entry("org.gnome.Nautilus.desktop", "Files", "File Manager", "nautilus"),
+    entry("org.gnome.FileRoller.desktop", "File Roller", "Archive Manager", "file-roller"),
+    entry("bookworm.desktop", "Bookworm", "eBook Reader", "bookworm"),
+    entry("org.gnome.Maps.desktop", "Maps", program="gnome-maps"),
+    entry("org.kde.showfoto.desktop", "Showfoto", program="showfoto"),
+]
+
+
+@pytest.mark.parametrize("said", ["Start over.", "Open the file.", "Launch the file.",
+                                  "Open the books.", "Open the map.", "Start the show.",
+                                  "Start again.", "Open it up."])
+def test_a_short_sentence_is_never_taken_for_an_app_it_only_starts_like(said):
+    """With an article, or a word sentences are made of, only a name said
+    whole counts: the start of one or a close spelling doesn't."""
+    assert find(parse(said), SENTENCE_MENU, {}).kind == "none"
+
+
+def test_a_sentence_that_says_an_apps_whole_name_still_opens_it():
+    assert ids(find(parse("Open the maps."), SENTENCE_MENU, {})) == ["org.gnome.Maps.desktop"]
+
+
+@pytest.mark.parametrize("said, app", [
+    ("open thunder", "org.mozilla.Thunderbird.desktop"),
+    ("open prusa", "PrusaSlicer.desktop"),
+    ("open orca", "OrcaSlicer.desktop"),
+    ("open spot", "spotify.desktop"),
+    ("open git", "github-desktop.desktop"),
+    ("start console", "org.kde.konsole.desktop"),
+    ("start fierfox", "firefox.desktop"),
+])
+def test_a_bare_name_cut_short_or_misheard_opens_its_app(said, app):
+    menu = [entry("org.mozilla.Thunderbird.desktop", "Thunderbird", "Mail Client", "thunderbird"),
+            entry("PrusaSlicer.desktop", "PrusaSlicer", program="prusa-slicer"),
+            entry("OrcaSlicer.desktop", "OrcaSlicer", program="orca-slicer"),
+            entry("spotify.desktop", "Spotify", "Music Player", "spotify"),
+            entry("github-desktop.desktop", "GitHub Desktop", program="github-desktop"),
+            entry("org.kde.konsole.desktop", "Konsole", "Terminal", "konsole"),
             entry("firefox.desktop", "Firefox", "Web Browser", "firefox")]
-    for said in ("start over", "start the show", "open the show"):
-        assert find(parse(said), menu, {}).kind == "none", said
-    # One word must be most of a name's word for its start to count.
-    assert find(parse("open over"), menu[:3], {}).kind == "none"
-    assert ids(find(parse("open the clock"), menu, {})) == ["org.gnome.clocks.desktop"]
-    assert ids(find(parse("start firefox"), menu, {})) == ["firefox.desktop"]
-    assert ids(find(parse("start the web browser"), menu, {})) == ["firefox.desktop"]
-    # A close spelling, or the start of a name, counts after "open" and "launch" only.
-    assert find(parse("start fierfox"), menu, {}).kind == "none"
-    assert find(parse("start the clock"), menu, {}).kind == "none"
-    assert ids(find(parse("open fierfox"), menu, {})) == ["firefox.desktop"]
-    assert ids(find(parse("open over"), menu, {})) == ["rover.desktop"]
+    assert ids(find(parse(said), menu, {})) == [app]
+
+
+def test_a_bare_name_several_apps_start_with_names_them_all():
+    """"open libre" and "open calc" give the note naming the apps, not one of them."""
+    menu = [entry("libreoffice-writer.desktop", "LibreOffice Writer", program="libreoffice"),
+            entry("libreoffice-calc.desktop", "LibreOffice Calc", program="libreoffice"),
+            entry("org.gnome.Calculator.desktop", "Calculator", "Calculator", "gnome-calculator")]
+    assert find(parse("open libre"), menu, {}).kind == "tie"
+    assert ids(find(parse("open calc"), menu, {})) == ["libreoffice-calc.desktop",
+                                                       "org.gnome.Calculator.desktop"]
 
 
 def test_the_name_wins_over_a_program_shared_by_other_apps(apps):
