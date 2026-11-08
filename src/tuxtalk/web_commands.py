@@ -8,6 +8,7 @@ The address and the words are never logged: they are as private as a
 dictation. Run on the dictation worker, never GTK's thread, since a browser
 that has to start can take seconds to come forward."""
 import os
+import re
 import time
 from typing import NamedTuple
 
@@ -129,14 +130,18 @@ def _into_address_bar(where, opener, text: str, what: str, beeps_on: bool) -> bo
     """*opener* (Ctrl+L or Ctrl+T, each leaving the cursor in the address
     bar), *text*, Delete and Enter, into the window
     *where* only: if another window takes the focus partway, what's left
-    goes nowhere, Enter above all."""
+    goes nowhere, Enter above all. Each send is checked against *where*
+    right before its first key (only_into), so the text goes a word at a
+    time: one send would be checked once, and its last words would land in
+    the window switched to."""
     press = keyboard_output.output_backend().press_keys
 
     def send():
         if not press(opener):
             return False
         time.sleep(OPENER_SETTLE_S)
-        return keyboard_output.type_text(text) and press(_DELETE_ENTER)
+        return (all(keyboard_output.type_text(word) for word in re.findall(r"\S+\s*", text))
+                and press(_DELETE_ENTER))
     try:
         sent = keyboard_output.send_only_into(where, send)
     except virtual_keyboard.StoppedPartway as stop:

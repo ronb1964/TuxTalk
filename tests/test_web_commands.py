@@ -26,6 +26,8 @@ VIVALDI_ENTRY = AppEntry("com.vivaldi.Vivaldi.desktop", "Vivaldi", "Vivaldi", "W
 KWRITE_ENTRY = AppEntry("org.kde.kwrite.desktop", "KWrite", "KWrite", "Text Editor", "kwrite", "")
 
 CTRL, ENTER, DELETE = 29, 28, 111
+# "cheap tires" as typed: a word at a time, each checked against the window.
+CHEAP_TIRES = ["cheap ", "tires"]
 CTRL_L = [CTRL, keyboard_output.nav_keycode("L")]
 CTRL_T = [CTRL, keyboard_output.nav_keycode("T")]
 
@@ -168,7 +170,7 @@ def test_the_address_and_the_words_never_reach_the_log(focus, typed, opened_uris
 
 def test_web_search_in_a_browser_types_the_words_in_its_bar(at_firefox, typed, keyboard):
     assert web_commands.search(SearchRequest("cheap tires"), FIREFOX, False) is True
-    assert typed == ["cheap tires"]
+    assert typed == CHEAP_TIRES
     assert keyboard.typed_keys() == CTRL_L + [DELETE, ENTER]   # Delete: the browser's autofill
 
 
@@ -177,7 +179,7 @@ def test_web_search_elsewhere_brings_the_browser_forward_then_opens_a_tab(
     assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is True
     assert browser.started == []
     assert keyboard.typed_keys() == CTRL_T + [DELETE, ENTER]
-    assert typed == ["cheap tires"]
+    assert typed == CHEAP_TIRES
 
 
 def test_web_search_starts_the_browser_when_it_isnt_running(at_kwrite, browser, typed,
@@ -188,7 +190,7 @@ def test_web_search_starts_the_browser_when_it_isnt_running(at_kwrite, browser, 
     assert browser.started == ["firefox.desktop"]
     # Two polls slept through, then the pause for the new tab.
     assert clock.now == pytest.approx(2 * web_commands.POLL_S + web_commands.OPENER_SETTLE_S)
-    assert keyboard.typed_keys() == CTRL_T + [DELETE, ENTER] and typed == ["cheap tires"]
+    assert keyboard.typed_keys() == CTRL_T + [DELETE, ENTER] and typed == CHEAP_TIRES
 
 
 def test_a_browser_that_never_comes_forward_types_nothing(at_kwrite, browser, typed, keyboard,
@@ -232,7 +234,7 @@ def vivaldi_default(browser, monkeypatch):
 def test_a_default_browser_on_no_list_is_searched_in(at_kwrite, vivaldi_default, typed,
                                                      keyboard):
     assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is True
-    assert keyboard.typed_keys() == CTRL_T + [DELETE, ENTER] and typed == ["cheap tires"]
+    assert keyboard.typed_keys() == CTRL_T + [DELETE, ENTER] and typed == CHEAP_TIRES
 
 
 def test_go_to_in_a_default_browser_on_no_list_uses_its_bar(focus, vivaldi_default, typed,
@@ -293,7 +295,7 @@ def test_on_wayland_copies_are_told_apart_by_their_app_id(wayland, at_kwrite, br
     installed(monkeypatch, FIREFOX_ENTRY, FLATPAK_FIREFOX)
     browser.arrives = [(arrives, ("tray", "7"))]
     assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is searched
-    assert typed == (["cheap tires"] if searched else [])
+    assert typed == (CHEAP_TIRES if searched else [])
 
 
 def test_on_x11_the_default_copys_own_window_class_is_waited_for(x11, at_kwrite, browser,
@@ -303,7 +305,7 @@ def test_on_x11_the_default_copys_own_window_class_is_waited_for(x11, at_kwrite,
     installed(monkeypatch, FLATPAK_FIREFOX, SNAP_FIREFOX, default="org.mozilla.firefox.desktop")
     browser.arrives = [("firefox", ("x11", "7"))]
     assert web_commands.search(SearchRequest("cheap tires"), KWRITE, False) is True
-    assert typed == ["cheap tires"]
+    assert typed == CHEAP_TIRES
 
 
 def test_on_x11_another_copys_window_isnt_the_default(x11, at_kwrite, browser, typed, floated,
@@ -366,6 +368,23 @@ def test_focus_moving_away_during_the_address_stops_the_typing(focus, at_firefox
     monkeypatch.setattr(keyboard_output, "type_text", type_then_focus_moves)
     assert web_commands.go_to(AddressRequest("https://youtube.com"), FIREFOX, False) is False
     assert keyboard.typed_keys() == CTRL_L          # no Enter into KWrite
+    assert floated == ["Window changed, nothing done"]
+
+
+def test_a_window_switch_partway_through_the_words_leaves_the_rest_out(at_firefox, focus,
+                                                                     keyboard, floated,
+                                                                     monkeypatch):
+    """The user clicks into KWrite while "cheap tires" is being typed: "tires"
+    and the Enter never reach it."""
+    type_text = keyboard_output.type_text
+
+    def type_then_switch(text):
+        went_in = type_text(text)
+        focus[:] = [KWRITE]
+        return went_in
+    monkeypatch.setattr(keyboard_output, "type_text", type_then_switch)
+    assert web_commands.search(SearchRequest("cheap tires"), FIREFOX, False) is False
+    assert len(keyboard.typed_keys()) == len(CTRL_L) + len("cheap ")
     assert floated == ["Window changed, nothing done"]
 
 
