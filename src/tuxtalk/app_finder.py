@@ -119,12 +119,18 @@ def _sounds(letters):
 
 
 def _words_start(said, name_words):
-    """Each said word starts a later word of the name than the one before."""
+    """Each said word starts a later word of the name than the one before.
+    One word alone must be most of the name's word ("calc", "clock" of
+    "Clocks"): the last word of a short sentence often starts some app's
+    name ("over" of Overgrive, "show" of Showfoto)."""
+    alone = len(said) == 1
     position = 0
     for word in said:
         if len(word) < _MIN_SHORT_WORD:
             return False
-        while position < len(name_words) and not name_words[position].startswith(word):
+        while position < len(name_words) and not (
+                name_words[position].startswith(word)
+                and (not alone or 3 * len(word) >= 2 * len(name_words[position]))):
             position += 1
         if position == len(name_words):
             return False
@@ -242,7 +248,8 @@ def find(request, entries, defaults, strict=False):
     *defaults* maps "browser", "email", "files", "text editor" and "terminal"
     to app ids; saying one of those words opens the default app. *strict*:
     the name as said only (_candidates), else some whole words of it, then
-    Found.partial (_some_name_words).
+    Found.partial (_some_name_words). A request with name_only ("start")
+    takes the name as said only too, without the whole-words fallback.
     """
     words = _clean(request.name)
     if not words:
@@ -257,7 +264,7 @@ def find(request, entries, defaults, strict=False):
                            if request.install and c.install == request.install), match[0])
             return Found("one", (chosen,))
     indexed = [_Indexed(e) for e in entries]
-    hits = _candidates(words, indexed, strict)
+    hits = _candidates(words, indexed, strict or request.name_only)
     partial = strict and not hits
     if partial:
         hits = _some_name_words(request, words, indexed)

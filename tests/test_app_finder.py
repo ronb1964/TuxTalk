@@ -65,6 +65,28 @@ def test_generic_names_and_word_starts(apps):
     assert ids(find(parse("open calc"), apps, {})) == ["libreoffice-calc.desktop"]
 
 
+def test_a_short_sentence_never_opens_an_app_it_only_starts_like():
+    """"Start over." with Overgrive installed, "Start the show." with
+    Showfoto: typed, not opened."""
+    menu = [entry("overgrive.desktop", "Overgrive", program="overgrive"),
+            entry("org.kde.showfoto.desktop", "Showfoto", program="showfoto"),
+            entry("org.gnome.clocks.desktop", "Clocks", program="gnome-clocks"),
+            entry("rover.desktop", "Rover", program="rover"),
+            entry("firefox.desktop", "Firefox", "Web Browser", "firefox")]
+    for said in ("start over", "start the show", "open the show"):
+        assert find(parse(said), menu, {}).kind == "none", said
+    # One word must be most of a name's word for its start to count.
+    assert find(parse("open over"), menu[:3], {}).kind == "none"
+    assert ids(find(parse("open the clock"), menu, {})) == ["org.gnome.clocks.desktop"]
+    assert ids(find(parse("start firefox"), menu, {})) == ["firefox.desktop"]
+    assert ids(find(parse("start the web browser"), menu, {})) == ["firefox.desktop"]
+    # A close spelling, or the start of a name, counts after "open" and "launch" only.
+    assert find(parse("start fierfox"), menu, {}).kind == "none"
+    assert find(parse("start the clock"), menu, {}).kind == "none"
+    assert ids(find(parse("open fierfox"), menu, {})) == ["firefox.desktop"]
+    assert ids(find(parse("open over"), menu, {})) == ["rover.desktop"]
+
+
 def test_the_name_wins_over_a_program_shared_by_other_apps(apps):
     # Both LibreOffice entries run "libreoffice"; the program name only counts
     # when no app is called that.

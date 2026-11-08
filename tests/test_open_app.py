@@ -194,11 +194,11 @@ def test_a_tie_names_both_and_opens_neither(desktop):
 
 
 def test_a_tie_of_many_names_three(desktop):
-    """"open libre" fits every LibreOffice app: the label stays short."""
+    """"open libreoffice" fits every LibreOffice app: the label stays short."""
     desktop.apps = [AppEntry(f"libreoffice-{n.lower()}.desktop", f"LibreOffice {n}",
                              f"LibreOffice {n}", "", "libreoffice", "")
                     for n in ("Writer", "Calc", "Impress", "Draw")]
-    voice_actions.run("open libre", True)
+    voice_actions.run("open libreoffice", True)
     assert desktop.floated == ["Several apps fit: LibreOffice Writer, LibreOffice Calc, "
                                "LibreOffice Impress and more. Say the full name."]
 
@@ -230,6 +230,8 @@ def test_a_sentence_about_opening_is_typed(desktop, say):
                                           "Start with the introduction"),
                                          ("open fierfox zz", "Open fierfox zz")])
 def test_a_short_sentence_naming_no_app_is_typed(desktop, say, said, typed):
+    desktop.apps.append(AppEntry("overgrive.desktop", "Overgrive", "Overgrive", "",
+                                 "overgrive", ""))
     say(said)
     assert desktop.chat[2][0][0].startswith(typed)
     assert desktop.launched == [] and desktop.floated == [] and desktop.beeps == []

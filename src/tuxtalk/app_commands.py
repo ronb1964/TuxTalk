@@ -6,8 +6,9 @@ what they ask for. Finding the app and starting it are other modules' jobs.
 A dictation is a command only when the WHOLE of it is a verb and up to four
 more words, so "I opened Firefox yesterday" and "open the door and come in
 now" are typed as text. A short sentence like "Start over." is a request
-here; it's typed when app_finder finds no app it names. Spoken quotation
-("open quote", "close quote") is never a request. "literal open Firefox" is
+here; it's typed when app_finder finds no app it names, and after "start",
+which begins so many sentences, only an app's name as said counts. Spoken
+quotation ("open quote", "close quote") is never a request. "literal open Firefox" is
 left alone here: the caller strips "literal" and types the rest.
 """
 from dataclasses import dataclass, replace
@@ -29,6 +30,9 @@ class OpenRequest:
     name: str                # what was said for the app: "firefox", "fire fox"
     new: bool = False        # "new" or "another": start a second one
     install: str = ""        # "", "flatpak", "snap" or "appimage": which copy
+    # Only the name as said counts, never the start of one or a close
+    # spelling: the verb was "start" ("Start over.", "Start the show.").
+    name_only: bool = False
 
 
 def parse(text: str) -> OpenRequest | None:
@@ -36,10 +40,10 @@ def parse(text: str) -> OpenRequest | None:
     words = normalize(text).split()
     if len(words) < 2 or words[0] not in VERBS:
         return None
-    words = words[1:]
+    verb, words = words[0], words[1:]
     new = words[0] in _NEW
     request = app_name(words[1:] if new else words)
-    return replace(request, new=new) if request else None
+    return replace(request, new=new, name_only=verb == "start") if request else None
 
 
 def app_name(words: list[str]) -> OpenRequest | None:
