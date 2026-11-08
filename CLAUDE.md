@@ -173,12 +173,16 @@ sleep 3 && cat /tmp/tuxtalk-output.log && tail -n 40 ~/.config/tuxtalk/tuxtalk.l
 - Continue monitoring both as Ron tests — check them after each reported issue
 
 ### Step 8: Ron Tests — WAIT for Results
-Before Ron starts, show him his part as a checklist panel in the chat (the
-visualize show_widget tool): only what the VM run (Step 4b) can't check,
-numbered, one feature per check (never two under one heading: he missed
-Backup tucked under Transcribe a File), each with its steps and Pass /
-Problem buttons, so he can work
-down it and dictate results as he goes (Ron, 2026-11-01). Keep it to what
+Before Ron starts, give him his part as an Artifact page that opens in its
+own window and stays put (not a panel in the chat, which scrolls away as he
+reports): only what the VM run (Step 4b) can't check, numbered, one feature
+per check (never two under one heading: he missed Backup tucked under
+Transcribe a File), each with its steps, a note box and Pass / Problem
+buttons. Each click is saved in the page's `db` and sent to Claude at once
+with the `comments` capability's sendToClaude, so a problem is seen as it
+happens and a rebuild can start before the rest of the list. 0.22's page
+(https://claude.ai/artifact/7Kv8WRh1R437dPJvveSYwm) is the template:
+republish it with the new checks and clear its `results`. Keep it to what
 needs him: his graphics card, his password, his voice, file dialogs, feel.
 Ron tests against this checklist. Do NOT proceed until he reports back.
 Claude checks every item against the log too
