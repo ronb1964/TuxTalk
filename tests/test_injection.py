@@ -107,6 +107,22 @@ def test_paste_reports_success_when_the_clipboard_is_set_and_ctrl_v_sent(monkeyp
     assert keyboard.events == [(29, 1), (47, 1), (47, 0), (29, 0)]     # Ctrl+V
 
 
+@pytest.mark.parametrize("gnome", [True, False])
+def test_on_gnome_the_paste_key_waits_for_wl_copys_window_to_give_the_focus_back(
+        monkeypatch, wayland, keyboard, gnome):
+    """There the key could reach wl-copy's closing window, and the text was lost."""
+    steps = []
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: FakePopen(returncode=0))
+    monkeypatch.setattr(keyboard_output.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
+    monkeypatch.setattr("tuxtalk.desktop_detect.is_gnome", lambda: gnome)
+    monkeypatch.setattr("time.sleep", lambda s: steps.append(("wait", s)))
+    monkeypatch.setattr(keyboard_output, "send_paste_keystroke",
+                        lambda *a: steps.append(("key",)) or True)
+    assert keyboard_output.paste_text("hello")
+    before_key = steps[:steps.index(("key",))]
+    assert (("wait", keyboard_output.WL_COPY_FOCUS_BACK_S) in before_key) is gnome
+
+
 def test_paste_waits_for_wl_copy_to_set_the_clipboard(monkeypatch, wayland, keyboard):
     """The wl-copy we start exits once the clipboard is set. One still running
     has not got that far, so Ctrl+V would paste the old clipboard contents,

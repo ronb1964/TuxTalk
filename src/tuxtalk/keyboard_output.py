@@ -16,7 +16,7 @@ from typing import NamedTuple
 
 from evdev import ecodes
 
-from . import delivery_notices, focused_window, modifier_hotkeys, virtual_keyboard
+from . import delivery_notices, desktop_detect, focused_window, modifier_hotkeys, virtual_keyboard
 from . import live_settings as live
 from . import notify as notify_module
 from . import recording_state as rs
@@ -61,6 +61,11 @@ WTYPE_TIMEOUT_S = 20.0
 # How long wl-copy may take to hand the dictation to the compositor. It is
 # usually a few milliseconds; a slower one is stuck, and nothing is pasted.
 WL_COPY_READY_TIMEOUT_S = 1.0
+# GNOME has no data-control protocol, so wl-copy sets the clipboard from a
+# window of its own, which has the focus until GNOME has handled its closing
+# (20 to 35 ms in the Zorin VM). wl-copy exits without waiting for that, and
+# a paste key sent at once can reach that window, and the text is lost.
+WL_COPY_FOCUS_BACK_S = 0.1
 
 # Shortcuts and single keys (Ctrl+V, Enter, Delete) keep ydotool's pace from
 # before TuxTalk had its own keyboard: they're four key events at most, so
@@ -649,6 +654,8 @@ def _send_paste(text, keeping):
         if keeping:
             _clipboard_keeper.before_primary()
         primary_holds_text = clipboard.copy_to_primary(text, WL_COPY_READY_TIMEOUT_S)
+    if desktop_detect.is_gnome():
+        time.sleep(WL_COPY_FOCUS_BACK_S)
     keystroke_start = time.time()
     if not send_paste_keystroke(focused_class, primary_holds_text):
         return False
