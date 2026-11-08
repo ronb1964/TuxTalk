@@ -25,9 +25,11 @@ VIVALDI_ENTRY = AppEntry("com.vivaldi.Vivaldi.desktop", "Vivaldi", "Vivaldi", "W
                          "vivaldi", "flatpak")
 KWRITE_ENTRY = AppEntry("org.kde.kwrite.desktop", "KWrite", "KWrite", "Text Editor", "kwrite", "")
 
-CTRL, ENTER, DELETE = 29, 28, 111
-# "cheap tires" as typed: a word at a time, each checked against the window.
-CHEAP_TIRES = ["cheap ", "tires"]
+CTRL, ENTER, DELETE, SHIFT = 29, 28, 111, 42
+# "cheap tires" and youtube's address as typed: a few characters at a time,
+# the window checked before each.
+CHEAP_TIRES = ["cheap ti", "res"]
+YOUTUBE = ["https://", "youtube.", "com"]
 CTRL_L = [CTRL, keyboard_output.nav_keycode("L")]
 CTRL_T = [CTRL, keyboard_output.nav_keycode("T")]
 
@@ -130,7 +132,7 @@ def browser(monkeypatch, focus):
 
 def test_in_a_browser_go_to_types_the_address_in_its_bar(at_firefox, typed, keyboard):
     assert web_commands.go_to(AddressRequest("https://youtube.com"), FIREFOX, False) is True
-    assert typed == ["https://youtube.com"]
+    assert typed == YOUTUBE
     assert keyboard.typed_keys() == CTRL_L + [DELETE, ENTER]
 
 
@@ -168,10 +170,11 @@ def test_the_address_and_the_words_never_reach_the_log(focus, typed, opened_uris
     assert "youtube" not in caplog.text.lower() and "tires" not in caplog.text.lower()
 
 
-def test_web_search_in_a_browser_types_the_words_in_its_bar(at_firefox, typed, keyboard):
+def test_web_search_in_a_browser_opens_a_new_tab_for_the_words(at_firefox, typed, keyboard):
+    """Never the current tab: the page there may hold something half written."""
     assert web_commands.search(SearchRequest("cheap tires"), FIREFOX, False) is True
     assert typed == CHEAP_TIRES
-    assert keyboard.typed_keys() == CTRL_L + [DELETE, ENTER]   # Delete: the browser's autofill
+    assert keyboard.typed_keys() == CTRL_T + [DELETE, ENTER]   # Delete: the browser's autofill
 
 
 def test_web_search_elsewhere_brings_the_browser_forward_then_opens_a_tab(
@@ -241,7 +244,7 @@ def test_go_to_in_a_default_browser_on_no_list_uses_its_bar(focus, vivaldi_defau
                                                             opened_uris, keyboard):
     focus[:] = [VIVALDI]
     assert web_commands.go_to(AddressRequest("https://youtube.com"), VIVALDI, False) is True
-    assert opened_uris == [] and typed == ["https://youtube.com"]
+    assert opened_uris == [] and typed == YOUTUBE
     assert keyboard.typed_keys()[:2] == CTRL_L
 
 
@@ -374,8 +377,8 @@ def test_focus_moving_away_during_the_address_stops_the_typing(focus, at_firefox
 def test_a_window_switch_partway_through_the_words_leaves_the_rest_out(at_firefox, focus,
                                                                      keyboard, floated,
                                                                      monkeypatch):
-    """The user clicks into KWrite while "cheap tires" is being typed: "tires"
-    and the Enter never reach it."""
+    """The user clicks into KWrite while "cheap tires" is being typed: the
+    rest and the Enter never reach it."""
     type_text = keyboard_output.type_text
 
     def type_then_switch(text):
@@ -384,7 +387,23 @@ def test_a_window_switch_partway_through_the_words_leaves_the_rest_out(at_firefo
         return went_in
     monkeypatch.setattr(keyboard_output, "type_text", type_then_switch)
     assert web_commands.search(SearchRequest("cheap tires"), FIREFOX, False) is False
-    assert len(keyboard.typed_keys()) == len(CTRL_L) + len("cheap ")
+    assert len(keyboard.typed_keys()) == len(CTRL_T) + len("cheap ti")
+    assert floated == ["Window changed, nothing done"]
+
+
+def test_a_window_switch_partway_through_an_address_leaves_the_rest_out(at_firefox, focus,
+                                                                        keyboard, floated,
+                                                                        monkeypatch):
+    type_text = keyboard_output.type_text
+
+    def type_then_switch(text):
+        went_in = type_text(text)
+        focus[:] = [KWRITE]
+        return went_in
+    monkeypatch.setattr(keyboard_output, "type_text", type_then_switch)
+    assert web_commands.go_to(AddressRequest("https://youtube.com"), FIREFOX, False) is False
+    keys = [k for k in keyboard.typed_keys() if k != SHIFT]     # the colon's Shift
+    assert keys[:2] == CTRL_L and len(keys) == len(CTRL_L) + len("https://")
     assert floated == ["Window changed, nothing done"]
 
 
@@ -420,7 +439,7 @@ def test_an_address_said_without_https_is_typed_with_it(actions_on, chat, say, k
     texts = []
     monkeypatch.setattr(keyboard_output, "type_text", lambda text: texts.append(text) or True)
     say("Go to youtube dot com.")
-    assert texts == ["https://youtube.com"]
+    assert texts == YOUTUBE
 
 
 @pytest.mark.parametrize("done", [True, False])

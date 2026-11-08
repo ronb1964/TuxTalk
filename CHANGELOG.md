@@ -90,7 +90,8 @@ before 0.15.0, so older entries use that name.
   the file", "select all", "copy the selection", "paste it" and "press
   escape"; "go to youtube.com", which uses your browser's address bar or opens
   your default browser; and "web search cheap tires", which uses your
-  browser's own search engine. In a terminal the keys are the terminal's
+  browser's own search engine, always in a new tab, so the page you were
+  on stays as it was. In a terminal the keys are the terminal's
   own, and select all, save, find on page, reopen tab, go back, go forward
   and reload the page don't apply there.
   "literal" before any of them types the words. "close Firefox" closes the

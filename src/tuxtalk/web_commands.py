@@ -8,7 +8,6 @@ The address and the words are never logged: they are as private as a
 dictation. Run on the dictation worker, never GTK's thread, since a browser
 that has to start can take seconds to come forward."""
 import os
-import re
 import time
 from typing import NamedTuple
 
@@ -24,6 +23,10 @@ POLL_S = 0.25
 # A new tab puts the cursor in its address bar a moment after Ctrl+T; keys
 # sent before that land in the page that was showing.
 OPENER_SETTLE_S = 0.2
+# An address or search is typed this many characters at a time, the focused
+# window checked before each: a switch partway can let only the rest of one
+# chunk (a few hundredths of a second of keys) into the window switched to.
+CHUNK_CHARS = 8
 
 _ADDRESS_BAR = [(("CTRL",), "L")]
 _NEW_TAB = [(("CTRL",), "T")]
@@ -107,9 +110,10 @@ def go_to(request: AddressRequest, where, beeps_on: bool) -> bool:
 
 def search(request: SearchRequest, where, beeps_on: bool) -> bool:
     """Search the web for *request*'s words: the browser's address bar
-    searches with the engine the user picked there. In the browser window
-    *where*, in its current tab; anywhere else, in a new tab of the default
-    browser, brought forward or started for it. True when the words went in;
+    searches with the engine the user picked there. Always in a new tab,
+    which never takes the user away from a page they were writing in: of
+    the browser window *where*, else of the default browser, brought
+    forward or started for it. True when the words went in;
     False after a note, or after Esc (said already).
 
     A desktop that doesn't say which window has the focus can't tell a
@@ -119,7 +123,7 @@ def search(request: SearchRequest, where, beeps_on: bool) -> bool:
         return False
     default = _default_browser()
     if is_browser_class(where[0]) or _is_default(where[0], default):
-        return _into_address_bar(where, _ADDRESS_BAR, request.words, _SEARCH, beeps_on)
+        return _into_address_bar(where, _NEW_TAB, request.words, _SEARCH, beeps_on)
     browser = _browser_in_front(default, beeps_on)
     if browser is None:
         return False
@@ -131,17 +135,17 @@ def _into_address_bar(where, opener, text: str, what: str, beeps_on: bool) -> bo
     bar), *text*, Delete and Enter, into the window
     *where* only: if another window takes the focus partway, what's left
     goes nowhere, Enter above all. Each send is checked against *where*
-    right before its first key (only_into), so the text goes a word at a
-    time: one send would be checked once, and its last words would land in
-    the window switched to."""
+    right before its first key (only_into), so the text goes CHUNK_CHARS
+    at a time: one send would be checked once, and the rest of a long
+    address or search would land in the window switched to."""
     press = keyboard_output.output_backend().press_keys
 
     def send():
         if not press(opener):
             return False
         time.sleep(OPENER_SETTLE_S)
-        return (all(keyboard_output.type_text(word) for word in re.findall(r"\S+\s*", text))
-                and press(_DELETE_ENTER))
+        chunks = (text[i:i + CHUNK_CHARS] for i in range(0, len(text), CHUNK_CHARS))
+        return all(keyboard_output.type_text(chunk) for chunk in chunks) and press(_DELETE_ENTER)
     try:
         sent = keyboard_output.send_only_into(where, send)
     except virtual_keyboard.StoppedPartway as stop:

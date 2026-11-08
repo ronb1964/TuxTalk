@@ -621,8 +621,8 @@ In a browser it uses the address bar, so it replaces the page you're on; anywher
 your default browser opens it.
 
 Hold <b>{hold}</b>, say <b>web search cheap tires</b>, let go: your browser's own search
-engine shows the results. In a browser that replaces the page you're on too; from any
-other app a new tab opens.
+engine shows the results in a new tab, so the page you were on stays as it was, a form
+you were filling in included.
 
 Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>.
 
