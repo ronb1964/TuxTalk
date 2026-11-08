@@ -550,7 +550,10 @@ Hold <b>{hold}</b>, say <b>mouse grid</b>, let go. Numbers 1 to 9 appear over th
     in further. Where the desktop's own zoom can be used (KDE's Zoom effect, or the
     whole-screen magnifier on GNOME and Cinnamon), the whole desktop zooms in about
     three times on that part, so you can see what you are aiming at. It goes back to
-    normal after the click, or when the grid closes.
+    normal after the click, or when the grid closes. With two screens on KDE, its zoom
+    magnifies both screens at once, so the other one shows a magnified part of your
+    desktop until then. Moving the mouse while zoomed in moves KDE's zoom, and the
+    grid can slide out of view: say <b>cancel</b> or press Esc to close it.
   • The pointer hides while the grid shows, so it doesn't cover a number, and comes
     back when the grid closes. From the second grid on, thin lines mark the parts, their
     numbers sit small in the corners, out of the way, and a dot marks where a click will

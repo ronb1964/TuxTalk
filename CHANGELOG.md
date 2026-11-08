@@ -35,6 +35,10 @@ before 0.15.0, so older entries use that name.
   what you are aiming at. It goes back after the click, the move, "cancel",
   the minute running out or anything else you dictate, and if you already
   had the zoom or magnifier on, it is left as you had it.
+- With two screens on KDE, KDE's zoom magnifies both screens at once (it has
+  no zoom for one screen), so the other screen shows a magnified part of
+  your desktop while you pick. Moving the mouse while zoomed in moves KDE's
+  zoom, and the grid can slide out of view: say "cancel" or press Esc.
 - While the grid shows, the pointer is hidden so it doesn't cover a number,
   and it comes back when the grid closes. From the second grid on, thin
   lines mark the parts, their numbers sit small in the corners, and a dot
