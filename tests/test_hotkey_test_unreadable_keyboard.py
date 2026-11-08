@@ -153,6 +153,9 @@ def test_without_the_hotkey_helper_the_notice_names_fix_typing_and_a_restart(mon
     assert uinput_helper.FIX_TYPING_PATH in notice and "restart" in notice
 
 
+TEST_KEYS = {"hold": "F8", "toggle": "F9"}
+
+
 class _Notice:
     """The dialog's notice label: what it shows, and whether."""
     markup, shown = None, False
@@ -182,7 +185,7 @@ def test_a_helper_that_sees_no_keyboard_gets_the_notice_not_silence(monkeypatch,
     count = {"blind": 0, "old": None, "seeing": 2}.get(keyboards)
     reading = [] if keyboards == "none" else [SimpleNamespace(helper_keyboards=count)]
     dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice(),
-                             _heard_by_reader=set())
+                             _heard_by_reader=set(), keys=dict(TEST_KEYS))
     hkd.HotkeyTestDialog._show_reading(dialog, reading)
     assert dialog.keyboard_notice.shown is bool(says)
     if says:
@@ -200,7 +203,7 @@ def test_a_helper_too_old_for_the_keyboard_says_why_keys_arent_active(monkeypatc
                         lambda: read_only)
     helper = SimpleNamespace(helper_keyboards=None, helper_version="1.11")
     dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice(),
-                             _heard_by_reader=set())
+                             _heard_by_reader=set(), keys=dict(TEST_KEYS))
     hkd.HotkeyTestDialog._show_reading(dialog, [helper])
     assert dialog.keyboard_notice.shown is bool(says)
     if says:
@@ -221,12 +224,30 @@ def test_an_old_helpers_notice_goes_once_a_key_was_heard_only_where_it_may_not_a
     monkeypatch.setattr(f"tuxtalk.helper_keyboard_access.{kind}", lambda: ["/dev/input/event5"])
     helper = SimpleNamespace(helper_keyboards=4, helper_version=version)
     dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice(),
-                             _heard_by_reader=set())
+                             _heard_by_reader=set(), keys=dict(TEST_KEYS))
     hkd.HotkeyTestDialog._show_reading(dialog, [helper])
     assert dialog.keyboard_notice.shown and says in dialog.keyboard_notice.markup
     dialog._heard_by_reader.add("F8")
     hkd.HotkeyTestDialog._show_reading(dialog, [helper])
     assert dialog.keyboard_notice.shown is not goes
+
+
+def test_left_ctrl_space_picked_with_a_helper_too_old_for_it_brings_the_notice():
+    """Helper 1.13 doesn't report the pair: Change Key saved it without a
+    word, and the key showed "Seen, not active yet" with nothing saying why."""
+    import threading
+    from tuxtalk.config import CTRL_SPACE
+    helper = SimpleNamespace(helper_keyboards=1, helper_version="1.13")
+    dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice(),
+                             _heard_by_reader=set(), keys=dict(TEST_KEYS), capturing="hold",
+                             rows={"hold": (_Notice(),)}, _reading_now=[helper],
+                             _show_status=lambda which, key: None, _end_capture=lambda: None)
+    dialog._show_reading = lambda kbs: hkd.HotkeyTestDialog._show_reading(dialog, kbs)
+    dialog._show_reading([helper])
+    assert not dialog.keyboard_notice.shown
+    hkd.HotkeyTestDialog._capture(dialog, CTRL_SPACE)
+    assert dialog.keys["hold"] == CTRL_SPACE
+    assert dialog.keyboard_notice.shown and "too old" in dialog.keyboard_notice.markup
 
 
 def test_the_helpers_count_is_asked_again_while_the_test_is_open(monkeypatch):
@@ -237,7 +258,7 @@ def test_the_helpers_count_is_asked_again_while_the_test_is_open(monkeypatch):
     from tuxtalk import secure_input
     helper = SimpleNamespace(helper_keyboards=0)
     dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice(),
-                             _heard_by_reader=set())
+                             _heard_by_reader=set(), keys=dict(TEST_KEYS))
     dialog._show_reading = lambda kbs: hkd.HotkeyTestDialog._show_reading(dialog, kbs)
     monkeypatch.setattr(hkd.GLib, "idle_add", lambda fn, *args: fn(*args))
     dialog._show_reading([helper])

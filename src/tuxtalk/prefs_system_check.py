@@ -54,11 +54,12 @@ def _hide_widgets(*widgets):
 _READY = "✓ Ready"
 
 
-def _typing_state(refused_shortcuts):
+def _typing_state(refused_shortcuts, keys=()):
     """What System check says about typing and the hotkeys: (markup, the Fix
     Typing button's label (None: no button, nothing it could fix), whether
     it's offered, whether all is well).
-    *refused_shortcuts* are the shortcuts the hotkey helper won't take."""
+    *refused_shortcuts* are the shortcuts the hotkey helper won't take, and
+    *keys* the dictation keys set (secure_input.needs_update)."""
     from . import secure_input, uinput_helper
     from .hotkey_helper import VERSION as HELPER_VERSION
     installed = secure_input.is_installed()
@@ -77,7 +78,7 @@ def _typing_state(refused_shortcuts):
     has_access, _reason = uinput_helper.check_all_device_permissions(hello)
     running = answered if has_access else None
     versions = f'({GLib.markup_escape_text(running or "")} → {HELPER_VERSION})'
-    if secure_input.needs_update(running) and installed:
+    if secure_input.needs_update(running, keys) and installed:
         # A TuxTalk update brought a helper it needs: the old one keeps
         # running until it's installed again.
         return (f'<span color="{WARNING_AMBER}">⚠ This TuxTalk needs a newer hotkey helper '
@@ -390,7 +391,8 @@ class SystemCheck(Tab):
     def _show_typing_status(self):
         """Show the typing permission status; True when nothing needs fixing."""
         try:
-            markup, label, offered, ok = _typing_state(self._shortcuts_the_helper_refuses())
+            markup, label, offered, ok = _typing_state(self._shortcuts_the_helper_refuses(),
+                                                       self._dictation_keys())
         except Exception as e:
             self.typing_status_label.set_text(f"Error checking typing: {e}")
             logger.warning(f"Could not check typing: {e}")
@@ -470,6 +472,11 @@ class SystemCheck(Tab):
                           switching)
 
         threading.Thread(target=work, daemon=True).start()
+
+    def _dictation_keys(self):
+        """The hold and toggle keys set."""
+        from .config import HOTKEY_KEYS
+        return [self.config.get(key, "") or "" for key in HOTKEY_KEYS]
 
     def _shortcuts_the_helper_refuses(self):
         """The Voice Commands / Paste Last shortcuts (only a hand-edited

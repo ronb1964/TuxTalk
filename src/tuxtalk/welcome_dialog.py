@@ -48,15 +48,15 @@ def helper_sees_no_keyboard():
 
 
 def outdated_helper():
-    """The running hotkey helper's version when this TuxTalk needs a newer
-    one (secure_input.needs_update), else None. Fix Typing installs the
-    new one, so first run offers it there rather than leave it to the
-    question at the next start."""
+    """The running hotkey helper's version when this TuxTalk, or a
+    dictation key saved, needs a newer one (secure_input.needs_update),
+    else None. Fix Typing installs the new one, so first run offers it
+    there rather than leave it to the question at the next start."""
     from . import secure_input
     if os.environ.get("FLATPAK_ID") or not secure_input.is_installed():
         return None
     running = secure_input.running_version()
-    return running if secure_input.needs_update(running) else None
+    return running if secure_input.needs_update(running, secure_input.saved_keys()) else None
 
 
 def _no_keyboard_label():

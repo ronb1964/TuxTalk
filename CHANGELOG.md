@@ -58,7 +58,10 @@ before 0.15.0, so older entries use that name.
   right after a dictation undoes instead of typing a "z", and pressing Space
   again under the same Ctrl starts the next dictation.
 - It needs the newer hotkey helper (1.15). If yours is older, picking the key
-  asks to update it, with one password prompt and no restart.
+  asks to update it, with one password prompt and no restart. If you already
+  have it set as a key with an older helper (from a backup, say), TuxTalk
+  asks at start, and System check and the hotkey test say why it does
+  nothing.
 - You can open an app by saying its name. Hold your dictation key, say "open
   Firefox", let go. Firefox opens, or comes to the front if it's already
   open, and nothing is typed. "launch" and "start" work too. It's in

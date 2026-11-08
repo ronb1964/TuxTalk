@@ -102,14 +102,14 @@ def _hotkey_test_notice(service_can_read):
             "then restart your computer, and these keys will work.")
 
 
-def _reading_notice(keyboards):
-    """(notice, gone_once_heard) for what the test reads, *keyboards*: the
-    notice is None when it needs none, else it says why keys show as seen,
-    not active: nothing to read, only a hotkey helper that says it reads no
-    keyboard (one before 1.12 doesn't say), or one too old for this TuxTalk
-    (secure_input.needs_update). *gone_once_heard* when it only may apply
-    (a Logitech mouse may be all it's about): a key heard through the
-    reader shows the keyboard is read."""
+def _reading_notice(keyboards, keys):
+    """(notice, gone_once_heard) for what the test reads, *keyboards*, and
+    its dictation *keys*: the notice is None when it needs none, else it
+    says why keys show as seen, not active: nothing to read, only a hotkey
+    helper that says it reads no keyboard (one before 1.12 doesn't say), or
+    one too old for this TuxTalk or these keys (secure_input.needs_update).
+    *gone_once_heard* when it only may apply (a Logitech mouse may be all
+    it's about): a key heard through the reader shows the keyboard is read."""
     if not keyboards:
         return _hotkey_test_notice(False), False
     if all(getattr(k, "helper_keyboards", None) == 0 for k in keyboards):
@@ -117,7 +117,7 @@ def _reading_notice(keyboards):
         return f"{HELPER_SEES_NO_KEYBOARD}.", False
     from tuxtalk import secure_input
     version = next((k.helper_version for k in keyboards if hasattr(k, "helper_version")), None)
-    if not secure_input.needs_update(version):
+    if not secure_input.needs_update(version, keys):
         return None, False
     reason = secure_input.outdated_reason(version)
     uncertain = reason == secure_input.ALSO_MICE_REASON
@@ -354,6 +354,9 @@ class HotkeyTestDialog:
         label = self.rows[self.capturing][0]
         label.set_markup(f'<b>{_TITLES[self.capturing]}:</b> {layout_label(keyname)}')
         self._show_status(self.capturing, keyname)
+        if self._reading_now:
+            # A key the helper reading them is too old for brings the notice.
+            self._show_reading(self._reading_now)
         self._end_capture()
 
     def _mark_working(self, keyname):
@@ -426,7 +429,8 @@ class HotkeyTestDialog:
         if self._stop.is_set():
             return False    # the window has closed
         self._reading_now = keyboards
-        notice, self._notice_gone_once_heard = _reading_notice(keyboards)
+        notice, self._notice_gone_once_heard = _reading_notice(keyboards,
+                                                               list(self.keys.values()))
         if notice is None or (self._notice_gone_once_heard and self._heard_by_reader):
             self.keyboard_notice.hide()
         else:

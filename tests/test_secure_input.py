@@ -188,7 +188,7 @@ def test_preferences_offers_the_helper_to_input_group_users(monkeypatch):
 
 
 def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False, read_only=(),
-                  also_mice=(), watched=None):
+                  also_mice=(), watched=None, config=None):
     from tuxtalk import prefs_system_check as P, uinput_helper
 
     monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda hello: (True, ""))
@@ -199,7 +199,7 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False, read_
                         lambda: also_mice)
     monkeypatch.setattr(si, "helper_hello", lambda: (running, watched))
     monkeypatch.setattr(si, "is_installed", lambda: installed)
-    prefs = P.SystemCheck(SimpleNamespace(config={}))
+    prefs = P.SystemCheck(SimpleNamespace(config=config or {}))
     prefs.typing_status_label, prefs.fix_typing_button = ShownWidget(), ShownWidget()
     prefs._show_typing_status()
     return P, prefs
@@ -238,6 +238,17 @@ def test_a_helper_before_1_15_is_offered_the_update_quietly(monkeypatch, running
     _P, prefs = _typing_prefs(monkeypatch, running=running)
     assert f"({running} → 1.15)" in prefs.typing_status_label.markup
     assert "✓ Ready" in prefs.typing_status_label.markup
+
+
+def test_a_helper_too_old_for_a_dictation_key_set_is_a_warning(monkeypatch):
+    """Left Ctrl+Space with helper 1.13, which doesn't report it: System
+    check said "✓ Ready" and stayed closed while the key did nothing."""
+    from tuxtalk.config import CTRL_SPACE
+    P, prefs = _typing_prefs(monkeypatch, running="1.13", config={"hotkey": CTRL_SPACE})
+    assert "needs a newer hotkey helper" in prefs.typing_status_label.markup
+    assert prefs.fix_typing_button.label == P.UPDATE_HELPER_LABEL
+    assert P._typing_state([], [CTRL_SPACE, "F9"])[3] is False
+    assert P._typing_state([], ["F8", "F9"])[3] is True
 
 
 @pytest.mark.parametrize("running, kind", [("1.11", "read_only"), ("1.12", "also_mice")])

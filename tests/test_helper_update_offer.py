@@ -6,8 +6,9 @@ import types
 
 import pytest
 
-from tuxtalk import hotkey_helper, secure_input
+from tuxtalk import hotkey_helper, secure_input, welcome_dialog
 from tuxtalk import update_offers as offers
+from tuxtalk.config import CTRL_SPACE
 
 
 @pytest.fixture
@@ -157,3 +158,28 @@ def test_a_helper_too_old_for_a_read_only_keyboard_here_is_asked_about(helper, m
     monkeypatch.setattr(secure_input, "running_version", lambda: hotkey_helper.VERSION)
     offers._offer_in_turn(restarts.append)
     assert asked == ["1.11"]                    # 1.12 reads it: nothing to ask
+
+
+def _saved(monkeypatch, hold, toggle="F9"):
+    monkeypatch.setattr("tuxtalk.config.load_config",
+                        lambda: types.SimpleNamespace(hotkey=hold, toggle_hotkey=toggle))
+
+
+@pytest.mark.parametrize("hold, asks", [(CTRL_SPACE, True), ("F8", False)])
+def test_a_saved_key_the_helper_cant_report_is_asked_about_at_start(helper, monkeypatch,
+                                                                    hold, asks):
+    """Left Ctrl+Space saved with helper 1.13 running (Not Now when it was
+    picked, or a backup loaded): holding it did nothing, and nothing asked."""
+    asked, *_ = helper
+    monkeypatch.setattr(secure_input, "running_version", lambda: "1.13")
+    _saved(monkeypatch, hold)
+    assert offers.offer_helper_update() is asks
+    assert asked == (["1.13"] if asks else [])
+
+
+@pytest.mark.parametrize("toggle, outdated", [(CTRL_SPACE, "1.14"), ("F9", None)])
+def test_the_welcome_screen_offers_the_helper_a_saved_key_needs(helper, monkeypatch,
+                                                                toggle, outdated):
+    monkeypatch.setattr(secure_input, "running_version", lambda: "1.14")
+    _saved(monkeypatch, "F8", toggle)
+    assert welcome_dialog.outdated_helper() == outdated

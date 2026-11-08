@@ -366,18 +366,29 @@ def outdated_reason(running):
             or "The hotkey helper on this computer is too old for this TuxTalk")
 
 
-def needs_update(running):
+def needs_update(running, keys=()):
     """Whether this TuxTalk asks at start to update the running helper
-    (version *running*): it's older than NEEDED_HELPER_VERSION, or leaves
-    out a keyboard here (missed_keyboard_reason)."""
+    (version *running*): it's older than NEEDED_HELPER_VERSION, can't
+    report one of the dictation *keys* set (hears_key; saved_keys), or
+    leaves out a keyboard here (missed_keyboard_reason)."""
     return running is not None and (_version(running) < _version(NEEDED_HELPER_VERSION)
+                                    or not all(hears_key(running, key) for key in keys)
                                     or missed_keyboard_reason(running) is not None)
+
+
+def saved_keys():
+    """The hold and toggle keys in the settings, for needs_update."""
+    from .config import HOTKEY_KEYS, load_config
+    cfg = load_config()
+    return [getattr(cfg, key) for key in HOTKEY_KEYS]
 
 
 # The dictation keys the first helpers didn't report, and the version that
 # does. Here, not in hotkey_helper.py: the helper speaks key codes, and
-# nothing in it would use this.
-KEYS_SINCE = {"Right Ctrl": "1.5", "Right Alt": "1.5", CTRL_SPACE: "1.14"}
+# nothing in it would use this. Left Ctrl+Space works from 1.14, but only
+# 1.15 presses a Left Ctrl kept down after a hold again (Ctrl+Z after a
+# dictation is "z" before it).
+KEYS_SINCE = {"Right Ctrl": "1.5", "Right Alt": "1.5", CTRL_SPACE: "1.15"}
 
 
 def hears_key(running, key):
