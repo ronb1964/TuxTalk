@@ -247,7 +247,7 @@ The Hands-free section has a way to make it stop by itself when you stop talking
   look and place in <b>Preferences → Audio → Customize…</b>
 • If the microphone heard nothing but silence, TuxTalk says so and types nothing.
 
-### Indicator Follows Your Window
+### Indicator follows your window
 The recording indicator shows up in the window you're dictating into, wherever
 that window is on the screen, instead of always in the same spot. It's on from
 the start.

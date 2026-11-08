@@ -152,8 +152,8 @@ def test_start_here_explains_it_and_where_to_turn_it_off():
         notebook = find(dialog, Gtk.Notebook)
         page = notebook.get_nth_page(notebook.get_current_page())
         text = " ".join(shown_text(page))
-        assert "Indicator Follows Your Window" in text
-        assert "Labs" not in text.split("Indicator Follows Your Window", 1)[1][:600]
+        assert "Indicator follows your window" in text
+        assert "Labs" not in text.split("Indicator follows your window", 1)[1][:600]
     finally:
         dialog.destroy()
 
