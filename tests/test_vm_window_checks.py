@@ -33,6 +33,20 @@ def test_the_program_a_menu_entry_runs_is_read_from_its_exec_line(exec_line, pro
     assert open_apps.program_of(exec_line) == program
 
 
+def test_libreoffice_is_known_by_the_soffice_it_runs_as():
+    """Debian's default text editor is LibreOffice Writer: its window is
+    "soffice" in AT-SPI and its process soffice.bin, so the check failed while
+    Writer had opened, and left it open for the checks after it."""
+    names = (*open_apps.names_of("libreoffice"), "libreoffice-writer", "LibreOffice Writer")
+    assert open_apps.window_of("soffice", names)
+    ps = open_apps.parse_ps(
+        "  700 oosplash         /usr/lib/libreoffice/program/oosplash --writer\n"
+        "  701 soffice.bin      /usr/lib/libreoffice/program/soffice.bin --writer\n"
+        "  702 bash             bash\n")
+    assert open_apps._new_pids(ps, {"702": ()}, "libreoffice") == ["701"]
+    assert open_apps._new_pids(ps, {}, "kwrite") == []
+
+
 def test_an_apps_window_is_known_by_its_program_or_its_menu_name_only():
     """On KDE every Qt app comes into AT-SPI when the switch goes on; the
     panel must never be taken for the editor (and then ended)."""

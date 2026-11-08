@@ -31,6 +31,10 @@ MOUNT_ON_A_PATH = r"(LD_LIBRARY_PATH|PATH)=.*/\.mount_"
 # Python or GTK apps to try, with the phrase that opens each.
 GTK_APPS = (("meld", "open_meld"), ("gnome-calculator", "open_calculator"))
 PHRASES = ("open_text_editor", "open_unknown_app", "open_meld", "open_calculator")
+# Launchers whose app runs, and shows in AT-SPI, under another name:
+# "libreoffice --writer" (Debian's default text editor) starts soffice.bin,
+# whose application AT-SPI calls "soffice".
+RUNS_AS = {"libreoffice": ("soffice", "soffice.bin")}
 
 
 # The session's accessibility switch (org.a11y.Status's IsEnabled), which
@@ -94,11 +98,21 @@ def _apps(run):
     return {app for app, _title, _active in _windows(run)}
 
 
+def names_of(program):
+    """*program* and the names its app runs under (RUNS_AS)."""
+    return (program, *RUNS_AS.get(program, ()))
+
+
+def _pattern(program):
+    """Regular expression for a command line running *program* (or a name it
+    runs under) as a command or a path's last part. Not -x: the kernel keeps
+    15 characters of a process name, so "-x gnome-calculator" never matches."""
+    return f"(^|/)({'|'.join(re.escape(name) for name in names_of(program))})( |$)"
+
+
 def _running(program):
-    """pgrep/pkill -f pattern for *program* as a command or a path's last part.
-    Not -x: the kernel keeps 15 characters of a process name, so "-x
-    gnome-calculator" never matches."""
-    return shlex.quote(f"(^|/){re.escape(program)}( |$)")
+    """pgrep/pkill -f pattern for *program* (_pattern)."""
+    return shlex.quote(_pattern(program))
 
 
 def _close(run, program):
@@ -128,7 +142,7 @@ def parse_ps(text):
 def _new_pids(now, before, program):
     """The pids in *now* (from _processes) running *program* that weren't
     in *before*."""
-    pattern = re.compile(f"(^|/){re.escape(program)}( |$)")
+    pattern = re.compile(_pattern(program))
     return sorted(pid for pid, (_comm, args) in now.items()
                   if pid not in before and pattern.search(args))
 
@@ -194,7 +208,8 @@ def opened_by_voice(run, phrase_id, timeout=25):
     found = re.search(r"Opened (\S+\.desktop)", opened.log)
     if found:
         opened.program, name = _entry(run, found.group(1))
-        names = (opened.program, found.group(1).removesuffix(".desktop").split(".")[-1], name)
+        names = (*names_of(opened.program),
+                 found.group(1).removesuffix(".desktop").split(".")[-1], name)
         deadline = time.monotonic() + timeout
         while opened.app is None and time.monotonic() < deadline:
             opened.new_apps = sorted(_apps(run) - before_apps)
