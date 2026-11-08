@@ -49,6 +49,11 @@ CINNAMON_SCREENSAVER = ("gdbus", "call", "--session", "--dest", "org.cinnamon.Sc
 # SetActive(false) unlocks it (the manager's unlock()): a lock asked of the
 # screensaver may not be one logind's unlock reaches.
 CINNAMON_UNLOCK = (*CINNAMON_SCREENSAVER[:-1], "org.cinnamon.ScreenSaver.SetActive", "false")
+# GNOME Shell's own way to put its lock screen down.
+GNOME_UNLOCK = ("gdbus", "call", "--session", "--dest", "org.gnome.ScreenSaver",
+                "--object-path", "/org/gnome/ScreenSaver", "--method",
+                "org.gnome.ScreenSaver.SetActive", "false")
+UNLOCK_TRIES = 3
 # TuxTalk waits up to 30 s for the portal (90 s for its picker, which the
 # window check closes itself) and 10 s for its call; then the files are
 # looked for one last time.
@@ -1263,20 +1268,27 @@ def bare_words_and_sentences_typed(run):
 # Last in the section: a lock that goes wrong must not hold up another check.
 def _unlock(run, session):
     """Unlock the session whatever logind says (COSMIC's locker never tells
-    it), through loginctl and through sudo, and on Cinnamon through its
-    screensaver, and look again: True only when
-    logind says "no", the lock screen is down (_screen_locked) and the test
-    window shows with the focus, which a lock screen in front of it would
-    take. Unknown is not unlocked."""
-    for command in ("loginctl unlock-session", "sudo -n loginctl unlock-session"):
-        run.vm.ssh(f"{command} {session}", check=False)
-    if "cinnamon" in run.vm.spec.tags:
-        _session_tool(run, *CINNAMON_UNLOCK)
-    time.sleep(5)      # a lock that landed late is undone by this
-    run.vm.click_centre()
-    return bool(_until(10, lambda: _locked(run, session) == "no"
-                       and not _screen_locked(run, session)
-                       and _sink_state(_sink(run)) is None))
+    it), through loginctl and through sudo, and on Cinnamon and GNOME
+    through their screensaver, and look again: True only when logind says
+    "no", the lock screen is down (_screen_locked) and the test window shows
+    with the focus, which a lock screen in front of it would take. Unknown
+    is not unlocked. Asked UNLOCK_TRIES times before giving up: GNOME once
+    left its lock screen up after logind's Unlock and took the next one, and
+    the Abort that follows a failure skips every check after it."""
+    for _attempt in range(UNLOCK_TRIES):
+        for command in ("loginctl unlock-session", "sudo -n loginctl unlock-session"):
+            run.vm.ssh(f"{command} {session}", check=False)
+        if "cinnamon" in run.vm.spec.tags:
+            _session_tool(run, *CINNAMON_UNLOCK)
+        elif "gnome" in run.vm.spec.tags:
+            _session_tool(run, *GNOME_UNLOCK)
+        time.sleep(5)      # a lock that landed late is undone by this
+        run.vm.click_centre()
+        if _until(10, lambda: _locked(run, session) == "no"
+                  and not _screen_locked(run, session)
+                  and _sink_state(_sink(run)) is None):
+            return True
+    return False
 
 
 @check(SECTION, "lock_screen", "“lock screen” locks the session")

@@ -141,3 +141,58 @@ def test_each_command_the_checks_say_is_one_tuxtalk_takes(phrase):
 def test_each_sentence_the_checks_say_is_typed_as_words(phrase):
     said = desktop.voices.load_phrases()[phrase]["say"]
     assert command_phrases.parse(said, navigation=False, actions=True) is None
+
+
+class _LockedVM:
+    """A VM whose lock screen goes down only at the *opens_at*-th unlock."""
+
+    def __init__(self, opens_at, tags=("gnome",)):
+        self.vm = self
+        self.spec = namedtuple("Spec", "tags")(tags)
+        self.opens_at, self.unlocks, self.session_calls = opens_at, 0, []
+
+    def ssh(self, command, check=True):
+        if command.startswith("loginctl unlock-session"):
+            self.unlocks += 1
+        return type("Done", (), {"stdout": "", "returncode": 0})()
+
+    def session(self, *command, check=True):
+        self.session_calls.append(command)
+        return type("Done", (), {"stdout": ""})()
+
+    def click_centre(self):
+        pass
+
+    def unlocked(self):
+        return self.unlocks >= self.opens_at
+
+
+@pytest.fixture
+def lock_screen_vm(monkeypatch):
+    """_unlock with no waiting, the lock screen as the fake VM has it."""
+    monkeypatch.setattr(desktop.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(desktop, "_until", lambda _s, test: test())
+    monkeypatch.setattr(desktop, "_sink", lambda _run: None)
+    monkeypatch.setattr(desktop, "_sink_state", lambda _sink: None)
+
+    def make(opens_at, tags=("gnome",)):
+        vm = _LockedVM(opens_at, tags)
+        monkeypatch.setattr(desktop, "_locked", lambda run, _s: "no" if run.unlocked() else "yes")
+        monkeypatch.setattr(desktop, "_screen_locked", lambda run, _s: not run.unlocked())
+        return vm
+    return make
+
+
+def test_a_lock_screen_that_stays_up_once_is_asked_again_before_the_run_stops(lock_screen_vm):
+    """One ignored unlock on Zorin stopped the run and skipped 70 checks."""
+    vm = lock_screen_vm(opens_at=2)
+    assert desktop._unlock(vm, "3") is True
+    assert vm.unlocks == 2
+    assert desktop.GNOME_UNLOCK in vm.session_calls
+
+
+def test_a_lock_screen_that_never_goes_down_is_reported(lock_screen_vm):
+    vm = lock_screen_vm(opens_at=99, tags=("kde",))
+    assert desktop._unlock(vm, "3") is False
+    assert vm.unlocks == desktop.UNLOCK_TRIES
+    assert vm.session_calls == []
