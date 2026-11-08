@@ -366,12 +366,21 @@ def outdated_reason(running):
             or "The hotkey helper on this computer is too old for this TuxTalk")
 
 
-def needs_update(running):
+def needs_update(running, keys=()):
     """Whether this TuxTalk asks at start to update the running helper
-    (version *running*): it's older than NEEDED_HELPER_VERSION, or leaves
-    out a keyboard here (missed_keyboard_reason)."""
+    (version *running*): it's older than NEEDED_HELPER_VERSION, can't
+    report one of the dictation *keys* set (hears_key; saved_keys), or
+    leaves out a keyboard here (missed_keyboard_reason)."""
     return running is not None and (_version(running) < _version(NEEDED_HELPER_VERSION)
+                                    or not all(hears_key(running, key) for key in keys)
                                     or missed_keyboard_reason(running) is not None)
+
+
+def saved_keys():
+    """The hold and toggle keys in the settings, for needs_update."""
+    from .config import HOTKEY_KEYS, load_config
+    cfg = load_config()
+    return [getattr(cfg, key) for key in HOTKEY_KEYS]
 
 
 # The dictation keys the first helpers didn't report, and the version that

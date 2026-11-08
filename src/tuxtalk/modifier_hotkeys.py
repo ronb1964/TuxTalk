@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 from evdev import ecodes
 
-from . import focused_window, keyboard_layout, virtual_keyboard
+from . import ctrl_kept, focused_window, keyboard_layout, virtual_keyboard
 from .config import HOTKEY_CHOICES
 from .hotkey_keys import MODIFIER_CODES, SHIFT_CODES, keys_down
 from .keyboard_devices import is_keyboard_device
@@ -168,6 +168,19 @@ def _hidden_now():
     return codes if all(getattr(k, "hidden", True) for k in keyboards) else frozenset()
 
 
+def hidden(code) -> bool:
+    """Whether a grab hides *code* from the desktop now (note_hidden)."""
+    return code in _hidden_now()
+
+
+def hidden_by_own_grab(code) -> bool:
+    """Whether a grab TuxTalk holds itself (the input group) hides *code*.
+    The hotkey helper reports a Space under Left Ctrl only while the desktop
+    can see that Ctrl; TuxTalk reading the keys itself sees every Space."""
+    _codes, keyboards = _hidden
+    return hidden(code) and not any(hasattr(k, "held_now") for k in keyboards)
+
+
 def note_released(code) -> None:
     """The hotkey loop read *code* come up. A key typing had found stuck
     isn't any more: the next typing waits for it again rather than giving
@@ -239,12 +252,15 @@ def wait_while_held(destination=None,
     out of date by then, and the user may have clicked into a password
     field meanwhile. *gave_up* says in the log what giving up stopped."""
     devices, modifiers = _noted
-    if not modifiers and _compose is None:
+    if not modifiers and _compose is None and not ctrl_kept.pressed():
         return None
     keyboards = [d for d in list(devices) if is_keyboard_device(d)]
 
     def held():
-        return keys_down(keyboards) & (modifiers - _hidden_now())
+        # With the Left Ctrl TuxTalk holds for the desktop (ctrl_kept),
+        # until it's let go: the real one may be up a moment before.
+        kept = {ctrl_kept.CODE} if ctrl_kept.pressed() else set()
+        return keys_down(keyboards) & (modifiers - _hidden_now()) | kept
 
     def wait():
         """Until no such key is down, guarding a Right Alt first; GaveUp
@@ -258,7 +274,9 @@ def wait_while_held(destination=None,
         give_up_at = time.monotonic() + HELD_LIMIT_S
         while still := held():
             if still & _stuck or time.monotonic() >= give_up_at:
+                ctrl_kept.let_go()
                 _give_up(still, gave_up)
+            ctrl_kept.let_go(keyboards)     # if the real one is up already
             time.sleep(0.02)
         _stuck.clear()
         if destination and focused_window.changed(where, destination()):

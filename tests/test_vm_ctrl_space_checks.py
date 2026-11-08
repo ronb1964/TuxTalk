@@ -12,9 +12,10 @@ checks = import_vm_tool("checks_hotkeys")
 harness = import_vm_tool("harness")
 voices = import_vm_tool("voices")
 
-IDS = {"ctrl_space_helper_only_the_pair", "ctrl_space_hold", "ctrl_space_toggle",
-       "ctrl_space_terminal", "ctrl_space_input_method_log", "ctrl_space_quiet_helper_update"}
-HEARD_OK = ["HELLO 1 1.14 keyboards=1", "OK WATCH"]
+IDS = {"ctrl_space_helper_only_the_pair", "ctrl_space_hold", "ctrl_space_ctrl_kept",
+       "ctrl_space_toggle", "ctrl_space_terminal", "ctrl_space_input_method_log",
+       "ctrl_space_quiet_helper_update"}
+HEARD_OK = ["HELLO 1 1.15 keyboards=1", "OK WATCH"]
 
 
 def test_every_ctrl_space_check_is_registered_in_the_hotkeys_section():
@@ -70,8 +71,8 @@ def test_a_space_without_left_ctrl_is_a_problem():
 
 def test_a_silent_listener_is_a_problem_not_a_pass():
     assert checks.helper_report_problem([], []) is not None
-    assert checks.helper_report_problem(["HELLO 1 1.14 keyboards=1"], []) is not None
-    assert checks.helper_report_problem(["HELLO 1 1.14 keyboards=1", "ERR bad spec"], []) \
+    assert checks.helper_report_problem(["HELLO 1 1.15 keyboards=1"], []) is not None
+    assert checks.helper_report_problem(["HELLO 1 1.15 keyboards=1", "ERR bad spec"], []) \
         is not None
 
 
@@ -91,6 +92,7 @@ class _Guest:
 
     def __init__(self, question=None, log=""):
         self.question, self.log, self.clicked, self.needles = question, log, [], []
+        self.config = {}
 
     def ssh(self, command, check=False):
         return type("Done", (), {"stdout": "active", "returncode": 0})()
@@ -101,7 +103,7 @@ class _Guest:
         if action == "find":
             return self.question
         if action == "texts":
-            return ["✓ Ready", "(1.13 → 1.14)"]
+            return ["✓ Ready", "(1.13 → 1.15)"]
         return "found"
 
 
@@ -114,7 +116,7 @@ def _run(guest):
     run.dbus = lambda method: None
     run.shot = lambda name: None
     run.settings_put_back = lambda *keys: nullcontext()
-    run.set_config = lambda **changes: None
+    run.set_config = lambda **changes: guest.config.update(changes)
 
     def wait_log(mark, *needles, timeout=30):
         guest.needles += needles
@@ -144,6 +146,14 @@ def test_a_found_update_question_fails_the_check_and_is_closed(quiet_update):
 def test_an_offer_that_was_skipped_is_not_a_question_asked(quiet_update):
     guest = _Guest(log="Hotkey helper update offer skipped: no D-Bus yet")
     assert quiet_update(guest).status == "pass"
+
+
+def test_the_quiet_check_runs_with_keys_helper_1_13_reports(quiet_update):
+    """Left Ctrl+Space saved there (by an earlier check, or by hand) rightly
+    brings the question, which isn't what this check looks at."""
+    guest = _Guest()
+    quiet_update(guest)
+    assert guest.config == {"hotkey": "F8", "toggle_hotkey": "F9"}
 
 
 def test_an_offer_answered_not_now_is_a_question_asked(quiet_update):

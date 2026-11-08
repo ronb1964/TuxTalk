@@ -270,7 +270,7 @@ class _WatchedHelper:
 
 @pytest.mark.parametrize("version", [None, "1.13", "1.14"])
 def test_the_helper_is_asked_for_the_pair_whatever_its_version(version):
-    """A helper that's stopped now may come back as 1.14, and is then sent
+    """A helper that's stopped now may come back updated, and is then sent
     the same list again; an older one refuses only "L:57" and reports the
     rest, F8 included. Working still needs 1.14 (service_hears)."""
     ecodes = pytest.importorskip("evdev").ecodes
@@ -280,7 +280,7 @@ def test_the_helper_is_asked_for_the_pair_whatever_its_version(version):
     assert str(ecodes.KEY_F8) in helper.specs and "L:57" in helper.specs
 
 
-def test_a_helper_that_comes_back_as_1_14_reports_the_pair_to_the_test(setup):
+def test_a_helper_that_comes_back_updated_reports_the_pair_to_the_test(setup):
     """The test opened while the helper was stopped; it starts again, and
     Left Ctrl+Space held then reaches the test and counts as working."""
     ecodes = pytest.importorskip("evdev").ecodes

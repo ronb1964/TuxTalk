@@ -14,7 +14,7 @@ from evdev import ecodes
 from conftest import KeyEvent
 from hotkey_helper_fakes import FakeKeyboard, ready_client
 from hotkey_loop_fakes import Cfg, Grabbable, Keyboard
-from tuxtalk import (cosmic_hotkeys, ctrl_space, ctrl_space_clashes, gnome_hotkeys,
+from tuxtalk import (cosmic_hotkeys, ctrl_kept, ctrl_space, ctrl_space_clashes, gnome_hotkeys,
                      hotkey_claims, hotkeys, keyboard_grab, keyboard_layout, keyboard_output,
                      modifier_hotkeys, pipeline, recording, x11_hotkeys)
 from tuxtalk import live_settings as live
@@ -132,10 +132,10 @@ def test_shift_with_the_pair_is_a_voice_edit_when_voice_editing_is_on(service, s
 
 
 def test_after_a_hold_space_again_needs_left_ctrl_pressed_again(service, svc):
-    """The hold told the desktop Left Ctrl went up, so a Space pressed again
-    under it reaches the app as a space, and the hotkey helper doesn't
-    report it: it mustn't start a dictation as well. Left Ctrl pressed
-    again is the pair again."""
+    """TuxTalk's own grab (the input group) told the desktop Left Ctrl went
+    up, so a Space pressed again under it reaches the app as a space: it
+    mustn't start a dictation as well. Left Ctrl pressed again is the pair
+    again."""
     held = set()
     for code, value in ((LCTRL, 1), (SPACE, 1), (SPACE, 0), (SPACE, 1), (SPACE, 0)):
         ev(code, value, held, svc)
@@ -143,6 +143,20 @@ def test_after_a_hold_space_again_needs_left_ctrl_pressed_again(service, svc):
     for code, value in ((LCTRL, 0), (LCTRL, 1), (SPACE, 1)):
         ev(code, value, held, svc)
     assert service[-2:] == ["grab", "start"]
+
+
+def test_a_left_ctrl_the_grab_left_to_the_desktop_makes_the_pair_again(service, svc,
+                                                                       monkeypatch):
+    """Held on a keyboard that's a mouse too, which no grab takes, the
+    desktop saw Left Ctrl down all along: Space again under it is the pair."""
+    def grab_shows_ctrl(devices, codes):
+        service.append("grab")
+        modifier_hotkeys.note_hidden(set(codes) - {LCTRL})
+    monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", grab_shows_ctrl)
+    held = set()
+    for code, value in ((LCTRL, 1), (SPACE, 1), (SPACE, 0), (SPACE, 1)):
+        ev(code, value, held, svc)
+    assert service == ["grab", "start", "let go", "stop", "grab", "start"]
 
 
 def test_the_toggle_starts_and_stops_and_hides_nothing(service, svc, monkeypatch):
@@ -187,6 +201,22 @@ def test_through_the_helper_left_ctrl_up_ends_the_hold(service, svc, tmp_path):
     assert service == ["grab", "start", "let go", "stop"]
     said(kb, "UP 57", held, svc)
     assert service == ["grab", "start", "let go", "stop"]
+
+
+def test_a_space_the_helper_reports_under_the_held_left_ctrl_dictates(service, svc, tmp_path,
+                                                                      monkeypatch):
+    """The hotkey helper reports Space under Left Ctrl only while the
+    desktop can see that Ctrl: it's the pair, whatever the hold before hid."""
+    kb, held = helper(tmp_path), set()
+    kb.hidden = True                            # the helper said OK to the HIDE
+
+    def helper_hides(devices, codes):
+        service.append("grab")
+        modifier_hotkeys.note_hidden(codes, [kb])
+    monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", helper_hides)
+    for line in ("DOWN 29 -", "DOWN 57 29", "UP 57", "DOWN 57 29"):
+        said(kb, line, held, svc)
+    assert service == ["grab", "start", "let go", "stop", "grab", "start"]
 
 
 def test_through_the_helper_a_space_without_left_ctrl_dictates_nothing(service, svc,
@@ -332,15 +362,145 @@ def test_typing_goes_on_under_a_hidden_left_ctrl(keyboard, holding_the_pair):
 
 
 def test_after_the_hold_typing_waits_for_a_left_ctrl_still_held(keyboard, holding_the_pair):
-    """Space let go first: the dictation is typed once Left Ctrl is up too."""
+    """Space let go first: the desktop is given its Ctrl back, and the
+    dictation is typed once Left Ctrl is up too (here it never is, and
+    typing gives up, letting go of the Ctrl it pressed)."""
     holding_the_pair(SPACE, 0)
     assert not rs.state.is_recording
+    assert keyboard.events == [(LCTRL, 1)]
     assert keyboard_output.send_keys(A_KEY, what="a") is False
+    assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)]
+
+
+def test_the_ctrl_pressed_again_is_let_go_with_the_real_one(keyboard, holding_the_pair):
+    holding_the_pair(SPACE, 0)
+    modifier_hotkeys._noted[0][0].pressed = lambda look: False
+    holding_the_pair(LCTRL, 0)
+    assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)]
+    assert keyboard_output.send_keys(A_KEY, what="a")
+    assert keyboard.events[2:] == A_KEY
+
+
+def test_a_left_ctrl_let_go_before_the_hold_ends_isnt_pressed_again(keyboard,
+                                                                     holding_the_pair):
+    modifier_hotkeys._noted[0][0].pressed = lambda look: False
+    holding_the_pair(LCTRL, 0)          # ends the dictation, as Space's release would
+    holding_the_pair(SPACE, 0)
     assert keyboard.events == []
 
 
-def test_a_stuck_left_ctrl_let_go_and_pressed_again_is_waited_for(keyboard, holding_the_pair,
-                                                                  monkeypatch):
+def test_typing_lets_go_of_the_ctrl_once_the_real_one_is_up(keyboard, holding_the_pair):
+    """The real Left Ctrl came up and the hotkey loop hasn't read it yet:
+    typing finds it up and gives the desktop's back first, then types."""
+    holding_the_pair(SPACE, 0)
+    modifier_hotkeys._noted[0][0].pressed = lambda look: False
+    assert keyboard_output.send_keys(A_KEY, what="a")
+    assert keyboard.events == [(LCTRL, 1), (LCTRL, 0), *A_KEY]
+
+
+def test_no_typed_key_follows_the_ctrl_pressed_again_until_it_is_let_go(keyboard,
+                                                                        holding_the_pair,
+                                                                        monkeypatch):
+    """The hold ends while a phrase is still being typed under it: the Ctrl
+    given back to the desktop goes between two keys, and the next key waits
+    until it's let go, or a "w" there would be Ctrl+W."""
+    import threading
+    import time as real_time
+    monkeypatch.setattr(modifier_hotkeys, "time", real_time)
+    board = modifier_hotkeys._noted[0][0]
+    board.pressed = lambda look: (LCTRL, 1) not in keyboard.events
+    ending, write = [], keyboard.write
+
+    def write_ending_the_hold(*event):
+        write(*event)
+        if len(keyboard.events) == 4 and not ending:
+            ending.append(threading.Thread(target=holding_the_pair, args=(SPACE, 0)))
+            ending[0].start()
+            real_time.sleep(0.1)        # it's let go of the grab and waits for the keyboard
+    monkeypatch.setattr(keyboard, "write", write_ending_the_hold)
+    assert keyboard_output.send_keys(A_KEY * 5, what="a")
+    ending[0].join(5)
+    at = keyboard.events.index((LCTRL, 1))
+    assert keyboard.events[at + 1] == (LCTRL, 0)
+    assert [e for e in keyboard.events if e[0] != LCTRL] == A_KEY * 5
+
+
+def test_typing_reads_the_ctrl_as_held_from_before_its_press_to_after_its_release(
+        keyboard, holding_the_pair, monkeypatch):
+    """A key typed by another thread in between would be a Ctrl shortcut."""
+    read_as_held, write = [], keyboard.write
+
+    def write_noting(_type, code, value):
+        if code == LCTRL:
+            read_as_held.append((value, ctrl_kept.pressed()))
+        write(_type, code, value)
+    monkeypatch.setattr(keyboard, "write", write_noting)
+    holding_the_pair(SPACE, 0)
+    modifier_hotkeys._noted[0][0].pressed = lambda look: False
+    holding_the_pair(LCTRL, 0)
+    assert read_as_held == [(1, True), (0, True)] and not ctrl_kept.pressed()
+
+
+def test_a_left_ctrl_let_go_while_the_keyboard_was_busy_isnt_pressed_again(keyboard):
+    """The real Ctrl came up while TuxTalk was typing: a lone Ctrl tap after
+    the typing would do nothing anyone asked for."""
+    class LetGoOnTheSecondLook:
+        looks = 0
+
+        def active_keys(self):
+            self.looks += 1
+            return [LCTRL] if self.looks == 1 else []
+    ctrl_kept.press_if_held([LetGoOnTheSecondLook()])
+    assert keyboard.events == [] and not ctrl_kept.pressed()
+
+
+def test_a_ctrl_whose_release_was_lost_is_let_go_after_the_limit(keyboard, holding_the_pair,
+                                                                 monkeypatch):
+    """A release the kernel dropped never comes: every key the user types
+    would be a Ctrl shortcut until then."""
+    monkeypatch.setattr(ctrl_kept, "time", keyboard.clock)
+    holding_the_pair(SPACE, 0)
+    keyboard.clock.sleep(ctrl_kept.HOLD_LIMIT_S - 1)
+    ctrl_kept.let_go_if_held_too_long()
+    assert keyboard.events == [(LCTRL, 1)]
+    keyboard.clock.sleep(1)
+    ctrl_kept.let_go_if_held_too_long()
+    assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)] and not ctrl_kept.pressed()
+
+
+def test_scroll_waits_for_the_ctrl_given_back(keyboard, holding_the_pair):
+    """Under Ctrl a wheel turn zooms the page instead of scrolling it."""
+    holding_the_pair(SPACE, 0)
+    modifier_hotkeys._noted[0][0].pressed = lambda look: False
+    assert keyboard_output.send_scroll(-3)
+    assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)] and keyboard.wheel == [-1, -1, -1]
+
+
+def test_scroll_never_turns_under_a_ctrl_that_stays_down(keyboard, holding_the_pair):
+    holding_the_pair(SPACE, 0)
+    assert keyboard_output.send_scroll(-3) is False
+    assert keyboard.wheel == []
+
+
+def test_space_again_under_the_ctrl_pressed_again_is_the_pair(keyboard, holding_the_pair):
+    """The desktop sees Ctrl+Space then, which it holds back for TuxTalk;
+    the new hold hides that Ctrl again, and gives it back after."""
+    holding_the_pair(SPACE, 0)
+    holding_the_pair(SPACE, 1)
+    assert rs.state.is_recording
+    assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)]
+    holding_the_pair(SPACE, 0)
+    assert keyboard.events[-1] == (LCTRL, 1) and not rs.state.is_recording
+
+
+def test_the_ctrl_pressed_again_is_let_go_when_its_keyboard_goes_away(keyboard,
+                                                                      holding_the_pair):
+    holding_the_pair(SPACE, 0)
+    hotkeys._forget_lost_presses([], Hotkeys(SPACE, F9, "", None, None))
+    assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)]
+
+
+def test_a_stuck_left_ctrl_let_go_and_pressed_again_is_waited_for(keyboard, holding_the_pair):
     """Once the loop reads its release it isn't stuck: the next typing waits
     for it again rather than giving up at once."""
     holding_the_pair(SPACE, 0)
@@ -350,7 +510,7 @@ def test_a_stuck_left_ctrl_let_go_and_pressed_again_is_waited_for(keyboard, hold
     looked = board.looks
     board.pressed = lambda look: look <= looked + 3      # down again, for a moment
     assert keyboard_output.send_keys(A_KEY, what="a")
-    assert keyboard.typed_keys() == [ecodes.KEY_A]
+    assert keyboard.typed_keys() == [LCTRL, ecodes.KEY_A]       # LCTRL: given back
 
 
 def test_a_space_after_the_pair_was_lost_is_typing(service, svc):

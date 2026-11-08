@@ -55,8 +55,15 @@ before 0.15.0, so older entries use that name.
   something else (Caps Lock, Alt, Compose, a layout switch). On a desktop
   where TuxTalk can't hold keys back from apps (anything but KDE, GNOME with
   the TuxTalk extension, COSMIC and X11) the app gets Ctrl+Space as well.
-- It needs the newer hotkey helper (1.14). If yours is older, picking the key
-  asks to update it, with one password prompt and no restart.
+- If you let go of Space and keep holding Ctrl, Ctrl keeps working: Ctrl+Z
+  right after a dictation undoes instead of typing a "z". The dictation is
+  typed once you let go of Ctrl.
+- Left Ctrl+Space needs a newer hotkey helper than the one 0.21 brought
+  (this release has 1.15). With the older one, picking the key asks to
+  update it, with one password prompt and no
+  restart. If you already have it set as a key with the older helper (from
+  a backup, say), TuxTalk asks at start, and System check and the hotkey
+  test say why it does nothing.
 - You can open an app by saying its name. Hold your dictation key, say "open
   Firefox", let go. Firefox opens, or comes to the front if it's already
   open, and nothing is typed. "launch" and "start" work too. It's the same

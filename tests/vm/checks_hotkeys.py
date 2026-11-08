@@ -301,6 +301,38 @@ def ctrl_space_hold(run):
     return outcome
 
 
+@check(SECTION, "ctrl_space_ctrl_kept",
+       "Left Ctrl kept down after a Left Ctrl+Space hold is still Ctrl",
+       desktops=("kde", "gnome", "cosmic", "cinnamon"))
+def ctrl_space_ctrl_kept(run):
+    """Space let go first, Ctrl kept down and A tapped: TuxTalk gave the
+    desktop its Ctrl back, so that's Ctrl+A, which selects the text already
+    in the sink, and the dictation, typed once Ctrl is let go, replaces it.
+    An "a" typed, or Ctrl+A swallowed, leaves the old text in the sink."""
+    with run.settings_put_back("hotkey"):
+        run.set_config(hotkey=CTRL_SPACE)
+        run.sink_ready(fresh=True)
+        for key in ("o", "l", "d"):
+            run.vm.tap(key)
+        mark = run.log_mark()
+        run.vm.key_down("ctrl", "spc")
+        try:
+            time.sleep(0.4)
+            run.play("basic")
+            time.sleep(0.3)
+            run.vm.key_up("spc")
+            time.sleep(0.5)
+            run.vm.tap("a")
+            time.sleep(0.3)
+        finally:
+            run.vm.key_up("ctrl", "spc")
+        typed = run.wait_dictation(mark)
+        heard = heard_in(run.log_since(mark))
+        outcome = run.expect_typed("basic", BASIC, typed, heard)
+        outcome.screenshot = run.shot("ctrl-space-ctrl-kept")
+    return outcome
+
+
 @check(SECTION, "ctrl_space_toggle",
        "Left Ctrl+Space as the tap key: one tap starts, the next tap stops",
        desktops=("kde", "gnome", "cosmic", "cinnamon"))
@@ -361,7 +393,7 @@ def ctrl_space_input_method_log(run):
 
 
 @check(SECTION, "ctrl_space_quiet_helper_update",
-       "Helper 1.13 gets no question at start; System check offers 1.14 quietly")
+       "Helper 1.13 gets no question at start; System check offers 1.15 quietly")
 def ctrl_space_quiet_helper_update(run):
     missing = _helper_missing(run)
     if missing:
@@ -373,6 +405,14 @@ def ctrl_space_quiet_helper_update(run):
     if version != "1.13":
         return Outcome("skip", f"Skipped: the helper here is {version}, not 1.13 (checked on a "
                        "VM that still has the old one)")
+    with run.settings_put_back("hotkey", "toggle_hotkey"):
+        # Keys 1.13 reports: one it doesn't (Left Ctrl+Space) is asked about.
+        run.set_config(hotkey="F8", toggle_hotkey="F9")
+        return _quiet_update_outcome(run)
+
+
+def _quiet_update_outcome(run):
+    """ctrl_space_quiet_helper_update's look at the start and System check."""
     mark = run.log_mark()
     _reboot(run)
     time.sleep(30)      # the helper offer comes about 20 seconds after the start
@@ -393,11 +433,11 @@ def ctrl_space_quiet_helper_update(run):
     problems = []
     if question is not None or asked_in_log:
         problems.append("TuxTalk asked about updating the helper at start")
-    if not any("(1.13 → 1.14)" in t for t in texts):
-        problems.append("System check doesn't offer (1.13 → 1.14)")
+    if not any("(1.13 → 1.15)" in t for t in texts):
+        problems.append("System check doesn't offer (1.13 → 1.15)")
     if not any("✓ Ready" in t for t in texts):
         problems.append("System check doesn't say ✓ Ready")
     if problems:
         return Outcome("fail", "; ".join(problems), screenshot=shot)
     return Outcome("pass", "No question at start; System check reads ✓ Ready and offers "
-                   "(1.13 → 1.14)", screenshot=shot)
+                   "(1.13 → 1.15)", screenshot=shot)

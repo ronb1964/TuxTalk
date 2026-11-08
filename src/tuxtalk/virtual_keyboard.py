@@ -226,10 +226,35 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
         return True
 
 
-def scroll(clicks: int, delay_ms: float = KEY_DELAY_MS, claim=None) -> bool:
+def press(code: int, value: int, wanted=None) -> bool:
+    """One key going down (1) or up (0), and left so: Left Ctrl held for the
+    desktop past any send (ctrl_kept). It waits for the keyboard, so never
+    lands between two events of a send; *wanted*, if given, is asked right
+    before the write, and nothing is sent if it says no. False when nothing
+    was sent, or the keyboard isn't there or failed: closing it lets go of
+    every key it held."""
+    with _lock:
+        device = _open()
+        if device is None:
+            return False
+        time.sleep(max(0.0, _ready_at - time.monotonic()))
+        if wanted is not None and not wanted():
+            return False
+        try:
+            _write(device, code, value)
+            device.syn()
+        except OSError as e:
+            logger.error(f"TuxTalk's virtual keyboard failed pressing key {code}: {e}")
+            _close_broken(device, {})
+            return False
+    return True
+
+
+def scroll(clicks: int, delay_ms: float = KEY_DELAY_MS, claim=None, before_press=None) -> bool:
     """Turn the mouse wheel *clicks* notches, up (toward the top of the
-    screen) when positive, down when negative. *claim* is send's: made before
-    the first notch, so a scroll can be refused like a key. True when every
+    screen) when positive, down when negative. *claim* and *before_press* are
+    send's: made before the first notch, so a scroll can be refused like a
+    key, and waits like one while Ctrl is down (it would zoom). True when every
     notch was sent, False when the keyboard isn't there or failed (a wheel
     turn is not text: partway is not worth telling apart)."""
     from evdev import ecodes
@@ -240,7 +265,7 @@ def scroll(clicks: int, delay_ms: float = KEY_DELAY_MS, claim=None) -> bool:
             return False
         time.sleep(max(0.0, _ready_at - time.monotonic()))
         try:
-            _ready_for_key(device, {}, None, claim)
+            _ready_for_key(device, {}, before_press, claim)
             for _ in range(abs(clicks)):
                 device.write(ecodes.EV_REL, ecodes.REL_WHEEL, step)
                 device.syn()

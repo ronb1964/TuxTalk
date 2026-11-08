@@ -68,7 +68,7 @@ are never reported, so even a hostile program that connects learns nothing
 about what is typed beyond when an AltGr, Compose or layout-switch key went
 down (Right Alt, Right Ctrl, and Left Ctrl to a client watching Left
 Ctrl+Space). Each client may ask for four shortcuts at most; TuxTalk asks
-for two.
+for three at most.
 
 Hiding a held hotkey
 --------------------
@@ -131,6 +131,7 @@ helper -> client
 Codes are Linux evdev key codes (linux/input-event-codes.h).
 """
 import array
+import contextlib
 import errno
 import fcntl
 import os
@@ -142,7 +143,7 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.14"
+VERSION = "1.15"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"
@@ -162,14 +163,12 @@ UHID_SYS = "/sys/devices/virtual/misc/uhid/"
 
 EV_SYN, EV_KEY, EV_REL = 0, 1, 2
 SYN_REPORT, SYN_DROPPED = 0, 3
-REL_X = 0
-BTN_LEFT = 0x110
+REL_X, BTN_LEFT = 0, 0x110
 # The keyboard TuxTalk types with (virtual_keyboard.NAME): never read.
 OWN_KEYBOARD_NAME = "TuxTalk virtual keyboard"
 KEY_MAX = 0x2FF
 KEY_ESC, KEY_SCROLLLOCK, KEY_PAUSE = 1, 70, 119
-KEY_LEFTCTRL, KEY_RIGHTCTRL, KEY_RIGHTALT = 29, 97, 100
-KEY_SPACE = 57
+KEY_LEFTCTRL, KEY_RIGHTCTRL, KEY_RIGHTALT, KEY_SPACE = 29, 97, 100, 57
 BUS_VIRTUAL = 0x06
 
 F_KEYS = frozenset(list(range(59, 69)) + [87, 88] + list(range(183, 195)))   # F1-F24
@@ -186,8 +185,7 @@ UNLOCKERS = {
     "A": frozenset({56}),           # Left Alt
     "S": frozenset({42, 54}),       # Shift
     "M": frozenset({125, 126}),     # Meta / Super
-    # Left Ctrl alone, for Space only (see parse_spec and the rule at the top).
-    "L": frozenset({KEY_LEFTCTRL}),
+    "L": frozenset({KEY_LEFTCTRL}),  # Left Ctrl alone, for Space only (parse_spec)
 }
 LEFT_CTRL = "L"
 SHORTCUT_LETTERS = frozenset("CAM")
@@ -248,7 +246,7 @@ LISTEN_BACKLOG = 64           # connections waiting to be let in or turned away
 ACCEPTS_PER_PASS = 64
 MAX_LINE = 512
 MAX_SPECS = 32
-MAX_COMBOS = 4                # shortcuts per client; TuxTalk watches two
+MAX_COMBOS = 4                # shortcuts per client; TuxTalk watches three at most
 MAX_COMBO_KEYS_PER_HOLD = 2   # different shortcut keys while the modifiers stay down
 MAX_OUTBUF = 64 * 1024
 MAX_KEYBOARDS = 48
@@ -320,14 +318,11 @@ def bits(buffer):
 def read_active_uid(seat_file):
     """The uid of the user whose session is in front on seat0, or None.
     logind keeps it in a plain file; no answer means nobody gets anything."""
-    try:
-        with open(seat_file) as f:
-            for line in f:
-                key, _, value = line.strip().partition("=")
-                if key == "ACTIVE_UID" and value.isdigit():
-                    return int(value)
-    except OSError:
-        pass
+    with contextlib.suppress(OSError), open(seat_file) as f:
+        for line in f:
+            key, _, value = line.strip().partition("=")
+            if key == "ACTIVE_UID" and value.isdigit():
+                return int(value)
     return None
 
 
@@ -597,10 +592,8 @@ class Keyboard:
             return False
 
     def close(self):
-        try:
+        with contextlib.suppress(OSError):
             os.close(self.fd)
-        except OSError:
-            pass
 
 
 # --- clients -------------------------------------------------------------------------------
@@ -668,10 +661,8 @@ class Helper:
     # -- setup ------------------------------------------------------------------------
 
     def listen(self):
-        try:
+        with contextlib.suppress(FileNotFoundError):
             os.unlink(self.socket_path)
-        except FileNotFoundError:
-            pass
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM | socket.SOCK_CLOEXEC)
         sock.bind(self.socket_path)
         # Anyone may connect; only the user at the screen is kept (accept).
@@ -1108,16 +1099,15 @@ class Helper:
     def hide_on(self, keyboard, codes, is_origin):
         """Hide those of *codes* down on *keyboard*: True when it's held now,
         False when it isn't (nothing to hide there, or it couldn't be held),
-        None when a key couldn't be hidden.
+        None when a key couldn't be hidden (and it isn't held).
 
         The desktop has seen these keys go down: tell it they went up, so it
-        doesn't auto-repeat them, then keep the keyboard, then mark them down
-        again, which only we see, so the real release still reaches us. By
-        the kernel's state, not what's been read, in case a release is on its
-        way. The press's own keyboard (*is_origin*) is kept; another keyboard
-        of its group only has its modifiers hidden the same way. A
-        listen-only keyboard is never held or written to: its keys reach the
-        desktop as they are."""
+        doesn't auto-repeat them, keep the keyboard, then mark them down
+        again, which only we see, so the real release still reaches us (let_up
+        goes by the kernel's state, not what's been read, in case a release is
+        on its way). The press's own keyboard (*is_origin*) is kept; another
+        of its group only has its modifiers hidden. A listen-only keyboard is
+        never held or written to."""
         if keyboard.listen_only:
             return False            # holds none of them (listen_only_holding)
         if keyboard.mouse and not is_origin:
@@ -1127,18 +1117,24 @@ class Helper:
             return None
         if not (is_origin or released):
             return False
+        # The desktop now believes these are up.
+        keyboard.trusted.difference_update(released)
         if not keyboard.grab(True):
             # Not held, so the desktop would see the keys go down again and
             # repeat them: leave them up for it.
             log(f"couldn't hold keyboard {keyboard.name!r}")
-            keyboard.trusted.difference_update(released)
             self.settle(keyboard, ())
             return False
-        for code in released:
-            self.inject(keyboard, code, 1)
-        # The desktop now believes these are up.
-        keyboard.trusted.difference_update(released)
-        self.settle(keyboard, released)
+        down_again = [c for c in released if self.inject(keyboard, c, 1)]
+        self.settle(keyboard, down_again)
+        if len(down_again) < len(released):
+            # One left up in the kernel would come up unheard, the keyboard
+            # held to HIDE_MAX_S: give it back, believe the kernel, refuse.
+            log(f"couldn't mark the keys down again on {keyboard.name!r}")
+            self.let_go([keyboard])
+            if keyboard.path in self.keyboards:
+                self.resync(keyboard)
+            return None
         return True
 
     def never_hold_mouse(self, keyboard, codes):
@@ -1182,14 +1178,18 @@ class Helper:
         self.let_go(keyboards)
 
     def let_go(self, keyboards):
-        """Give *keyboards* back to the desktop, closing one that won't let go."""
-        stuck = [k for k in keyboards
-                 if k.path in self.keyboards and k.grabbed and not k.grab(False)]
-        for keyboard in stuck:
-            # Closing the device always ends the kernel's grab; the keyboard
-            # is opened afresh on the next scan.
-            log(f"couldn't let go of {keyboard.name!r}; closing it")
-            self.drop_keyboard(keyboard)
+        """Give *keyboards* back to the desktop, closing one that won't let go.
+        What came while it was held is read first, as such: a modifier
+        pressed then, which the desktop never saw, isn't trusted."""
+        for keyboard in keyboards:
+            if keyboard.path not in self.keyboards or not keyboard.grabbed:
+                continue
+            self.drain(keyboard)
+            if keyboard.path in self.keyboards and not keyboard.grab(False):
+                # Closing the device always ends the kernel's grab; the
+                # keyboard is opened afresh on the next scan.
+                log(f"couldn't let go of {keyboard.name!r}; closing it")
+                self.drop_keyboard(keyboard)
 
     def check_hide(self):
         """The safety net: a keyboard is never kept once the hotkey is let go."""
@@ -1245,10 +1245,8 @@ class Helper:
         if self.hide is not None and self.hide["client"] is client:
             self.end_hide("TuxTalk went away")
         self.clients.pop(client.sock.fileno(), None)
-        try:
+        with contextlib.suppress(OSError):
             client.sock.close()
-        except OSError:
-            pass
 
     def send(self, client, line):
         try:
@@ -1442,10 +1440,8 @@ class Helper:
             self.end_hide()
             for keyboard in list(self.keyboards.values()):
                 keyboard.close()
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(self.socket_path)
-            except OSError:
-                pass
 
 
 def main():

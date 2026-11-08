@@ -528,7 +528,7 @@ def test_a_virtual_keyboard_still_cant_lend_to_real_ones(setup):
     assert heard(sock) == []
 
 
-def test_holding_the_hotkey_on_a_virtual_keyboard_cant_pin_the_grab(setup, monkeypatch):
+def test_holding_the_hotkey_on_a_virtual_keyboard_cant_pin_the_grab(setup):
     """A program holds F8 on its own virtual keyboard while the user holds
     the real one, then asks for the grab: the real keyboard comes back as
     soon as the user lets go, and TuxTalk hears the release."""
@@ -1007,16 +1007,16 @@ def test_a_right_ctrl_held_with_another_hotkey_comes_up_once(setup):
     assert heard(sock) == ["DOWN 97 -", "DOWN 67 97", "UP 67", "UP 97", "OK WATCH"]
 
 
-def _release_fails(monkeypatch, keyboard, code):
-    """Injecting *code*'s release into *keyboard* fails, as a write to a
-    device on its way out does."""
+def inject_fails(monkeypatch, keyboard, code, value=0):
+    """Injecting *code* going to *value* (its release, by default) into
+    *keyboard* fails, as a write to a device on its way out does."""
     inject = keyboard.inject
 
-    def failing(c, value):
-        if (c, value) == (code, 0):
-            keyboard.calls.append(("inject failed", c, value))
+    def failing(c, *values):
+        if c == code and value in values:
+            keyboard.calls.append(("inject failed", c, *values))
             return False
-        return inject(c, value)
+        return inject(c, *values)
 
     monkeypatch.setattr(keyboard, "inject", failing)
 
@@ -1028,11 +1028,25 @@ def test_a_right_ctrl_the_desktop_still_sees_down_isnt_called_hidden(setup, monk
     sock = _ready(connect, say, heard, "97")
     kb.press(RCTRL)
     heard(sock)
-    _release_fails(monkeypatch, kb, RCTRL)
+    inject_fails(monkeypatch, kb, RCTRL)
     say(sock, "HIDE 97")
     assert heard(sock) == ["ERR couldn't hide the keys"]
     assert helper.hide is None and not kb.grabbed
     assert ("grab", True) not in kb.calls
+
+
+def test_a_key_that_cant_be_marked_down_again_ends_the_hide(setup, monkeypatch):
+    """The kernel then takes F8 to be up, so its release would never be read
+    and the keyboard stay held, recording, for 15 minutes: it's given back,
+    F8 called up, and the hide refused."""
+    helper, kb, connect, say, heard, _seat = setup
+    tuxtalk = _ready(connect, say, heard)
+    kb.press(F8)
+    heard(tuxtalk)
+    inject_fails(monkeypatch, kb, F8, 1)
+    say(tuxtalk, "HIDE 66")
+    assert heard(tuxtalk) == ["UP 66", "ERR couldn't hide the keys"]
+    assert helper.hide is None and not kb.grabbed
 
 
 def test_a_failed_release_on_a_second_keyboard_gives_the_first_back(setup, monkeypatch):
@@ -1047,7 +1061,7 @@ def test_a_failed_release_on_a_second_keyboard_gives_the_first_back(setup, monke
     assert heard(sock) == []
     kb.press(F8)
     assert heard(sock) == ["DOWN 66 97"]
-    _release_fails(monkeypatch, second, RCTRL)
+    inject_fails(monkeypatch, second, RCTRL)
     say(sock, "HIDE 66 97")
     assert heard(sock) == ["ERR couldn't hide the keys"]
     assert ("grab", True) in kb.calls and not kb.grabbed
