@@ -12,7 +12,7 @@ import time
 from typing import NamedTuple
 
 from . import app_finder, app_focus, app_launcher, command_notices, desktop_detect, focused_window
-from . import keyboard_output, virtual_keyboard
+from . import keyboard_layout, keyboard_output, virtual_keyboard
 from .app_finder import AppEntry
 from .command_phrases import AddressRequest, SearchRequest
 from .window_classes import is_browser_class
@@ -24,8 +24,8 @@ POLL_S = 0.25
 # sent before that land in the page that was showing.
 OPENER_SETTLE_S = 0.2
 # An address or search is typed this many characters at a time, the focused
-# window checked before each: a switch partway can let only the rest of one
-# chunk (a few hundredths of a second of keys) into the window switched to.
+# window checked before each: a switch partway can let at most the rest of
+# one chunk into the window switched to.
 CHUNK_CHARS = 8
 
 _ADDRESS_BAR = [(("CTRL",), "L")]
@@ -144,8 +144,8 @@ def _into_address_bar(where, opener, text: str, what: str, beeps_on: bool) -> bo
         if not press(opener):
             return False
         time.sleep(OPENER_SETTLE_S)
-        chunks = (text[i:i + CHUNK_CHARS] for i in range(0, len(text), CHUNK_CHARS))
-        return all(keyboard_output.type_text(chunk) for chunk in chunks) and press(_DELETE_ENTER)
+        return (all(keyboard_output.type_text(piece) for piece in _pieces(text))
+                and press(_DELETE_ENTER))
     try:
         sent = keyboard_output.send_only_into(where, send)
     except virtual_keyboard.StoppedPartway as stop:
@@ -153,6 +153,20 @@ def _into_address_bar(where, opener, text: str, what: str, beeps_on: bool) -> bo
         # and the note says why the typing stopped.
         sent = stop.reason if stop.reason in ("moved", "cancelled") else False
     return command_notices.outcome(sent, what, beeps_on)
+
+
+def _pieces(text: str) -> list[str]:
+    """*text* in CHUNK_CHARS pieces, or whole when the keyboard layout can't
+    type it. Then it is pasted, and one paste is a single Ctrl+V, checked
+    like a piece; pasted pieces would each replace the clipboard, perhaps
+    before the browser had read the one before."""
+    try:
+        keyboard_layout.layout_key_events(text)
+    except keyboard_layout.UntypableText:
+        return [text]
+    except OSError:
+        pass        # no libxkbcommon: type_text says so and types another way
+    return [text[i:i + CHUNK_CHARS] for i in range(0, len(text), CHUNK_CHARS)]
 
 
 def _browser_in_front(browser: _Browser | None, beeps_on: bool):

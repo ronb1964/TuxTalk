@@ -10,8 +10,8 @@ import pytest
 
 from conftest import FakeClock
 from desktop_fakes import set_desktop
-from tuxtalk import (app_finder, app_focus, app_launcher, focused_window, keyboard_output,
-                     screen_message, voice_actions, web_commands, window_classes)
+from tuxtalk import (app_finder, app_focus, app_launcher, focused_window, keyboard_layout,
+                     keyboard_output, screen_message, voice_actions, web_commands, window_classes)
 from tuxtalk.app_finder import AppEntry
 from tuxtalk.command_phrases import AddressRequest, SearchRequest
 
@@ -405,6 +405,16 @@ def test_a_window_switch_partway_through_an_address_leaves_the_rest_out(at_firef
     keys = [k for k in keyboard.typed_keys() if k != SHIFT]     # the colon's Shift
     assert keys[:2] == CTRL_L and len(keys) == len(CTRL_L) + len("https://")
     assert floated == ["Window changed, nothing done"]
+
+
+def test_an_address_the_layout_cant_type_is_pasted_whole(at_firefox, typed, monkeypatch):
+    """Pasted in pieces, each piece's paste could replace the clipboard
+    before the browser had read the one before."""
+    def untypable(text):
+        raise keyboard_layout.UntypableText(("ua", "", None), "y")
+    monkeypatch.setattr(keyboard_layout, "layout_key_events", untypable)
+    assert web_commands.go_to(AddressRequest("https://youtube.com"), FIREFOX, False)
+    assert typed == ["https://youtube.com"]
 
 
 def test_a_partial_address_typed_before_the_focus_moved_says_so(at_firefox, keyboard, floated,

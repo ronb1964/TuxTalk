@@ -29,6 +29,9 @@ class OpenRequest:
     name: str                # what was said for the app: "firefox", "fire fox"
     new: bool = False        # "new" or "another": start a second one
     install: str = ""        # "", "flatpak", "snap" or "appimage": which copy
+    # Said after "start", a verb sentences use with any noun ("Start work.",
+    # "Start video."): the start of a name's word doesn't name the app.
+    whole_words: bool = False
 
 
 def parse(text: str) -> OpenRequest | None:
@@ -36,10 +39,10 @@ def parse(text: str) -> OpenRequest | None:
     words = normalize(text).split()
     if len(words) < 2 or words[0] not in VERBS:
         return None
-    words = words[1:]
+    verb, words = words[0], words[1:]
     new = words[0] in _NEW
     request = app_name(words[1:] if new else words)
-    return replace(request, new=new) if request else None
+    return replace(request, new=new, whole_words=verb == "start") if request else None
 
 
 def app_name(words: list[str]) -> OpenRequest | None:

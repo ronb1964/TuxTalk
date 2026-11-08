@@ -155,35 +155,40 @@ def _fuzzy(letters, indexed):
     return [item for score, item in scored if score == best]
 
 
-def _candidates(words, indexed, strict=False):
+def _candidates(words, indexed, strict=False, bare=True, whole_words=False):
     """The entries the first matching rule finds, rules in the spec's order.
     *strict*: only the rules that take the name as said, never the start of
     a word, a sound or a close spelling, for a window command, where "Close
     the fire." must not close Firefox: the whole name, its letters (or its
-    program's) and the generic name."""
+    program's) and the generic name. Not *bare* (_bare): a sound-alike of
+    the whole name counts too ("Open the console." for Konsole), never the
+    start of a word or a close spelling ("Open the file."). *whole_words*:
+    never the start of a word (OpenRequest.whole_words)."""
     said = " ".join(words)
     letters = said.replace(" ", "")
     sounds = _sounds(letters) if len(letters) >= MIN_SOUND_LETTERS else ""
-    # Sounding alike comes after every rule that matches what was said, so
-    # "open contact" stays Contacts and never becomes Kontact.
-    rules = (
+    rules = [
         lambda i: said in i.names,
         lambda i: letters in i.letters,
         lambda i: said in i.labels,
-        lambda i: i.starts_name(words),
-        lambda i: bool(sounds) and sounds in i.sounds,
-    )
-    for rule in rules[:3] if strict else rules:
+    ]
+    if not strict:
+        if bare and not whole_words:
+            rules.append(lambda i: i.starts_name(words))
+        # Sounding alike comes after every rule that matches what was said,
+        # so "open contact" stays Contacts and never becomes Kontact.
+        rules.append(lambda i: bool(sounds) and sounds in i.sounds)
+    for rule in rules:
         hits = [i for i in indexed if rule(i)]
         if hits:
             return hits
-    return [] if strict else _fuzzy(letters, indexed)
+    return _fuzzy(letters, indexed) if bare and not strict else []
 
 
 def _bare(request) -> bool:
     """Whether *request*'s name was said bare, with no article and no word
     a sentence is made of ("thunder", "libre writer"): only then may the
-    start of a name, a sound-alike or a close spelling name the app."""
+    start of a name or a close spelling name the app."""
     return not _SENTENCE_WORDS.intersection(normalize(request.name).split())
 
 
@@ -274,8 +279,8 @@ def find(request, entries, defaults, strict=False):
     *defaults* maps "browser", "email", "files", "text editor" and "terminal"
     to app ids; saying one of those words opens the default app. *strict*:
     the name as said only (_candidates), else some whole words of it, then
-    Found.partial (_some_name_words). A request that isn't _bare takes the
-    name as said only too, without the whole-words fallback.
+    Found.partial (_some_name_words). A request that isn't _bare, or says
+    "start", is matched by fewer rules (_candidates).
     """
     words = _clean(request.name)
     if not words:
@@ -284,7 +289,7 @@ def find(request, entries, defaults, strict=False):
     if default is not None:
         return Found("one", (default,))
     indexed = [_Indexed(e) for e in entries]
-    hits = _candidates(words, indexed, strict or not _bare(request))
+    hits = _candidates(words, indexed, strict, _bare(request), request.whole_words)
     partial = strict and not hits
     if partial:
         hits = _some_name_words(request, words, indexed)

@@ -268,7 +268,8 @@ SECTIONS = (
     Section("Addresses and Search", KEYS, labs=LABS_ACTIONS, commands=(
         Command(("go to youtube dot com",), "opens the address; in a browser, in that tab",
                 "action"),
-        Command(("web search cheap tires",), "your browser's own search", "action"),
+        Command(("web search cheap tires",), "your browser's own search, in a new tab",
+                "action"),
     )),
     Section("Sound and Music", SOUND, labs=LABS_ACTIONS, commands=(
         Command(("volume up", "volume down", "volume up 3", "turn down the volume"),

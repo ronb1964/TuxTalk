@@ -69,7 +69,8 @@ before 0.15.0, so older entries use that name.
 - Only a dictation that is just the command opens something. "I opened
   Firefox yesterday" is typed as usual, and so is a short one that names no
   app. The start of a name or a close spelling counts only when the name is
-  said alone: "open thunder" opens Thunderbird, while "Open the file." and
+  said alone, and the start of a name only after "open" or "launch": "open
+  thunder" opens Thunderbird, while "Open the file.", "Start work." and
   "Start over." are typed. A short sentence that says an app's whole name
   still opens it ("Open the maps."); "literal" first types it. If two apps
   fit equally well ("open libre"), a note floats over your window naming

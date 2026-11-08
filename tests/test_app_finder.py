@@ -74,12 +74,16 @@ SENTENCE_MENU = [
     entry("bookworm.desktop", "Bookworm", "eBook Reader", "bookworm"),
     entry("org.gnome.Maps.desktop", "Maps", program="gnome-maps"),
     entry("org.kde.showfoto.desktop", "Showfoto", program="showfoto"),
+    entry("us.zoom.Zoom.desktop", "Zoom Workplace", program="zoom"),
+    entry("chatgpt.desktop", "ChatGPT", program="chatgpt"),
+    entry("org.kde.konsole.desktop", "Konsole", "Terminal", "konsole"),
 ]
 
 
 @pytest.mark.parametrize("said", ["Start over.", "Open the file.", "Launch the file.",
                                   "Open the books.", "Open the map.", "Start the show.",
-                                  "Start again.", "Open it up."])
+                                  "Start again.", "Open it up.", "Start work.",
+                                  "Start chat."])
 def test_a_short_sentence_is_never_taken_for_an_app_it_only_starts_like(said):
     """With an article, or a word sentences are made of, only a name said
     whole counts: the start of one or a close spelling doesn't."""
@@ -88,6 +92,19 @@ def test_a_short_sentence_is_never_taken_for_an_app_it_only_starts_like(said):
 
 def test_a_sentence_that_says_an_apps_whole_name_still_opens_it():
     assert ids(find(parse("Open the maps."), SENTENCE_MENU, {})) == ["org.gnome.Maps.desktop"]
+
+
+def test_a_name_said_with_an_article_may_still_sound_like_the_app():
+    """Speech models write "console" for Konsole, and people say "the"."""
+    assert ids(find(parse("Open the console."), SENTENCE_MENU, {})) == [
+        "org.kde.konsole.desktop"]
+
+
+def test_open_takes_the_start_of_a_name_and_start_does_not():
+    """"start" goes with any noun in a sentence ("Start work."); "open" with
+    the start of an app's name is the command ("open chat" for ChatGPT)."""
+    assert ids(find(parse("open chat"), SENTENCE_MENU, {})) == ["chatgpt.desktop"]
+    assert find(parse("start chat"), SENTENCE_MENU, {}).kind == "none"
 
 
 @pytest.mark.parametrize("said, app", [
