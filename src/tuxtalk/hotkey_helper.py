@@ -1108,7 +1108,7 @@ class Helper:
     def hide_on(self, keyboard, codes, is_origin):
         """Hide those of *codes* down on *keyboard*: True when it's held now,
         False when it isn't (nothing to hide there, or it couldn't be held),
-        None when a key couldn't be hidden.
+        None when a key couldn't be hidden (and it isn't held).
 
         The desktop has seen these keys go down: tell it they went up, so it
         doesn't auto-repeat them, then keep the keyboard, then mark them down
@@ -1134,11 +1134,18 @@ class Helper:
             keyboard.trusted.difference_update(released)
             self.settle(keyboard, ())
             return False
-        for code in released:
-            self.inject(keyboard, code, 1)
+        down_again = [c for c in released if self.inject(keyboard, c, 1)]
         # The desktop now believes these are up.
         keyboard.trusted.difference_update(released)
-        self.settle(keyboard, released)
+        self.settle(keyboard, down_again)
+        if len(down_again) < len(released):
+            # One left up in the kernel would come up unheard, the keyboard
+            # held to HIDE_MAX_S: give it back, believe the kernel, refuse.
+            log(f"couldn't mark the keys down again on {keyboard.name!r}")
+            self.let_go([keyboard])
+            if keyboard.path in self.keyboards:
+                self.resync(keyboard)
+            return None
         return True
 
     def never_hold_mouse(self, keyboard, codes):
