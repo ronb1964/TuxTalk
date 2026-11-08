@@ -1,7 +1,8 @@
 """Minimal GDBus helper for the xdg-desktop-portal Request/Response pattern.
 
-Both the input (GlobalShortcuts) and output (RemoteDesktop) backends use this
-to talk to the portal over the session bus.
+The input (GlobalShortcuts) and output (RemoteDesktop) backends, the
+screenshot command (Screenshot) and start at login (Background) use this to
+talk to the portal over the session bus.
 """
 import itertools
 import logging

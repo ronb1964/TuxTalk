@@ -18,7 +18,7 @@ NOTES = {
         "This key doesn't apply in a terminal. Use the terminal's own keys."),
     "no_window": (
         "{app} has no open window",
-        "{app} is running but has no window to use. Open one, then try again."),
+        "There's no {app} window open to do that to. Open one, then try again."),
     "not_running": (
         "{app} isn't open",
         "There is no {app} running to do that to. Say \"open {app}\" first."),
@@ -96,8 +96,8 @@ NOTES = {
     # about the screens.
     "desktop_no_answer": (
         "The desktop didn't answer",
-        "The desktop didn't answer in time, so nothing was done. Say it again in a "
-        "moment."),
+        "The desktop didn't answer in time. It may still have done it: look before you "
+        "say it again."),
     "no_sound_control": (
         "Couldn't change the volume",
         "TuxTalk couldn't reach the sound system (PipeWire or PulseAudio). Use your "

@@ -18,7 +18,8 @@ phrases), "edit" ("edit that, ..."), "select" (voice_navigation),
 "instruction" (an example of what to tell the AI; any wording works),
 "exact" (an edit done in code, voice_edit_rules), "format" (a word
 processor's own shortcut),
-"action" (command_phrases.parse: the Labs apps, windows, desktops and sound), or
+"action" (command_phrases.parse: the Labs apps, windows, desktops and sound),
+"mouse" (mouse_phrases: while a grid shows, or for the clicks at any time), or
 "literal" (normalize_text types the word after "literal" or "the word").
 """
 from typing import NamedTuple

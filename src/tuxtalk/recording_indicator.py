@@ -2,7 +2,8 @@
 """
 Visual recording indicator for TuxTalk
 Shows the recording, drawn in the chosen style, at a fixed place on the
-screen or near the window being dictated into, while the hotkey is held
+screen or near the window being dictated into, while it records (held,
+toggled or hands-free)
 """
 
 import gi

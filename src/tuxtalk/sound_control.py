@@ -32,8 +32,9 @@ def target_percent(current: int, action: str, steps: int) -> int:
 
 
 def _tool() -> str:
-    """The sound tool this command uses, looked for once: wpctl (PipeWire),
-    else pactl, which fails like any missing program when it isn't there."""
+    """The sound tool this command uses, looked for each time: wpctl
+    (PipeWire), else pactl, which fails like any missing program when it
+    isn't there."""
     return "wpctl" if shutil.which("wpctl") else "pactl"
 
 

@@ -493,7 +493,6 @@ class AdvancedTab(Tab):
                                        "(TuxTalk Discussions on GitHub)")
         labs_links.pack_start(labs_feedback, False, False, 0)
         grid.attach(labs_links, 0, row, 2, 1)
-        row += 1
 
     def _swiss_spelling_check(self):
         """The "Swiss German spelling" checkbox, bound to swiss_spelling."""
