@@ -60,10 +60,9 @@ before 0.15.0, so older entries use that name.
   typed once you let go of Ctrl.
 - Left Ctrl+Space needs a newer hotkey helper than the one 0.21 brought
   (this release has 1.15). With the older one, picking the key asks to
-  update it, with one password prompt and no
-  restart. If you already have it set as a key with the older helper (from
-  a backup, say), TuxTalk asks at start, and System check and the hotkey
-  test say why it does nothing.
+  update it, with one password prompt and no restart. If you already have
+  it set as a key with the older helper (from a backup, say), TuxTalk asks
+  at start, and System check and the hotkey test say why it does nothing.
 - You can open an app by saying its name. Hold your dictation key, say "open
   Firefox", let go. Firefox opens, or comes to the front if it's already
   open, and nothing is typed. "launch" and "start" work too. It's the same
