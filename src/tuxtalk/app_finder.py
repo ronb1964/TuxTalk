@@ -242,6 +242,20 @@ def _one_of_each_app(hits, entries, install):
     return tuple(chosen)
 
 
+def _default_app(request, words, entries, defaults):
+    """The entry of the default app *words* name ("browser", "email"), the
+    copy the request asks for if it names one; None when they name none, or
+    the default isn't installed."""
+    kind = _DEFAULT_WORDS.get(" ".join(words))
+    default_id = defaults.get(kind) if kind else None
+    match = [e for e in entries if e.app_id == default_id] if default_id else []
+    if not match:
+        return None
+    # The user's own choice, unless the request names another copy.
+    return next((c for c in copies(match[0], entries)
+                 if request.install and c.install == request.install), match[0])
+
+
 def find(request, entries, defaults, strict=False):
     """The Found result for *request* among *entries*.
 
@@ -254,15 +268,9 @@ def find(request, entries, defaults, strict=False):
     words = _clean(request.name)
     if not words:
         return _NONE
-    kind = _DEFAULT_WORDS.get(" ".join(words))
-    default_id = defaults.get(kind) if kind else None
-    if default_id:
-        match = [e for e in entries if e.app_id == default_id]
-        if match:
-            # The user's own choice, unless the request names another copy.
-            chosen = next((c for c in copies(match[0], entries)
-                           if request.install and c.install == request.install), match[0])
-            return Found("one", (chosen,))
+    default = _default_app(request, words, entries, defaults)
+    if default is not None:
+        return Found("one", (default,))
     indexed = [_Indexed(e) for e in entries]
     hits = _candidates(words, indexed, strict or request.name_only)
     partial = strict and not hits
