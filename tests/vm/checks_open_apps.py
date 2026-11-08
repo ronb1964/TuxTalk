@@ -135,9 +135,21 @@ def _new_pids(now, before, program):
 
 def program_of(exec_line):
     """The program a menu entry's Exec line runs, by its last path part:
-    "kwrite" of "/usr/bin/kwrite %U", "foo" of "env A=1 foo"; None for none."""
-    words = [w for w in shlex.split(exec_line) if "=" not in w and w != "env"]
-    return words[0].rsplit("/", 1)[-1] if words else None
+    "kwrite" of "/usr/bin/kwrite %U", "foo" of "env A=1 foo"; None for none.
+    A Flatpak's is its --command= (else its app id's last part), not
+    "flatpak": no flatpak process stays running, and AT-SPI names the app."""
+    words = shlex.split(exec_line)
+    plain = [w for w in words if "=" not in w and w != "env"]
+    if not plain:
+        return None
+    program = plain[0].rsplit("/", 1)[-1]
+    if program != "flatpak":
+        return program
+    command = next((w.split("=", 1)[1] for w in words if w.startswith("--command=")), None)
+    if command:
+        return command.rsplit("/", 1)[-1]
+    app_id = next((w for w in plain[2:] if not w.startswith("-") and "." in w), None)
+    return app_id.rsplit(".", 1)[-1] if app_id else program
 
 
 def _entry(run, app_id):

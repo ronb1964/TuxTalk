@@ -23,6 +23,10 @@ voices = import_vm_tool("voices")
     ("/usr/bin/kwrite %U", "kwrite"),
     ("gnome-text-editor --new-window %U", "gnome-text-editor"),
     ("env GTK_THEME=Adwaita xed %U", "xed"),
+    # Silverblue's editor: "flatpak" never matched its window or a process.
+    ("/usr/bin/flatpak run --branch=stable --arch=x86_64 --command=gnome-text-editor "
+     "--file-forwarding org.gnome.TextEditor @@u %U @@", "gnome-text-editor"),
+    ("/usr/bin/flatpak run --branch=stable org.gnome.Calculator", "Calculator"),
     ("", None),
 ])
 def test_the_program_a_menu_entry_runs_is_read_from_its_exec_line(exec_line, program):
