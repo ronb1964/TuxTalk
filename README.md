@@ -150,7 +150,7 @@ You can copy the text or save it as a text file, or as subtitles for the video. 
 <td width="50%"><img src="screenshots/transcribe-file.png" alt="Transcribe a File: shop-meeting.mp3 turned into three paragraphs of text with times, and buttons to copy it or save it as text or subtitles"></td>
 </tr>
 <tr>
-<td width="50%"><img src="screenshots/prefs-labs.png" alt="Preferences, Advanced: the TuxTalk Labs section with voice editing and Type at pause"></td>
+<td width="50%"><img src="screenshots/prefs-labs.png" alt="Preferences, Advanced: TuxTalk Labs with voice editing, select and move, apps, windows, keys and the mouse by voice, and Type at pause"></td>
 <td>
 
 ### Try what's coming next
@@ -453,15 +453,15 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 
 <p align="center">
   <img src="screenshots/prefs-general.png" alt="Preferences, General" width="45%">
-  <img src="screenshots/prefs-advanced.png" alt="Preferences, Advanced" width="45%">
+  <img src="screenshots/prefs-advanced.png" alt="Preferences, Advanced: send each dictation automatically, numbers, remove um, AI self-corrections, fine-tuning and system check" width="45%">
 </p>
 <p align="center"><em>Model, graphics card and hotkeys &bull; Dictation cleanup and AI self-corrections</em></p>
 
 <p align="center">
-  <img src="screenshots/prefs-audio.png" alt="Preferences, Audio" width="45%">
-  <img src="screenshots/voice-commands.png" alt="Voice Commands quick reference" width="30%">
+  <img src="screenshots/prefs-audio.png" alt="Preferences, Audio: microphone test, beeps, pausing other sound and the recording indicator" width="45%">
+  <img src="screenshots/voice-commands.png" alt="The Voice Commands window: a tab for each group of commands, with what to say and what it does" width="45%">
 </p>
-<p align="center"><em>Microphone test and recording indicator &bull; The Voice Commands quick reference</em></p>
+<p align="center"><em>Microphone test and recording indicator &bull; Every voice command, a tab per group</em></p>
 
 <p align="center">
   <img src="screenshots/prefs-words.png" alt="Preferences, Words: Your Words with the ways each one gets misheard, and Snippets below" width="45%">
@@ -470,11 +470,11 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 <p align="center"><em>The Words tab: Your Words and Snippets &bull; Your Stats</em></p>
 
 <p align="center">
-  <img src="screenshots/help-getting-started.png" alt="Help, Getting Started" width="70%">
+  <img src="screenshots/help-getting-started.png" alt="Help, Start Here: dictating in three steps" width="70%">
 </p>
 <p align="center">
-  <img src="screenshots/help-voice-commands.png" alt="Help, Voice Commands" width="45%">
-  <img src="screenshots/help-labs.png" alt="Help, TuxTalk Labs: how voice editing works" width="45%">
+  <img src="screenshots/help-voice-commands.png" alt="Help, Commands: punctuation and brackets, each with what to say" width="45%">
+  <img src="screenshots/help-labs.png" alt="Help, Writing: the TuxTalk Labs part, starting with voice editing" width="45%">
 </p>
 <p align="center"><em>Built-in help, including a page on TuxTalk Labs and voice editing</em></p>
 
