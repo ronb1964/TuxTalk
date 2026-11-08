@@ -407,9 +407,7 @@ def test_every_mouse_action_is_listed():
     listed phrase; so do the clicks that need no grid."""
     made = [command_phrases.parse(p, navigation=False, actions=True, grid=True)
             for p in _listed("mouse")]
-    assert {r.action for r in made} == {"grid", "zoom", "click", "double click",
-                                        "right click", "middle click", "move", "nudge",
-                                        "cancel"}
+    assert {r.action for r in made} == set(mouse_phrases.ACTIONS)
     assert all(isinstance(r, mouse_phrases.MouseRequest) for r in made)
     no_grid = [p for p in _listed("mouse")
                if command_phrases.parse(p, navigation=False, actions=True, grid=False)]
