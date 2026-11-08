@@ -630,10 +630,11 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
   • Only a dictation that is just the command counts. "I opened Firefox yesterday" and
     "open the door and come in" are typed as usual.
   • A name that fits no app is typed as usual, and after <b>start</b> only an app's whole
-    name counts, so a sentence like "Start over." is never lost. Two apps that fit equally well: the cancel beep sounds, a note floats over your
-    window naming them, and nothing opens.
-  • Where it works: KDE has everything. GNOME has it with the TuxTalk extension (log out and
-    back in once after updating). X11 desktops like Cinnamon and Xfce have all but
+    name counts, so a sentence like "Start over." is never lost. Two apps that fit equally
+    well: the cancel beep sounds, a note floats over your window naming them, and nothing
+    opens.
+  • Where it works: KDE Plasma 6 has everything. GNOME has it with the TuxTalk extension
+    (log out and back in once after updating). X11 desktops like Cinnamon and Xfce have all but
     <b>show all windows</b>. On COSMIC, Sway and Hyprland, windows and desktops can't be
     done (TuxTalk says so; use the window's own buttons), and an open app is started
     again, which most then answer by showing the window they already have. Sound, music,
