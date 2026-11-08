@@ -1,6 +1,6 @@
 """Preferences, read through the accessibility tree: the tabs, the new 0.16
 options and their defaults. Nothing here is saved: each check leaves with
-Cancel. CLAUDE.md Step 8, the Preferences lines.
+Cancel. RELEASE_CHECKLIST.md, the Preferences lines.
 """
 import time
 

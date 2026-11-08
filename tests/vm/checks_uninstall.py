@@ -1,6 +1,6 @@
 """Uninstall TuxTalk (uninstall.py): Preferences -> Updates & Backup ->
 Uninstall TuxTalk..., and tuxtalk --uninstall with TuxTalk not running. Last
-in a run, since it takes everything away. CLAUDE.md Step 8, the "Uninstall"
+in a run, since it takes everything away. RELEASE_CHECKLIST.md, the "Uninstall"
 line. The password goes through the pkexec stand-in that first run put in,
 which logs each call: one call is one password prompt for a real user.
 """

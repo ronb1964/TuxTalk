@@ -1,5 +1,5 @@
 """The local AI: self-corrections and voice editing (TuxTalk Labs).
-CLAUDE.md Step 8: "AI self-corrections", "Voice editing".
+RELEASE_CHECKLIST.md: "AI self-corrections", "Voice editing".
 
 The AI engine and model are copied in from this computer (1.1 GB, the
 pinned commit hub_pins names) rather than downloaded in each VM.

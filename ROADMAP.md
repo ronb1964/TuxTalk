@@ -9,7 +9,7 @@ Things I'd like to add or fix, roughly grouped. Nothing here has a date on it. W
 1.0 means TuxTalk does its main job reliably and won't change under you in
 big ways. Roughly in order:
 
-- [~] 0.19, a clean-up release: smaller files, code that's easy to read and
+- [x] 0.19, a clean-up release: smaller files, code that's easy to read and
   tested, and the build tools pinned so a release can't change by itself.
 - [ ] Decide which TuxTalk Labs features graduate and which stay experimental.
 - [ ] Dictation works reliably on the desktops it claims: KDE, GNOME,

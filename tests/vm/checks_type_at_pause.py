@@ -1,5 +1,5 @@
 """Type at pause (TuxTalk Labs), each phrase typed at the pause after it.
-CLAUDE.md Step 8: "Type at pause, a question over pauses".
+RELEASE_CHECKLIST.md: "Type at pause, a question over pauses".
 
 The computer voice's intonation decides where Parakeet hears a question
 end, so the phrases are cut where it hears the question going on. Whether

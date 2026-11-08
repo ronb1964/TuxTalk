@@ -1,8 +1,8 @@
 """Open apps by voice (TuxTalk Labs): "open the text editor" starts it, said
 again it brings the open window forward, a name that fits nothing is typed
-as words, and a GTK app starts as from the menu. Ron's part is CLAUDE.md
-Step 8's "Open apps by voice (Labs, from the AppImage)": the dropdowns of
-that GTK app, and an app that uses the NVIDIA card.
+as words, and a GTK app starts as from the menu. Ron's part is
+RELEASE_CHECKLIST.md's "Open apps by voice (Labs, from the AppImage)": the
+dropdowns of that GTK app, and an app that uses the NVIDIA card.
 
 The apps are found by name in the VM's own menu, so the text editor is
 whatever that desktop has as its default. A window counts as the app's when
