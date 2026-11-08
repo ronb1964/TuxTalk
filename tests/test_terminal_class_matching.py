@@ -57,3 +57,14 @@ class TestItStaysNarrow:
     def test_a_terminal_name_inside_another_app_does_not_match(self):
         """Substring matching would make 'kitty-photo-viewer' a terminal."""
         assert window_classes.is_terminal_class("kitty-photo-viewer") is False
+
+
+@pytest.mark.parametrize("wm_class", [
+    "io.elementary.terminal", "com.raggesilver.BlackBox", "app.devsuite.Ptyxis",
+    "deepin-terminal", "tabby", "hyper", "dev.warp.Warp", "waveterm", "rio",
+])
+def test_send_automatically_never_runs_the_words_in_these_terminals(wm_class):
+    """With "Send each dictation automatically" on, an Enter there would run
+    the dictated words as a command."""
+    assert window_classes.why_no_automatic_enter(wm_class) == (
+        "in a terminal Enter would run it as a command")
