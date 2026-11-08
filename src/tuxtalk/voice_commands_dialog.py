@@ -52,7 +52,8 @@ def show_voice_commands_dialog():
     content.set_margin_start(12)
     content.set_margin_end(12)
     content.pack_start(cards.paragraph(INTRO), False, False, 0)
-    content.pack_start(_group_tabs(), True, True, 0)
+    tabs = _group_tabs()
+    content.pack_start(tabs, True, True, 0)
 
     hint = Gtk.Label()
     hint.set_markup(f'<span size="small" color="#888888">{_hint_markup()}</span>')
@@ -71,6 +72,9 @@ def show_voice_commands_dialog():
 
     _active_dialog = dialog
     dialog.show_all()
+    # On the tabs, as in Help: the intro, which can be selected, would take
+    # the focus first, and Left and Right would move a cursor in it.
+    tabs.grab_focus()
     dialog.present()
     return dialog
 

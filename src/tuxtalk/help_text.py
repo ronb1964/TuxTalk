@@ -502,7 +502,7 @@ These work <b>right after you dictate</b>, on what you just said.
   • After a select or move, <b>delete last word</b> won't run, since the cursor is
     somewhere else now. Use Ctrl+Z in the app instead.
 
-## 🧪 Apps, Windows and Keys by Voice
+## 🧪 Apps, Windows, Keys and the Mouse by Voice
 Open apps, close or switch windows, snap and move them, press everyday keys, change
 desktops and volume, control music, lock or take a screenshot, go to an address or search
 the web, all by saying it. Turn it on in

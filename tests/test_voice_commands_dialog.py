@@ -136,6 +136,16 @@ def test_tab_goes_into_each_tab_and_the_keys_scroll_it():
         dialog.destroy()
 
 
+def test_the_window_opens_with_the_keyboard_on_the_tabs(monkeypatch):
+    """As Help does: Left and Right change group straight away."""
+    from gi.repository import Gtk
+    dialog = _open_window(monkeypatch)
+    try:
+        assert isinstance(dialog.get_focus(), Gtk.Notebook)
+    finally:
+        dialog.destroy()
+
+
 def test_the_tabs_are_the_groups_of_commands(monkeypatch):
     from gi.repository import Gtk
     from gtk_text import widgets

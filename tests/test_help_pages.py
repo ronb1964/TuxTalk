@@ -176,7 +176,17 @@ def test_a_screen_reader_hears_each_cards_heading_before_its_text(help_window):
     assert ["Filling in a form"] in names
     assert ["Voice Editing", "Good to know"] in names
     assert ["Select and Move by Voice", "Good to know"] in names
-    assert ["Apps, Windows and Keys by Voice", "Good to know"] in names
+    assert ["Apps, Windows, Keys and the Mouse by Voice", "Good to know"] in names
+
+
+def test_a_screen_reader_hears_the_feature_before_its_opening_lines(help_window):
+    """The lines under a feature's title take the focus too."""
+    from gi.repository import Gtk
+    from gtk_text import widgets
+    page = _pages(help_window)["Writing"]
+    intro = next(w for w in widgets(page) if isinstance(w, Gtk.Label)
+                 and w.get_text().startswith("Change text by saying how you want it changed"))
+    assert _named_by(intro)[0] == "Voice Editing"
 
 
 def test_a_heading_note_is_read_with_the_heading(help_window):
