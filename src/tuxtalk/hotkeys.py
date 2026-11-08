@@ -14,6 +14,7 @@ from evdev import InputDevice, ecodes, list_devices
 
 from . import (
     beeps,
+    ctrl_kept,
     ctrl_space,
     ctrl_space_clashes,
     delivery,
@@ -167,6 +168,7 @@ def _forget_lost_presses(devices, keys) -> None:
     down = keys_down(devices) & {keys.hold_key, keys.toggle_key}   # read outside the lock
     if ctrl_space.KEY not in down:
         _ctrl_space.forget()
+    ctrl_kept.let_go(devices)           # its release won't be read either
     if send_countdown.forget_presses(down) and send_countdown.owes_space():
         dictation_worker.submit(send_countdown.give_back_space)
 
@@ -269,8 +271,10 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
     held = send_countdown.hold(announce=False)
     shift = _held_shift(held_modifiers) if live.voice_editing else set()
     pair = ctrl_space.held_with(hold_key)
+    if pair:
+        ctrl_kept.let_go()      # a Ctrl given back after the last hold is hidden too
     keyboard_grab.grab_keyboards_hiding(devices, {hold_key, *pair, *shift})
-    if pair and modifier_hotkeys.hidden_till_pressed_again(ctrl_space.MODIFIER):
+    if pair and modifier_hotkeys.hidden_by_own_grab(ctrl_space.MODIFIER):
         _ctrl_space.modifier_hidden()
     rec = recording.start_recording(cfg.beeps, cfg.notify, input_device_idx,
                                     edit_mode=bool(shift), held_send=held)
@@ -701,6 +705,7 @@ def _on_key_event(event, keys: "hotkey_keys.Hotkeys", held_modifiers, devices, c
         # As for a Right Ctrl dictation key (_hide_modifier_hotkey): typing
         # that found it stuck waits for it again.
         modifier_hotkeys.note_released(event.code)
+        ctrl_kept.let_go(devices)       # once no keyboard holds the real one
     for key_event in _ctrl_space.events(event, held_modifiers, (keys.hold_key, keys.toggle_key)):
         # Any hotkey counts as activity, whether or not the auto-timeout is
         # on now: it can be switched on later, and must then count from the

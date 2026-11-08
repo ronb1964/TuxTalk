@@ -226,6 +226,26 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
         return True
 
 
+def press(code: int, value: int) -> bool:
+    """One key going down (1) or up (0), and left so: Left Ctrl held for the
+    desktop past any send (ctrl_kept). It waits for the keyboard, so never
+    lands between two events of a send. False when the keyboard isn't there
+    or failed: closing it lets go of every key it held."""
+    with _lock:
+        device = _open()
+        if device is None:
+            return False
+        time.sleep(max(0.0, _ready_at - time.monotonic()))
+        try:
+            _write(device, code, value)
+            device.syn()
+        except OSError as e:
+            logger.error(f"TuxTalk's virtual keyboard failed pressing key {code}: {e}")
+            _close_broken(device, {})
+            return False
+    return True
+
+
 def scroll(clicks: int, delay_ms: float = KEY_DELAY_MS, claim=None) -> bool:
     """Turn the mouse wheel *clicks* notches, up (toward the top of the
     screen) when positive, down when negative. *claim* is send's: made before

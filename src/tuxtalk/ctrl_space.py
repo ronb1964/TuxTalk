@@ -12,18 +12,20 @@ would, once: Space's own release after it is nothing.
 
 The hold hides Space and Left Ctrl from the desktop (hotkeys
 _start_hold_recording), so that what Type at pause types under it isn't a
-row of Ctrl shortcuts. The hotkey helper presses that Left Ctrl again when
-it gives the keyboard back, if it's still held, so Space under it is the
-pair again. TuxTalk's own grab (the input group) doesn't: the desktop then
-takes Left Ctrl to be up until it's let go, so a Space pressed again under
-it reaches the app as a space, and isn't the pair until Left Ctrl is
-pressed again (modifier_hidden). The toggle hides nothing: Space isn't a
-modifier, typing waits for a Left Ctrl the desktop sees
+row of Ctrl shortcuts. When the hold ends with Left Ctrl still held, TuxTalk
+presses it again for the desktop (ctrl_kept). Where that didn't happen the
+desktop takes Left Ctrl to be up until it's let go, so a Space pressed again
+under it reaches the app as a space, and isn't the pair until Left Ctrl is
+pressed again (modifier_hidden). The hotkey helper doesn't report such a
+Space at all: it counts only a Ctrl the desktop saw go down on a real
+keyboard, not TuxTalk's. The toggle hides nothing: Space isn't a modifier,
+typing waits for a Left Ctrl the desktop sees
 (modifier_hotkeys.wait_while_held), and a hidden one would make the second
 tap of a double tap, Ctrl kept down, a space.
 """
 from evdev import ecodes
 
+from . import ctrl_kept
 from .hotkey_helper_client import KeyEvent
 
 KEY = ecodes.KEY_SPACE
@@ -55,7 +57,9 @@ class Presses:
         if event.code != KEY:
             return [event]
         if event.value == 1:
-            self._down = MODIFIER in held_modifiers and not self._ctrl_hidden
+            # Pressed again for the desktop, it sees Ctrl+Space: the pair.
+            self._down = MODIFIER in held_modifiers and not (
+                self._ctrl_hidden and not ctrl_kept.pressed())
             return [event] if self._down else []
         if not self._down:
             return []           # typing, or a release the pair already had
@@ -73,9 +77,10 @@ class Presses:
         return [event]
 
     def modifier_hidden(self) -> None:
-        """A hold has hidden Left Ctrl from the desktop till it's pressed
-        again (modifier_hotkeys.hidden_till_pressed_again): until then, a
-        Space under it reaches the app, and isn't the pair."""
+        """TuxTalk's own grab has hidden Left Ctrl from the desktop
+        (modifier_hotkeys.hidden_by_own_grab): until it's pressed again, by
+        the user or by TuxTalk (ctrl_kept), a Space under it reaches the
+        app, and isn't the pair."""
         self._ctrl_hidden = True
 
     def forget(self) -> None:

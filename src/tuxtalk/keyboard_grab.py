@@ -26,7 +26,7 @@ import time
 
 from evdev import ecodes
 
-from . import keyboard_devices, modifier_hotkeys
+from . import ctrl_kept, keyboard_devices, modifier_hotkeys
 from . import recording_state as rs
 from .hotkey_keys import keys_down
 from .logger import setup_logger
@@ -160,16 +160,22 @@ def release_all() -> None:
 
     One unplugged device must not strand the grabs on every other keyboard, so
     each release is attempted independently and the registry is always cleared.
+    A Left Ctrl a hold hid that is still held is pressed again for the
+    desktop (ctrl_kept), after typing has been told it's no longer hidden, so
+    the next key typed waits for it.
     """
     global grabbed_devices
-    for dev in grabbed_devices:
+    ctrl_hidden = modifier_hotkeys.hidden(ctrl_kept.CODE)
+    released, grabbed_devices = grabbed_devices, []
+    for dev in released:
         try:
             dev.ungrab()
             logger.info(f"Ungrabbed device: {getattr(dev, 'name', dev)}")
         except Exception as e:
             logger.warning(f"Could not ungrab {getattr(dev, 'name', dev)}: {e}")
-    grabbed_devices = []
     modifier_hotkeys.note_hidden(())
+    if ctrl_hidden:
+        ctrl_kept.press_if_held(released)
 
 
 def release_if_not_recording() -> bool:

@@ -809,10 +809,11 @@ class FakeClock:
 def keyboard(monkeypatch):
     """A recording keyboard for every test. A real one would type into
     whatever window has the focus on the computer running the tests."""
-    from tuxtalk import virtual_keyboard
+    from tuxtalk import ctrl_kept, virtual_keyboard
     fake = FakeKeyboard()
     clock = FakeClock()
     fake.clock = clock
+    monkeypatch.setattr(ctrl_kept, "_pressed", False)     # no Ctrl held on it yet
     monkeypatch.setattr(virtual_keyboard, "time", clock)
     monkeypatch.setattr(virtual_keyboard, "_device", None)
     monkeypatch.setattr(virtual_keyboard, "_make_device", lambda: fake)

@@ -92,6 +92,7 @@ class _Guest:
 
     def __init__(self, question=None, log=""):
         self.question, self.log, self.clicked, self.needles = question, log, [], []
+        self.config = {}
 
     def ssh(self, command, check=False):
         return type("Done", (), {"stdout": "active", "returncode": 0})()
@@ -115,7 +116,7 @@ def _run(guest):
     run.dbus = lambda method: None
     run.shot = lambda name: None
     run.settings_put_back = lambda *keys: nullcontext()
-    run.set_config = lambda **changes: None
+    run.set_config = lambda **changes: guest.config.update(changes)
 
     def wait_log(mark, *needles, timeout=30):
         guest.needles += needles
@@ -145,6 +146,14 @@ def test_a_found_update_question_fails_the_check_and_is_closed(quiet_update):
 def test_an_offer_that_was_skipped_is_not_a_question_asked(quiet_update):
     guest = _Guest(log="Hotkey helper update offer skipped: no D-Bus yet")
     assert quiet_update(guest).status == "pass"
+
+
+def test_the_quiet_check_runs_with_keys_helper_1_13_reports(quiet_update):
+    """Left Ctrl+Space saved there (by an earlier check, or by hand) rightly
+    brings the question, which isn't what this check looks at."""
+    guest = _Guest()
+    quiet_update(guest)
+    assert guest.config == {"hotkey": "F8", "toggle_hotkey": "F9"}
 
 
 def test_an_offer_answered_not_now_is_a_question_asked(quiet_update):

@@ -305,16 +305,15 @@ def ctrl_space_hold(run):
        "Left Ctrl kept down after a Left Ctrl+Space hold is still Ctrl",
        desktops=("kde", "gnome", "cosmic", "cinnamon"))
 def ctrl_space_ctrl_kept(run):
-    """Space let go first, Ctrl kept down and A tapped: the helper presses
-    the Ctrl it hid again, so that's Ctrl+A in the sink, and no "a" lands
-    before the dictation, typed once Ctrl is let go."""
-    missing = _helper_missing(run)
-    if missing:
-        return Outcome("skip", f"{missing}; TuxTalk's own grab still leaves Ctrl up there "
-                       "(CODE_HEALTH row 85)")
+    """Space let go first, Ctrl kept down and A tapped: TuxTalk gave the
+    desktop its Ctrl back, so that's Ctrl+A, which selects the text already
+    in the sink, and the dictation, typed once Ctrl is let go, replaces it.
+    An "a" typed, or Ctrl+A swallowed, leaves the old text in the sink."""
     with run.settings_put_back("hotkey"):
         run.set_config(hotkey=CTRL_SPACE)
         run.sink_ready(fresh=True)
+        for key in ("o", "l", "d"):
+            run.vm.tap(key)
         mark = run.log_mark()
         run.vm.key_down("ctrl", "spc")
         try:
@@ -406,6 +405,14 @@ def ctrl_space_quiet_helper_update(run):
     if version != "1.13":
         return Outcome("skip", f"Skipped: the helper here is {version}, not 1.13 (checked on a "
                        "VM that still has the old one)")
+    with run.settings_put_back("hotkey", "toggle_hotkey"):
+        # Keys 1.13 reports: one it doesn't (Left Ctrl+Space) is asked about.
+        run.set_config(hotkey="F8", toggle_hotkey="F9")
+        return _quiet_update_outcome(run)
+
+
+def _quiet_update_outcome(run):
+    """ctrl_space_quiet_helper_update's look at the start and System check."""
     mark = run.log_mark()
     _reboot(run)
     time.sleep(30)      # the helper offer comes about 20 seconds after the start
