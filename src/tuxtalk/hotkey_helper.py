@@ -1105,9 +1105,9 @@ class Helper:
         doesn't auto-repeat them, keep the keyboard, then mark them down
         again, which only we see, so the real release still reaches us (let_up
         goes by the kernel's state, not what's been read, in case a release is
-        on its way). The press's own
-        keyboard (*is_origin*) is kept; another of its group only has its
-        modifiers hidden. A listen-only keyboard is never held or written to."""
+        on its way). The press's own keyboard (*is_origin*) is kept; another
+        of its group only has its modifiers hidden. A listen-only keyboard is
+        never held or written to."""
         if keyboard.listen_only:
             return False            # holds none of them (listen_only_holding)
         if keyboard.mouse and not is_origin:

@@ -763,11 +763,13 @@ def send_chords(chords, claim=None) -> bool:
 
 def send_scroll(clicks: int) -> bool:
     """Turn the wheel *clicks* notches, up when positive, with the checks of
-    the delivery on this thread (only_into, Esc). True when it was sent. Only
+    the delivery on this thread (only_into, Esc) and the wait for a Ctrl held
+    down (send_keys). True when it was sent. Only
     the virtual keyboard turns a wheel: the Flatpak's voice commands are off,
     so the libei backend never gets here."""
     try:
-        return virtual_keyboard.scroll(clicks, key_delay(), _delivery_claim(None))
+        return virtual_keyboard.scroll(clicks, key_delay(), _delivery_claim(None),
+                                       modifier_hotkeys.wait_while_held(focused_window.destination))
     except virtual_keyboard.GaveUp:
         return False
 

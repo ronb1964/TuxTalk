@@ -14,7 +14,7 @@ from evdev import ecodes
 from conftest import KeyEvent
 from hotkey_helper_fakes import FakeKeyboard, ready_client
 from hotkey_loop_fakes import Cfg, Grabbable, Keyboard
-from tuxtalk import (cosmic_hotkeys, ctrl_space, ctrl_space_clashes, gnome_hotkeys,
+from tuxtalk import (cosmic_hotkeys, ctrl_kept, ctrl_space, ctrl_space_clashes, gnome_hotkeys,
                      hotkey_claims, hotkeys, keyboard_grab, keyboard_layout, keyboard_output,
                      modifier_hotkeys, pipeline, recording, x11_hotkeys)
 from tuxtalk import live_settings as live
@@ -423,6 +423,63 @@ def test_no_typed_key_follows_the_ctrl_pressed_again_until_it_is_let_go(keyboard
     at = keyboard.events.index((LCTRL, 1))
     assert keyboard.events[at + 1] == (LCTRL, 0)
     assert [e for e in keyboard.events if e[0] != LCTRL] == A_KEY * 5
+
+
+def test_typing_reads_the_ctrl_as_held_from_before_its_press_to_after_its_release(
+        keyboard, holding_the_pair, monkeypatch):
+    """A key typed by another thread in between would be a Ctrl shortcut."""
+    read_as_held, write = [], keyboard.write
+
+    def write_noting(_type, code, value):
+        if code == LCTRL:
+            read_as_held.append((value, ctrl_kept.pressed()))
+        write(_type, code, value)
+    monkeypatch.setattr(keyboard, "write", write_noting)
+    holding_the_pair(SPACE, 0)
+    modifier_hotkeys._noted[0][0].pressed = lambda look: False
+    holding_the_pair(LCTRL, 0)
+    assert read_as_held == [(1, True), (0, True)] and not ctrl_kept.pressed()
+
+
+def test_a_left_ctrl_let_go_while_the_keyboard_was_busy_isnt_pressed_again(keyboard):
+    """The real Ctrl came up while TuxTalk was typing: a lone Ctrl tap after
+    the typing would do nothing anyone asked for."""
+    class LetGoOnTheSecondLook:
+        looks = 0
+
+        def active_keys(self):
+            self.looks += 1
+            return [LCTRL] if self.looks == 1 else []
+    ctrl_kept.press_if_held([LetGoOnTheSecondLook()])
+    assert keyboard.events == [] and not ctrl_kept.pressed()
+
+
+def test_a_ctrl_whose_release_was_lost_is_let_go_after_the_limit(keyboard, holding_the_pair,
+                                                                 monkeypatch):
+    """A release the kernel dropped never comes: every key the user types
+    would be a Ctrl shortcut until then."""
+    monkeypatch.setattr(ctrl_kept, "time", keyboard.clock)
+    holding_the_pair(SPACE, 0)
+    keyboard.clock.sleep(ctrl_kept.HOLD_LIMIT_S - 1)
+    ctrl_kept.let_go_if_held_too_long()
+    assert keyboard.events == [(LCTRL, 1)]
+    keyboard.clock.sleep(1)
+    ctrl_kept.let_go_if_held_too_long()
+    assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)] and not ctrl_kept.pressed()
+
+
+def test_scroll_waits_for_the_ctrl_given_back(keyboard, holding_the_pair):
+    """Under Ctrl a wheel turn zooms the page instead of scrolling it."""
+    holding_the_pair(SPACE, 0)
+    modifier_hotkeys._noted[0][0].pressed = lambda look: False
+    assert keyboard_output.send_scroll(-3)
+    assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)] and keyboard.wheel == [-1, -1, -1]
+
+
+def test_scroll_never_turns_under_a_ctrl_that_stays_down(keyboard, holding_the_pair):
+    holding_the_pair(SPACE, 0)
+    assert keyboard_output.send_scroll(-3) is False
+    assert keyboard.wheel == []
 
 
 def test_space_again_under_the_ctrl_pressed_again_is_the_pair(keyboard, holding_the_pair):

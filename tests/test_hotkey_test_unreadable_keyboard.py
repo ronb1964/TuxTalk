@@ -254,8 +254,10 @@ def test_left_ctrl_space_picked_with_a_helper_too_old_for_it_brings_the_notice()
     helper = SimpleNamespace(helper_keyboards=1, helper_version="1.13")
     dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice(),
                              _heard_by_reader=set(), keys=dict(TEST_KEYS), capturing="hold",
-                             rows={"hold": (_Notice(), _ChangeKey())}, _reading_now=[helper],
-                             _show_status=lambda which, key: None, _end_capture=lambda: None)
+                             rows={"hold": (_Notice(), _ChangeKey(), _Notice())},
+                             _reading_now=[helper], status_words={},
+                             _end_capture=lambda: None)
+    dialog._show_status = lambda which, key: hkd.HotkeyTestDialog._show_status(dialog, which, key)
     dialog._show_reading = lambda kbs: hkd.HotkeyTestDialog._show_reading(dialog, kbs)
     dialog._announce = lambda which, words: hkd.HotkeyTestDialog._announce(dialog, which, words)
     dialog._show_reading([helper])

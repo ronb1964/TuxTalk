@@ -360,8 +360,8 @@ class HotkeyTestDialog:
             self._show_reading(self._reading_now)
             notice = _reading_notice(self._reading_now, list(self.keys.values()))[0]
             if notice:
-                status = self.rows[self.capturing][1].get_accessible().get_description()
-                self._announce(self.capturing, f"{status} {notice}")
+                self._announce(self.capturing,
+                               f"{self.status_words[self.capturing]}. {notice}")
         self._end_capture()
 
     def _mark_working(self, keyname):

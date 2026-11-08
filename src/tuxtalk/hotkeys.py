@@ -590,6 +590,7 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
 
         # Backstop: we must never hold a keyboard grab while not recording.
         keyboard_grab.release_if_not_recording()
+        ctrl_kept.let_go_if_held_too_long()
 
         pass_time = time.time() - current_time
         if pass_time < INPUT_MIN_PASS_S:
