@@ -123,6 +123,7 @@ class Rig:
         self.timers = []         # [id, callback, args, removed]
         self.beeps = []
         self.notes = []
+        self.notified = []      # the notes also sent as a desktop notification
 
     def landings(self):
         """Where each move sent the pointer, in screen pixels, in order; none
@@ -206,8 +207,11 @@ def rig(pointer, monkeypatch):
     monkeypatch.setattr(mouse_grid.GLib, "timeout_add_seconds", add_timer)
     monkeypatch.setattr(mouse_grid.GLib, "source_remove", remove_timer)
     monkeypatch.setattr(beeps, "beep", lambda on, freq, length: rig.beeps.append((freq, length)))
-    monkeypatch.setattr(notices, "command_refused",
-                        lambda label, sentence, beeps_on: rig.notes.append(label))
+    def refused(label, sentence, beeps_on, notify=True):
+        rig.notes.append(label)
+        if notify:
+            rig.notified.append(label)
+    monkeypatch.setattr(notices, "command_refused", refused)
     monkeypatch.setattr(mouse_grid, "_session", None)
     yield rig
     mouse_grid.close("the test is over")
@@ -1058,3 +1062,19 @@ def test_esc_while_a_click_checks_the_landing_leaves_the_pointer_alone(rig, monk
         assert act("click", 5) is False
     assert len(rig.pointer.events) == closed_at[0] and rig.buttons() == []
     assert rig.notes == [] and "not clicked" not in caplog.text
+
+
+def test_a_slip_in_the_grid_floats_its_note_and_sends_no_notification(rig):
+    """The grid stays up: the beep and the label say it, and a notification
+    each time would cover the zoomed view and fill the history."""
+    act("grid")
+    act("nudge", 3, direction="left")
+    act("zoom", 12)
+    assert rig.notes == ["Say a number first", "No cell 12 here"]
+    assert rig.notified == []
+
+
+def test_a_grid_that_closes_on_a_refusal_still_notifies(rig):
+    rig.visible = False
+    assert act("grid") is False
+    assert rig.notified == ["Can't place the pointer exactly on this screen setup"]

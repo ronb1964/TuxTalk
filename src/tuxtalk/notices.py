@@ -160,12 +160,14 @@ def edit_problem(kind: str, beeps_on: bool) -> None:
         notify_module.notify(edit_notices.LABELS[kind], message)
 
 
-def command_refused(label: str, sentence: str, beeps_on: bool) -> None:
+def command_refused(label: str, sentence: str, beeps_on: bool, notify: bool = True) -> None:
     """A voice command was said and not done (open_app.py, command_notices.py):
     the cancel beep, *label* over the active window, where the user is
-    looking, and *sentence* in a notification, kept in the history as a
-    backup. Always said: otherwise nothing at all would seem to happen."""
+    looking, and with *notify* *sentence* in a notification, kept in the
+    history as a backup. Always said: otherwise nothing at all would seem
+    to happen."""
     beeps.beep(beeps_on, *CANCEL_BEEP)
     from . import screen_message
     screen_message.show_over_active_window(label)
-    notify_module.notify(label, sentence)
+    if notify:
+        notify_module.notify(label, sentence)
