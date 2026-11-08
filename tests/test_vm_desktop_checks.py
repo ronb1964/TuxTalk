@@ -12,6 +12,7 @@ from tuxtalk import command_phrases
 pytest.importorskip("tomllib", reason="the VM harness needs Python 3.11 or newer")
 desktop = import_vm_tool("checks_desktop_commands")
 run = import_vm_tool("run")
+voices = import_vm_tool("voices")
 
 
 def test_a_window_is_found_on_its_desktop_by_its_name():
@@ -112,7 +113,7 @@ def test_only_a_missing_extension_lets_the_workspace_reset_go_unchecked(answer, 
 
 def test_every_desktop_command_phrase_has_its_entry():
     """A check names its phrase by id; without an entry the run stops."""
-    ids = set(desktop.voices.load_phrases())
+    ids = set(voices.load_phrases())
     used = {c.id for c in run.CHECKS if c.section == desktop.SECTION}
     assert used
     assert set(COMMANDS) | {"minimize_text_editor", "restore_text_editor"} <= ids
@@ -133,13 +134,13 @@ COMMANDS = ("snap_left", "snap_top_right", "centre_window", "show_desktop",
 def test_each_command_the_checks_say_is_one_tuxtalk_takes(phrase):
     """A rewording for the computer voice must still be a command, or the
     check would fail on TuxTalk typing it."""
-    said = desktop.voices.load_phrases()[phrase]["say"]
+    said = voices.load_phrases()[phrase]["say"]
     assert command_phrases.parse(said, navigation=False, actions=True) is not None
 
 
 @pytest.mark.parametrize("phrase", [phrase for phrase, _said in desktop.SENTENCES])
 def test_each_sentence_the_checks_say_is_typed_as_words(phrase):
-    said = desktop.voices.load_phrases()[phrase]["say"]
+    said = voices.load_phrases()[phrase]["say"]
     assert command_phrases.parse(said, navigation=False, actions=True) is None
 
 

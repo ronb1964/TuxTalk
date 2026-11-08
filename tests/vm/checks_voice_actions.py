@@ -23,7 +23,7 @@ from checks_open_apps import (
     _apps, _nothing_to_open, _open_apps_on, _processes, _running, _windows, apps_seen,
     opened_by_voice)
 import voices
-from harness import Outcome, check
+from harness import Outcome, check, heard_in, squash
 from vmlib import REMOTE
 
 SECTION = "Windows, keys and addresses by voice"
@@ -125,6 +125,21 @@ def _unheard(run, mark, phrase_id):
         return Outcome("misheard", f"the computer voice's “{said}” was heard as another "
                        "sentence", typed=run.sink_text().strip())
     return None
+
+
+def _not_a_command(run, phrase_id, log, heard):
+    """An Outcome when *log* shows no voice command for *phrase_id* at all:
+    "misheard" when Parakeet heard other words (the computer voice's fault),
+    else a fail. None when a command was heard, done or not."""
+    if "Voice command" in log:
+        return None
+    said = voices.load_phrases()[phrase_id]["say"]
+    typed = run.sink_text().strip()
+    if heard is not None and squash(heard) != squash(said):
+        return Outcome("misheard", f"the computer voice's “{said}” was heard as another "
+                       "sentence", typed=typed, heard=heard)
+    return Outcome("fail", f"“{said}” was heard but not taken as a command", typed=typed,
+                   heard=heard)
 
 
 def _no_editor(opened):
@@ -270,7 +285,12 @@ def close_asks_to_save(run):
             titles = {title for title, _focused in mine}
             document = _document_name(next((t for t, focused in mine if focused), ""))
             _typed, _heard, mark = run.say("close_text_editor", wait=False)
-            run.wait_log(mark, "Voice command: close", "Voice command not done", timeout=30)
+            run.wait_log(mark, "Voice command: close", "Voice command not done",
+                         "Text injected", timeout=30)
+            log = run.log_since(mark)
+            if bad := _not_a_command(run, "close_text_editor", log, heard_in(log)):
+                bad.screenshot = run.shot("close-asks")
+                return bad
             asked = _until(10, lambda: _new_window(run, app, titles)
                            or _question_inside(run, app))
             question = (_save_question(run, app, titles, document)
@@ -291,7 +311,21 @@ def close_asks_to_save(run):
             return Outcome("pass", f"{app} asked what to do with the unsaved line and is still "
                            "running", screenshot=shot)
         finally:
-            _discard(run, app, question)
+            _discard(run, app, question or _asked_by_harness(run, opened))
+
+
+def _asked_by_harness(run, opened):
+    """When the close command never asked to save: end the editor's new
+    processes, and the title of the save question that brings up, or None.
+    KWrite answers SIGTERM with that question and stays open until it's
+    answered; left open, every later check that opens the editor skipped.
+    Any question of the editor will do: its processes are the check's own,
+    and the document's name may have changed with the words typed into it
+    (KWrite names an untitled document after its first line)."""
+    if not opened.pids:
+        return None
+    run.vm.ssh(f"kill {' '.join(opened.pids)}", check=False)
+    return _until(5, lambda: _question_inside(run, opened.app))
 
 
 @check(SECTION, "close_this_window", "“close this window” closes the focused window")

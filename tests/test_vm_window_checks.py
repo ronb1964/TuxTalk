@@ -253,3 +253,48 @@ def test_a_button_is_pressed_by_its_toolkits_own_action_name(actions, done):
     button = _Button(*actions)
     assert _guest_ui().press(button) is (done is not None)
     assert button.done == done
+
+
+class _SinkRun:
+    """A stand-in for harness.Run: an empty test window, and the commands sent."""
+
+    def __init__(self):
+        self.vm = self
+        self.sent = []
+
+    def sink_text(self):
+        return ""
+
+    def ssh(self, command, check=True):
+        self.sent.append(command)
+
+
+def test_a_close_command_heard_as_other_words_is_misheard_not_a_fail():
+    """Parakeet heard the computer voice's “Close the text editor.” as “Plose
+    the text editor.” on KDE and openSUSE: KWrite got the words and the check
+    failed as if TuxTalk had missed a command."""
+    log = "Raw transcription (Parakeet): 'Plose the text editor.'\nText injected via paste"
+    outcome = actions._not_a_command(_SinkRun(), "close_text_editor", log,
+                                     "Plose the text editor.")
+    assert outcome.status == "misheard"
+    heard_right = actions._not_a_command(_SinkRun(), "close_text_editor", log,
+                                         "Close the text editor.")
+    assert heard_right.status == "fail"
+    assert actions._not_a_command(_SinkRun(), "close_text_editor",
+                                  "Voice command: close org.kde.kwrite.desktop", None) is None
+
+
+def test_an_editor_that_was_never_asked_to_close_is_closed_and_its_question_answered(
+        monkeypatch):
+    """KWrite answers SIGTERM with a save question and stays open until it's
+    answered; left open, the checks after it skipped. Its question names the
+    document after the words typed into it, so it's taken whatever it names."""
+    monkeypatch.setattr(actions, "_until", lambda _s, test: test())
+    monkeypatch.setattr(actions, "_question_inside", lambda run, app, document=None: (
+        "Close Document — KWrite" if run.sent and document is None else None))
+    run = _SinkRun()
+    opened = open_apps.Opened(log="", program="kwrite", app="kwrite", pids=["41", "42"])
+    assert actions._asked_by_harness(run, opened) == "Close Document — KWrite"
+    assert run.sent == ["kill 41 42"]
+    nothing_started = open_apps.Opened(log="", program="kwrite", app="kwrite")
+    assert actions._asked_by_harness(_SinkRun(), nothing_started) is None

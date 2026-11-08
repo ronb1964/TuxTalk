@@ -24,14 +24,13 @@ import shlex
 import time
 from collections import namedtuple
 
-import voices
 from checks_open_apps import opened_by_voice
 from checks_send import PLAYER_LOG
 from checks_type_at_pause import PAUSE_S
 from checks_voice_actions import (
-    _action_blocker, _kwin_windows, _no_editor, _open_apps_on, _sink, _sink_state, _until,
-    _wayland)
-from harness import Abort, Outcome, check, heard_in, squash
+    _action_blocker, _kwin_windows, _no_editor, _not_a_command, _open_apps_on, _sink,
+    _sink_state, _until, _wayland)
+from harness import Abort, Outcome, check, heard_in
 from vmlib import REMOTE
 
 SECTION = "Desktop commands by voice"
@@ -160,21 +159,6 @@ def _said(run, phrase_id, *done, timeout=30):
     time.sleep(1.5)
     log = run.log_since(mark)
     return log, heard_in(log)
-
-
-def _not_a_command(run, phrase_id, log, heard):
-    """An Outcome when *log* shows no voice command for *phrase_id* at all:
-    "misheard" when Parakeet heard other words (the computer voice's fault),
-    else a fail. None when a command was heard, done or not."""
-    if "Voice command" in log:
-        return None
-    said = voices.load_phrases()[phrase_id]["say"]
-    typed = run.sink_text().strip()
-    if heard is not None and squash(heard) != squash(said):
-        return Outcome("misheard", f"the computer voice's “{said}” was heard as another "
-                       "sentence", typed=typed, heard=heard)
-    return Outcome("fail", f"“{said}” was heard but not taken as a command", typed=typed,
-                   heard=heard)
 
 
 def _refused_with(run, phrase_id, note):
