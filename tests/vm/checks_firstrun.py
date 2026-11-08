@@ -1,5 +1,5 @@
 """First run, from a computer that has never seen TuxTalk to the first
-dictation: CLAUDE.md Step 8, "First run". These checks run in order and each
+dictation: RELEASE_CHECKLIST.md, "First run". These checks run in order and each
 leaves the screens where the next one expects them.
 """
 import re

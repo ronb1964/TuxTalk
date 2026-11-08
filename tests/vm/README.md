@@ -1,7 +1,7 @@
 # VM release tests
 
-Runs a new TuxTalk AppImage through as much of the CLAUDE.md Step 8
-checklist as a computer can do on its own, inside the libvirt test VMs, and
+Runs a new TuxTalk AppImage through as much of RELEASE_CHECKLIST.md
+(Step 8) as a computer can do on its own, inside the libvirt test VMs, and
 writes one report page. Nothing here touches the real desktop, and none of
 it goes into the AppImage, .deb or .rpm. pytest doesn't collect these files
 either (none are named `test_*.py`), because they need the VMs.

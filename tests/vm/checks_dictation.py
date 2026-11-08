@@ -1,6 +1,6 @@
 """Dictation with nobody speaking: phrases played into the pretend microphone,
 F8 and F9 pressed on the VM's own keyboard, and what TuxTalk typed read back
-from the test window. CLAUDE.md Step 8, the dictation lines.
+from the test window. RELEASE_CHECKLIST.md, the dictation lines.
 """
 import re
 import time

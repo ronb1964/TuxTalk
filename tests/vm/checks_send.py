@@ -1,5 +1,5 @@
 """Send each dictation automatically, Paste Last Dictation, and what TuxTalk
-does to other sound while you dictate. CLAUDE.md Step 8: "Press enter",
+does to other sound while you dictate. RELEASE_CHECKLIST.md: "Press enter",
 "Paste Last Dictation", "Turn other sounds down", "pause it".
 """
 import time

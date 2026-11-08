@@ -3,7 +3,7 @@ in the Hugging Face cache) and no Parakeet Ultra. The VM is put in that state
 after the run: the v3 files go in from this computer's own cache, Ultra's
 come out, and TuxTalk starts again. It must keep dictating on v3, offer the
 update once, remember Not Now, and still offer it in Preferences.
-CLAUDE.md Step 8, "Parakeet Ultra offer".
+RELEASE_CHECKLIST.md, "Parakeet Ultra offer".
 """
 import re
 import time

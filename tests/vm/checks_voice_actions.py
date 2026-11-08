@@ -4,7 +4,7 @@ window", "new tab", "go back", "go to example dot com", "web search cheap
 tires" and "scroll down". These need a real desktop: only it has a window
 that asks to save, a title bar to minimize, a browser with an address bar.
 
-What the VM can't judge is Ron's part (CLAUDE.md Step 8's "Voice commands"):
+What the VM can't judge is Ron's part (RELEASE_CHECKLIST.md's "Voice commands"):
 how the keys feel in his own browsers and whether his default browser comes
 forward. Closing, switching and sizing windows need to know which window has
 the focus, so COSMIC and GNOME without the TuxTalk extension skip them.
