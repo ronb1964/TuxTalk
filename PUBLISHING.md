@@ -40,7 +40,13 @@ now" list, and update it with what went where (and the per-release log,
    feature section or "And a bunch of smaller stuff").
 6. **Listings:** AlternativeTo (is the description still true?); AppImageHub
    updates itself from the release.
-7. **Only for a release with a headline feature, if Ron wants:** one new
+7. **Before calling the release done:** every item in the register's "Owed
+   right now" is posted with Ron's OK, or he said skip. A drafted reply never
+   sits unasked: if it isn't posted in the session it was drafted, it goes
+   back to Ron at the start of the next one (the project's SessionStart hook
+   prints the list from ~/scripts/tuxtalk-owed.sh). Done items move to the
+   register's Log with their link.
+8. **Only for a release with a headline feature, if Ron wants:** one new
    place from the outreach list in Obsidian (EndeavourOS or openSUSE forums,
    accessibility communities, a Phoronix tip, a YouTuber who replied).
 
