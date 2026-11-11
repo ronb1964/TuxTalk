@@ -50,13 +50,30 @@ def helper_sees_no_keyboard():
 def outdated_helper():
     """The running hotkey helper's version when this TuxTalk, or a
     dictation key saved, needs a newer one (secure_input.needs_update),
-    else None. Fix Typing installs the new one, so first run offers it
-    there rather than leave it to the question at the next start."""
+    or on KDE Plasma one that can turn Num Lock off (lock_lights_reason),
+    else None. Fix Typing installs the new one, so first run, which asks
+    nothing at start, offers it there rather than leave it to the question
+    at the next start."""
     from . import secure_input
     if os.environ.get("FLATPAK_ID") or not secure_input.is_installed():
         return None
     running = secure_input.running_version()
-    return running if secure_input.needs_update(running, secure_input.saved_keys()) else None
+    if (secure_input.needs_update(running, secure_input.saved_keys())
+            or secure_input.lock_lights_reason(running)):
+        return running
+    return None
+
+
+def _helper_update_explanation(running):
+    """Why first run asks to update helper *running* (outdated_helper), as
+    markup: the keys when it's too old for them, else Num Lock on KDE."""
+    from tuxtalk import secure_input
+    if secure_input.needs_update(running, secure_input.saved_keys()):
+        goal, reason = "your dictation keys work", secure_input.outdated_reason(running)
+    else:
+        goal, reason = "Num Lock stays on", secure_input.lock_lights_reason(running)
+    return (f'<span><b>Update the hotkey helper so {goal}.</b>\n'
+            f'{GLib.markup_escape_text(reason)}.\nClick "Update Helper" below.</span>')
 
 
 def _no_keyboard_label():
@@ -760,13 +777,10 @@ class WelcomeDialog:
         details.append("🔄 Restart your computer to apply (logging out is often not enough)"
                        if needs_restart else "✓ No restart needed")
         if self.outdated_helper is not None:
-            from tuxtalk.secure_input import outdated_reason
-            reason = GLib.markup_escape_text(outdated_reason(self.outdated_helper))
             title = '🔴 Hotkey Helper Update Required'
             status = "❌ The hotkey helper needs an update"
             action = "Update Helper"
-            explain = ('<span><b>Update the hotkey helper so your dictation keys work.</b>\n'
-                       f'{reason}.\nClick "Update Helper" below.</span>')
+            explain = _helper_update_explanation(self.outdated_helper)
         else:
             title, status = '🔴 Typing Setup Required', "❌ Input device permissions needed"
             action = "Fix Typing"

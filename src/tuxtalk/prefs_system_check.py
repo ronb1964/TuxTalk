@@ -54,6 +54,17 @@ def _hide_widgets(*widgets):
 _READY = "✓ Ready"
 
 
+def _newer_helper_offer(running, versions):
+    """The sentence offering the helper this TuxTalk brings to one running
+    *running*, which works: on KDE Plasma what the question at start says
+    (secure_input.lock_lights_reason), elsewhere that it's up to them."""
+    from . import secure_input
+    lights = secure_input.lock_lights_reason(running)
+    why = (f". {GLib.markup_escape_text(lights)}; updating it fixes that" if lights
+           else "; updating it is up to you")
+    return f". A newer hotkey helper comes with this TuxTalk {versions}{why}"
+
+
 def _typing_state(refused_shortcuts, keys=()):
     """What System check says about typing and the hotkeys: (markup, the Fix
     Typing button's label (None: no button, nothing it could fix), whether
@@ -88,9 +99,9 @@ def _typing_state(refused_shortcuts, keys=()):
         state = _helper_state(refused_shortcuts)
         if state[3] and installed and secure_input.is_older(running):
             # New enough for this TuxTalk, which brings a newer one: offered,
-            # but nothing is wrong, so System check doesn't open itself.
-            return (state[0] + f'. A newer hotkey helper comes with this TuxTalk {versions}; '
-                    'updating it is up to you', UPDATE_HELPER_LABEL, True, True)
+            # but the keys work, so System check doesn't open itself.
+            return (state[0] + _newer_helper_offer(running, versions),
+                    UPDATE_HELPER_LABEL, True, True)
         return state
     if has_access:
         return _input_group_state()

@@ -9,6 +9,10 @@ from shell_stubs import recorders, stub
 from tuxtalk import secure_input as si
 from tuxtalk import hotkey_helper
 
+# The real check, before conftest stands in for it (no test may reach pkexec;
+# this one runs nothing as root).
+CAN_INSTALL = si.can_install
+
 
 def test_the_install_script_is_valid_bash_and_installs_root_owned():
     script = si.install_script()
@@ -238,6 +242,17 @@ def test_a_helper_before_1_16_is_offered_the_update_quietly(monkeypatch, running
     _P, prefs = _typing_prefs(monkeypatch, running=running)
     assert f"({running} → 1.16)" in prefs.typing_status_label.markup
     assert "✓ Ready" in prefs.typing_status_label.markup
+    assert "Num Lock" not in prefs.typing_status_label.markup
+
+
+def test_on_kde_system_check_says_why_the_start_asks_for_the_update(monkeypatch):
+    """The question at start says Num Lock goes off; System check mustn't
+    call the same update a matter of taste."""
+    monkeypatch.setattr("tuxtalk.desktop_detect.get_desktop_environment", lambda: "kde")
+    P, prefs = _typing_prefs(monkeypatch, running="1.15")
+    markup = prefs.typing_status_label.markup
+    assert "Num Lock" in markup and "up to you" not in markup
+    assert P._typing_state([])[3] is True        # the keys work: it doesn't open itself
 
 
 def test_a_helper_too_old_for_a_dictation_key_set_is_a_warning(monkeypatch):
@@ -447,3 +462,16 @@ def test_system_check_asks_for_a_restart_only_where_fix_typing_needs_one(
     monkeypatch.setattr(si, "can_install", lambda: (helper_possible, ""))
     markup, label, offered, ok = P._typing_state([])
     assert wording in markup and label == P.FIX_TYPING_LABEL and offered and not ok
+
+
+def test_a_python_that_doesnt_answer_isnt_called_missing(monkeypatch):
+    """Timed out, it's there: saying it isn't installed sends people the wrong way."""
+    import subprocess
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(si.os.path, "isdir", lambda path: True)
+
+    def hangs(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0], 10)
+    monkeypatch.setattr(si.subprocess, "run", hangs)
+    ok, why = CAN_INSTALL()
+    assert not ok and "didn't answer" in why and "isn't installed" not in why

@@ -266,8 +266,9 @@ def can_install():
         ok = subprocess.run([PYTHON, "-I", "-S", "-c",
                              "import sys; sys.exit(sys.version_info < (3, 8))"],
                             timeout=10).returncode == 0
-    except (OSError, subprocess.TimeoutExpired):
-        ok = False
+    except (OSError, subprocess.TimeoutExpired) as e:
+        logger.info(f"Couldn't ask {PYTHON} its version: {e}")
+        return False, f"{PYTHON} didn't answer when asked its version"
     if not ok:
         return False, f"{PYTHON} (3.8 or newer) isn't installed"
     if not any(os.access(os.path.join(d, "pkexec"), os.X_OK)
@@ -325,8 +326,9 @@ def is_older(running):
 # The oldest helper this TuxTalk works with as it should on any computer.
 # Raised only when a feature or fix everyone needs comes with a newer
 # helper, since TuxTalk then asks at every start to update it. A fix only
-# some computers need asks there alone (missed_keyboard_reason); the
-# rest of a newer helper is offered in System check without asking.
+# some computers need asks there alone (missed_keyboard_reason,
+# lock_lights_reason); the rest of a newer helper is offered in System
+# check without asking.
 NEEDED_HELPER_VERSION = "1.11"
 
 # The first helpers that read a keyboard the ones before skipped without a
@@ -365,17 +367,17 @@ def lock_lights_reason(running):
     """Why to update the running helper (version *running*) on KDE Plasma,
     in one sentence without a full stop, or None. Every helper before
     LOCK_LIGHTS_SINCE leaves the keyboards with the text console's lock
-    lights, all off, when it lets go of them, and KWin follows the lights:
-    there Num Lock goes off after every dictation and the number pad stops
-    typing numbers. Not a reason to update anywhere else, where only the
-    light was seen to go."""
+    lights, all off, when it lets go of them. On KDE Plasma the desktop can
+    follow them (issue #34, KWin 6.8.2: the number pad stopped typing
+    numbers; the test VMs' KWin only lost the light). Elsewhere only the
+    light was seen to go, so that's no reason to ask."""
     if running is None or _version(running) >= _version(LOCK_LIGHTS_SINCE):
         return None
     from .desktop_detect import get_desktop_environment
     if get_desktop_environment() != "kde":
         return None
-    return ("On KDE Plasma, the hotkey helper on this computer turns Num Lock and Caps Lock "
-            "off after each dictation")
+    return ("On KDE Plasma, the hotkey helper on this computer can turn Num Lock and Caps "
+            "Lock off after each dictation")
 
 
 def outdated_reason(running):
@@ -387,7 +389,8 @@ def outdated_reason(running):
 
 
 def needs_update(running, keys=()):
-    """Whether this TuxTalk asks at start to update the running helper
+    """Whether this TuxTalk needs a newer helper for its keys to work, and
+    asks at start to update the running one (lock_lights_reason asks too)
     (version *running*): it's older than NEEDED_HELPER_VERSION, can't
     report one of the dictation *keys* set (hears_key; saved_keys), or
     leaves out a keyboard here (missed_keyboard_reason)."""

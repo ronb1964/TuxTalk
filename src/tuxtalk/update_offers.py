@@ -2,7 +2,8 @@
 for this computer (once, a notification), and the offers of what it brings
 that the computer doesn't have yet: a hotkey helper new enough for this
 TuxTalk (asked at every start until it's updated: without it the dictation
-keys can stop working) and Parakeet Ultra (asked once). At most one offer
+keys can stop working, or on KDE Plasma Num Lock goes off) and Parakeet
+Ultra (asked once). At most one offer
 a start, so two never stack.
 
 They come up while people may be typing, so Not Now is the default: an
@@ -55,8 +56,9 @@ def offer_helper_update() -> bool:
     or a dictation key set needs (secure_input.needs_update), or turns Num
     Lock off on KDE Plasma (secure_input.lock_lights_reason), ask to update
     it, at every start until it is. True when it asked. One only older than
-    the helper this TuxTalk brings is left to System check, which offers it
-    without asking. The Flatpak has no helper to update."""
+    the helper this TuxTalk brings, with nothing wrong here, is left to
+    System check, which offers it without asking. The Flatpak has no helper
+    to update."""
     try:
         from . import secure_input
         if os.environ.get("FLATPAK_ID") or not secure_input.is_installed():
@@ -80,14 +82,19 @@ def helper_update_text(running) -> str:
     from . import secure_input
     from .hotkey_helper import VERSION
     keys = [key for key in secure_input.KEYS_SINCE if not secure_input.hears_key(running, key)]
+    saved_unheard = [key for key in secure_input.saved_keys()
+                     if not secure_input.hears_key(running, key)]
+    lights = secure_input.lock_lights_reason(running)
     if missed := secure_input.missed_keyboard_reason(running):
         why = f". {missed}, so your dictation keys may not work until it's updated."
+    # Num Lock before keys this person doesn't use: a key that helper can't
+    # report says nothing to them unless it's one of theirs.
+    elif lights and not saved_unheard:
+        why = f". {lights}, so the number pad can stop typing numbers until it's updated."
     elif keys:
         names = keys[0] if len(keys) == 1 else f"{', '.join(keys[:-1])} and {keys[-1]}"
         can_t = "can't be a dictation key" if len(keys) == 1 else "can't be dictation keys"
         why = f": until it's updated, {names} {can_t}, and it misses this version's fixes."
-    elif lights := secure_input.lock_lights_reason(running):
-        why = f". {lights}, so the number pad can stop typing numbers until it's updated."
     else:
         why = ", with fixes the one you have doesn't get."
     return ("The hotkey helper is the small background service that reads your dictation "
