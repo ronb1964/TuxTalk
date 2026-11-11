@@ -77,3 +77,13 @@ def test_hand_edited_capitals_load_as_the_values_the_app_compares():
     s = config.repaired(s)
     assert (s.device, s.injection_mode, s.mode) == ("vulkan", "type", "hold")
     assert (s.indicator_style, s.indicator_size) == ("bars", "large")
+
+
+def test_a_config_with_live_text_and_type_at_pause_both_on_keeps_only_the_box():
+    """Preferences offers one or the other; a config from before, or a hand
+    edit, with both on would show each phrase and then empty the box as the
+    phrase was typed."""
+    s = config.Settings()
+    s.live_text = s.chunked_dictation = True
+    s = config.repaired(s)
+    assert (s.live_text, s.chunked_dictation) == (True, False)

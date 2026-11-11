@@ -1,5 +1,6 @@
-"""Preferences → Advanced → TuxTalk Labs → Type at pause: the switch, the
-fine-tuning, and the live test (with a fake microphone stream)."""
+"""Preferences → Advanced → TuxTalk Labs → While you talk: the choice
+between live text and Type at pause, Type at pause's fine-tuning, and its
+live test (with a fake microphone stream)."""
 import threading
 import time
 from types import SimpleNamespace
@@ -40,7 +41,7 @@ def win(monkeypatch):
     """The Labs entry, in a PreferencesWindow with only what it needs."""
     monkeypatch.setattr(mic_stream, "input_samplerate", lambda idx, rate: 16000)
     w = PreferencesWindow.__new__(PreferencesWindow)
-    w.config = {"chunked_dictation": False, "chunk_pause_seconds": 0.8,
+    w.config = {"chunked_dictation": False, "live_text": False, "chunk_pause_seconds": 0.8,
                 "chunk_context_marks": True, "mic": ""}
     w.updates = []
 
@@ -107,22 +108,40 @@ def labels(widget):
     return [w.get_text() for w in gtk_text.widgets(widget) if isinstance(w, Gtk.Label)]
 
 
-def test_the_entry_has_its_heading_and_switch(win):
-    assert "Type at pause" in labels(win.grid)
-    assert win.tap_check.get_label() == "Type each phrase when you pause"
-    assert win.tap_fold.button.get_label() == "Adjust Settings"
+def test_the_entry_has_its_heading_and_choice(win):
+    assert "While you talk" in labels(win.grid)
+    assert win.while_talking.get_active_id() == "nothing"
+    win.while_talking.set_active_id("pause")
+    assert win.tap_fold.button.get_label() == "Adjust Type at pause"
     summary = win.tap_fold.summary.get_text()
     assert summary == "pause 0.8 s \u00b7 punctuation from context on"
     assert not win.tap_fold.is_open()
 
 
-def test_the_switch_greys_the_fine_tuning(win):
-    assert win.tap_fine.get_sensitive() is False
-    assert win.tap_fold.header.get_sensitive() is False
-    win.tap_check.set_active(True)
-    assert win.tap_fine.get_sensitive() is True
-    assert win.tap_fold.header.get_sensitive() is True
+def test_type_at_pauses_settings_show_only_when_it_is_the_choice(win):
+    assert not win.tap_fold.get_visible()
+    win.while_talking.set_active_id("pause")
+    assert win.tap_fold.get_visible()
     assert ("chunked_dictation", True) in win.win.updates
+    win.while_talking.set_active_id("box")
+    assert not win.tap_fold.get_visible()
+
+
+@pytest.mark.parametrize("choice, pause, box", [("nothing", False, False),
+                                                ("box", False, True), ("pause", True, False)])
+def test_one_choice_never_leaves_both_on(win, choice, pause, box):
+    """Both on, the box showed each phrase and then emptied as it was typed."""
+    win.while_talking.set_active_id("box" if choice != "box" else "pause")
+    win.while_talking.set_active_id(choice)
+    assert (win.win.config["chunked_dictation"], win.win.config["live_text"]) == (pause, box)
+
+
+def test_the_setting_going_off_is_written_first(win):
+    """The service reads each write: it must never see both on."""
+    win.while_talking.set_active_id("box")
+    win.win.updates.clear()
+    win.while_talking.set_active_id("pause")
+    assert win.win.updates == [("live_text", False), ("chunked_dictation", True)]
 
 
 def test_the_controls_write_their_settings(win):
@@ -133,7 +152,7 @@ def test_the_controls_write_their_settings(win):
 
 
 def test_the_test_opens_the_chosen_mic_and_shows_what_it_hears(win):
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_test_btn.clicked()
     stream = win.streams[-1]
     assert stream.started
@@ -149,7 +168,7 @@ def test_the_test_opens_the_chosen_mic_and_shows_what_it_hears(win):
 
 
 def test_closing_preferences_stops_the_test(win):
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_test_btn.clicked()
     win.win._stop_tests(closing=True)       # what OK, Cancel and the X all call
     assert win.streams[-1].stopped and win.streams[-1].closed
@@ -157,26 +176,26 @@ def test_closing_preferences_stops_the_test(win):
 
 
 def test_turning_the_feature_off_stops_the_test(win):
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_test_btn.clicked()
-    win.tap_check.set_active(False)
+    win.while_talking.set_active_id("nothing")
     assert stopped(win.streams[-1])
 
 
 def test_the_button_opens_the_settings_and_hiding_them_stops_the_test(win):
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_fold.button.clicked()
     assert win.tap_fold.is_open()
-    assert win.tap_fold.button.get_label() == "Hide Settings"
+    assert win.tap_fold.button.get_label() == "Hide Type at pause"
     win.tap_test_btn.clicked()
     win.tap_fold.button.clicked()
     assert not win.tap_fold.is_open()
-    assert win.tap_fold.button.get_label() == "Adjust Settings"
+    assert win.tap_fold.button.get_label() == "Adjust Type at pause"
     assert stopped(win.streams[-1])
 
 
 def test_leaving_the_advanced_tab_stops_the_test(win):
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_test_btn.clicked()
     notebook = SimpleNamespace(get_tab_label_text=lambda page: "Audio")
     win.win.on_tab_switched(notebook, Gtk.ScrolledWindow(), 1)
@@ -187,7 +206,7 @@ def test_a_mic_that_wont_open_says_so(win):
     def broken(**kwargs):
         raise OSError("Device unavailable")
     win._pause_stream_factory = broken
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_test_btn.clicked()
     assert "Couldn't open the microphone" in win.tap_status.get_text()
     assert win.tap_test_btn.get_label() == "Test"
@@ -196,7 +215,7 @@ def test_a_mic_that_wont_open_says_so(win):
 def test_a_voice_detector_that_fails_stops_the_test_and_says_so(win):
     """An error in the stream's callback ended the stream: the meter froze
     with the test still showing as running."""
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_test_btn.clicked()
     stream = win.streams[-1]
 
@@ -213,7 +232,7 @@ def test_a_voice_detector_that_wont_load_says_so(win, monkeypatch):
     def unavailable():
         raise voice_detector.Unavailable("the voice detector didn't load")
     monkeypatch.setattr(voice_detector, "_model", unavailable)
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_test_btn.clicked()
     assert win.streams == [] and win.tap_test_btn.get_label() == "Test"
     assert win.tap_status.get_text() == prefs_type_at_pause.DETECTOR_MISSING
@@ -225,14 +244,14 @@ def test_a_mic_that_cant_be_found_says_so(win):
     def no_devices():
         raise OSError("no audio devices")
     win.win.get_selected_device_idx = no_devices
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_test_btn.clicked()
     assert win.tap_status.get_text() == "Couldn't open the microphone: no audio devices"
     assert win.tap_test_btn.get_label() == "Test"
 
 
 def test_a_new_pause_length_applies_to_a_running_test(win):
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_test_btn.clicked()
     win.tap_pause_spin.set_value(1.5)
     assert win._pause_test._detector.pause_seconds == 1.5
@@ -242,9 +261,9 @@ def test_the_advanced_tab_builds_it(prefs_window):
     from gtk_text import below, find
     window = prefs_window()
     labs = below(find(window.window, Gtk.Label, "🧪 TuxTalk Labs"))
-    switch = find(window.window, Gtk.CheckButton, "Type each phrase when you pause")
-    assert switch in labs
-    switch.set_active(True)
+    choice = window.advanced_tab.type_at_pause.while_talking
+    assert choice in labs
+    choice.set_active_id("pause")
     assert window.config["chunked_dictation"] is True
 
 
@@ -252,7 +271,7 @@ def test_help_explains_type_at_pause(help_pages):
     hands_free = next(text for title, text in help_pages.items() if "Hands-free" in title)
     assert "Type at Pause" in hands_free
     # The heading, and beside it where to find those settings.
-    assert "Fine-tuning\n(under Type at pause → Adjust Settings)" in hands_free
+    assert "Fine-tuning\n(under While you talk → Adjust Type at pause)" in hands_free
 
 
 # --- stopping the test, its microphone, and what the settings show ------------------
@@ -261,7 +280,7 @@ def test_leaving_the_window_stops_the_test(win):
     """Clicking into the app to dictate takes the focus from Preferences. A test
     still holding a direct hw: mic would make the dictation fail with only a
     beep, so the test stops then."""
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_test_btn.clicked()
     win.win._on_window_active(SimpleNamespace(is_active=lambda: False), None)
     assert stopped(win.streams[-1])
@@ -274,7 +293,7 @@ def test_a_microphone_that_never_stops_doesnt_freeze_the_window(win, monkeypatch
     monkeypatch.setattr(mic_stream, "STOP_TIMEOUT_S", 0.1)
     monkeypatch.setattr(mic_stream, "_closing", set())
     release = slow_to_stop(win)
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
 
     def closing():
         win.win._stop_tests(closing=True)
@@ -293,7 +312,7 @@ def test_a_stream_still_stopping_feeds_nothing_to_the_next_test(win):
     """Stop hands the stream to another thread to close, and Test comes back
     at once: the old stream's callback still fed the new test's detector,
     and its redraw drew the new test."""
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_test_btn.clicked()
     old = win.streams[0].kwargs["callback"]
     speech = (np.random.default_rng(5).normal(0, 6000, 320)).astype(np.int16).reshape(-1, 1)
@@ -315,7 +334,7 @@ def test_the_next_test_waits_until_the_last_stream_is_closed(win):
     """An ALSA hw: device is held until its stream is closed, so opening it
     again at once failed as busy ("Device unavailable")."""
     release = slow_to_stop(win)
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_test_btn.clicked()
     win.tap_test_btn.clicked()                   # Stop
     win.tap_test_btn.clicked()                   # Test again
@@ -332,7 +351,7 @@ STOP_PATHS = {
         SimpleNamespace(get_tab_label_text=lambda page: "Audio"),
         Gtk.ScrolledWindow(), 1),
     "hiding the settings": lambda win: win.tap_fold.button.clicked(),
-    "turning it off": lambda win: win.tap_check.set_active(False),
+    "turning it off": lambda win: win.while_talking.set_active_id("nothing"),
     "closing Preferences": lambda win: win.win._stop_tests(closing=True),
 }
 
@@ -344,7 +363,7 @@ def test_a_test_called_off_while_it_waits_never_opens_the_mic(win, stop):
     left it waiting all the same: it then opened the mic with Preferences in
     the background, and a hw: mic was busy for the dictation."""
     release = slow_to_stop(win)
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_fold.button.clicked()                # open, so hiding them is a way to stop
     win.tap_test_btn.clicked()
     win.tap_test_btn.clicked()                   # Stop
@@ -381,7 +400,7 @@ def test_a_stream_that_wont_start_is_closed(win):
         return s
 
     win._pause_stream_factory = factory
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_test_btn.clicked()
     assert stopped(opened[-1])
     assert "Couldn't open the microphone" in win.tap_status.get_text()
@@ -392,7 +411,7 @@ def test_punctuation_from_context_comes_first(win):
 
 
 def test_the_title_follows_the_settings(win):
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_pause_spin.set_value(1.2)
     win.tap_context_check.set_active(False)
     summary = win.tap_fold.summary.get_text()
@@ -403,7 +422,7 @@ def test_opening_the_settings_scrolls_them_into_view(win, monkeypatch):
     shown = []
     monkeypatch.setattr("tuxtalk.prefs_tab.scroll_into_view",
                         lambda widget, delay_ms=60: shown.append(widget))
-    win.tap_check.set_active(True)
+    win.while_talking.set_active_id("pause")
     win.tap_fold.button.clicked()
     assert shown == [win.tap_fold.revealer]
     win.tap_fold.button.clicked()                # closing doesn't scroll

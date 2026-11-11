@@ -434,6 +434,9 @@ def _migrate_settings(s: Settings) -> Settings:
     - The choices validation accepts in any case are lowercased, since the
       rest of the app compares them as written ("Vulkan" blanked the
       indicator's device line).
+    - Live text and Type at pause are one choice in Preferences: with both
+      on, Type at pause goes off. Together, the box showed each phrase and
+      then emptied as it was typed.
     """
     for name in _CASE_FREE_CHOICES:
         value = getattr(s, name)
@@ -442,6 +445,8 @@ def _migrate_settings(s: Settings) -> Settings:
     if s.indicator_color_mode == "cyan":
         s.indicator_color_mode = "custom"
         s.indicator_color = CLASSIC_CYAN_HEX
+    if s.live_text and s.chunked_dictation:
+        s.chunked_dictation = False
     return s
 
 

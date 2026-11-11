@@ -701,9 +701,9 @@ on/off toggle. The seconds box beside it sets how long a pause ends it.
 Each phrase is typed as soon as you pause, while you go on talking, instead of
 all of it when you stop. Nothing that was typed changes afterwards.
 
-Turn it on in <b>Preferences → Advanced → TuxTalk Labs → Type at pause</b>. Then hold
-<b>{hold}</b> (or double-tap <b>{toggle}</b>), say "see you at noon", pause: it's typed, and
-you can go on talking.
+Pick "Type each phrase when you pause" in <b>Preferences → Advanced → TuxTalk Labs →
+While you talk</b>. Then hold <b>{hold}</b> (or double-tap <b>{toggle}</b>), say "see you at
+noon", pause: it's typed, and you can go on talking.
 
 ### How it works
   • A pause of about a second ends a phrase, and it's typed right away.
@@ -711,7 +711,7 @@ you can go on talking.
     then a period goes in, or a comma, or the sentence just carries on.
   • "delete last sentence" and the other commands work on the phrase before them.
 
-### Fine-tuning (under Type at pause → Adjust Settings)
+### Fine-tuning (under While you talk → Adjust Type at pause)
   • <b>Pause length</b>: how long a silence ends a phrase. A dryer, a fan or a busy
     kitchen doesn't count as talking, so the pause is still heard; other people
     talking nearby does.
@@ -723,22 +723,23 @@ you can go on talking.
     make it shorter.
 
 ## 🧪 Live Text
-See what you've said so far while you're still talking, in a box under the recording
+See what you've said so far while you're still talking, in a box by the recording
 indicator. What gets typed doesn't change.
 
-Turn it on in <b>Preferences → Advanced → TuxTalk Labs → Live text</b>. Then hold
-<b>{hold}</b>, say a few sentences, and watch them come up in the box; let go, and the box
-closes as your text is typed.
+Pick "Show the words in a box" in <b>Preferences → Advanced → TuxTalk Labs →
+While you talk</b>. Then hold <b>{hold}</b>, say a few sentences, and watch them come up
+in the box; let go, and the box closes as your text is typed.
 
 ### How it works
   • It needs the speech model on a graphics card (the TuxTalk menu says where it
     runs). On the processor the box stays closed, so your typing never waits on it.
   • The box updates about twice a second. If reading it again ever gets slow, the box
-    goes away until your next pause or dictation, and if your graphics card is too slow
+    goes away until your next dictation, and if your graphics card is too slow
     for it, until TuxTalk restarts (Restart Service). Your text is still typed as usual.
   • It shows the words as they're heard: numbers, commands like "new line" and AI
     corrections are worked out when the text is typed.
-  • With Type at pause, the box holds only what hasn't been typed yet.
+  • It's that or Type at pause, not both: with both, each phrase would show in the box
+    and then be typed away at the pause.
   • In a password field the box stays closed.
   • It never takes the keyboard or a click, so you can keep working underneath it.
 

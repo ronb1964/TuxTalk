@@ -1,5 +1,6 @@
-"""Preferences, Advanced tab, TuxTalk Labs: Type at pause (chunking.py), its
-settings, and a live test of what the pause detector hears."""
+"""Preferences, Advanced tab, TuxTalk Labs: what happens while you talk,
+Live text (live_text.py) or Type at pause (chunking.py), with Type at
+pause's settings and a live test of what its pause detector hears."""
 import time
 
 import gi
@@ -11,7 +12,7 @@ from . import mic_stream
 from .chunk_meter import PauseTest, level_to_fraction
 from .mic_test import MicReopen, SegmentedVUMeter
 from .logger import setup_logger
-from .prefs_tab import LABS_INDENT, Tab, fold, subheading
+from .prefs_tab import LABS_INDENT, Tab, dropdown, fold, subheading, tip_label
 from .voice_detector import Unavailable
 
 logger = setup_logger(__name__)
@@ -20,6 +21,28 @@ DETECTOR_MISSING = ("The test can't run: TuxTalk's voice detector didn't load, s
                     "pause can't hear pauses either. The log says why.")
 DETECTOR_FAILED = ("The test stopped: TuxTalk's voice detector failed while it listened. "
                    "The log says why.")
+
+# What happens while you talk: id -> (label, chunked_dictation, live_text,
+# the line under the dropdown). One choice over the two settings: with both
+# on, the box showed each phrase and then emptied as it was typed.
+WHILE_TALKING = {
+    "nothing": ("Nothing extra", False, False,
+                "Your words are typed when you let go."),
+    "box": ("Show the words in a box", False, True,
+            "A box above the recording indicator shows what you've said so far. Your "
+            "words are typed when you let go. Needs the speech model on a graphics card."),
+    "pause": ("Type each phrase when you pause", True, False,
+              "Each phrase is typed as soon as you pause. Nothing typed is changed "
+              "afterwards. Works on the processor too."),
+}
+
+
+def while_talking(config):
+    """The WHILE_TALKING id *config* stands for. Both settings on (an older
+    config) is the box, as config._migrate_settings makes it."""
+    if config.get("live_text", False):
+        return "box"
+    return "pause" if config.get("chunked_dictation", False) else "nothing"
 
 
 class PauseMeter(SegmentedVUMeter):
@@ -69,25 +92,18 @@ class TypeAtPause(Tab):
         self._tap_redraw_pending = False
 
     def build(self, grid, row):
-        """The Labs entry: the switch, and under it the fine-tuning with a live
-        test of what the pause detector hears. Returns the next grid row."""
-        grid.attach(subheading("Type at pause"), 0, row, 2, 1)
+        """The Labs entry: the While you talk dropdown with a line saying
+        what the choice does, and under it Type at pause's fine-tuning with
+        a live test of what the pause detector hears. Returns the next row."""
+        grid.attach(subheading("While you talk"), 0, row, 2, 1)
         row += 1
-
-        self.tap_check = Gtk.CheckButton(label="Type each phrase when you pause")
-        self.tap_check.set_active(bool(self.config.get("chunked_dictation", False)))
-        self.tap_check.set_tooltip_text(
-            "While you dictate, each phrase is typed as soon as you pause, instead of\n"
-            "all of it when you stop. Nothing typed is changed afterwards. Whether a\n"
-            "pause ends a sentence is decided once the next words are heard.")
-        self.tap_check.set_margin_start(LABS_INDENT)
-        grid.attach(self.tap_check, 0, row, 2, 1)
-        row += 1
+        row = self._build_choice(grid, row)
 
         # Several settings, so a fold with their values beside its button (one
         # setting would sit by its tickbox, like Power Saving's minutes).
-        self.tap_fold = fold(grid, row, "Adjust Settings", "Hide Settings")
+        self.tap_fold = fold(grid, row, "Adjust Type at pause", "Hide Type at pause")
         self.tap_fold.set_margin_start(LABS_INDENT)
+        self.tap_fold.set_no_show_all(True)     # shown only with Type at pause
         # Hiding the settings hides the test's meter, so the test stops.
         self.tap_fold.button.connect(
             "clicked", lambda _b: self.tap_fold.is_open() or self.stop_test())
@@ -97,9 +113,7 @@ class TypeAtPause(Tab):
         self._build_test(self.tap_fine, r)
         self._tap_update_summary()
 
-        self.tap_check.connect("toggled", lambda c: (
-            self.update_config("chunked_dictation", c.get_active()),
-            self._tap_sync_sensitivity()))
+        self.while_talking.connect("changed", self._while_talking_changed)
         self.tap_pause_spin.connect("value-changed", lambda sp: (
             self.update_config("chunk_pause_seconds", round(sp.get_value(), 1)),
             self._tap_reconfigure(), self._tap_update_summary()))
@@ -109,6 +123,45 @@ class TypeAtPause(Tab):
         self.tap_test_btn.connect("clicked", self._tap_toggle_test)
         self._tap_sync_sensitivity()
         return row
+
+    def _build_choice(self, grid, row):
+        """The While you talk dropdown and the line under it; returns the
+        next row."""
+        self.while_talking = combo = dropdown(Gtk.ComboBoxText())
+        for cid, (clabel, _pause, _box, _note) in WHILE_TALKING.items():
+            combo.append(cid, clabel)
+        combo.set_active_id(while_talking(self.config))
+        label = tip_label(
+            "While you talk",
+            "Show the words in a box: see what you've said so far, then it's all\n"
+            "typed when you let go.\n"
+            "Type each phrase when you pause: each phrase goes into the app as you\n"
+            "go. Whether a pause ends a sentence is decided once the next words are heard.")
+        label.set_mnemonic_widget(combo)
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        box.set_margin_start(LABS_INDENT)
+        box.pack_start(label, False, False, 0)
+        box.pack_start(combo, False, False, 0)
+        grid.attach(box, 0, row, 2, 1)
+        self.while_talking_note = Gtk.Label(xalign=0)
+        self.while_talking_note.set_line_wrap(True)
+        self.while_talking_note.set_opacity(0.7)
+        self.while_talking_note.set_margin_start(LABS_INDENT)
+        grid.attach(self.while_talking_note, 0, row + 1, 2, 1)
+        return row + 2
+
+    def _while_talking_changed(self, combo):
+        """Write the two settings the choice stands for, the one going off
+        first: the service reads each write, and never sees both on. Then
+        show the choice's parts."""
+        choice = combo.get_active_id()
+        if choice is None:
+            return
+        _label, pause, box, _note = WHILE_TALKING[choice]
+        for key, on in sorted((("chunked_dictation", pause), ("live_text", box)),
+                              key=lambda setting: setting[1]):
+            self.update_config(key, on)
+        self._tap_sync_sensitivity()
 
     def _build_settings(self, fine):
         """Punctuation from context and the pause length; returns the next
@@ -172,10 +225,16 @@ class TypeAtPause(Tab):
             f" \u00b7 punctuation from context {context}")
 
     def _tap_sync_sensitivity(self):
-        on = self.tap_check.get_active()
-        self.tap_fine.set_sensitive(on)
-        self.tap_fold.header.set_sensitive(on)
-        if not on:
+        """Type at pause's settings show only while it's the choice; the
+        line under the dropdown says what the choice does."""
+        choice = self.while_talking.get_active_id() or "nothing"
+        self.while_talking_note.set_text(WHILE_TALKING[choice][3])
+        on = choice == "pause"
+        self.tap_fold.set_visible(on)
+        if on:
+            self.tap_fold.show_all()
+        else:
+            self.tap_fold.set_open(False)
             self.stop_test()
 
     def _pause_stream_factory(self, **kwargs):

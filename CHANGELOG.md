@@ -10,21 +10,26 @@ before 0.15.0, so older entries use that name.
   seconds. Claude Desktop used to ignore TuxTalk's Ctrl+V, and since TuxTalk
   has its own keyboard it doesn't. A tab still goes in as four spaces there,
   since the Tab key jumps to the Send button.
-- New in TuxTalk Labs: Live text. Turn it on under Preferences → Advanced →
-  TuxTalk Labs, and while you dictate, a box by the recording indicator
-  shows what you've said so far, updated about twice a second. It grows
-  with a long dictation, above the text box you're typing into, and the
-  older words settle and stop changing. What gets typed doesn't change,
-  and the box takes no keys or clicks. It needs the speech model on a
-  graphics card: it reads the audio again with the model you already have, only when nothing
-  else is being transcribed, and on a recent desktop card a read takes well
-  under half a second. If one ever takes over about half a second, the box
-  stops until your next pause or dictation, and if short ones keep doing
-  that (a built-in graphics chip can be that slow) it stays off until
-  TuxTalk restarts, so your typed text is never held up for long. The box
-  shows the words as the model hears them, before numbers and commands are
-  worked out, and it stays empty for words said into a password field.
-  Asked for in the live-text poll (Discussion #24).
+- New in TuxTalk Labs: Live text. Pick "Show the words in a box" under
+  Preferences → Advanced → TuxTalk Labs → While you talk, and while you
+  dictate, a box by the recording indicator shows what you've said so far,
+  updated about twice a second. It grows with a long dictation, above the
+  text box you're typing into, and the older words settle and stop changing.
+  What gets typed doesn't change, and the box takes no keys or clicks. It
+  needs the speech model on a graphics card: it reads the audio again with
+  the model you already have, only when nothing else is being transcribed,
+  and on a recent desktop card a read takes well under half a second. If one
+  ever takes over about half a second, the box stops until your next
+  dictation, and if short ones keep doing that (a built-in graphics chip can
+  be that slow) it stays off until TuxTalk restarts, so your typed text is
+  never held up for long. The box shows the words as the model hears them,
+  before numbers and commands are worked out, and it stays empty for words
+  said into a password field. Asked for in the live-text poll (Discussion
+  #24).
+- TuxTalk Labs has one While you talk choice instead of two tickboxes: show
+  the words in a box, or type each phrase when you pause. With both on, the
+  box showed a phrase and then emptied as it was typed. A settings file with
+  both on gets the box.
 - On a computer with more than one graphics card you can pick which one
   TuxTalk uses: Preferences → General → Change model, device or language →
   Graphics card, under Device. It lists each card, with how much of its memory

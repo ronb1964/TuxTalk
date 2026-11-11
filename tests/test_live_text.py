@@ -688,18 +688,10 @@ def test_a_read_leaves_no_info_lines_in_the_log(talking, monkeypatch):
     assert window.shown == ["so far"]
 
 
-def test_the_labs_switch_turns_it_on(prefs_window):
-    """Off until it's ticked; ticking it changes the setting to be saved."""
-    from gi.repository import Gtk
+def test_the_labs_choice_turns_it_on(prefs_window):
+    """Off until it's picked; picking it changes the setting to be saved."""
     win = prefs_window()
-
-    def checks(widget):
-        if isinstance(widget, Gtk.CheckButton):
-            yield widget
-        if isinstance(widget, Gtk.Container):
-            for child in widget.get_children():
-                yield from checks(child)
-    [switch] = [c for c in checks(win.window) if c.get_label() == "Show the words while you talk"]
-    assert not switch.get_active()
-    switch.set_active(True)
+    choice = win.advanced_tab.type_at_pause.while_talking
+    assert choice.get_active_id() == "nothing"
+    choice.set_active_id("box")
     assert win.config["live_text"] is True

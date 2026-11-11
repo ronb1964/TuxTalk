@@ -153,17 +153,20 @@ def prefs_folds(run):
 def prefs_labs(run):
     names = {w["name"]: w for w in widgets(run)}
     wanted_buttons = ["How these work", "Send feedback", "Show tips again"]
-    wanted_boxes = ["Type each phrase when you pause"]
     prefixes = ["Voice editing:", "Select and move:", "Apps, windows, keys and the mouse by voice:"]
     problems = [f"no “{b}” button" for b in wanted_buttons if b not in names]
-    boxes = wanted_boxes + [n for n in names for p in prefixes if n.startswith(p)]
-    if len(boxes) != 4:
+    boxes = [n for n in names for p in prefixes if n.startswith(p)]
+    if len(boxes) != 3:
         problems.append(f"Labs options found: {boxes}")
     problems += [f"“{b[:30]}” is on" for b in boxes
                  if "checked" in names.get(b, {}).get("states", [])]
-    return verdict(problems, "Voice editing, Select and move, Apps, windows, keys and the mouse, "
-                             "Type at pause: "
-                             "all off; How these work and "
+    # The dropdown's name is its choice: "Nothing extra" when it's off.
+    talking = run.vm.ui("items", "combo box", "Nothing extra", PREFS, timeout=5)
+    if [i["name"] for i in talking or []] != [
+            "Nothing extra", "Show the words in a box", "Type each phrase when you pause"]:
+        problems.append("“While you talk” doesn't read “Nothing extra” with its three choices")
+    return verdict(problems, "Voice editing, Select and move, Apps, windows, keys and the mouse "
+                             "off, While you talk on Nothing extra; How these work and "
                              "Send feedback present")
 
 
