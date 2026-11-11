@@ -18,10 +18,11 @@ waited. A read already running can't be stopped, so:
     before it, so none is much slower than the last, and a phrase's first
     read holds a few seconds at most, even after waiting for the worker;
   - a read that takes longer than STOP_AFTER_S ends reads of that phrase;
-  - two reads in a row of SHORT_AUDIO_S or less whose transcription alone
-    took that long say the chip itself is slow, and end live text while
-    that engine runs: a built-in graphics chip can be no faster than the
-    processor, and the first read of every phrase would cost that again.
+  - two reads of SHORT_AUDIO_S or less whose transcription alone took that
+    long, with no fast read of about as much audio between them, say the
+    chip itself is slow, and end live text while that engine runs: a
+    built-in graphics chip can be no faster than the processor, and the
+    first read of every phrase would cost that again.
 Nothing stops a read the driver itself stalls, but a stalled driver would
 hold up the dictation's own transcription just the same.
 
@@ -52,10 +53,11 @@ SHORTEST_S = 0.5
 # average for 4 s of audio and never over 0.5 s for 5 s or less (501 typed
 # phrases), so a desktop card stays well under it.
 STOP_AFTER_S = 0.6
-# Reads in a row of no more than SHORT_AUDIO_S of audio whose transcription
-# alone took over STOP_AFTER_S, with one engine, before live text stays off
-# while it runs. A longer read is slow on any card once a dictation without
-# Type at pause grows long enough: that ends reads of it only.
+# Reads of no more than SHORT_AUDIO_S of audio whose transcription alone
+# took over STOP_AFTER_S, with one engine and no fast read of about as much
+# audio between them, before live text stays off while it runs. A longer
+# read is slow on any card once a dictation without Type at pause grows
+# long enough: that ends reads of it only.
 SLOW_READS = 2
 SHORT_AUDIO_S = 5.0
 # The most audio a read may see beyond what the phrase's read before it saw.
@@ -80,8 +82,8 @@ _shown = None
 _seen = None
 # The processor was found doing the work, and the log said so.
 _said_processor = False
-# (engine.running(), how many short reads with it in a row were too slow,
-# the seconds of audio the last slow one heard); the engine as (model,
+# (engine.running(), how many short reads with it were too slow since a
+# fast one of about as much audio, the seconds the last slow one heard); the engine as (model,
 # device), so Power Saving letting it go doesn't reset it.
 _slow = (None, 0, 0.0)
 
@@ -147,7 +149,10 @@ def _judge_engine(heard):
         count, slow_audio = 0, 0.0
     if heard[1] > STOP_AFTER_S:
         _slow = (engine.running(), count + 1, heard[0])
-    elif heard[0] >= slow_audio:
+    # "As much" stops a second short of the limit: a hiccup on a 5 s read
+    # (a first read held back) would otherwise linger all session, waiting
+    # for another read of exactly 5 s.
+    elif heard[0] >= min(slow_audio, SHORT_AUDIO_S - INTERVAL_S):
         _slow = (engine.running(), 0, 0.0)
 
 
@@ -205,11 +210,16 @@ def _read(rec, frames, rate, phrase):
 
 def _let_go_if_ended(rec, phrase):
     """hide() may have run while the read did, and the read then noted
-    what it saw: keep no recording that has ended, nor its audio."""
-    global _seen
-    seen = _seen
-    if seen is not None and _same(seen, rec, phrase) and not _current(rec, phrase):
+    what it saw or showed: keep no recording that has ended, nor its audio.
+    Only an ended recording: after a cut, _close_after_a_cut needs _shown."""
+    global _seen, _shown
+    if rs.state.current is rec and rs.state.is_recording:
+        return
+    seen, shown = _seen, _shown
+    if seen is not None and _same(seen, rec, phrase):
         _seen = None
+    if shown is not None and _same(shown, rec, phrase):
+        _shown = None
 
 
 def _hear(rec, frames, rate, phrase):

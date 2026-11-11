@@ -323,7 +323,7 @@ def test_a_slow_chip_isnt_excused_by_each_phrases_short_first_reads(talking, mon
 
 def test_one_slow_read_between_fast_ones_doesnt_end_it(talking, monkeypatch):
     """A card that's fast but slow once in a while (another app on it) keeps
-    live text: only slow reads in a row say the chip is too slow."""
+    live text: a fast read of as much audio clears the slow one."""
     rec, window, _heard = talking
     for phrase, seconds in enumerate([SLOW, 0.0, SLOW, 0.0]):
         monkeypatch.setattr(engine, "transcribe", _taking(seconds, f"phrase {phrase}"))
@@ -554,6 +554,39 @@ def test_a_slow_read_ending_after_the_stop_keeps_no_recording(talking, real_work
     release.set()
     assert real_worker.drain(5)
     assert live_text._skip is None and live_text._seen is None
+
+
+def test_a_hiccup_on_a_five_second_read_doesnt_linger(talking, monkeypatch):
+    """A first read held back by typing hears 5 s; one slow one there (the
+    helper restarting) must be cleared by ordinary fast reads, or the next
+    hiccup, however short, would end live text for the session."""
+    rec, window, _heard = talking
+    for phrase, (seconds, slow) in enumerate([(5, True), (4, False), (1, True), (2, False)]):
+        rec.frames = _speech(seconds)
+        rec.chunks_submitted = phrase
+        monkeypatch.setattr(engine, "transcribe", _taking(SLOW if slow else 0.0, f"p{phrase}"))
+        live_text.tick(now=100.0 + phrase)
+    assert window.shown == ["p1", "p3"]
+
+
+def test_a_read_ending_after_the_stop_keeps_nothing_it_saw(talking, monkeypatch):
+    """The key came up while the read checked for a password field: the
+    recording, and all its audio, mustn't stay in memory."""
+    rec, _window, _heard = talking
+    first = []
+
+    def stop_during_the_check(budget=None):
+        if not first:
+            first.append(True)
+            monkeypatch.setattr(rs.state, "is_recording", False)
+            live_text.hide()
+            monkeypatch.setattr(rs.state, "is_recording", True)
+        return False
+    monkeypatch.setattr(focused_window, "is_password", stop_during_the_check)
+    live_text.tick(now=100.0)
+    monkeypatch.setattr(rs.state, "is_recording", False)
+    live_text._let_go_if_ended(rec, rec.chunks_submitted)
+    assert live_text._seen is None and live_text._shown is None
 
 
 def test_only_the_newest_audio_is_converted(talking, monkeypatch):
