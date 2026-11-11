@@ -70,7 +70,7 @@ def test_float_sensitivity_round_trips_as_a_float(tmp_path, monkeypatch):
 def test_hand_edited_capitals_load_as_the_values_the_app_compares():
     """Validation accepts "Vulkan" or "Type" in any case, so the rest of the
     app must see them lowercase too: kept as written, the indicator went
-    blank and "Type" took the paste path's Claude Desktop detour."""
+    blank and "Type" missed a check for "type"."""
     s = config.Settings()
     s.device, s.injection_mode, s.mode = "Vulkan", "Type", "Hold"
     s.indicator_style, s.indicator_size = "Bars", "Large"

@@ -150,24 +150,21 @@ def is_browser_class(wm_class: str | None) -> bool:
     return bool(wm_class) and wm_class.lower() in _BROWSER_CLASSES_LOWER
 
 
-# Electron/Chromium apps where synthetic paste (Ctrl+V from /dev/uinput) is
-# broken on Wayland — modifier-key chords are silently dropped and the focused
-# input blurs. These apps are typed into instead (plain character keystrokes
-# still work, per OpenWhispr #240 and others).
-_PASTE_BROKEN_CLASSES_LOWER = frozenset({
+# Claude Desktop, where a real Tab moves the focus from the message box to
+# the Send button, and the next space typed presses it.
+_TAB_SENDS_CLASSES_LOWER = frozenset({
     "claude", "claude-desktop", "claude desktop", "anthropic-claude",
     # Claude Desktop reports this reverse-DNS id or one of the names above,
-    # depending on how it was packaged; a missing one means a paste that
-    # silently does nothing.
+    # depending on how it was packaged.
     "com.anthropic.claude",
 })
 
 
-def pastes_broken(wm_class) -> bool:
-    """Whether a synthetic Ctrl+V does nothing in *wm_class* (Claude
-    Desktop), so text has to be typed there. Compared without case, as the
-    terminal check is: a build that reports "Claude-Desktop" is the same app."""
-    return bool(wm_class) and wm_class.lower() in _PASTE_BROKEN_CLASSES_LOWER
+def tab_may_send(wm_class) -> bool:
+    """Whether a Tab key in *wm_class* (Claude Desktop) can send the message
+    half-written, so a tab goes in as four spaces there. Compared without
+    case, as the terminal check is: "Claude-Desktop" is the same app."""
+    return bool(wm_class) and wm_class.lower() in _TAB_SENDS_CLASSES_LOWER
 
 
 # KDE's text editor component takes Shift+Enter as Insert Smart Newline,

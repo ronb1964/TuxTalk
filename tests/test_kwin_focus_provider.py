@@ -1,7 +1,7 @@
 """On KDE, KWin must report the focused window so paste can pick the right keys.
 
 TuxTalk chooses Ctrl+Shift+V for terminals and plain Ctrl+V everywhere else, and
-routes Electron apps to a typing fallback. Both decisions read one cache, which
+types a tab as spaces in Claude Desktop. Both decisions read one cache, which
 the GNOME Shell extension fills on GNOME. Without a provider the cache stays
 empty on KDE: every paste uses Ctrl+V, which a terminal treats as readline's
 quoted-insert, so dictating into a terminal puts nothing on screen while

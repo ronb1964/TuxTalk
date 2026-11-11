@@ -36,7 +36,7 @@ from .beeps import CANCEL_BEEP, READY_BEEP
 from .chunk_text import carry_question, engine_period, hold_back_boundary
 from .key_commands import auto_send, ends_unfinished, split_key_command
 from .logger import error_without_words, setup_logger
-from .window_classes import app_kind, pastes_broken, why_no_automatic_enter
+from .window_classes import app_kind, tab_may_send, why_no_automatic_enter
 
 logger = setup_logger(__name__)
 
@@ -63,7 +63,7 @@ def press_said(key: str, chunk_role, after_words: bool = False, message=None) ->
     by hand, then say "press enter" to log in; Esc a moment before stops it
     at its first key (keyboard_output.until_cancelled), and says so itself."""
     why = f'said "press {key.lower()}"'
-    if (key == "TAB" and pastes_broken(focused_window.window_class())
+    if (key == "TAB" and tab_may_send(focused_window.window_class())
             and not focused_window.is_password()):
         if after_words:
             outcome = send_countdown.type_where_sent("    ", key, message,

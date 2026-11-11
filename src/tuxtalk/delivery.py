@@ -21,7 +21,7 @@ from . import (
 from . import recording_state as rs
 from .logger import setup_logger
 from .normalize import LINE_BREAK
-from .window_classes import SMART_NEWLINE_CLASSES_LOWER, is_terminal_class, pastes_broken
+from .window_classes import SMART_NEWLINE_CLASSES_LOWER, is_terminal_class, tab_may_send
 
 logger = setup_logger(__name__)
 
@@ -53,8 +53,7 @@ def determine_injection_method(injection_mode: str) -> tuple[str, str]:
         - reason: str (explanation for logging)
 
     Auto pastes on Wayland: the paste keystroke is picked per paste from the
-    focused window's class (Ctrl+Shift+V in a terminal), and Electron apps where
-    paste is broken are typed into instead, in inject_text. It types on X11.
+    focused window's class (Ctrl+Shift+V in a terminal). It types on X11.
     """
     # Inside a Flatpak, clipboard-paste needs wl-copy (not bundled) and the libei
     # output backend types directly — always type, never attempt paste.
@@ -187,8 +186,8 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
     # Which window this text goes into, so select and move by voice only
     # trusts "what I just said" in that same window.
     rs.state.last_inserted_window = focused_class = where.wm_class
-    if pastes_broken(focused_class):
-        # A tab as four spaces, however it's typed: a real Tab moves the
+    if tab_may_send(focused_class):
+        # A tab as four spaces, however it goes in: a real Tab moves the
         # focus from Claude Desktop's box to the Send button, and the next
         # space typed sends the message.
         text = text.replace("\t", "    ")
@@ -200,15 +199,6 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
         logger.warning(f"Injection method detection slow: {detection_time:.2f}s")
 
     injection_start = time.time()
-
-    # Electron-paste-broken override: in an Electron app where a synthetic
-    # Ctrl+V silently fails on Wayland, type instead of pasting. Only for
-    # auto and paste: "type" types anyway.
-    if (injection_mode != "type" and pastes_broken(focused_class)
-            and not os.environ.get("FLATPAK_ID")):
-        outcome = _type_for_electron(text, focused_class, injection_start)
-        if outcome is not None:
-            return outcome
 
     use_paste = (actual_mode == "paste")
     logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, "
@@ -349,33 +339,6 @@ def _remember_delivered(text, inject_ok):
         rs.state.last_inserted_text = ""
         logger.warning("Injection failed — undo buffer cleared")
     return "ok" if inject_ok else "failed"
-
-
-def _type_for_electron(text, focused_class, injection_start):
-    """Type *text* into an Electron app where a synthetic paste fails, line
-    breaks as Shift+Enter between the parts. The outcome, or None when
-    nothing landed and the normal path may try again."""
-    logger.info(f"Electron-paste-broken override: class={focused_class!r}, typing")
-    parts = text.replace("\n", LINE_BREAK).split(LINE_BREAK)
-    delivered = keyboard_output.deliver_lines(parts, keyboard_output.type_text_raw, 0.03, 0.03)
-    if not delivered.stopped:
-        injection_time = time.time() - injection_start
-        logger.info(f"TIMING: Electron typing completed in {injection_time:.2f}s")
-        # Kept for undo in the typed form: tabs already four spaces, each
-        # line break one "\n", so backspace counts match what was sent.
-        rs.state.last_inserted_text = "\n".join(parts)
-        logger.debug(f"Kept {len(rs.state.last_inserted_text)} chars for undo (typed)")
-        return "ok"
-    if not delivered.went_in(parts):
-        # Nothing landed, so the normal injection path can safely try again.
-        logger.warning("Typing failed, falling through to normal injection")
-        return None
-    # Partial delivery: parts already in the document must not be sent
-    # again by the fallback, or the user gets a duplicate copy.
-    rs.state.last_inserted_text = delivered.landed(parts)
-    logger.warning(f"Typing stopped after {delivered.parts} chunk(s) — "
-                   "not re-injecting, undo buffer holds only what landed")
-    return "partial"
 
 
 def _paste_part(part) -> bool:

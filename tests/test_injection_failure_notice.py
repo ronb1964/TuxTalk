@@ -29,7 +29,7 @@ MARKER = "\xa7SHIFT_ENTER\xa7"
 
 @pytest.fixture
 def quiet(monkeypatch):
-    """No real tools, sleeps, focus lookups or Electron detection."""
+    """No real tools, sleeps or focus lookups."""
     monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
@@ -77,24 +77,18 @@ def test_type_mode_failure_is_failed(monkeypatch, quiet):
     assert delivery.inject_text("hello", "type") == "failed"
 
 
-@pytest.fixture
-def electron(monkeypatch, quiet):
-    """Claude Desktop focused: typed, not pasted."""
-    cls = "claude-desktop"
+def test_claude_desktop_is_pasted_into_at_once(monkeypatch, quiet):
+    """Since TuxTalk has its own keyboard, Claude Desktop takes its Ctrl+V:
+    typed key by key, a long dictation took seconds to go in."""
+    cls = "com.anthropic.Claude"
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: cls)
     monkeypatch.setattr(focused_window, "look", lambda: (cls, None))
     _paste_mode(monkeypatch)
-
-
-def test_typing_into_electron_that_lands_is_ok(monkeypatch, electron):
-    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: True)
-    assert delivery.inject_text("hello", "auto") == "ok"
-
-
-def test_typing_into_electron_stopping_partway_is_partial(monkeypatch, electron):
-    calls = []
-    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: calls.append(t) or len(calls) == 1)
-    assert delivery.inject_text(MARKER.join(["first", "second"]), "auto") == "partial"
+    pasted = []
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda t, *a, **k: pasted.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: pytest.fail("typed"))
+    assert delivery.inject_text("hello there", "auto") == "ok"
+    assert pasted == ["hello there"]
 
 
 # --- pipeline.transcribe_and_inject tells the user --------------------------------------

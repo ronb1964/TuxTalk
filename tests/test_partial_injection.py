@@ -174,19 +174,6 @@ def test_smart_paste_leaves_out_a_line_break_that_failed(monkeypatch, quiet):
     assert rs.state.last_inserted_text == "first"
 
 
-def test_typing_into_electron_records_the_line_break_that_landed(monkeypatch, quiet):
-    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
-    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "Claude")
-    monkeypatch.setattr(focused_window, "look", lambda: ("Claude", None))
-    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: t == "first")
-    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
-
-    outcome = delivery.inject_text(f"first{MARKER}second", "paste")
-
-    assert outcome == "partial"
-    assert rs.state.last_inserted_text == "first\n"
-
-
 def test_an_unexpected_typing_error_forgets_the_dictation_before(monkeypatch, quiet):
     """Some of the new text may be in the app: "undo that" counted back over
     the dictation before it, and deleted that many characters of whatever
