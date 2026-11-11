@@ -25,8 +25,10 @@ timing work alike for all of them:
   nothing else is filtered: unlike a dictation, a video's real "like and
   subscribe" should stay.
 """
+import math
 import os
 import re
+import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -299,6 +301,9 @@ def transcribe(audio, engine, progress=None, cancelled=None):
 RECENT_FILE = "recent-transcripts.json"
 MAX_RECENT = 10
 OLD_LAST_FILE = "last-transcript.json"     # one kept transcript, before the list
+# What a damaged list set aside is named after (_aside_name), for clearing and
+# for uninstall: .corrupt-<date>-<time>, -2 for a second in the same second.
+SET_ASIDE = r"\.corrupt-\d{8}-\d{6}(?:-\d+)?"
 
 
 class Kept:
@@ -323,37 +328,136 @@ def _read_list(target):
     return data if isinstance(data, list) else [data]
 
 
+# The longest time into a file a kept transcript may reach: far past any
+# recording, and small enough for the subtitle clock (clock) to count it.
+_LONGEST_S = 10_000_000
+
+
+def _number(value):
+    """*value* as a finite float; NaN and infinity raise ValueError."""
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"not a usable number: {value!r}")
+    return number
+
+
+def _seconds(value):
+    """*value* as a time into the file, 0 to _LONGEST_S; else ValueError."""
+    seconds = _number(value)
+    if not 0 <= seconds <= _LONGEST_S:
+        raise ValueError(f"not a time in a file: {value!r}")
+    return seconds
+
+
 def _entry(data):
+    """The Kept in one saved entry, or None when it's damaged: no text, a
+    path that isn't text, or a number that isn't one (NaN, infinite, a date
+    too far off to show, a time no file reaches), each of which broke Earlier
+    Transcripts or saving the subtitles."""
     try:
-        pieces = [Piece(float(a), float(b), str(t)) for a, b, t in data["pieces"]]
-        if not pieces:
+        pieces = [Piece(_seconds(a), _seconds(b), str(t)) for a, b, t in data["pieces"]]
+        path, when = data.get("path"), _number(data.get("when", 0))
+        time.localtime(when)            # a date Earlier Transcripts can show
+        if not pieces or (path is not None and not isinstance(path, str)):
             return None
-        return Kept(data.get("path"), pieces, float(data.get("total", 0)),
-                    float(data.get("when", 0)))
-    except (KeyError, TypeError, ValueError):
+        return Kept(path, pieces, _seconds(data.get("total", 0)), when)
+    except (KeyError, TypeError, ValueError, OverflowError, OSError):
         return None
+
+
+# What reading the list found, beside the transcripts in it: nothing wrong, a
+# list that's damaged (set aside before the next transcript is written), or
+# one that can't be read just now (left alone, and the next one not added).
+_FINE, _DAMAGED, _UNAVAILABLE = "fine", "damaged", "unavailable"
+# The problems already logged: a list that stays damaged is read at every
+# opening of the window, and each finished transcript.
+_reported = set()
+
+
+def _report(problem):
+    """Log *problem* the first time it comes up in this process."""
+    if problem not in _reported:
+        _reported.add(problem)
+        logger.warning(problem)
 
 
 def recent():
     """The transcripts kept, newest first. Never raises."""
+    return _read_kept()[0]
+
+
+def _read_kept():
+    """(the transcripts kept, newest first, and _FINE, _DAMAGED or _UNAVAILABLE).
+    Only a transcript with text is ever kept (transcribe_window), so an entry
+    that can't be read is damage too, and setting the list aside keeps it."""
     target = recent_path()
-    entries = []
     try:
         entries = _read_list(target)
     except FileNotFoundError:
-        # The one transcript kept before there was a list comes along once.
-        old = os.path.join(os.path.dirname(target), OLD_LAST_FILE)
-        try:
-            entries = _read_list(old)
-            kept = [e for e in (_entry(d) for d in entries) if e]
-            if _write(kept):
-                os.remove(old)
-            return kept
-        except (OSError, ValueError):
-            return []
-    except (OSError, ValueError):
+        return _kept_before_the_list(target), _FINE
+    except (ValueError, PermissionError) as e:
+        _report(f"The list of kept transcripts can't be read: {e}")
+        return [], _DAMAGED
+    except OSError as e:        # a passing failure (too many files open, a disk error)
+        _report(f"The list of kept transcripts can't be read just now: {e}")
+        return [], _UNAVAILABLE
+    parsed = [_entry(d) for d in entries]
+    kept = [e for e in parsed if e]
+    if len(kept) < len(parsed):
+        _report(f"{len(parsed) - len(kept)} of the kept transcripts can't be read")
+        return kept[:MAX_RECENT], _DAMAGED
+    return kept[:MAX_RECENT], _FINE
+
+
+def _kept_before_the_list(target):
+    """The one transcript kept before there was a list, which comes along once."""
+    old = os.path.join(os.path.dirname(target), OLD_LAST_FILE)
+    try:
+        entries = _read_list(old)
+    except FileNotFoundError:
         return []
-    return [e for e in (_entry(d) for d in entries) if e][:MAX_RECENT]
+    except (OSError, ValueError) as e:
+        _report(f"The transcript an older TuxTalk kept can't be read: {e}")
+        return []
+    parsed = [_entry(d) for d in entries]
+    kept = [e for e in parsed if e]
+    if len(kept) < len(parsed):     # kept as it is: moving it would lose that one
+        _report(f"The transcript an older TuxTalk kept is damaged; {old} is left as it is")
+        return kept
+    if _write(kept):
+        try:
+            os.remove(old)
+        except OSError as e:
+            logger.warning(f"Couldn't remove {old} now its transcript is in the list: {e}")
+    return kept
+
+
+def _aside_name(target):
+    """*target*.corrupt-<date>-<time>, as a damaged config.toml is kept
+    (config.py; SET_ASIDE is its pattern), with -2, -3 and so on when a
+    copy from that second is there already. The window runs once at a time,
+    so nothing takes the name between the look and the move."""
+    base = f"{target}.corrupt-{time.strftime('%Y%m%d-%H%M%S')}"
+    name, number = base, 1
+    while os.path.lexists(name):
+        number += 1
+        name = f"{base}-{number}"
+    return name
+
+
+def _set_aside(target):
+    """Move a damaged list out of the way, so the next transcript doesn't
+    write over the ones in it (it may be mended, or read by hand). True when
+    the way is clear."""
+    aside = _aside_name(target)
+    try:
+        os.rename(target, aside)
+    except OSError as e:
+        logger.warning(f"The damaged list of kept transcripts can't be moved, so it's left "
+                       f"as it is and this transcript isn't added: {e}")
+        return False
+    logger.warning(f"The damaged list of kept transcripts is set aside as {aside}")
+    return True
 
 
 def _write(entries):
@@ -383,9 +487,11 @@ def remember(path, pieces, total):
     """Put this transcript first in the list (a file done again replaces its
     older copy) and keep MAX_RECENT. Returns the Kept, or None when it
     couldn't be written."""
-    import time
     entry = Kept(path, list(pieces), total, time.time())
-    others = [e for e in recent() if not (path and e.path == path)]
+    kept, state = _read_kept()
+    if state == _UNAVAILABLE or (state == _DAMAGED and not _set_aside(recent_path())):
+        return None
+    others = [e for e in kept if not (path and e.path == path)]
     entries = [entry] + others[:MAX_RECENT - 1]
     return entry if _write(entries) else None
 
@@ -400,14 +506,30 @@ def further_kept(path, pieces):
 
 
 def forget_all():
-    """Clear the list. True when nothing is kept any more."""
+    """Clear the list, the damaged ones set aside and an older TuxTalk's one
+    transcript (the user asked for the transcripts gone; left, that one would
+    come back as the list). True when nothing is kept any more. The list goes
+    last, so when something else can't go, what the window shows is still kept."""
+    import re
+    target = recent_path()
+    folder = os.path.dirname(target)
+    set_aside = re.compile(re.escape(RECENT_FILE) + SET_ASIDE)
     try:
-        os.remove(recent_path())
+        with os.scandir(folder) as found:
+            copies = [entry.path for entry in found if set_aside.fullmatch(entry.name)]
     except FileNotFoundError:
-        pass
+        copies = []
     except OSError as e:
-        logger.warning(f"Couldn't clear the earlier transcripts: {e}")
+        logger.warning(f"Couldn't look for the earlier transcripts set aside: {e}")
         return False
+    for name in (*copies, os.path.join(folder, OLD_LAST_FILE), target):
+        try:
+            os.remove(name)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            logger.warning(f"Couldn't clear the earlier transcripts: {e}")
+            return False
     return True
 
 

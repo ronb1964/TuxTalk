@@ -104,9 +104,11 @@ _CONFIG_COPIES = _copies(
     re.escape(custom_words.FILE_NAME) + r"\.before-words-tab",
     *(re.escape(name) + r"\.old" for name in (LOG_FILE_NAME, "talktype.log")))
 # Stats save through a temp file of their own (stats._write), the
-# transcripts through their name and .tmp (file_transcribe).
+# transcripts through their name and .tmp, and a damaged transcript list is
+# kept as .corrupt-<time>, -2 for a second in the same second (file_transcribe).
 _PERSONAL_COPIES = _copies(r"\.stats-[a-z0-9_]{8}",
-                           re.escape(file_transcribe.RECENT_FILE) + r"\.tmp")
+                           re.escape(file_transcribe.RECENT_FILE) + r"\.tmp",
+                           re.escape(file_transcribe.RECENT_FILE) + file_transcribe.SET_ASIDE)
 _DOWNLOADED_COPIES = _copies(*_saved("remote_desktop_token", gnome_keybindings.BACKUP_NAME))
 # (names, copies) for each kind of file, for _known.
 _CONFIG = ((CONFIG_NAMES, _CONFIG_COPIES),)

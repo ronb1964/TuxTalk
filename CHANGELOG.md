@@ -14,6 +14,16 @@ before 0.15.0, so older entries use that name.
   with several cards might not be the one you wanted. Dictation, Transcribe a
   File and Vulkan's speed check all use the card you pick. Asked for by q5sys
   in Discussion #32.
+- Transcribe a File keeps your last 10 transcripts, and if that list ever got
+  damaged, even one transcript in it, the next transcript was saved over it
+  and the earlier ones were gone. Now a damaged list is moved aside in
+  TuxTalk's data folder, as recent-transcripts.json.corrupt- and the date and
+  time, the way a damaged settings file already is, and a new one is started.
+  If it can't be moved it's left alone, and the window asks before you close
+  it so the new transcript isn't lost. A damaged transcript saved by an older
+  TuxTalk (last-transcript.json) is kept as it is instead of being deleted.
+  Clear This List and uninstalling with your data clear the set-aside copies
+  and that older file too. Found by a code review.
 
 ## [0.22.0] - 2026-11-08
 

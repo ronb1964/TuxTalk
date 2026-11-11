@@ -271,6 +271,8 @@ def test_every_file_tuxtalk_writes_in_its_folders_goes_with_them(home):
                  "custom_commands.toml.a1b2c3d4.tmp"):
         (config / name).write_text("")
     for name in ("stats.json.bak", ".stats-ab12cd34", "recent-transcripts.json.tmp",
+                 "recent-transcripts.json.corrupt-20261111-093000",
+                 "recent-transcripts.json.corrupt-20261111-093000-2",
                  "last-transcript.json",
                  ".hotkey_test_mode", "remote_desktop_token", "remote_desktop_token.k3j_9x0a.tmp",
                  "gnome-keybindings-backup.json.0a1b2c3d.tmp"):

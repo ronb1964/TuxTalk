@@ -13,6 +13,7 @@ def win(monkeypatch, tmp_path):
     from tuxtalk import transcribe_window as tw
     # Transcripts are kept here, never in the real data folder.
     monkeypatch.setattr(ft, "recent_path", lambda: str(tmp_path / "recent-transcripts.json"))
+    monkeypatch.setattr(ft, "_reported", set())     # each test sees its own warnings
     monkeypatch.setattr(Gtk, "main_quit", lambda: None)
     # Never on the desktop: the windows are built but not shown.
     monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)
@@ -223,6 +224,131 @@ def test_a_broken_list_is_ignored(win, tmp_path):
     (tmp_path / "recent-transcripts.json").write_text("{not json")
     win.recall()
     assert win.pieces == []
+
+
+def _kept_list(path):
+    import json
+    return json.dumps([{"path": path, "total": 5, "when": 1.0, "pieces": [[0, 5, "Kept."]]}])
+
+
+def _aside(tmp_path):
+    return sorted(p.name for p in tmp_path.iterdir()
+                  if p.name.startswith("recent-transcripts.json.corrupt-"))
+
+
+def test_a_damaged_list_survives_the_next_transcript(win, tmp_path, caplog):
+    """Whatever was in it, the bytes are still there after the next
+    transcript is kept, set aside under the name a damaged config gets."""
+    damaged = '[{"path": "/videos/hour.mov", "pieces": [[0, 3600, "An hour of'
+    (tmp_path / "recent-transcripts.json").write_text(damaged)
+    assert ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0) is not None
+    [aside] = _aside(tmp_path)
+    assert (tmp_path / aside).read_text() == damaged
+    assert [e.path for e in ft.recent()] == ["/videos/new.mov"]
+    assert "set aside" in caplog.text
+
+
+def test_a_list_with_one_damaged_transcript_keeps_it_aside(win, tmp_path):
+    """The JSON reads, but one entry doesn't: it isn't dropped for good."""
+    import json
+    good = json.loads(_kept_list("/videos/good.mov"))
+    original = json.dumps(good + [{"path": "/videos/hour.mov", "total": "damaged",
+                                   "pieces": [[0, 3600, "An hour of talk."]]}])
+    (tmp_path / "recent-transcripts.json").write_text(original)
+    ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
+    [aside] = _aside(tmp_path)
+    assert (tmp_path / aside).read_text() == original
+    assert [e.path for e in ft.recent()] == ["/videos/new.mov", "/videos/good.mov"]
+
+
+def test_a_second_damaged_list_in_the_same_second_keeps_the_first(win, tmp_path, monkeypatch):
+    import time
+    import types
+    monkeypatch.setattr(ft, "time", types.SimpleNamespace(
+        **{**vars(time), "strftime": lambda fmt: "20261111-093000"}))
+    for damaged in ("{first", "{second"):
+        (tmp_path / "recent-transcripts.json").write_text(damaged)
+        ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
+    assert [(tmp_path / a).read_text() for a in _aside(tmp_path)] == ["{first", "{second"]
+
+
+def test_a_damaged_list_that_cant_be_moved_is_left_alone(win, tmp_path, monkeypatch):
+    """The new transcript isn't kept then, so closing asks before losing it."""
+    import os
+    import types
+
+    def cant_move(*args):
+        raise OSError("read-only")
+    monkeypatch.setattr(ft, "os", types.SimpleNamespace(**{**vars(os), "rename": cant_move}))
+    (tmp_path / "recent-transcripts.json").write_text("{not json")
+    done(win, kept_for_next_time=True)
+    assert not win.remembered
+    assert (tmp_path / "recent-transcripts.json").read_text() == "{not json"
+
+
+def test_a_list_that_cant_be_read_just_now_is_neither_moved_nor_written(win, tmp_path,
+                                                                         monkeypatch):
+    """Too many files open, say: the list is fine, so it isn't set aside."""
+    (tmp_path / "recent-transcripts.json").write_text(_kept_list("/videos/good.mov"))
+
+    def busy(target):
+        raise OSError(24, "Too many open files")
+    monkeypatch.setattr(ft, "_read_list", busy)
+    assert ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0) is None
+    assert _aside(tmp_path) == []
+    assert (tmp_path / "recent-transcripts.json").read_text() == _kept_list("/videos/good.mov")
+
+
+def test_clearing_the_list_clears_every_copy_kept(win, tmp_path):
+    """The damaged ones set aside, and an older TuxTalk's one transcript,
+    which would otherwise come back as the list."""
+    (tmp_path / "recent-transcripts.json").write_text("{not json")
+    ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
+    (tmp_path / "last-transcript.json").write_text(_kept_list("/videos/old.mov"))
+    assert ft.forget_all()
+    assert ft.recent() == [] and sorted(p.name for p in tmp_path.iterdir()) == []
+
+
+def test_a_clear_that_cant_see_the_copies_says_so_and_keeps_the_list(win, tmp_path,
+                                                                     monkeypatch):
+    """Copies it can't list may still be there: not cleared, and the list
+    stays, so the window's transcript is still kept."""
+    import os
+    import types
+    (tmp_path / "recent-transcripts.json").write_text(_kept_list("/videos/good.mov"))
+
+    def unreadable(folder):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(ft, "os", types.SimpleNamespace(**{**vars(os), "scandir": unreadable}))
+    assert not ft.forget_all()
+    assert [e.path for e in ft.recent()] == ["/videos/good.mov"]
+
+
+def test_a_damaged_transcript_an_older_tuxtalk_kept_isnt_deleted(win, tmp_path):
+    damaged = ('{"path": "/videos/hour.mov", "total": "damaged", '
+               '"pieces": [[0, 3600, "An hour of talk."]]}')
+    (tmp_path / "last-transcript.json").write_text(damaged)
+    assert ft.recent() == []
+    ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
+    assert (tmp_path / "last-transcript.json").read_text() == damaged
+
+
+@pytest.mark.parametrize("damage", ['"path": 123', '"path": 0', '"path": false', '"path": []',
+                                    '"when": "nan"', '"when": 1e300', '"total": "inf"',
+                                    '"pieces": [[0, 1e400, "Kept."]]',
+                                    '"pieces": [[0, 1' + '0' * 400 + ', "Kept."]]',
+                                    '"pieces": [[1e308, 1e308, "Kept."]]',
+                                    '"pieces": [[-5, 0, "Kept."]]'])
+def test_a_transcript_with_a_field_it_cant_use_counts_as_damaged(win, tmp_path, damage):
+    """Showing it under Earlier Transcripts broke the window, or reading the
+    list itself raised."""
+    # A key given twice keeps its last value, so the damaged field wins.
+    original = '[{"total": 5, "when": 1.0, "pieces": [[0, 5, "Kept."]], ' + damage + '}]'
+    (tmp_path / "recent-transcripts.json").write_text(original)
+    assert ft.recent() == []
+    ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
+    [aside] = _aside(tmp_path)
+    assert (tmp_path / aside).read_text() == original
 
 
 def test_the_one_kept_before_the_list_comes_along(win, tmp_path):
