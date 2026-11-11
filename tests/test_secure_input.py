@@ -233,8 +233,8 @@ def test_a_helper_only_older_than_the_one_shipped_is_offered_without_a_warning(m
 
 @pytest.mark.parametrize("running", ["1.13", "1.14", "1.15"])
 def test_a_helper_before_1_16_is_offered_the_update_quietly(monkeypatch, running):
-    """1.14 came only with test builds; 1.15 turns Num Lock off on KDE at
-    each dictation (issue #34), but only where Num Lock is used."""
+    """1.14 came only with test builds; 1.15 turns the lock lights off at
+    each dictation (issue #34), which only some KDE versions follow."""
     _P, prefs = _typing_prefs(monkeypatch, running=running)
     assert f"({running} → 1.16)" in prefs.typing_status_label.markup
     assert "✓ Ready" in prefs.typing_status_label.markup

@@ -12,17 +12,23 @@ import pytest
 
 from tuxtalk import hotkey_helper as hh
 
-NUM_LOCK, CAPS_LOCK, SCROLL_LOCK = 0, 1, 2
+NUM_LOCK, CAPS_LOCK, SCROLL_LOCK = hh.LED_NUML, hh.LED_CAPSL, hh.LED_SCROLLL
+COMPOSE = 3
+REPORT = (hh.EV_SYN, hh.SYN_REPORT, 0)
 
 
 class ConsoleKernel:
-    """A keyboard's lock lights in the kernel. Letting go of a grab sets the
-    text console's own (*console*) on it, as kbd_start does in Linux."""
+    """A keyboard's lights in the kernel. Letting go of a grab sets the
+    text console's own (*console*) on it, as kbd_start does in Linux; a
+    request in *failing* fails as on a keyboard just unplugged."""
 
     def __init__(self, lit, console=frozenset()):
         self.lit, self.console = set(lit), set(console)
+        self.failing = set()
 
     def ioctl(self, fd, request, arg=0, mutate=False):
+        if request in self.failing:
+            raise OSError(19, "No such device")
         if request == hh.EVIOCGRAB and arg == 0:
             self.lit = set(self.console)
         elif request == hh.EVIOCGLED:
@@ -76,7 +82,9 @@ def test_lock_lights_on_before_a_dictation_are_on_after_it(keyboard, lit):
     assert kb.grab(True)
     assert written(r) == []                 # holding it changes nothing
     assert kb.grab(False)
-    assert lights_after(kernel, written(r)) == lit
+    events = written(r)
+    assert lights_after(kernel, events) == lit
+    assert events[-1] == REPORT             # the desktop takes them in at the report
 
 
 def test_a_lock_light_the_console_has_on_is_put_back_off(keyboard):
@@ -85,6 +93,16 @@ def test_a_lock_light_the_console_has_on_is_put_back_off(keyboard):
     kb.grab(True)
     kb.grab(False)
     assert lights_after(kernel, written(r)) == set()
+
+
+def test_only_the_lock_lights_letting_go_changed_are_written(keyboard):
+    """Caps Lock, which the console also has on, and Compose, which isn't a
+    lock light, are left alone."""
+    kb, r, under = keyboard
+    under(ConsoleKernel(lit={NUM_LOCK, CAPS_LOCK, COMPOSE}, console={CAPS_LOCK}))
+    kb.grab(True)
+    kb.grab(False)
+    assert written(r) == [(hh.EV_LED, NUM_LOCK, 1), REPORT]
 
 
 def test_nothing_is_written_when_letting_go_changed_no_light(keyboard):
@@ -101,12 +119,16 @@ def test_a_keyboard_that_cant_be_let_go_gets_nothing_written(keyboard):
     kb, r, under = keyboard
     kernel = under(ConsoleKernel({NUM_LOCK}))
     kb.grab(True)
-
-    def refuse_release(fd, request, arg=0, mutate=False):
-        if request == hh.EVIOCGRAB:
-            raise OSError(19, "No such device")
-        return ConsoleKernel.ioctl(kernel, fd, request, arg, mutate)
-
-    under(type("Refusing", (), {"ioctl": staticmethod(refuse_release)}))
+    kernel.failing.add(hh.EVIOCGRAB)
     assert not kb.grab(False)
     assert kb.grabbed and written(r) == []
+
+
+def test_lights_the_kernel_cant_read_are_left_as_they_are_and_said(keyboard, capsys):
+    kb, r, under = keyboard
+    kernel = under(ConsoleKernel({NUM_LOCK}))
+    kb.grab(True)
+    kernel.failing.add(hh.EVIOCGLED)
+    assert kb.grab(False) and not kb.grabbed
+    assert written(r) == []
+    assert "couldn't read the lock lights of 'Fake keyboard'" in capsys.readouterr().out

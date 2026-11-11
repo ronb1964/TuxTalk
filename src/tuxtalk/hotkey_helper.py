@@ -170,7 +170,8 @@ KEY_MAX = 0x2FF
 KEY_ESC, KEY_SCROLLLOCK, KEY_PAUSE = 1, 70, 119
 KEY_LEFTCTRL, KEY_RIGHTCTRL, KEY_RIGHTALT, KEY_SPACE = 29, 97, 100, 57
 BUS_VIRTUAL = 0x06
-LOCK_LIGHTS = frozenset({0, 1, 2})      # Num Lock, Caps Lock, Scroll Lock (Keyboard.grab)
+LED_NUML, LED_CAPSL, LED_SCROLLL = 0, 1, 2
+LOCK_LIGHTS = frozenset({LED_NUML, LED_CAPSL, LED_SCROLLL})     # see Keyboard.grab
 
 F_KEYS = frozenset(list(range(59, 69)) + [87, 88] + list(range(183, 195)))   # F1-F24
 # The modifiers that may also be watched on their own (see the rule at the top).
