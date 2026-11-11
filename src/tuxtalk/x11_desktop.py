@@ -347,7 +347,8 @@ def popup_ends_show_desktop() -> bool:
     windows back (tried in the Mint VM; KWin, Mutter and xfwm4 keep it). So
     TuxTalk's indicator and floating labels stay away while the desktop is
     shown there. Asked as a recording starts, on the thread that also reads
-    the keys, and before a label floats: an X server that doesn't answer
+    the keys, before a label floats, and before each of live text's reads
+    on the dictation worker: an X server that doesn't answer
     within _ASK_WAIT_S counts as "it would", so the key's release and Esc
     are read all the same. A question still running is waited for, not
     asked again."""

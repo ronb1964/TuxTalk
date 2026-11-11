@@ -85,6 +85,30 @@ def screen_monitors():
     return out
 
 
+def _gdk_display():
+    """GDK's default display (on GTK's thread)."""
+    import gi
+    gi.require_version("Gdk", "3.0")
+    from gi.repository import Gdk
+    return Gdk.Display.get_default()
+
+
+def main_monitor_rect():
+    """The primary monitor (or the first one). The screen's own size spans
+    every monitor, which would put "center" on the seam between two
+    side-by-side screens."""
+    display = _gdk_display()
+    g = (display.get_primary_monitor() or display.get_monitor(0)).get_geometry()
+    return Rect(g.x, g.y, g.width, g.height)
+
+
+def monitor_rect_at(x, y):
+    """The monitor holding (x, y), or the first one."""
+    display = _gdk_display()
+    g = (display.get_monitor_at_point(x, y) or display.get_monitor(0)).get_geometry()
+    return Rect(g.x, g.y, g.width, g.height)
+
+
 def _reported():
     """Where the KWin script or GNOME extension last told the tray the
     focused window is, or None."""

@@ -18,7 +18,8 @@ import numpy as np
 import pytest
 
 from tuxtalk import indicator_styles
-from tuxtalk.recording_indicator import RecordingIndicator, main_monitor_rect, fixed_position
+from tuxtalk.recording_indicator import RecordingIndicator, fixed_position
+from tuxtalk.window_geometry import main_monitor_rect
 
 
 def _apply(indicator, *args, **kwargs):

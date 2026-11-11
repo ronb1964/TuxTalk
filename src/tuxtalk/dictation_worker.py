@@ -25,7 +25,10 @@ class DictationWorker:
     def __init__(self):
         self._queue = queue.Queue()
         # Held for each put, so nothing is queued between submit_if_idle's
-        # look at the queue and its own put.
+        # look at the queue and its own put: its job is never queued ahead
+        # of one being handed over at that moment. (Live text's reads would
+        # give way anyway, by checking at their start that their phrase is
+        # still unsaid; this keeps even that wasted start out of the way.)
         self._submit_lock = threading.Lock()
         self.thread = threading.Thread(target=self._run, daemon=True, name="tt-dictation")
         self.thread.start()

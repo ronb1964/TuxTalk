@@ -35,7 +35,7 @@ def numbers_to_digits(text: str) -> str:
                      small_as_words=live.numbers_mode == "small_as_words")
 
 
-def _clean_up(text, ai):
+def clean_up(text, ai):
     """The cleanup options: the rules first ("um", "the the"), then the AI
     for sentences with a self-correction (unless *ai* is False)."""
     if live.remove_fillers:
@@ -100,7 +100,7 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     # Optional cleanup, while quoted custom-command replacements are still
     # placeholders, so a literal replacement is never "cleaned". Rules first
     # ("um", "the the"), then the AI for sentences with a self-correction.
-    text = _clean_up(text, ai)
+    text = clean_up(text, ai)
 
     # Your Words, second pass: "tux talk" -> "TuxTalk" and iPhone's capitals
     # back after a sentence start made it IPhone. After snippets, so a snippet

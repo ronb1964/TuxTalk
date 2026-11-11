@@ -134,7 +134,7 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
         from gi.repository import Gdk, GLib, Gtk, PangoCairo
         import cairo
         from .ui_style import LABEL_FILL, LABEL_TEXT, NEWS_EDGE, click_through, is_x11
-        from .window_geometry import Rect
+        from .window_geometry import main_monitor_rect, monitor_rect_at
 
         display = Gdk.Display.get_default()
         # A label floats over the active window without taking the keyboard
@@ -148,11 +148,9 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
                         "take the keyboard")
             return False
         if center is None:
-            mon = display.get_primary_monitor() or display.get_monitor(0)
-            g = mon.get_geometry()
-            center = (g.x + g.width // 2, g.y + g.height // 2)
-        g = (display.get_monitor_at_point(*center) or display.get_monitor(0)).get_geometry()
-        monitor = Rect(g.x, g.y, g.width, g.height)
+            main = main_monitor_rect()
+            center = (main.x + main.w // 2, main.y + main.h // 2)
+        monitor = monitor_rect_at(*center)
 
         win = Gtk.Window(type=Gtk.WindowType.POPUP)
         click_through(win)

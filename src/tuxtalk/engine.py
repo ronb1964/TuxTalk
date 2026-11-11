@@ -421,6 +421,11 @@ def _record_engine(model, device):
     _running_engine = (str(model), str(device).lower())
 
 
+def on_graphics_card() -> bool:
+    """Whether the model loaded runs on a graphics card (see _running_engine)."""
+    return _running_engine is not None and _running_engine[1] != "cpu"
+
+
 def notify_tray():
     """Tell the tray what's really running (see _running_engine)."""
     if _running_engine is None:

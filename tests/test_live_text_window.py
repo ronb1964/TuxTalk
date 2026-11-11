@@ -57,6 +57,39 @@ def test_it_never_takes_the_keyboard(shown):
     assert not window._win.get_accept_focus()
 
 
+def test_clicks_go_through_to_the_app_underneath():
+    """The indicator, the floating labels and this box all sit over the app
+    being dictated into (ui_style.click_through): an empty input region."""
+    from tuxtalk import ui_style
+
+    class Popup:
+        def __init__(self):
+            self.region, self.on_realize = None, None
+
+        def get_screen(self):
+            return ltw.Gdk.Screen.get_default()
+
+        def set_app_paintable(self, on):
+            pass
+
+        def set_visual(self, visual):
+            pass
+
+        def set_accept_focus(self, on):
+            self.focus = on
+
+        def connect(self, signal, handler):
+            assert signal == "realize"
+            self.on_realize = handler
+
+        def input_shape_combine_region(self, region):
+            self.region = region
+    popup = Popup()
+    ui_style.click_through(popup)
+    popup.on_realize(popup)
+    assert popup.region is not None and popup.region.is_empty() and popup.focus is False
+
+
 def test_a_screen_reader_can_read_the_words(shown):
     window, rec = shown
     window._show_now("Dear Sam, thanks for the photos", rec, 0)

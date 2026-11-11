@@ -42,7 +42,8 @@ def talking(monkeypatch):
     rec.frames = _speech(3)
     monkeypatch.setattr(live_text, "window", window)
     monkeypatch.setattr(live_text, "_last_read", 0.0)
-    monkeypatch.setattr(live_text, "_too_slow", None)
+    monkeypatch.setattr(live_text, "_skip", None)
+    monkeypatch.setattr(engine, "on_graphics_card", lambda: True)
     monkeypatch.setattr(live_text, "_shown", None)
     monkeypatch.setattr(live, "live_text", True)
     monkeypatch.setattr(live, "remove_fillers", False)
@@ -148,18 +149,51 @@ def test_fillers_left_out_of_the_typed_text_are_left_out_here_too(talking, monke
 
 
 def test_a_slow_read_ends_live_text_for_that_phrase_only(talking, monkeypatch):
-    """A read takes the worker the typed text needs: one longer than the
-    budget stops the reads until the next phrase."""
+    """A read takes the worker the typed text needs, and the next is a
+    second longer: once one is slow the phrase isn't read again."""
     rec, window, heard = talking
-    monkeypatch.setattr(live_text, "READ_BUDGET_S", -1.0)     # every read is too slow
+    monkeypatch.setattr(live_text, "STOP_AFTER_S", -1.0)      # every read is too slow
     live_text.tick(now=100.0)
     assert window.shown == [] and not window.up
     live_text.tick(now=101.0)
     assert len(heard) == 1                  # no more reads for this phrase
-    monkeypatch.setattr(live_text, "READ_BUDGET_S", 60.0)
+    monkeypatch.setattr(live_text, "STOP_AFTER_S", 60.0)
     rec.chunks_submitted += 1
     live_text.tick(now=102.0)
     assert window.shown == ["so far so good"]
+
+
+def test_on_the_processor_nothing_is_read(talking, monkeypatch, caplog):
+    """A read there can't be kept short, and the typed text would wait on it."""
+    _rec, window, heard = talking
+    monkeypatch.setattr(engine, "on_graphics_card", lambda: False)
+    monkeypatch.setattr(live_text, "_said_processor", False)
+    with caplog.at_level(logging.INFO, logger="tuxtalk.live_text"):
+        live_text.tick(now=100.0)
+        live_text.tick(now=101.0)
+    assert heard == [] and window.shown == []
+    assert len([r for r in caplog.records if "graphics card" in r.getMessage()]) == 1
+
+
+def test_words_said_into_a_password_field_stay_hidden_after_leaving_it(talking, monkeypatch):
+    """The phrase still holds them, so it isn't read again until the next one."""
+    rec, window, heard = talking
+    monkeypatch.setattr(focused_window, "is_password", lambda budget=None: True)
+    live_text.tick(now=100.0)
+    monkeypatch.setattr(focused_window, "is_password", lambda budget=None: False)
+    live_text.tick(now=101.0)
+    assert heard == [] and window.shown == []
+    rec.chunks_submitted += 1               # typed at a pause: a new phrase
+    live_text.tick(now=102.0)
+    assert window.shown == ["so far so good"]
+
+
+def test_a_password_field_reached_during_a_read_gets_nothing(talking, monkeypatch):
+    _rec, window, _heard = talking
+    answers = iter([False, True])
+    monkeypatch.setattr(focused_window, "is_password", lambda budget=None: next(answers))
+    live_text.tick(now=100.0)
+    assert window.shown == []
 
 
 def test_a_long_dictation_reads_only_its_newest_audio(talking):
@@ -255,6 +289,33 @@ def test_submit_if_idle_queues_nothing_while_the_worker_has_work(real_worker):
     assert ran.wait(5)
 
 
+def test_a_read_isnt_queued_alongside_a_phrase_being_handed_over(real_worker, monkeypatch):
+    """The audio thread hands a phrase over while live text asks whether the
+    worker is free: the read must see the phrase, not slip in before it."""
+    putting, finish = threading.Event(), threading.Event()
+    phrase = object()
+    queue_put = real_worker._queue.put
+
+    def slow_put(job):
+        if job is phrase:
+            putting.set()
+            finish.wait(5)
+        queue_put(job)
+    monkeypatch.setattr(real_worker._queue, "put", slow_put)
+    handing_over = threading.Thread(target=real_worker.submit, args=(phrase,))
+    handing_over.start()
+    assert putting.wait(5)
+    answer = []
+    asking = threading.Thread(target=lambda: answer.append(real_worker.submit_if_idle(print)))
+    asking.start()
+    asking.join(0.2)
+    finish.set()
+    handing_over.join(5)
+    asking.join(5)
+    monkeypatch.setattr(real_worker._queue, "put", queue_put)
+    assert answer == [False]
+
+
 def test_live_reads_leave_the_log_alone_but_not_its_warnings():
     """A line of text every second, from every engine, would be most of the
     log: the log file's own handler leaves them out."""
@@ -269,6 +330,19 @@ def test_live_reads_leave_the_log_alone_but_not_its_warnings():
         assert not kept(logging.INFO)           # still quiet after an inner block
         assert kept(logging.WARNING)
     assert kept(logging.INFO)
+
+
+def test_a_read_leaves_no_info_lines_in_the_log(talking, monkeypatch):
+    """Every engine's timing and raw-text lines, once a second, for each read."""
+    _rec, window, _heard = talking
+    quiet = []
+
+    def transcribe(audio, language):
+        quiet.append(tt_logger.is_quiet())
+        return "so far"
+    monkeypatch.setattr(engine, "transcribe", transcribe)
+    live_text.tick(now=100.0)
+    assert quiet == [True] and window.shown == ["so far"]
 
 
 def test_the_labs_switch_turns_it_on(prefs_window):

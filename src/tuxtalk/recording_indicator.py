@@ -22,6 +22,7 @@ import os
 import time
 
 from . import indicator_styles, ui_style, x11_desktop
+from .window_geometry import main_monitor_rect, monitor_rect_at
 from .indicator_styles import RadialGain
 from .logger import setup_logger
 
@@ -117,24 +118,6 @@ def fixed_position(position, width, height, monitor, offset_x=0, offset_y=0):
     x = max(monitor.x, min(x, monitor.x + monitor.w - width))
     y = max(monitor.y, min(y, monitor.y + monitor.h - height))
     return x, y
-
-
-def main_monitor_rect():
-    """The primary monitor (or the first one), as a window_geometry.Rect.
-    The screen's own size spans every monitor, which would put "center" on
-    the seam between two side-by-side screens."""
-    from .window_geometry import Rect
-    display = Gdk.Display.get_default()
-    g = (display.get_primary_monitor() or display.get_monitor(0)).get_geometry()
-    return Rect(g.x, g.y, g.width, g.height)
-
-
-def monitor_rect_at(x, y):
-    """The monitor holding (x, y), as a window_geometry.Rect."""
-    from .window_geometry import Rect
-    display = Gdk.Display.get_default()
-    g = (display.get_monitor_at_point(x, y) or display.get_monitor(0)).get_geometry()
-    return Rect(g.x, g.y, g.width, g.height)
 
 
 def settings_in(cfg) -> dict:

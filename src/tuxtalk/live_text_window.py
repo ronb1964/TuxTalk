@@ -20,8 +20,8 @@ from gi.repository import Gdk, GLib, Gtk, Pango, PangoCairo
 
 from . import recording_state as rs
 from .logger import setup_logger
-from .recording_indicator import main_monitor_rect, monitor_rect_at
 from .ui_style import LABEL_FILL, LABEL_TEXT, NEWS_EDGE, click_through, is_x11
+from .window_geometry import main_monitor_rect, monitor_rect_at
 
 logger = setup_logger(__name__)
 

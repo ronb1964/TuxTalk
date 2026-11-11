@@ -88,9 +88,9 @@ auto_stop_seconds = 0.0
 # Seconds of silence that end a chunk (0 = chunked dictation off).
 chunk_pause_seconds = 0.0
 
-# The settings as last applied: what work the recording loop doesn't hand
-# its settings to reads beeps, quotes and the language from (Type at pause's
-# middle phrases, live text's reads).
+# The settings as last applied. Work that isn't handed the settings (Type at
+# pause's middle phrases, live text's reads) reads beeps, quotes and the
+# language here.
 settings = None
 
 # Type at pause fine-tuning (Preferences → Advanced → TuxTalk Labs).

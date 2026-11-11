@@ -7,14 +7,15 @@ before 0.15.0, so older entries use that name.
 
 - New in TuxTalk Labs: Live text. Turn it on under Preferences → Advanced →
   TuxTalk Labs, and while you dictate, a box under the recording indicator
-  shows what you've said so far, the whole thing, updated about once a second.
-  What gets typed doesn't change, and the box takes no keys or clicks. It reads
-  the audio again with the model you already have, only when nothing else is
-  being transcribed, so there's nothing to download. On a graphics card a read
-  takes a few hundredths of a second; one that takes over half a second (a long
-  phrase on the processor) stops the box for that phrase, so your typed text
-  is never held up for long. The box shows the words as the model hears them,
-  before numbers, commands and corrections, and it stays empty in a password
+  shows what you've said so far (the last minute of it, in a long dictation),
+  updated about once a second. What gets typed doesn't change, and the box
+  takes no keys or clicks. It needs the speech model on a graphics card: it
+  reads the audio again with the model you already have, only when nothing
+  else is being transcribed, and a read there takes a few hundredths of a
+  second. If one ever takes over a quarter of a second, the box stops until
+  your next pause or dictation, so your typed text is never held up for
+  long. The box shows the words as the model hears them, before numbers and
+  commands are worked out, and it stays empty for words said into a password
   field. Asked for in the live-text poll (Discussion #24).
 - On a computer with more than one graphics card you can pick which one
   TuxTalk uses: Preferences → General → Change model, device or language →

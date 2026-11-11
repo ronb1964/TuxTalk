@@ -277,28 +277,9 @@ def _audio_rngs_from_their_seed():
         rng.bit_generator.state = state
 
 
-class InlineWorker:
-    """Stands in for the dictation worker: a job runs at once, on the test's
-    thread, so the text is typed when the key is let go. Order and timing: DictationWorker."""
-
-    thread = None               # no thread of its own: a job never runs "on" it
-
-    def submit(self, job):
-        job()
-
-    def submit_if_idle(self, job):
-        job()
-        return True
-
-    def idle(self):
-        return True
-
-    def drain(self, timeout=None):
-        return True
-
-
 @pytest.fixture(autouse=True)
 def _dictation_work_runs_at_once(monkeypatch):
+    from inline_worker import InlineWorker
     from tuxtalk import dictation_worker
     monkeypatch.setattr(dictation_worker, "_instance", InlineWorker())
 
