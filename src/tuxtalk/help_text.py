@@ -733,7 +733,7 @@ closes as your text is typed.
 ### How it works
   • It needs the speech model on a graphics card (the TuxTalk menu says where it
     runs). On the processor the box stays closed, so your typing never waits on it.
-  • The box updates about once a second. If reading it again ever gets slow, the box
+  • The box updates about twice a second. If reading it again ever gets slow, the box
     goes away until your next pause or dictation, and if your graphics card is too slow
     for it, until TuxTalk restarts (Restart Service). Your text is still typed as usual.
   • It shows the words as they're heard: numbers, commands like "new line" and AI

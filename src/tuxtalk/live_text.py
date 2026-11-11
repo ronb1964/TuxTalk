@@ -1,12 +1,15 @@
 """Live text (TuxTalk Labs): the words so far, shown in a small window
 (live_text_window.py) while the user is still talking.
 
-About once a second the audio not yet typed is read again with the model
+About twice a second the audio not yet typed is read again with the model
 already loaded, on the dictation worker, with its log lines left out
 (logger.quietly). With Type at pause that's the phrase still being said;
-without it, the dictation so far, its last MAX_AUDIO_S at most. What gets
-typed doesn't change: that is still the whole audio, read once the user
-stops or pauses.
+without it, the dictation so far. Past SETTLE_AFTER_S of it, its start is
+read one last time, at a gap between words, and those words stay as they
+are (_settle): reading it all again would get slower with every read, and
+reading only its newest part made the text shift as its start moved. What
+gets typed doesn't change: that is still the whole audio, read once the
+user stops or pauses.
 
 The typed text must never wait long on a preview. A read goes to the worker
 only when it has nothing else to do (submit_if_idle), and does nothing if
@@ -34,6 +37,8 @@ the cursor leaves the field.
 import threading
 import time
 
+import numpy as np
+
 from . import atspi_helper, dictation_text, dictation_worker, engine, focused_window
 from . import recording, resampling
 from . import live_settings as live
@@ -44,7 +49,7 @@ from .logger import quietly, setup_logger
 logger = setup_logger(__name__)
 
 # How often the words are read again, at most.
-INTERVAL_S = 1.0
+INTERVAL_S = 0.4
 # Less audio than this holds a word or two at most: not worth a read.
 SHORTEST_S = 0.5
 # A phrase whose read took longer than this, checks included, isn't read
@@ -62,9 +67,15 @@ SLOW_READS = 2
 SHORT_AUDIO_S = 5.0
 # The most audio a read may see beyond what the phrase's read before it saw.
 GROWTH_S = SHORT_AUDIO_S
-# The newest audio a read looks at, which bounds how long a read takes
-# without Type at pause, where the audio grows for the whole dictation.
-MAX_AUDIO_S = 60.0
+# Without Type at pause the audio grows for the whole dictation. Once a read
+# would hear more than SETTLE_AFTER_S, the quietest QUIET_S between
+# SETTLE_FROM_S in and the last KEEP_LIVE_S splits it: what's before is read
+# once more and kept, what's after is read on as usual. So no read hears
+# much more than SETTLE_AFTER_S, and words kept never change on screen.
+SETTLE_AFTER_S = 30.0
+SETTLE_FROM_S = 10.0
+KEEP_LIVE_S = 5.0
+QUIET_S = 0.25
 
 # The window, made on GTK's thread at the service's start (app); None where
 # it can't be shown without taking the keyboard (no X display).
@@ -80,6 +91,9 @@ _shown = None
 # (recording, phrase number, seconds of audio) of the last read: each read
 # sees at most GROWTH_S more of the phrase.
 _seen = None
+# (recording, phrase number, samples at the recording's rate whose words
+# are kept, those words), once a long phrase's start has been settled.
+_settled = None
 # The processor was found doing the work, and the log said so.
 _said_processor = False
 # (engine.running(), how many short reads with it were too slow since a
@@ -149,7 +163,7 @@ def _judge_engine(heard):
         count, slow_audio = 0, 0.0
     if heard[1] > STOP_AFTER_S:
         _slow = (engine.running(), count + 1, heard[0])
-    # "As much" stops a second short of the limit: a hiccup on a 5 s read
+    # "As much" stops one read's step short of the limit: a hiccup on a 5 s read
     # (a first read held back) would otherwise linger all session, waiting
     # for another read of exactly 5 s.
     elif heard[0] >= min(slow_audio, SHORT_AUDIO_S - INTERVAL_S):
@@ -166,7 +180,8 @@ def _log_slow_read(took):
 
 
 def _same(pair, rec, phrase):
-    """Whether *pair* (_skip, _shown or _seen) is *phrase* of this very recording."""
+    """Whether *pair* (_skip, _shown, _seen or _settled) is *phrase* of this
+    very recording."""
     return pair is not None and pair[0] is rec and pair[1] == phrase
 
 
@@ -189,7 +204,7 @@ def _read(rec, frames, rate, phrase):
     text waits for all of it."""
     started = time.monotonic()
     try:
-        # The checks log too (a slow accessibility bus), once a second here.
+        # The checks log too (a slow accessibility bus), on every read here.
         with quietly():
             words, heard = _hear(rec, frames, rate, phrase)
             fresh = (words is not None and _current(rec, phrase)
@@ -212,29 +227,79 @@ def _let_go_if_ended(rec, phrase):
     """hide() may have run while the read did, and the read then noted
     what it saw or showed: keep no recording that has ended, nor its audio.
     Only an ended recording: after a cut, _close_after_a_cut needs _shown."""
-    global _seen, _shown
+    global _seen, _shown, _settled
     if rs.state.current is rec and rs.state.is_recording:
         return
-    seen, shown = _seen, _shown
+    seen, shown, settled = _seen, _shown, _settled
     if seen is not None and _same(seen, rec, phrase):
         _seen = None
     if shown is not None and _same(shown, rec, phrase):
         _shown = None
+    if settled is not None and _same(settled, rec, phrase):
+        _settled = None
 
 
 def _hear(rec, frames, rate, phrase):
-    """(what *frames* say, "" for nothing; (audio seconds, transcription
-    seconds)), or (None, None) when they mustn't be read: the phrase was
-    typed or is private, or there's too little audio."""
+    """(what *frames* say, the words kept from its start included, "" for
+    nothing; (audio seconds, transcription seconds)), or (None, None) when
+    they mustn't be read: the phrase was typed or is private, or there's too
+    little audio."""
     if not _current(rec, phrase) or not _may_show(rec, phrase):
         return None, None
-    audio = _newest_audio(frames, rate, _allowed(rec, phrase))
+    total = sum(len(block) // 2 for block in frames)
+    kept_at, kept = _kept(rec, phrase)
+    unsettled = (total - kept_at) / rate
+    allowed = _allowed(rec, phrase)
+    audio = _newest_audio(frames, rate, min(allowed, unsettled))
     if audio is None:
         return None, None
-    _remember_seen(rec, phrase, audio.size / engine.SAMPLE_RATE)
+    seconds = audio.size / engine.SAMPLE_RATE
+    _remember_seen(rec, phrase, seconds)
+    language = getattr(live.settings, "language", None)
     started = time.monotonic()
-    words = engine.transcribe(audio, getattr(live.settings, "language", None)) or ""
-    return words, (audio.size / engine.SAMPLE_RATE, time.monotonic() - started)
+    # Settled only from a read that heard all that isn't kept yet: words
+    # skipped between the kept ones would never come back.
+    if seconds > SETTLE_AFTER_S and unsettled <= allowed:
+        audio, kept = _settle(rec, phrase, audio, total, rate, language)
+    words = engine.transcribe(audio, language) or ""
+    return _joined(kept, words), (seconds, time.monotonic() - started)
+
+
+def _kept(rec, phrase):
+    """(samples at the recording's rate whose words are kept, those words)
+    for *phrase* of *rec*; (0, "") before any are."""
+    settled = _settled
+    if settled is not None and _same(settled, rec, phrase):
+        return settled[2], settled[3]
+    return 0, ""
+
+
+def _settle(rec, phrase, audio, total, rate, language):
+    """Read *audio* (at the engine's rate, the end of *total* samples at
+    *rate*) up to its quietest moment and keep those words; return (the
+    audio after it, all the words kept)."""
+    global _settled
+    cut = _quietest(audio, SETTLE_FROM_S, audio.size / engine.SAMPLE_RATE - KEEP_LIVE_S)
+    _kept_at, kept = _kept(rec, phrase)
+    kept = _joined(kept, engine.transcribe(audio[:cut], language) or "")
+    rest = audio.size - cut
+    _settled = (rec, phrase, total - round(rest * rate / engine.SAMPLE_RATE), kept)
+    return audio[cut:], kept
+
+
+def _quietest(audio, start_s, end_s):
+    """The middle of the quietest QUIET_S of *audio* between *start_s* and
+    *end_s*, in samples: in a stretch of talking, a gap between words."""
+    window = int(QUIET_S * engine.SAMPLE_RATE)
+    start = int(start_s * engine.SAMPLE_RATE)
+    span = audio[start:int(end_s * engine.SAMPLE_RATE)]
+    blocks = span[:span.size // window * window].reshape(-1, window)
+    return start + int(np.argmin(np.square(blocks).sum(axis=1))) * window + window // 2
+
+
+def _joined(kept, words):
+    """The words kept, then the ones after them."""
+    return " ".join(part for part in (kept, words) if part)
 
 
 def _may_show(rec, phrase, budget=None):
@@ -263,7 +328,7 @@ def _allowed(rec, phrase):
     """Seconds of audio the next read of *phrase* may see."""
     seen = _seen
     before = seen[2] if seen is not None and _same(seen, rec, phrase) else 0.0
-    return min(MAX_AUDIO_S, before + GROWTH_S)
+    return before + GROWTH_S
 
 
 def _remember_seen(rec, phrase, seconds):
@@ -313,8 +378,8 @@ def _close():
 
 def hide():
     """The recording ended: the window goes (the text is typed now)."""
-    global _last_read, _shown, _skip, _seen
+    global _last_read, _shown, _skip, _seen, _settled
     _last_read = 0.0
-    _shown = _skip = _seen = None
+    _shown = _skip = _seen = _settled = None
     if window is not None:
         window.hide()

@@ -219,7 +219,7 @@ class Settings:
     # TuxTalk Labs: apps, windows, keys and the mouse by voice ("open Firefox",
     # "close window", "new tab", "mouse grid"); the name is from when it only opened apps
     open_apps: bool = False
-    # TuxTalk Labs: what's been said so far, in a box under the indicator
+    # TuxTalk Labs: what's been said so far, in a box by the indicator
     # while dictating (live_text.py)
     live_text: bool = False
     # No closing period in terminals and code editors, no starting capital in terminals

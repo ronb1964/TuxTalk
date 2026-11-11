@@ -347,8 +347,8 @@ class AdvancedTab(Tab):
         check = Gtk.CheckButton(label="Show the words while you talk")
         check.set_active(bool(self.config.get("live_text", False)))
         check.set_tooltip_text(
-            "A box under the recording indicator shows what you've said so far,\n"
-            "about once a second, so you can see it's hearing you right. What gets\n"
+            "A box by the recording indicator shows what you've said so far,\n"
+            "about twice a second, so you can see it's hearing you right. What gets\n"
             "typed doesn't change. Needs the speech model on a graphics card.")
         check.set_margin_start(LABS_INDENT)
         check.connect("toggled", lambda c: self.update_config("live_text", c.get_active()))

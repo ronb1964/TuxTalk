@@ -1,14 +1,14 @@
 """The live text window (TuxTalk Labs, live_text.py): what's been said so far,
-in a dark rounded box under the recording indicator, growing with the
+in a dark rounded box by the recording indicator, growing with the
 dictation.
 
 It takes no focus and clicks go through it, like the indicator and the
 floating messages (ui_style.click_through): an override-redirect popup,
 which goes exactly where it's put on X11 and XWayland, where the dictation
 service runs GTK. Without an X display GTK 3 would make it an ordinary
-window that takes the keyboard, so there none is made (make). It grows up
-to a third of the screen's height; past that the newest lines show and the
-first ones fade out at the top. Everything here runs on GTK's thread; show
+window that takes the keyboard, so there none is made (make). It grows into
+all the room on its side of the indicator; past that the newest lines show
+and the first ones fade out at the top. Everything here runs on GTK's thread; show
 and hide may be called from any thread.
 """
 import gi
@@ -27,9 +27,11 @@ logger = setup_logger(__name__)
 
 WIDTH = 560                 # pixels, or the screen's width less a margin
 _PAD = 14
-_GAP = 8                    # between the indicator and the window
+_GAP = 8                    # between the indicator and the window under it
+_GAP_ABOVE = 40             # above it, to clear the text box it sits on
 _FADE = 28                  # the fade over the first lines, when they don't fit
 _MARGIN = 20                # kept clear at the screen's edges
+_SHORTEST = 2 * _PAD + 40   # two lines, should an indicator at an edge leave no room
 
 
 def make(get_indicator):
@@ -44,17 +46,32 @@ def make(get_indicator):
 
 
 def place(width, height, anchor, monitor):
-    """Top-left corner for a *width* x *height* window under *anchor* (x, y,
-    w, h: the indicator, or a point), or above it when there's no room
-    below, kept inside *monitor* (a window_geometry.Rect)."""
+    """Top-left corner for a *width* x *height* window by *anchor* (x, y,
+    w, h: the indicator, or a point), kept inside *monitor* (a
+    window_geometry.Rect). In the monitor's lower half it goes above the
+    anchor and grows upward: an indicator low in a window sits on or near
+    the text box being dictated into, and a box that started below it would
+    jump above once it outgrew the room left. In the upper half it goes
+    below and grows downward."""
     ax, ay, aw, ah = anchor
     x = round(ax + aw / 2 - width / 2)
-    y = ay + ah + _GAP
-    if y + height > monitor.y + monitor.h - _MARGIN:
-        y = ay - _GAP - height
+    y = ay - _GAP_ABOVE - height if _above(anchor, monitor) else ay + ah + _GAP
     x = max(monitor.x + _MARGIN, min(x, monitor.x + monitor.w - _MARGIN - width))
     y = max(monitor.y + _MARGIN, min(y, monitor.y + monitor.h - _MARGIN - height))
     return x, y
+
+
+def room(anchor, monitor):
+    """How tall the window may grow on its side of *anchor* (see place)."""
+    _ax, ay, _aw, ah = anchor
+    if _above(anchor, monitor):
+        return ay - _GAP_ABOVE - monitor.y - _MARGIN
+    return monitor.y + monitor.h - _MARGIN - ay - ah - _GAP
+
+
+def _above(anchor, monitor):
+    """Whether the window goes above *anchor*: it's in *monitor*'s lower half."""
+    return anchor[1] + anchor[3] / 2 > monitor.y + monitor.h / 2
 
 
 class LiveTextWindow:
@@ -134,7 +151,7 @@ class LiveTextWindow:
         width = min(WIDTH, monitor.w - 2 * _MARGIN)
         self._layout.set_width((width - 2 * _PAD) * Pango.SCALE)
         _w, text_h = self._layout.get_pixel_size()
-        tallest = monitor.h // 3
+        tallest = max(room(anchor, monitor), _SHORTEST)
         height = min(text_h + 2 * _PAD, tallest)
         self._shift = max(0, text_h + 2 * _PAD - tallest)
         self._size = (width, height)

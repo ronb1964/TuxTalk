@@ -8,13 +8,39 @@ from tuxtalk.window_geometry import Rect
 SCREEN = Rect(0, 0, 1920, 1080)
 
 
-def test_it_sits_centred_under_the_indicator():
-    assert ltw.place(400, 100, (900, 500, 120, 40), SCREEN) == (760, 548)
+def test_high_on_the_screen_it_sits_centred_under_the_indicator():
+    assert ltw.place(400, 100, (900, 300, 120, 40), SCREEN) == (760, 348)
 
 
-def test_with_no_room_below_it_goes_above():
+def test_low_on_the_screen_it_sits_above_the_text_box():
+    """An indicator low in a window sits on the text box being dictated into."""
     x, y = ltw.place(400, 300, (900, 900, 120, 40), SCREEN)
-    assert y == 900 - ltw._GAP - 300
+    assert y + 300 == 900 - ltw._GAP_ABOVE
+
+
+@pytest.mark.parametrize("indicator_y", [300, 900], ids=["high", "low"])
+def test_growing_never_moves_it_to_the_other_side(indicator_y):
+    """One line, then a tall box: the edge by the indicator stays put, so
+    the box grows instead of jumping."""
+    anchor = (900, indicator_y, 120, 40)
+    _x, short_y = ltw.place(400, 50, anchor, SCREEN)
+    _x, tall_y = ltw.place(400, 350, anchor, SCREEN)
+    if indicator_y < SCREEN.h / 2:
+        assert short_y == tall_y
+    else:
+        assert short_y + 50 == tall_y + 350
+
+
+@pytest.mark.parametrize("indicator_y", [300, 900], ids=["high", "low"])
+def test_a_long_dictation_has_all_the_room_on_its_side(indicator_y):
+    """The whole paragraph shows, up to the screen's edge on that side."""
+    anchor = (900, indicator_y, 120, 40)
+    tallest = ltw.room(anchor, SCREEN)
+    _x, y = ltw.place(400, tallest, anchor, SCREEN)
+    if indicator_y < SCREEN.h / 2:
+        assert (y, y + tallest) == (indicator_y + 40 + ltw._GAP, SCREEN.h - ltw._MARGIN)
+    else:
+        assert (y, y + tallest) == (ltw._MARGIN, indicator_y - ltw._GAP_ABOVE)
 
 
 @pytest.mark.parametrize("anchor", [(1880, 20, 30, 30), (5, 1060, 10, 10), (-50, -50, 0, 0)],
@@ -99,7 +125,7 @@ def test_words_from_a_phrase_already_typed_dont_come_back(shown):
     assert window._win is None
 
 
-def test_it_grows_with_the_words_up_to_a_third_of_the_screen(shown):
+def test_it_grows_with_the_words_up_to_the_room_it_has(shown):
     """Then the newest lines show and the first ones fade out at the top."""
     window, rec = shown
     window._show_now("A short start.", rec, 0)
@@ -108,8 +134,9 @@ def test_it_grows_with_the_words_up_to_a_third_of_the_screen(shown):
     longer = window._size[1]
     assert longer > short and window._shift == 0
     window._show_now("And then it goes on and on. " * 400, rec, 0)
-    monitor = ltw.monitor_rect_at(0, 0)
-    assert window._size[1] == monitor.h // 3 and window._shift > 0
+    anchor = window._anchor()
+    tallest = ltw.room(anchor, ltw.monitor_rect_at(anchor[0], anchor[1]))
+    assert window._size[1] == tallest and window._shift > 0
 
 
 def test_closing_it_lets_the_next_recording_open_a_fresh_one(shown):

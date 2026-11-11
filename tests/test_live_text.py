@@ -55,6 +55,7 @@ def talking(monkeypatch):
     monkeypatch.setattr(live_text, "_skip", None)
     monkeypatch.setattr(live_text, "_slow", (None, 0, 0.0))
     monkeypatch.setattr(live_text, "_seen", None)
+    monkeypatch.setattr(live_text, "_settled", None)
     monkeypatch.setattr(live_text, "STOP_AFTER_S", LIMIT)
     monkeypatch.setattr(engine, "model", Model())
     monkeypatch.setattr(engine, "_running_engine", ("parakeet", "vulkan"))
@@ -80,11 +81,12 @@ def test_the_words_so_far_are_shown_while_recording(talking):
     assert heard == [3 * 16000]
 
 
-def test_they_are_read_again_about_once_a_second(talking):
+def test_they_are_read_again_about_twice_a_second(talking):
+    """Often enough that words keep up with the talking, never on every tick."""
     _rec, window, _heard = talking
-    for now in (100.0, 100.4, 100.9, 101.0, 101.5):
+    for now in (100.0, 100.2, 100.35, 100.4, 100.6):
         live_text.tick(now=now)
-    assert len(window.shown) == 2           # at 100.0 and 101.0
+    assert len(window.shown) == 2           # at 100.0 and 100.4
 
 
 @pytest.mark.parametrize("why", ["off", "not recording", "voice edit", "a read running"])
@@ -405,17 +407,62 @@ def test_a_password_field_reached_during_a_read_gets_nothing(talking, monkeypatc
     assert window.shown == []
 
 
-def test_each_read_sees_a_little_more_up_to_the_newest_minute(talking):
-    """Without Type at pause the audio grows with the whole dictation;
-    reading it all every second would get slower and slower, and a jump
-    from a short read to a long one could hold up the typing."""
+def test_each_read_sees_only_a_little_more_than_the_last(talking):
+    """A jump from a short read to a long one could hold up the typing."""
     rec, _window, heard = talking
-    rec.frames = _speech(live_text.MAX_AUDIO_S + 30)
-    for second in range(15):
-        live_text.tick(now=100.0 + second)
+    rec.frames = _speech(90)
+    for n in range(3):
+        live_text.tick(now=100.0 + n)
     growth = int(live_text.GROWTH_S * 16000)
-    assert heard[:3] == [growth, 2 * growth, 3 * growth]
-    assert heard[-1] == int(live_text.MAX_AUDIO_S * 16000)
+    assert heard == [growth, 2 * growth, 3 * growth]
+
+
+def _talk_with_a_gap(before, after, rate=16000):
+    """Talking for *before* seconds, half a second's quiet, then *after* more."""
+    def talk(seconds):
+        return (np.sin(np.arange(int(rate * seconds)) / 9) * 8000).astype(np.int16)
+    gap = np.zeros(rate // 2, dtype=np.int16)
+    return [np.concatenate([talk(before), gap, talk(after)]).tobytes()]
+
+
+def _numbered_reads(monkeypatch):
+    """Each read answers "read 1", "read 2"...; returns how much each heard."""
+    heard = []
+
+    def transcribe(audio, language):
+        heard.append(len(audio))
+        return f"read {len(heard)}"
+    monkeypatch.setattr(engine, "transcribe", transcribe)
+    return heard
+
+
+def test_a_long_dictations_start_is_read_once_at_a_pause_and_then_kept(talking, monkeypatch):
+    """Without Type at pause the audio grows for the whole dictation: its
+    start is settled at a gap between words, and its words stay put on screen
+    while the rest goes on being read."""
+    rec, window, _heard = talking
+    heard = _numbered_reads(monkeypatch)
+    rec.frames = _talk_with_a_gap(20, 15)
+    monkeypatch.setattr(live_text, "_seen", (rec, rec.chunks_submitted, 35.0))
+    live_text.tick(now=100.0)
+    settled, rest = heard
+    assert abs(settled / 16000 - 20.25) <= live_text.QUIET_S
+    assert window.shown == ["read 1 read 2"]
+    rec.frames = rec.frames + _speech(2)
+    live_text.tick(now=101.0)
+    assert heard[2] == rest + 2 * 16000     # the kept start isn't heard again
+    assert window.shown[-1] == "read 1 read 3"
+
+
+def test_nothing_is_kept_from_a_read_that_skipped_words(talking, monkeypatch):
+    """A first read held back hears only the newest seconds: keeping its
+    words would leave out what came before them for good."""
+    rec, _window, _heard = talking
+    heard = _numbered_reads(monkeypatch)
+    rec.frames = _talk_with_a_gap(20, 30)
+    monkeypatch.setattr(live_text, "_seen", (rec, rec.chunks_submitted, 35.0))
+    live_text.tick(now=100.0)
+    assert heard == [40 * 16000] and live_text._settled is None
 
 
 def test_a_moment_of_sound_isnt_read(talking):
@@ -553,7 +600,7 @@ def test_a_slow_read_ending_after_the_stop_keeps_no_recording(talking, real_work
     live_text.hide()
     release.set()
     assert real_worker.drain(5)
-    assert live_text._skip is None and live_text._seen is None
+    assert live_text._skip is None and live_text._seen is None and live_text._settled is None
 
 
 def test_a_hiccup_on_a_five_second_read_doesnt_linger(talking, monkeypatch):
@@ -561,7 +608,7 @@ def test_a_hiccup_on_a_five_second_read_doesnt_linger(talking, monkeypatch):
     helper restarting) must be cleared by ordinary fast reads, or the next
     hiccup, however short, would end live text for the session."""
     rec, window, _heard = talking
-    for phrase, (seconds, slow) in enumerate([(5, True), (4, False), (1, True), (2, False)]):
+    for phrase, (seconds, slow) in enumerate([(5, True), (4.8, False), (1, True), (2, False)]):
         rec.frames = _speech(seconds)
         rec.chunks_submitted = phrase
         monkeypatch.setattr(engine, "transcribe", _taking(SLOW if slow else 0.0, f"p{phrase}"))
@@ -586,7 +633,7 @@ def test_a_read_ending_after_the_stop_keeps_nothing_it_saw(talking, monkeypatch)
     live_text.tick(now=100.0)
     monkeypatch.setattr(rs.state, "is_recording", False)
     live_text._let_go_if_ended(rec, rec.chunks_submitted)
-    assert live_text._seen is None and live_text._shown is None
+    assert live_text._seen is None and live_text._shown is None and live_text._settled is None
 
 
 def test_only_the_newest_audio_is_converted(talking, monkeypatch):

@@ -6,10 +6,11 @@ before 0.15.0, so older entries use that name.
 ## [Unreleased]
 
 - New in TuxTalk Labs: Live text. Turn it on under Preferences → Advanced →
-  TuxTalk Labs, and while you dictate, a box under the recording indicator
-  shows what you've said so far (the last minute of it, in a long dictation),
-  updated about once a second. What gets typed doesn't change, and the box
-  takes no keys or clicks. It needs the speech model on a graphics card: it
+  TuxTalk Labs, and while you dictate, a box by the recording indicator
+  shows what you've said so far, updated about twice a second. It grows
+  with a long dictation, above the text box you're typing into, and the
+  older words settle and stop changing. What gets typed
+  doesn't change, and the box takes no keys or clicks. It needs the speech model on a graphics card: it
   reads the audio again with the model you already have, only when nothing
   else is being transcribed, and on a recent desktop card a read takes well
   under half a second. If one ever takes over about half a second, the box
