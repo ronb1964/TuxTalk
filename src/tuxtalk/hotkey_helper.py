@@ -143,7 +143,7 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.15"
+VERSION = "1.16"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"
@@ -161,7 +161,7 @@ UHID_SYS = "/sys/devices/virtual/misc/uhid/"
 
 # --- evdev numbers (linux/input.h, linux/input-event-codes.h) -------------------
 
-EV_SYN, EV_KEY, EV_REL = 0, 1, 2
+EV_SYN, EV_KEY, EV_REL, EV_LED = 0, 1, 2, 0x11
 SYN_REPORT, SYN_DROPPED = 0, 3
 REL_X, BTN_LEFT = 0, 0x110
 # The keyboard TuxTalk types with (virtual_keyboard.NAME): never read.
@@ -170,6 +170,7 @@ KEY_MAX = 0x2FF
 KEY_ESC, KEY_SCROLLLOCK, KEY_PAUSE = 1, 70, 119
 KEY_LEFTCTRL, KEY_RIGHTCTRL, KEY_RIGHTALT, KEY_SPACE = 29, 97, 100, 57
 BUS_VIRTUAL = 0x06
+LOCK_LIGHTS = frozenset({0, 1, 2})      # Num Lock, Caps Lock, Scroll Lock (Keyboard.grab)
 
 F_KEYS = frozenset(list(range(59, 69)) + [87, 88] + list(range(183, 195)))   # F1-F24
 # The modifiers that may also be watched on their own (see the rule at the top).
@@ -206,6 +207,7 @@ EVIOCGRAB = _ioc(1, 0x90, 4)
 EVIOCGID = _ioc(2, 0x02, 8)
 EVIOCSCLOCKID = _ioc(1, 0xA0, 4)
 EVIOCSMASK = _ioc(1, 0x93, 16)      # struct input_mask: type, codes_size, codes_ptr
+EVIOCGLED = _ioc(2, 0x19, 2)        # the lights lit, as bits: LED_MAX is 0x0f
 CLOCK_MONOTONIC = 1
 KEY_BYTES = KEY_MAX // 8 + 1
 
@@ -574,13 +576,42 @@ class Keyboard:
         return bits(state)
 
     def grab(self, on):
-        """Keep this keyboard's events to ourselves (on) or give them back."""
+        """Keep this keyboard's events to ourselves (on) or give them back
+        with its lock lights as they were: giving it back makes Linux restart
+        the text console's keyboard code on it, which sets the console's own
+        lock lights there (Num Lock off), seen by every reader of the
+        keyboard, the desktop included (issue #34)."""
+        lights = None if on else self.lock_lights()
         try:
             fcntl.ioctl(self.fd, EVIOCGRAB, 1 if on else 0)
-            self.grabbed = on
-            return True
         except OSError:
             return False
+        self.grabbed = on
+        if lights is not None:
+            self.put_back_lock_lights(lights)
+        return True
+
+    def lock_lights(self):
+        """Which LOCK_LIGHTS are lit here, or None when the kernel can't say."""
+        state = bytearray(2)
+        try:
+            fcntl.ioctl(self.fd, EVIOCGLED, state, True)
+        except OSError as e:
+            log(f"couldn't read the lock lights of {self.name!r}: {describe_error(e)}")
+            return None
+        return bits(state) & LOCK_LIGHTS
+
+    def put_back_lock_lights(self, lit):
+        """Set again those lock lights that changed since they were *lit*.
+        Only those, so a keyboard nothing changed on gets nothing written."""
+        now = self.lock_lights()
+        if now is None or now == lit:
+            return
+        events = [EVENT.pack(0, 0, EV_LED, code, int(code in lit)) for code in sorted(lit ^ now)]
+        try:
+            os.write(self.fd, b"".join(events) + EVENT.pack(0, 0, EV_SYN, SYN_REPORT, 0))
+        except OSError as e:
+            log(f"couldn't put back the lock lights of {self.name!r}: {describe_error(e)}")
 
     def inject(self, code, value):
         """Send a key event into this keyboard, as if it came from it."""

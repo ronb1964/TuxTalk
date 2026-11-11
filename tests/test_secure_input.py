@@ -208,12 +208,12 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False, read_
 def test_only_an_older_helper_needs_an_update():
     """1.9, installed by test builds, and 1.10 are older than 1.11: the
     numbers after the dot are compared as numbers, not as text."""
-    assert hotkey_helper.VERSION == "1.15" and si.NEEDED_HELPER_VERSION == "1.11"
+    assert hotkey_helper.VERSION == "1.16" and si.NEEDED_HELPER_VERSION == "1.11"
     for running, older, needed in (("1.0", True, True), ("1.3", True, True),
                                    ("garbled", True, True), ("1.9", True, True),
                                    ("1.10", True, True), ("1.11", True, False),
                                    ("1.12", True, False), ("1.13", True, False),
-                                   (hotkey_helper.VERSION, False, False), ("1.15", False, False),
+                                   ("1.15", True, False), (hotkey_helper.VERSION, False, False),
                                    ("9.0", False, False), (None, False, False)):
         assert si.is_older(running) is older, running
         assert si.needs_update(running) is needed, running
@@ -231,11 +231,12 @@ def test_a_helper_only_older_than_the_one_shipped_is_offered_without_a_warning(m
     assert P._typing_state([])[3] is True
 
 
-@pytest.mark.parametrize("running", ["1.13", "1.14"])
-def test_a_helper_before_1_15_is_offered_the_update_quietly(monkeypatch, running):
-    """1.14 came only with test builds."""
+@pytest.mark.parametrize("running", ["1.13", "1.14", "1.15"])
+def test_a_helper_before_1_16_is_offered_the_update_quietly(monkeypatch, running):
+    """1.14 came only with test builds; 1.15 turns Num Lock off on KDE at
+    each dictation (issue #34), but only where Num Lock is used."""
     _P, prefs = _typing_prefs(monkeypatch, running=running)
-    assert f"({running} → 1.15)" in prefs.typing_status_label.markup
+    assert f"({running} → 1.16)" in prefs.typing_status_label.markup
     assert "✓ Ready" in prefs.typing_status_label.markup
 
 
