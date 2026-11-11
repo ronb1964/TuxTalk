@@ -702,7 +702,8 @@ def test_parakeet_on_vulkan_without_its_files_quietly_uses_the_processor(monkeyp
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
     told = []
     monkeypatch.setattr(wv, "is_installed", lambda m: False)
-    monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", lambda *a: pytest.fail("started the helper"))
+    monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel",
+                        lambda *a, **k: pytest.fail("started the helper"))
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: told.append(a))
     monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda model, device, compute_type, **k: f"parakeet-on-{device}")

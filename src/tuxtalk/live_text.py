@@ -80,9 +80,10 @@ _shown = None
 _seen = None
 # The processor was found doing the work, and the log said so.
 _said_processor = False
-# (engine.running(), how many short reads with it in a row were too slow);
-# the engine as (model, device), so Power Saving letting it go doesn't reset it.
-_slow = (None, 0)
+# (engine.running(), how many short reads with it in a row were too slow,
+# the seconds of audio the last slow one heard); the engine as (model,
+# device), so Power Saving letting it go doesn't reset it.
+_slow = (None, 0, 0.0)
 
 
 def tick(now=None):
@@ -127,21 +128,27 @@ def _on_graphics_card():
 
 def _model_too_slow():
     """Whether SLOW_READS short reads with the engine running now were too slow."""
-    running, count = _slow
+    running, count, _heard = _slow
     return count >= SLOW_READS and running == engine.running()
 
 
 def _judge_engine(heard):
     """Count a short read (*heard*: audio seconds, transcription seconds)
-    whose transcription was slow against the engine running; a short fast
-    one starts the count again. None (nothing was read) changes nothing."""
+    whose transcription was slow against the engine running. A fast one
+    starts the count again only when it heard at least as much as the last
+    slow one: each phrase starts with reads shorter than the one that was
+    slow, and those say nothing about it. None (nothing was read) changes
+    nothing."""
     global _slow
     if heard is None or heard[0] > SHORT_AUDIO_S:
         return
-    running, count = _slow
+    running, count, slow_audio = _slow
     if running != engine.running():
-        count = 0
-    _slow = (engine.running(), count + 1 if heard[1] > STOP_AFTER_S else 0)
+        count, slow_audio = 0, 0.0
+    if heard[1] > STOP_AFTER_S:
+        _slow = (engine.running(), count + 1, heard[0])
+    elif heard[0] >= slow_audio:
+        _slow = (engine.running(), 0, 0.0)
 
 
 def _log_slow_read(took):
@@ -154,7 +161,7 @@ def _log_slow_read(took):
 
 
 def _same(pair, rec, phrase):
-    """Whether *pair* (_skip or _shown) is *phrase* of this very recording."""
+    """Whether *pair* (_skip, _shown or _seen) is *phrase* of this very recording."""
     return pair is not None and pair[0] is rec and pair[1] == phrase
 
 
@@ -192,7 +199,17 @@ def _read(rec, frames, rate, phrase):
         elif fresh:
             _show(rec, phrase, words)
     finally:
+        _let_go_if_ended(rec, phrase)
         _reading.clear()
+
+
+def _let_go_if_ended(rec, phrase):
+    """hide() may have run while the read did, and the read then noted
+    what it saw: keep no recording that has ended, nor its audio."""
+    global _seen
+    seen = _seen
+    if seen is not None and _same(seen, rec, phrase) and not _current(rec, phrase):
+        _seen = None
 
 
 def _hear(rec, frames, rate, phrase):

@@ -2,6 +2,7 @@
 import logging
 import threading
 import time
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -52,7 +53,8 @@ def talking(monkeypatch):
     monkeypatch.setattr(live_text, "window", window)
     monkeypatch.setattr(live_text, "_last_read", 0.0)
     monkeypatch.setattr(live_text, "_skip", None)
-    monkeypatch.setattr(live_text, "_slow", (None, 0))
+    monkeypatch.setattr(live_text, "_slow", (None, 0, 0.0))
+    monkeypatch.setattr(live_text, "_seen", None)
     monkeypatch.setattr(live_text, "STOP_AFTER_S", LIMIT)
     monkeypatch.setattr(engine, "model", Model())
     monkeypatch.setattr(engine, "_running_engine", ("parakeet", "vulkan"))
@@ -191,10 +193,18 @@ def test_a_slow_read_ends_live_text_for_that_phrase_only(talking, monkeypatch):
 
 
 def test_a_read_just_under_the_limit_is_shown(talking, monkeypatch):
+    """On a clock the read itself moves on, so a busy computer can't tip it over."""
     _rec, window, _heard = talking
-    monkeypatch.setattr(engine, "transcribe", _taking(live_text.STOP_AFTER_S / 2))
+    now = [0.0]
+
+    def transcribe(audio, language):
+        now[0] += LIMIT * 0.9
+        return "just in time"
+    monkeypatch.setattr(live_text, "time", SimpleNamespace(monotonic=lambda: now[0],
+                                                           time=time.time))
+    monkeypatch.setattr(engine, "transcribe", transcribe)
     live_text.tick(now=100.0)
-    assert window.shown == ["so far so good"]
+    assert window.shown == ["just in time"]
 
 
 def test_a_chip_too_slow_twice_ends_live_text_while_it_runs(talking, monkeypatch):
@@ -251,34 +261,63 @@ def test_a_first_read_held_back_by_typing_still_tells_a_slow_chip(talking, monke
     until the next one is seconds long: its first read sees a few seconds
     of it at most, and is counted when the chip is slow."""
     rec, _window, heard = talking
-    monkeypatch.setattr(engine, "transcribe", _taking(SLOW))
+    read = []
+
+    def slow(audio, language):
+        read.append(len(audio))
+        return _taking(SLOW)(audio, language)
+    monkeypatch.setattr(engine, "transcribe", slow)
     for phrase in range(live_text.SLOW_READS):
         rec.frames = _speech(live_text.SHORT_AUDIO_S + 3)
         rec.chunks_submitted = phrase
         live_text.tick(now=100.0 + phrase)
+    assert read == [int(live_text.GROWTH_S * 16000)] * live_text.SLOW_READS
     _off_while_that_engine_runs(rec, _window, monkeypatch)
 
 
 def _off_while_that_engine_runs(rec, window, monkeypatch):
-    """Assert a fast read of a new phrase shows nothing: live text is off."""
-    reads = []
+    """Assert a new phrase isn't read at all: live text is off."""
+    reads, shown = [], len(window.shown)
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: reads.append(1) or "x")
     rec.chunks_submitted += 1
     live_text.tick(now=500.0)
-    assert reads == [] and window.shown == []
+    assert reads == [] and len(window.shown) == shown
 
 
 def test_a_slow_read_counts_even_when_the_phrase_ended_meanwhile(talking, monkeypatch):
     """Those are the reads the typed text waited on."""
     rec, window, _heard = talking
 
+    read = []
+
     def slow_then_typed(audio, language):
+        read.append(1)
         time.sleep(SLOW)
         rec.chunks_submitted += 1           # typed at a pause while it read
         return "late"
     monkeypatch.setattr(engine, "transcribe", slow_then_typed)
     for second in range(live_text.SLOW_READS):
         live_text.tick(now=100.0 + second)
+    assert len(read) == live_text.SLOW_READS
+    _off_while_that_engine_runs(rec, window, monkeypatch)
+
+
+def test_a_slow_chip_isnt_excused_by_each_phrases_short_first_reads(talking, monkeypatch):
+    """Every phrase starts with reads shorter than the one that turned out
+    slow; those mustn't wipe the count, or every phrase pays a slow read."""
+    rec, window, _heard = talking
+    two_seconds = 2 * 16000
+
+    def slow_from_two_seconds(audio, language):
+        if len(audio) >= two_seconds:
+            time.sleep(SLOW)
+        return "so far"
+    monkeypatch.setattr(engine, "transcribe", slow_from_two_seconds)
+    for phrase in range(live_text.SLOW_READS):
+        rec.chunks_submitted = phrase
+        for seconds in (1, 2):
+            rec.frames = _speech(seconds)
+            live_text.tick(now=100.0 + 10 * phrase + seconds)
     _off_while_that_engine_runs(rec, window, monkeypatch)
 
 
@@ -514,7 +553,7 @@ def test_a_slow_read_ending_after_the_stop_keeps_no_recording(talking, real_work
     live_text.hide()
     release.set()
     assert real_worker.drain(5)
-    assert live_text._skip is None
+    assert live_text._skip is None and live_text._seen is None
 
 
 def test_only_the_newest_audio_is_converted(talking, monkeypatch):

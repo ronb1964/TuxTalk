@@ -11,9 +11,9 @@ before 0.15.0, so older entries use that name.
   updated about once a second. What gets typed doesn't change, and the box
   takes no keys or clicks. It needs the speech model on a graphics card: it
   reads the audio again with the model you already have, only when nothing
-  else is being transcribed, and a read there takes well under half a
-  second. If one ever takes longer, the box stops until your next pause or
-  dictation, and if short ones do that twice in a row (a built-in graphics
+  else is being transcribed, and on a recent desktop card a read takes well
+  under half a second. If one ever takes over about half a second, the box
+  stops until your next pause or dictation, and if short ones do that twice in a row (a built-in graphics
   chip can be that slow) it stays off until TuxTalk restarts, so your typed
   text is never held up for long. The box shows the
   words as the model hears them, before numbers and commands are worked out,
