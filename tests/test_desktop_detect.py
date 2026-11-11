@@ -11,6 +11,9 @@ from tuxtalk import desktop_detect, x11_hotkeys
     ("pop:GNOME", "pop", "gnome"),
     ("zorin:GNOME", "zorin", "gnome"),
     ("KDE", "plasma", "kde"),
+    # A session started by hand can leave XDG_CURRENT_DESKTOP out.
+    ("", "plasmawayland", "kde"),
+    ("", "/usr/share/wayland-sessions/plasma.desktop", "kde"),
     ("X-Cinnamon", "cinnamon", "cinnamon"),
     # They name GNOME too, but run no GNOME Shell: no extension can load,
     # and no extension holds F8 back from a terminal on X11.

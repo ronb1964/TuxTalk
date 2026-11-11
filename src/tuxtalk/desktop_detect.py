@@ -35,7 +35,7 @@ def get_desktop_environment() -> str:
         return 'gnome'
 
     # KDE Plasma
-    if 'kde' in desktop or 'plasma' in desktop or 'kde' in session:
+    if 'kde' in desktop or 'plasma' in desktop or 'kde' in session or 'plasma' in session:
         return 'kde'
 
     # XFCE

@@ -8,12 +8,17 @@ window on KDE and GNOME) belongs to the app, so it mustn't dictate as well.
 On GNOME these run after the extension is installed: only it holds keys back.
 """
 import json
+import sys
 import time
+from pathlib import Path
 
 from checks_dictation import type_in_terminal
 from checks_prefs import PREFS, open_fold
 from harness import Abort, Outcome, check, heard_in
 from vmlib import REMOTE
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from tuxtalk.hotkey_helper import VERSION  # noqa: E402
 
 SECTION = "Hotkeys and keyboard layouts"
 COSMIC_XKB = "~/.config/cosmic/com.system76.CosmicComp/v1/xkb_config"
@@ -393,7 +398,7 @@ def ctrl_space_input_method_log(run):
 
 
 @check(SECTION, "ctrl_space_quiet_helper_update",
-       "Helper 1.13 gets no question at start; System check offers 1.15 quietly")
+       "Helper 1.13 gets no question at start; System check offers the new one quietly")
 def ctrl_space_quiet_helper_update(run):
     missing = _helper_missing(run)
     if missing:
@@ -433,11 +438,12 @@ def _quiet_update_outcome(run):
     problems = []
     if question is not None or asked_in_log:
         problems.append("TuxTalk asked about updating the helper at start")
-    if not any("(1.13 → 1.15)" in t for t in texts):
-        problems.append("System check doesn't offer (1.13 → 1.15)")
+    offer = f"(1.13 → {VERSION})"
+    if not any(offer in t for t in texts):
+        problems.append(f"System check doesn't offer {offer}")
     if not any("✓ Ready" in t for t in texts):
         problems.append("System check doesn't say ✓ Ready")
     if problems:
         return Outcome("fail", "; ".join(problems), screenshot=shot)
-    return Outcome("pass", "No question at start; System check reads ✓ Ready and offers "
-                   "(1.13 → 1.15)", screenshot=shot)
+    return Outcome("pass", f"No question at start; System check reads ✓ Ready and offers "
+                   f"{offer}", screenshot=shot)

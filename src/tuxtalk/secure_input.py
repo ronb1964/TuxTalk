@@ -266,8 +266,11 @@ def can_install():
         ok = subprocess.run([PYTHON, "-I", "-S", "-c",
                              "import sys; sys.exit(sys.version_info < (3, 8))"],
                             timeout=10).returncode == 0
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError:             # not there, or not something that runs
         ok = False
+    except subprocess.TimeoutExpired as e:
+        logger.info(f"Couldn't ask {PYTHON} its version: {e}")
+        return False, f"{PYTHON} didn't answer when asked its version"
     if not ok:
         return False, f"{PYTHON} (3.8 or newer) isn't installed"
     if not any(os.access(os.path.join(d, "pkexec"), os.X_OK)
@@ -325,14 +328,18 @@ def is_older(running):
 # The oldest helper this TuxTalk works with as it should on any computer.
 # Raised only when a feature or fix everyone needs comes with a newer
 # helper, since TuxTalk then asks at every start to update it. A fix only
-# some computers need asks there alone (missed_keyboard_reason); the
-# rest of a newer helper is offered in System check without asking.
+# some computers need asks there alone (missed_keyboard_reason,
+# lock_lights_reason); the rest of a newer helper is offered in System
+# check without asking.
 NEEDED_HELPER_VERSION = "1.11"
 
 # The first helpers that read a keyboard the ones before skipped without a
 # word: one the input group may only read, and one that's a mouse too.
 READ_ONLY_KEYBOARDS_SINCE = "1.12"
 KEYBOARDS_ALSO_MICE_SINCE = "1.13"
+# The first helper that puts the lock lights back after letting go of the
+# keyboards (issue #34).
+LOCK_LIGHTS_SINCE = "1.16"
 # Why to update a helper before 1.13 on a computer with one: not certain,
 # since a Logitech mouse is one too.
 ALSO_MICE_REASON = ("A keyboard or mouse here is both at once, as Logitech's are, and the "
@@ -358,6 +365,23 @@ def missed_keyboard_reason(running):
     return None
 
 
+def lock_lights_reason(running):
+    """Why to update the running helper (version *running*) on KDE Plasma,
+    in one sentence without a full stop, or None. Every helper before
+    LOCK_LIGHTS_SINCE leaves the keyboards with the text console's lock
+    lights, all off, when it lets go of them. On KDE Plasma the desktop can
+    follow them (issue #34, KWin 6.8.2: the number pad stopped typing
+    numbers; the test VMs' KWin only lost the light). Elsewhere only the
+    light was seen to go, so that's no reason to ask."""
+    if running is None or _version(running) >= _version(LOCK_LIGHTS_SINCE):
+        return None
+    from .desktop_detect import get_desktop_environment
+    if get_desktop_environment() != "kde":
+        return None
+    return ("On KDE Plasma, the hotkey helper on this computer can turn Num Lock and Caps "
+            "Lock off after each dictation")
+
+
 def outdated_reason(running):
     """Why the running helper (version *running*) needs updating, in one
     sentence without a full stop, for the screens that offer it besides
@@ -367,8 +391,9 @@ def outdated_reason(running):
 
 
 def needs_update(running, keys=()):
-    """Whether this TuxTalk asks at start to update the running helper
-    (version *running*): it's older than NEEDED_HELPER_VERSION, can't
+    """Whether this TuxTalk needs a newer helper for its keys to work, and
+    asks at start to update the running one (version *running*;
+    lock_lights_reason asks too): it's older than NEEDED_HELPER_VERSION, can't
     report one of the dictation *keys* set (hears_key; saved_keys), or
     leaves out a keyboard here (missed_keyboard_reason)."""
     return running is not None and (_version(running) < _version(NEEDED_HELPER_VERSION)
@@ -446,7 +471,10 @@ def fix_permissions():
     Typing Permissions: the hotkey helper where this system can run it, the
     "input" group where it can't. Returns (ok, message, needs_restart)."""
     usable, why = can_install()
-    if usable:
+    # A helper already installed is updated, never swapped for the group:
+    # its check failing now (a Python slow to answer) doesn't undo the fact
+    # that it runs here, and the old helper would stay with its bugs.
+    if usable or is_installed():
         ok, message = install_with_pkexec()
         return ok, message, False
     logger.info(f"Hotkey helper not used ({why}); using the input group instead")

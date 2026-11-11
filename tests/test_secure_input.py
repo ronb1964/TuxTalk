@@ -9,6 +9,10 @@ from shell_stubs import recorders, stub
 from tuxtalk import secure_input as si
 from tuxtalk import hotkey_helper
 
+# The real check, before conftest stands in for it (no test may reach pkexec;
+# this one runs nothing as root).
+CAN_INSTALL = si.can_install
+
 
 def test_the_install_script_is_valid_bash_and_installs_root_owned():
     script = si.install_script()
@@ -208,12 +212,12 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False, read_
 def test_only_an_older_helper_needs_an_update():
     """1.9, installed by test builds, and 1.10 are older than 1.11: the
     numbers after the dot are compared as numbers, not as text."""
-    assert hotkey_helper.VERSION == "1.15" and si.NEEDED_HELPER_VERSION == "1.11"
+    assert hotkey_helper.VERSION == "1.16" and si.NEEDED_HELPER_VERSION == "1.11"
     for running, older, needed in (("1.0", True, True), ("1.3", True, True),
                                    ("garbled", True, True), ("1.9", True, True),
                                    ("1.10", True, True), ("1.11", True, False),
                                    ("1.12", True, False), ("1.13", True, False),
-                                   (hotkey_helper.VERSION, False, False), ("1.15", False, False),
+                                   ("1.15", True, False), (hotkey_helper.VERSION, False, False),
                                    ("9.0", False, False), (None, False, False)):
         assert si.is_older(running) is older, running
         assert si.needs_update(running) is needed, running
@@ -231,12 +235,24 @@ def test_a_helper_only_older_than_the_one_shipped_is_offered_without_a_warning(m
     assert P._typing_state([])[3] is True
 
 
-@pytest.mark.parametrize("running", ["1.13", "1.14"])
-def test_a_helper_before_1_15_is_offered_the_update_quietly(monkeypatch, running):
-    """1.14 came only with test builds."""
+@pytest.mark.parametrize("running", ["1.13", "1.14", "1.15"])
+def test_a_helper_before_1_16_is_offered_the_update_quietly(monkeypatch, running):
+    """1.14 came only with test builds; 1.15 turns the lock lights off at
+    each dictation (issue #34), which only some KDE versions follow."""
     _P, prefs = _typing_prefs(monkeypatch, running=running)
-    assert f"({running} → 1.15)" in prefs.typing_status_label.markup
+    assert f"({running} → 1.16)" in prefs.typing_status_label.markup
     assert "✓ Ready" in prefs.typing_status_label.markup
+    assert "Num Lock" not in prefs.typing_status_label.markup
+
+
+def test_on_kde_system_check_says_why_the_start_asks_for_the_update(monkeypatch):
+    """The question at start says Num Lock goes off; System check mustn't
+    call the same update a matter of taste."""
+    monkeypatch.setattr("tuxtalk.desktop_detect.get_desktop_environment", lambda: "kde")
+    P, prefs = _typing_prefs(monkeypatch, running="1.15")
+    markup = prefs.typing_status_label.markup
+    assert "Num Lock" in markup and "up to you" not in markup
+    assert P._typing_state([])[3] is True        # the keys work: it doesn't open itself
 
 
 def test_a_helper_too_old_for_a_dictation_key_set_is_a_warning(monkeypatch):
@@ -446,3 +462,40 @@ def test_system_check_asks_for_a_restart_only_where_fix_typing_needs_one(
     monkeypatch.setattr(si, "can_install", lambda: (helper_possible, ""))
     markup, label, offered, ok = P._typing_state([])
     assert wording in markup and label == P.FIX_TYPING_LABEL and offered and not ok
+
+
+def test_a_python_that_doesnt_answer_isnt_called_missing(monkeypatch):
+    """Timed out, it's there: saying it isn't installed sends people the wrong way."""
+    import subprocess
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(si.os.path, "isdir", lambda path: True)
+
+    def hangs(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0], 10)
+    monkeypatch.setattr(si.subprocess, "run", hangs)
+    ok, why = CAN_INSTALL()
+    assert not ok and "didn't answer" in why and "isn't installed" not in why
+
+
+def test_a_python_that_isnt_there_is_called_missing(monkeypatch):
+    """A minimal system running the AppImage may have none: installing it is the fix."""
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(si.os.path, "isdir", lambda path: True)
+
+    def missing(*args, **kwargs):
+        raise FileNotFoundError(args[0][0])
+    monkeypatch.setattr(si.subprocess, "run", missing)
+    ok, why = CAN_INSTALL()
+    assert not ok and "isn't installed" in why
+
+
+def test_an_installed_helper_is_updated_even_when_its_check_fails(monkeypatch):
+    """Swapped for the input group, the old helper would stay, bugs and all,
+    and the update would still say it worked."""
+    ran = []
+    monkeypatch.setattr(si, "can_install", lambda: (False, "Python didn't answer"))
+    monkeypatch.setattr(si, "is_installed", lambda: True)
+    monkeypatch.setattr(si, "install_with_pkexec", lambda: ran.append("helper") or (True, ""))
+    monkeypatch.setattr("tuxtalk.uinput_helper.install_udev_rule_with_pkexec",
+                        lambda: ran.append("group") or (True, ""))
+    assert si.fix_permissions() == (True, "", False) and ran == ["helper"]

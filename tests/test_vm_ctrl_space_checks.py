@@ -103,7 +103,7 @@ class _Guest:
         if action == "find":
             return self.question
         if action == "texts":
-            return ["✓ Ready", "(1.13 → 1.15)"]
+            return ["✓ Ready", f"(1.13 → {checks.VERSION})"]
         return "found"
 
 

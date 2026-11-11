@@ -1,7 +1,8 @@
 """A hotkey helper older than the one this TuxTalk needs is offered for
 update by itself, at every start until it's updated, not only in System
-check, where nobody looks until the keys stop working. One only older than
-the helper this TuxTalk brings is left to System check."""
+check, where nobody looks until the keys stop working. So is one that turns
+Num Lock off on KDE Plasma. One only older than the helper this TuxTalk
+brings, with nothing wrong here, is left to System check."""
 import types
 
 import pytest
@@ -160,6 +161,30 @@ def test_a_helper_too_old_for_a_read_only_keyboard_here_is_asked_about(helper, m
     assert asked == ["1.11"]                    # 1.12 reads it: nothing to ask
 
 
+@pytest.mark.parametrize("desktop, asks", [("kde", True), ("gnome", False)])
+def test_a_helper_that_turns_num_lock_off_is_asked_about_on_kde(helper, monkeypatch,
+                                                               desktop, asks):
+    """Issue #34: on KDE Plasma every helper before 1.16 turns the lock
+    lights off after each dictation, and the desktop can follow them (the
+    number pad stops typing numbers). Elsewhere only the light was seen to
+    go, so System check offers it without asking."""
+    asked, updates, restarts, answer, parakeet = helper
+    monkeypatch.setattr(secure_input, "running_version", lambda: "1.15")
+    monkeypatch.setattr("tuxtalk.desktop_detect.get_desktop_environment", lambda: desktop)
+    _saved(monkeypatch, "F8")
+    answer["update"] = False
+    offers._offer_in_turn(restarts.append)
+    assert asked == (["1.15"] if asks else [])
+    assert parakeet == ([] if asks else [restarts.append])     # one offer a start
+    if asks:
+        for running in ("1.15", "1.13"):    # 1.13 can't report Ctrl+Space, unused here
+            text = offers.helper_update_text(running)
+            assert "Num Lock" in text and "number pad" in text and "Ctrl+Space" not in text
+    monkeypatch.setattr(secure_input, "running_version", lambda: secure_input.LOCK_LIGHTS_SINCE)
+    offers._offer_in_turn(restarts.append)
+    assert asked == (["1.15"] if asks else [])  # 1.16 puts the lights back: nothing to ask
+
+
 def _saved(monkeypatch, hold, toggle="F9"):
     monkeypatch.setattr("tuxtalk.config.load_config",
                         lambda: types.SimpleNamespace(hotkey=hold, toggle_hotkey=toggle))
@@ -183,3 +208,17 @@ def test_the_welcome_screen_offers_the_helper_a_saved_key_needs(helper, monkeypa
     monkeypatch.setattr(secure_input, "running_version", lambda: "1.13")
     _saved(monkeypatch, "F8", toggle)
     assert welcome_dialog.outdated_helper() == outdated
+
+
+@pytest.mark.parametrize("desktop, offered", [("kde", True), ("gnome", False)])
+def test_first_run_on_kde_offers_the_helper_that_keeps_num_lock_on(helper, monkeypatch,
+                                                                   desktop, offered):
+    """First run asks nothing at start, so its own screen offers the update
+    there, saying it's for Num Lock, not for keys that work already."""
+    monkeypatch.setattr(secure_input, "running_version", lambda: "1.15")
+    monkeypatch.setattr("tuxtalk.desktop_detect.get_desktop_environment", lambda: desktop)
+    _saved(monkeypatch, "F8")
+    assert welcome_dialog.outdated_helper() == ("1.15" if offered else None)
+    if offered:
+        text = welcome_dialog._helper_update_explanation("1.15")
+        assert "so Num Lock stays on" in text and "dictation keys work" not in text

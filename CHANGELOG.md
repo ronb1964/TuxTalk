@@ -52,6 +52,13 @@ before 0.15.0, so older entries use that name.
   TuxTalk (last-transcript.json) is kept as it is instead of being deleted.
   Clear This List and uninstalling with your data clear the set-aside copies
   and that older file too. Found by a code review.
+- With the hotkey helper, Num Lock and Caps Lock no longer go off after
+  each dictation (issue #34). When the helper gave the keyboard back, Linux
+  set the lock lights to the text console's own, usually all off, and on
+  some KDE Plasma setups the number pad then stopped typing numbers. The
+  helper (now 1.16) puts back the lights that changed. On KDE Plasma
+  TuxTalk asks at start to update the helper; elsewhere System check offers
+  it. Either way it asks for your password once.
 
 ## [0.22.0] - 2026-11-08
 
