@@ -352,7 +352,7 @@ def _build_vulkan_model(settings: Settings):
         reason = "its download isn't there"
     else:
         try:
-            device_index = whisper_vulkan.find_device()
+            device_index = whisper_vulkan.find_device(settings.graphics_card)
             if device_index is None:
                 reason = "no graphics chip was found"
             else:
@@ -387,7 +387,7 @@ def _build_parakeet_gpu_model(settings: Settings):
         return None
     reason, model = None, None
     try:
-        device_index = whisper_vulkan.find_device()
+        device_index = whisper_vulkan.find_device(settings.graphics_card)
         if device_index is None:
             reason = "no graphics chip was found"
         else:
@@ -446,13 +446,15 @@ def build(settings: Settings):
         settings = Settings(**{**vars(settings), "device": "cpu"})
     settings = _without_missing_cuda(settings)
 
-    compute_type = "float16" if settings.device.lower() == "cuda" else "int8"
+    on_cuda = settings.device.lower() == "cuda" and not is_parakeet(settings.model)
+    compute_type = "float16" if on_cuda else "int8"
     try:
         model = download_model_with_progress(
             settings.model,
             device=settings.device,
             compute_type=compute_type,
             dialogs=gtk_loop.here(),
+            device_index=_cuda_card(settings) if on_cuda else 0,
         )
         if model is None:
             raise ModelUnavailable(
@@ -470,10 +472,19 @@ def build(settings: Settings):
         # asking and ignore the user's Cancel.
         raise
     except Exception as e:
-        if settings.device.lower() == "cuda" and not is_parakeet(settings.model):
+        if on_cuda:
             return _cpu_fallback_after_cuda(settings, e)
         logger.error(f"Model loading failed: {e}")
         raise
+
+
+def _cuda_card(settings):
+    """CUDA's number for the card picked in Preferences (graphics_cards)."""
+    from . import graphics_cards
+    index = graphics_cards.cuda_index(settings.graphics_card)
+    if settings.graphics_card:
+        logger.info(f"Graphics card picked: {settings.graphics_card}, CUDA card {index}")
+    return index
 
 
 def _without_missing_cuda(settings):

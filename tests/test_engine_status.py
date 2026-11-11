@@ -77,7 +77,7 @@ def loads(monkeypatch):
     monkeypatch.setattr(engine, "_running_engine", None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: None)
     monkeypatch.setattr(whisper_vulkan, "is_installed", lambda m: True)
-    monkeypatch.setattr(whisper_vulkan, "find_device", lambda: 0)
+    monkeypatch.setattr(whisper_vulkan, "find_device", lambda wanted="": 0)
     monkeypatch.setattr(whisper_vulkan, "VulkanWhisperModel", lambda m, d: "whisper on vulkan")
     monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", lambda d: "parakeet on vulkan")
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
@@ -106,6 +106,24 @@ def loads(monkeypatch):
 def test_the_service_records_every_load_path(loads, model, device, cuda_fails, running):
     """Each way a model loads records what really runs."""
     assert loads(model, device, cuda_fails) == running
+
+
+def test_whisper_on_cuda_loads_on_the_card_picked_in_preferences(monkeypatch):
+    from tuxtalk import config, cuda_helper, graphics_cards, model_helper
+    monkeypatch.setattr(engine, "_running_engine", None)
+    monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
+    monkeypatch.setattr(cuda_helper, "ctranslate2_has_cuda", lambda: True)
+    monkeypatch.setattr(graphics_cards, "cuda_index",
+                        lambda key: {"NVIDIA GeForce RTX 5070 Ti": 3}.get(key, 0))
+    used = {}
+
+    def download(name, device, device_index=0, **k):
+        used.update(device=device, card=device_index)
+        return "large-v3 on cuda"
+    monkeypatch.setattr(model_helper, "download_model_with_progress", download)
+    engine.build(config.Settings(model="large-v3", device="cuda",
+                                 graphics_card="NVIDIA GeForce RTX 5070 Ti"))
+    assert used == {"device": "cuda", "card": 3}
 
 
 def test_the_service_tells_the_tray_once_the_model_is_loaded(service_main):

@@ -111,7 +111,7 @@ def test_stop_ends_the_check_still_running_behind_it(monkeypatch):
         ran["thread"] = threading.Thread(target=work)
         ran["thread"].start()           # Stop: the window closes, the work goes on
 
-    monkeypatch.setattr(vsd.wv, "find_device", lambda: 0)
+    monkeypatch.setattr(vsd.wv, "find_device", lambda wanted="": 0)
     monkeypatch.setattr(vsd.wv, "speed_check", speed_check)
     monkeypatch.setattr(vsd, "_wait_dialog", stopped_at_once)
     monkeypatch.setattr(vsd, "message", lambda *a, **k: None)

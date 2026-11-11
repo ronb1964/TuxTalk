@@ -246,6 +246,34 @@ def test_a_model_that_is_not_downloaded_says_so(monkeypatch):
         ft.load_engine(config.Settings(model="small", device="cpu"))
 
 
+def test_files_are_transcribed_on_the_card_picked_in_preferences(monkeypatch):
+    from tuxtalk import cuda_helper, graphics_cards, model_helper, whisper_vulkan
+    monkeypatch.setattr(whisper_vulkan, "is_installed", lambda name: True)
+    monkeypatch.setattr(whisper_vulkan, "find_device",
+                        lambda wanted="": {"AMD Radeon RX 7900 XTX": 1}.get(wanted, 0))
+    monkeypatch.setattr(whisper_vulkan, "VulkanWhisperModel", lambda name, index: index)
+    engine = ft.load_engine(config.Settings(model="small", device="vulkan",
+                                            graphics_card="AMD Radeon RX 7900 XTX"))
+    assert engine.model == 1
+
+    used = {}
+    monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda name: True)
+    monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
+    monkeypatch.setattr(graphics_cards, "cuda_index",
+                        lambda key: {"NVIDIA GeForce RTX 5070 Ti": 3}.get(key, 0))
+    monkeypatch.setattr(model_helper, "whisper_model",
+                        lambda name, **options: used.update(options) or "whisper")
+    ft.load_engine(config.Settings(model="small", device="cuda",
+                                   graphics_card="NVIDIA GeForce RTX 5070 Ti"))
+    assert (used["device"], used["device_index"]) == ("cuda", 3)
+
+
+def test_a_new_card_pick_reloads_the_open_transcription_window():
+    before = config.Settings(model="small", device="cuda")
+    after = config.Settings(model="small", device="cuda", graphics_card="NVIDIA GeForce RTX 5090")
+    assert ft.engine_settings(before) != ft.engine_settings(after)
+
+
 # --- the menu and the window ------------------------------------------------------------------
 
 def test_the_d_bus_method_opens_the_window():

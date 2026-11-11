@@ -55,7 +55,8 @@ def test_large_v3_on_nvidia_through_vulkan_picks_both(speech, monkeypatch):
     section = speech("nvidia")
     monkeypatch.setattr(vulkan_setup_dialogs, "choose_light_or_full",
                         lambda parent, model: vulkan_setup_dialogs.LIGHT)
-    monkeypatch.setattr(vulkan_setup_dialogs, "set_up", lambda parent, model, confirm: True)
+    monkeypatch.setattr(vulkan_setup_dialogs, "set_up",
+                        lambda parent, model, confirm, card=None: True)
     section.model_combo.set_active_id("large-v3")
     assert _shown(section) == ("large-v3", "large-v3", "vulkan")
 
@@ -67,7 +68,7 @@ def test_large_v3_on_amd_asks_about_vulkan(speech, monkeypatch, response, kept):
     speech.answer(response)
     setups = []
     monkeypatch.setattr(vulkan_setup_dialogs, "set_up",
-                        lambda parent, model, confirm: setups.append(confirm) or True)
+                        lambda parent, model, confirm, card=None: setups.append(confirm) or True)
     section.model_combo.set_active_id("large-v3")
     assert speech.asked == ["Large-v3 needs your graphics card"]
     if kept:
@@ -104,7 +105,8 @@ def test_large_v3_not_downloaded_yet_is_confirmed_first(speech, monkeypatch, res
 
 def test_a_refused_vulkan_setup_puts_the_device_back(speech, monkeypatch):
     section = speech("amd")
-    monkeypatch.setattr(vulkan_setup_dialogs, "set_up", lambda parent, model, confirm: False)
+    monkeypatch.setattr(vulkan_setup_dialogs, "set_up",
+                        lambda parent, model, confirm, card=None: False)
     # The setup runs once the dropdown has closed (an idle callback): run it
     # here, so it isn't left for a later test's main loop.
     queued = []
@@ -124,7 +126,8 @@ def test_use_recommended_falls_back_to_the_processor_when_it_is_faster(speech, m
     section = speech("amd")
     monkeypatch.setattr(vulkan_setup_dialogs, "ensure_files",
                         lambda parent, model, confirm: True)
-    monkeypatch.setattr(vulkan_setup_dialogs, "run_speed_check", lambda parent, model: False)
+    monkeypatch.setattr(vulkan_setup_dialogs, "run_speed_check",
+                        lambda parent, model, card=None: False)
     section.use_recommended_btn.clicked()
     assert section.config["device"] == "cpu"
     assert section._shown_language().vulkan_slower is True
@@ -137,7 +140,8 @@ def test_an_interrupted_speed_check_isnt_taken_for_a_slower_graphics_chip(speech
     section = speech("amd")
     monkeypatch.setattr(vulkan_setup_dialogs, "ensure_files",
                         lambda parent, model, confirm: True)
-    monkeypatch.setattr(vulkan_setup_dialogs, "run_speed_check", lambda parent, model: None)
+    monkeypatch.setattr(vulkan_setup_dialogs, "run_speed_check",
+                        lambda parent, model, card=None: None)
     section.use_recommended_btn.clicked()
     assert section.config["device"] == "cpu"
     assert section._shown_language().vulkan_slower is False
@@ -199,3 +203,32 @@ def test_apply_shows_the_setup_the_tray_switched_to(speech, monkeypatch, tmp_pat
     assert section.language.combo.get_active_id() == "de"
     general = section.win.general_tab
     assert general.timeout_check.get_active() and general.timeout_spin.get_value() == 2
+
+
+@pytest.mark.parametrize("way", ["use recommended", "apply"])
+def test_the_graphics_card_row_asks_again_once_vulkans_engine_is_set_up(speech, monkeypatch,
+                                                                       way):
+    """The engine lists Vulkan's cards: before its download it lists none,
+    and the row stayed hidden until Preferences was reopened."""
+    from tuxtalk.graphics_cards import from_vulkan
+    two = from_vulkan([(0, "NVIDIA GeForce RTX 4070 SUPER (NVIDIA)", True, False),
+                       (1, "AMD Radeon RX 7900 XTX (RADV NAVI31) (radv)", False, False)])
+    engine = []                 # the Vulkan engine, once "downloaded"
+    section = speech("amd")
+    row = section.graphics_card
+    monkeypatch.setattr(row, "_list_cards", lambda device: two if engine else [])
+    combo = section.device_combo
+    combo.handler_block_by_func(section._on_device_changed)
+    combo.set_active_id("vulkan")       # shown with no engine yet: no cards
+    combo.handler_unblock_by_func(section._on_device_changed)
+    assert not row.combo.get_visible()
+    monkeypatch.setattr(vulkan_setup_dialogs, "ensure_files",
+                        lambda parent, model, confirm: engine.append(model) or True)
+    monkeypatch.setattr(vulkan_setup_dialogs, "run_speed_check",
+                        lambda parent, model, card=None: True)
+    if way == "use recommended":
+        section.use_recommended_btn.clicked()
+    else:
+        section.config.update(device="vulkan", model="small")
+        section.download_selected_model()
+    assert row.combo.get_visible()

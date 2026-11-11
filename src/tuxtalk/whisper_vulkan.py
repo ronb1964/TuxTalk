@@ -394,8 +394,19 @@ def _engine_env(folder=None):
     return {**os.environ, "LD_LIBRARY_PATH": folder or engine_dir()}
 
 
-def find_device():
-    """Index of the graphics chip the engine should use, or None."""
+def find_device(wanted=""):
+    """Index of the graphics chip the engine should use, or None: the card
+    saved as *wanted* (graphics_cards, the Graphics card setting) when it's
+    there, otherwise choose_device's."""
+    from . import graphics_cards
+    devices = list_devices()
+    picked = graphics_cards.index_for(graphics_cards.from_vulkan(devices), wanted)
+    return choose_device(devices) if picked is None else picked
+
+
+def list_devices():
+    """The graphics chips the engine sees, as parse_vulkan_devices gives
+    them; [] when it can't run."""
     folder = engine_dir()       # once: the program and its libraries from one build
     command, env = engine_process.parent_death_command(
         [os.path.join(folder, "whisper-server"), "--help"], _engine_env(folder))
@@ -408,10 +419,10 @@ def find_device():
             logger.warning(f"Could not list graphics devices{why}")
     except Exception as e:
         logger.warning(f"Could not list graphics devices: {e}")
-        return None
+        return []
     devices = parse_vulkan_devices(out)
     logger.info(f"Vulkan devices: {devices}")
-    return choose_device(devices)
+    return devices
 
 
 # --- The speed check -----------------------------------------------------------

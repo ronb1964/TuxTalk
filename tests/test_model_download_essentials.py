@@ -153,7 +153,7 @@ def test_a_model_that_looked_downloaded_but_wont_load_is_fetched_afresh(monkeypa
     from tuxtalk import model_helper as M
     fetched, loads = [], []
 
-    def load(name, device="cpu", compute_type="int8"):
+    def load(name, device="cpu", compute_type="int8", device_index=0):
         loads.append(name)
         if len(loads) == 1:
             raise RuntimeError("Unable to open file 'model.bin' in model")

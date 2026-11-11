@@ -14,6 +14,7 @@ from gi.repository import GLib, Gtk
 
 from .config import Settings
 from .logger import setup_logger
+from .prefs_graphics_card import GraphicsCardRow
 from .prefs_language import LanguageRow, language_summary
 from .prefs_tab import Tab, dropdown, fold, section_header, tip_label
 from .ui_style import WARNING_AMBER, message_dialog, show_message
@@ -177,8 +178,10 @@ class SpeechSection(Tab):
         setup.attach(compat_btn, 0, 0, 2, 1)
         self._build_model_row(setup, 1)
         self._build_device_row(setup, 2)
+        self.graphics_card = GraphicsCardRow(self.win)
+        self.graphics_card.build(setup, 3, self._card_device())
         self.language = LanguageRow(self.win, self.selected_model, self.update_hint)
-        self.language.build(setup, 3, self.config.get("model", Settings.model))
+        self.language.build(setup, 4, self.config.get("model", Settings.model))
         for combo in (self.model_combo, self.device_combo, self.language.combo):
             combo.connect("changed", lambda *_: self.update_hint())
         self.update_hint()
@@ -307,6 +310,21 @@ class SpeechSection(Tab):
         self.device_combo.connect("changed", self._on_device_changed)
         setup.attach(self.device_combo, 1, row, 1, 1)
 
+    def _card_device(self):
+        """The device the Graphics card row lists cards for: the one the
+        Device dropdown shows, but none for Parakeet on CUDA, which runs on
+        the processor."""
+        from .parakeet_engine import is_parakeet
+        device = self.device_combo.get_active_id()
+        if device == "cuda" and is_parakeet(self.selected_model()):
+            return "cpu"
+        return device
+
+    def _picked_card(self):
+        """The Graphics card setting as this window has it."""
+        from .graphics_cards import AUTOMATIC
+        return self.config.get("graphics_card", AUTOMATIC)
+
     def selected_model(self):
         """The model the Model dropdown shows."""
         return self.model_combo.get_active_id() or ""
@@ -322,6 +340,7 @@ class SpeechSection(Tab):
             return
         model = self.selected_model()
         self._relabel_cuda_option(model)
+        self.graphics_card.follow_device(self._card_device())
         self.language.follow_model(model)
         self._update_recommended_row(model)
         from . import language_limit
@@ -431,7 +450,8 @@ class SpeechSection(Tab):
             with self.win.busy():           # as CUDA's download
                 if not ensure_files(self.window, model, confirm=True):
                     return                  # cancelled: nothing changes
-                faster = run_speed_check(self.window, model)
+                self._vulkan_files_ready()
+                faster = run_speed_check(self.window, model, self._picked_card())
             if not faster:
                 # A processor that won was saved by the speed check itself;
                 # the row's recommendation needs it too, or it keeps offering
@@ -729,7 +749,16 @@ class SpeechSection(Tab):
         True if TuxTalk should use the graphics chip."""
         from .vulkan_setup_dialogs import set_up
         with self.win.busy():           # as CUDA's download
-            return set_up(self.window, model, confirm=confirm)
+            ready = set_up(self.window, model, confirm=confirm, card=self._picked_card())
+        if ready:
+            self._vulkan_files_ready()
+        return ready
+
+    def _vulkan_files_ready(self):
+        """Vulkan's engine was just set up: it may be new, and it's what lists
+        Vulkan's cards, so the Graphics card row asks again."""
+        self.graphics_card.forget("vulkan")
+        self.graphics_card.follow_device(self._card_device())
 
     def _switch_to_vulkan_for_model(self, model, confirm=True):
         """Set up Vulkan for *model* (download plus speed check). If it's kept,
@@ -844,7 +873,10 @@ class SpeechSection(Tab):
                 from . import whisper_vulkan
                 if whisper_vulkan.supports_model(model):
                     from .vulkan_setup_dialogs import ensure_files
-                    return ensure_files(self.window, model, False)
+                    ready = ensure_files(self.window, model, False)
+                    if ready:
+                        self._vulkan_files_ready()
+                    return ready
             return fetch_model(self.window, model)
 
     def rollback_download(self, previous):

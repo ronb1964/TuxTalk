@@ -22,6 +22,9 @@ _TUXTALK_VARIABLES = (
 # cuda_preload.py sets CUDA_VISIBLE_DEVICES='' and this beside it, so that a
 # value the user set themselves is told apart from TuxTalk's.
 CUDA_HIDDEN_BY_TUXTALK = "TUXTALK_SET_CUDA_VISIBLE_DEVICES"
+# Set beside CUDA_DEVICE_ORDER when TuxTalk set it (cuda_preload), so the
+# programs it starts keep CUDA's own card order.
+CUDA_ORDER_SET_BY_TUXTALK = "TUXTALK_SET_CUDA_DEVICE_ORDER"
 
 
 def _running_venv() -> str:
@@ -68,6 +71,8 @@ def clean(environ: Mapping[str, str], venv: str | None = None) -> dict[str, str]
         env.pop("LD_LIBRARY_PATH", None)
     if environ.get(CUDA_HIDDEN_BY_TUXTALK):
         env.pop("CUDA_VISIBLE_DEVICES", None)
+    if environ.get(CUDA_ORDER_SET_BY_TUXTALK):
+        env.pop("CUDA_DEVICE_ORDER", None)
     if USERS_GDK_BACKEND in environ:
         env.pop("GDK_BACKEND", None)
         if environ[USERS_GDK_BACKEND]:

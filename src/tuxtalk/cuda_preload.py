@@ -14,7 +14,7 @@ import warnings
 from pathlib import Path
 
 from .config import get_data_dir
-from .launch_env import CUDA_HIDDEN_BY_TUXTALK
+from .launch_env import CUDA_HIDDEN_BY_TUXTALK, CUDA_ORDER_SET_BY_TUXTALK
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -25,6 +25,47 @@ def _cuda_lib_dir():
     lib): this copy's data folder, dev or not, the private one in a Flatpak."""
     return Path(get_data_dir()) / "cuda" / "lib"
 
+
+def _forget_what_tuxtalk_set():
+    """Drop the CUDA settings an earlier TuxTalk process set and this one
+    inherited (the service starts Preferences, which can start the service
+    again), so each process decides them afresh: otherwise Automatic kept an
+    old pick's card order, and a graphics card hidden while CUDA wasn't
+    downloaded stayed hidden once it was."""
+    for marker, variable in ((CUDA_HIDDEN_BY_TUXTALK, "CUDA_VISIBLE_DEVICES"),
+                             (CUDA_ORDER_SET_BY_TUXTALK, "CUDA_DEVICE_ORDER")):
+        if os.environ.pop(marker, None):
+            os.environ.pop(variable, None)
+
+
+def _order_cards_by_pci_bus():
+    """With a card picked in Preferences (graphics_cards.py) and in the
+    computer, have CUDA number the cards by PCI bus, the order graphics_cards
+    lists them in, so the pick means the same card to both. Otherwise CUDA
+    keeps its own order, fastest first, the card Automatic has always used.
+    Must run before anything loads CUDA. A CUDA_DEVICE_ORDER the user set is
+    kept; with one other than PCI_BUS_ID the pick is left out
+    (graphics_cards.cuda_index)."""
+    if "CUDA_DEVICE_ORDER" in os.environ:
+        return
+    try:
+        from .config import load_config
+        settings = load_config()
+    except Exception as e:      # a settings file that won't load: CUDA's own order
+        logger.info(f"Couldn't read the graphics card setting: {e}")
+        return
+    picked = settings.graphics_card if settings.device == "cuda" else ""
+    if not picked:
+        return
+    from . import graphics_cards
+    if graphics_cards.index_for(graphics_cards.cuda_cards(), picked) is None:
+        return                  # taken out: Automatic's fastest card, not the first slot
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ[CUDA_ORDER_SET_BY_TUXTALK] = "1"
+
+
+_forget_what_tuxtalk_set()
+_order_cards_by_pci_bus()
 
 # Decide at import time, before anything loads CUDA, whether the GPU stays visible:
 #   1. TuxTalk's CUDA download exists: leave it visible.

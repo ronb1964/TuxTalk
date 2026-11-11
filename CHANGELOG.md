@@ -3,6 +3,18 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [Unreleased]
+
+- On a computer with more than one graphics card you can pick which one
+  TuxTalk uses: Preferences → General → Change model, device or language →
+  Graphics card, under Device. It lists each card, with how much of its memory
+  is free on CUDA, and only shows up when there's more than one card to choose
+  from. Automatic works as before: CUDA takes the card it ranks fastest and
+  Vulkan the first one that isn't built into the processor, which on a machine
+  with several cards might not be the one you wanted. Dictation, Transcribe a
+  File and Vulkan's speed check all use the card you pick. Asked for by q5sys
+  in Discussion #32.
+
 ## [0.22.0] - 2026-11-08
 
 - The recording indicator now shows in the window you're dictating into, out

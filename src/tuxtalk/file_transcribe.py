@@ -186,7 +186,7 @@ class FileEngine:
 def engine_settings(cfg):
     """The settings load_engine depends on; when any of them changes, the
     engine has to be loaded again."""
-    return (cfg.model, (cfg.device or "cpu").lower(), cfg.language or "",
+    return (cfg.model, (cfg.device or "cpu").lower(), cfg.graphics_card, cfg.language or "",
             getattr(cfg, "auto_languages", ""))
 
 
@@ -211,7 +211,7 @@ def load_engine(cfg):
     if device == "vulkan" and whisper_vulkan.is_installed(name):
         gpu_failed = True       # until it starts
         try:
-            index = whisper_vulkan.find_device()
+            index = whisper_vulkan.find_device(cfg.graphics_card)
             if index is not None:
                 if parakeet:
                     from .parakeet_gpu import ParakeetGpuModel
@@ -238,7 +238,9 @@ def load_engine(cfg):
         try:
             from .cuda_helper import has_cuda_libraries
             if has_cuda_libraries():
+                from .graphics_cards import cuda_index
                 model = whisper_model(name, device="cuda", compute_type="float16",
+                                      device_index=cuda_index(cfg.graphics_card),
                                       local_files_only=True)
                 return FileEngine(model, "whisper", f"{title} on the graphics card (CUDA)",
                                   **common)

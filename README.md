@@ -564,6 +564,8 @@ Before switching to Vulkan, TuxTalk times your graphics chip against your proces
 
 Parakeet doesn't need a graphics card, since it's already fast on the processor. With the device set to Vulkan it runs on the graphics card anyway: on an RTX 4070 Super, a minute of speech took 0.2 seconds instead of 2, with the same accuracy. That needs a second copy of Parakeet in the graphics engine's format (669 MB). The processor copy stays too, as a fallback. CUDA can't run Parakeet.
 
+With more than one graphics card, a **Graphics card** setting shows up under Device, listing each card (on CUDA with how much of its memory is free). Automatic leaves the choice to TuxTalk as before: CUDA takes the card it ranks fastest, Vulkan the first one that isn't built into the processor. The graphics built into a processor isn't listed, since it's no faster than the processor itself. If the card you picked is taken out, TuxTalk goes back to the automatic choice.
+
 </details>
 
 <details>
@@ -574,6 +576,7 @@ Settings are stored in `~/.config/tuxtalk/config.toml`. To keep a copy, use **Sa
 ```toml
 model = "parakeet-v3"     # AI model: parakeet-v3, tiny, base, small, medium, large-v3
 device = "cpu"            # "cpu", "vulkan" (any GPU) or "cuda" (NVIDIA)
+graphics_card = ""        # With several cards, the one to use by name; "" = automatic
 hotkey = "F8"             # Hold-to-talk key (hold to record, release to stop)
 toggle_hotkey = "F9"      # Tap-to-toggle key (press once start, press again stop)
 # Both hotkeys are always active simultaneously

@@ -202,6 +202,9 @@ class Settings:
                                 # English (Open ASR Leaderboard) and fast on a processor.
     # "cpu", "cuda" (NVIDIA via CUDA) or "vulkan" (any GPU via whisper.cpp)
     device: str = "cpu"
+    # On a computer with more than one card, the one to use, by name
+    # (graphics_cards.py); empty lets each engine choose
+    graphics_card: str = ""
     hotkey: str = ""            # hold-to-talk hotkey (empty until user picks during onboarding)
     beeps: bool = True          # beeps on/off
     smart_quotes: bool = True   # "smart quotes"
@@ -878,6 +881,7 @@ def merge_changed_keys(original: dict, current: dict, base: dict) -> dict:
 RESTART_REQUIRED_KEYS = {
     "model",
     "device",
+    "graphics_card",
     # Turning the indicator on would mean constructing a GTK window from the
     # polling path mid-flight. Low value, real risk — restart instead.
     "recording_indicator",

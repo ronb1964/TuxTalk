@@ -179,17 +179,21 @@ def _remember_speed_result(processor_won):
         logger.warning(f"Couldn't save the speed check's result: {e}")
 
 
-def run_speed_check(parent, model):
+def run_speed_check(parent, model, card=None):
     """Time the graphics chip against the processor on a short sample, tell
     the user the result, and return True if the graphics chip should be used,
     False if the processor won, or None when nothing was measured (Stop, an
-    error, no graphics chip): the processor is kept then too."""
+    error, no graphics chip): the processor is kept then too. *card* is the
+    graphics card to time (graphics_cards), the saved one when None."""
+    if card is None:
+        from .config import load_config
+        card = load_config().graphics_card
     result = {}
     cancel = threading.Event()
 
     def work():
         try:
-            device = wv.find_device()
+            device = wv.find_device(card)
             if device is None:
                 result["error"] = "TuxTalk couldn't find a graphics chip it can use."
             else:
@@ -221,9 +225,9 @@ def run_speed_check(parent, model):
     return False
 
 
-def set_up(parent, model, confirm=True):
-    """Download and speed-check the Vulkan engine for *model*. True if TuxTalk
-    should use the graphics chip."""
+def set_up(parent, model, confirm=True, card=None):
+    """Download and speed-check the Vulkan engine for *model* on *card*
+    (run_speed_check). True if TuxTalk should use the graphics chip."""
     if not wv.supports_model(model):
         # English-only and older Whisper variants (small.en, large-v2, ...) have
         # no file in whisper.cpp's format here.
@@ -234,4 +238,4 @@ def set_up(parent, model, confirm=True):
         return False
     if not ensure_files(parent, model, confirm):
         return False
-    return run_speed_check(parent, model)
+    return run_speed_check(parent, model, card)

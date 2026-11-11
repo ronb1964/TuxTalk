@@ -16,7 +16,7 @@ def test_a_vulkan_model_download_reports_success(monkeypatch):
     monkeypatch.setattr(vulkan_setup_dialogs, "ensure_files",
                         lambda parent, m, confirm: downloads.append(m) or True)
     stub = SimpleNamespace(config={"model": "parakeet-v3", "device": "vulkan"}, window=None,
-                           win=SimpleNamespace(busy=nullcontext))
+                           win=SimpleNamespace(busy=nullcontext), _vulkan_files_ready=lambda: None)
     assert SpeechSection.download_selected_model(stub) is True
     assert downloads == ["parakeet-v3"]
 

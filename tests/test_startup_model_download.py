@@ -16,7 +16,7 @@ from tuxtalk import gtk_loop
 
 
 def _settings(model="small", device="cuda"):
-    return SimpleNamespace(model=model, device=device)
+    return SimpleNamespace(model=model, device=device, graphics_card="")
 
 
 @pytest.fixture(autouse=True)

@@ -61,16 +61,17 @@ def _files_to_download(repo_id):
             if getattr(f, 'size', None) is not None]
 
 
-def load_model(model_name, device="cpu", compute_type="int8"):
+def load_model(model_name, device="cpu", compute_type="int8", device_index=0):
     """Load an already-downloaded model, Whisper or Parakeet.
 
     Parakeet loads here only for the processor (on the graphics card it is
-    parakeet_gpu's), so *device* and *compute_type* only apply to Whisper.
+    parakeet_gpu's), so *device*, *compute_type* and *device_index* (which
+    CUDA card, graphics_cards.cuda_index) only apply to Whisper.
     """
     if is_parakeet(model_name):
         return load_parakeet_model()
     return whisper_model(model_name, device=device, compute_type=compute_type,
-                         cpu_threads=os.cpu_count() or 4)
+                         device_index=device_index, cpu_threads=os.cpu_count() or 4)
 
 
 def whisper_model(model_name, **options):
@@ -532,7 +533,7 @@ class BrokenModelFiles(Exception):
 
 
 def download_model_with_progress(model_name, device="cpu", compute_type="int8", parent=None,
-                                 show_confirmation=True, dialogs=True):
+                                 show_confirmation=True, dialogs=True, device_index=0):
     """
     Load a model, first downloading it behind a progress dialog if needed.
 
@@ -546,6 +547,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             thread runs Gtk.main()). A downloaded model that won't load then
             raises BrokenModelFiles instead of downloading again, and one
             that isn't downloaded returns None instead of downloading.
+        device_index: Which CUDA card (graphics_cards.cuda_index)
 
     Returns:
         WhisperModel (or ParakeetModel) instance, or None if cancelled/failed
@@ -556,7 +558,8 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     if cached:
         logger.info(f"Model {model_name} already cached, loading directly (no download window)")
         try:
-            return load_model(model_name, device=device, compute_type=compute_type)
+            return load_model(model_name, device=device, compute_type=compute_type,
+                              device_index=device_index)
         except Exception as e:
             # Broken files are downloaded again; a device problem (the files
             # load on the processor) is the caller's to report. Parakeet's
@@ -600,7 +603,8 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             return False
         report("Loading model...", 95)
         try:
-            model = load_model(model_name, device=device, compute_type=compute_type)
+            model = load_model(model_name, device=device, compute_type=compute_type,
+                               device_index=device_index)
         except Exception as e:
             logger.error(f"Model download failed: {e}")
             report(f"Couldn't load the model: {e}", 0)
