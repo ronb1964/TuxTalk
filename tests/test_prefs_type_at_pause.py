@@ -136,6 +136,16 @@ def test_one_choice_never_leaves_both_on(win, choice, pause, box):
     assert (win.win.config["chunked_dictation"], win.win.config["live_text"]) == (pause, box)
 
 
+@pytest.mark.parametrize("device", ["cpu", "vulkan"])
+def test_the_box_says_when_this_computer_cant_show_it(win, device):
+    """On the processor the box never opens: picked anyway, with no word
+    why, it would look broken."""
+    win.win.config["device"] = device
+    win.while_talking.set_active_id("box")
+    on_processor = win.while_talking_note.get_text() == prefs_type_at_pause.BOX_ON_PROCESSOR
+    assert on_processor is (device == "cpu")
+
+
 def test_the_setting_going_off_is_written_first(win):
     """The service reads each write: it must never see both on."""
     win.while_talking.set_active_id("box")

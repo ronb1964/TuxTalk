@@ -732,10 +732,12 @@ in the box; let go, and the box closes as your text is typed.
 
 ### How it works
   • It needs the speech model on a graphics card (the TuxTalk menu says where it
-    runs). On the processor the box stays closed, so your typing never waits on it.
+    runs). On the processor the box stays closed, so your typing never waits on it,
+    and a short message says so once.
   • The box updates about twice a second. If reading it again ever gets slow, the box
     goes away until your next dictation, and if your graphics card is too slow
-    for it, until TuxTalk restarts (Restart Service). Your text is still typed as usual.
+    for it, until TuxTalk restarts (Restart Service), and a short message says so.
+    Your text is still typed as usual.
   • It shows the words as they're heard: numbers, commands like "new line" and AI
     corrections are worked out when the text is typed.
   • It's that or Type at pause, not both: with both, each phrase would show in the box

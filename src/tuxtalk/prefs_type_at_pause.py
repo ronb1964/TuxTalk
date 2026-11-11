@@ -36,6 +36,12 @@ WHILE_TALKING = {
               "afterwards. Works on the processor too."),
 }
 
+# The box's line when the speech model runs on the processor (Device), where
+# the box never opens: picked anyway, it would look broken.
+BOX_ON_PROCESSOR = ("Your speech model runs on the processor, so the box won't open: it "
+                    "needs the model on a graphics card (General → Change model, device "
+                    "or language).")
+
 
 def while_talking(config):
     """The WHILE_TALKING id *config* stands for. Both settings on (an older
@@ -228,7 +234,10 @@ class TypeAtPause(Tab):
         """Type at pause's settings show only while it's the choice; the
         line under the dropdown says what the choice does."""
         choice = self.while_talking.get_active_id() or "nothing"
-        self.while_talking_note.set_text(WHILE_TALKING[choice][3])
+        note = WHILE_TALKING[choice][3]
+        if choice == "box" and self.config.get("device", "cpu") == "cpu":
+            note = BOX_ON_PROCESSOR
+        self.while_talking_note.set_text(note)
         on = choice == "pause"
         self.tap_fold.set_visible(on)
         if on:

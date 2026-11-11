@@ -24,8 +24,11 @@ before 0.15.0, so older entries use that name.
   be that slow) it stays off until TuxTalk restarts, so your typed text is
   never held up for long. The box shows the words as the model hears them,
   before numbers and commands are worked out, and it stays empty for words
-  said into a password field. Asked for in the live-text poll (Discussion
-  #24).
+  said into a password field. When the box can't show, because the speech
+  model runs on the processor or the graphics chip is too slow, a short
+  message over your window says so once, and Preferences says so beside the
+  choice when the model is set to run on the processor. Asked for in the
+  live-text poll (Discussion #24).
 - TuxTalk Labs has one While you talk choice instead of two tickboxes: show
   the words in a box, or type each phrase when you pause. With both on, the
   box showed a phrase and then emptied as it was typed. A settings file with

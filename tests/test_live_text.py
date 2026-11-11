@@ -44,7 +44,16 @@ def _speech(seconds, rate=16000):
 
 
 @pytest.fixture
-def talking(monkeypatch):
+def floated(monkeypatch):
+    """The messages shown over the window being dictated into."""
+    shown = []
+    monkeypatch.setattr(live_text.screen_message, "show_over_active_window",
+                        lambda text, **k: shown.append(text))
+    return shown
+
+
+@pytest.fixture
+def talking(monkeypatch, floated):
     """A recording running with live text on; returns (recording, window,
     the length of each piece of audio transcribed)."""
     window, heard = Window(), []
@@ -209,9 +218,10 @@ def test_a_read_just_under_the_limit_is_shown(talking, monkeypatch):
     assert window.shown == ["just in time"]
 
 
-def test_a_chip_too_slow_twice_ends_live_text_while_it_runs(talking, monkeypatch):
+def test_a_chip_too_slow_twice_ends_live_text_while_it_runs(talking, monkeypatch, floated):
     """A built-in graphics chip can be no faster than the processor, and the
-    first read of every phrase would hold up the typing again."""
+    first read of every phrase would hold up the typing again. The user is
+    told, once: a box that goes away for good looks broken."""
     rec, window, _heard = talking
     reads = []
 
@@ -223,6 +233,7 @@ def test_a_chip_too_slow_twice_ends_live_text_while_it_runs(talking, monkeypatch
         rec.chunks_submitted = phrase
         live_text.tick(now=100.0 + phrase)
     assert len(reads) == live_text.SLOW_READS and window.shown == []
+    assert floated == [live_text.TOO_SLOW]
     monkeypatch.setattr(engine, "model", Model())       # Power Saving let it go, and back
     rec.chunks_submitted = 3
     live_text.tick(now=110.0)
@@ -374,16 +385,28 @@ def test_no_graphics_card_means_no_reads(monkeypatch, why):
     assert not engine.on_graphics_card()
 
 
-def test_on_the_processor_nothing_is_read(talking, monkeypatch, caplog):
-    """A read there can't be kept short, and the typed text would wait on it."""
+def test_on_the_processor_nothing_is_read_and_the_user_is_told_once(talking, monkeypatch,
+                                                                     caplog, floated):
+    """A read there can't be kept short, and the typed text would wait on it;
+    a box that never opens, with no word why, looks broken."""
     _rec, window, heard = talking
+    monkeypatch.setattr(engine, "_running_engine", ("parakeet", "cpu"))
     monkeypatch.setattr(engine, "on_graphics_card", lambda: False)
     monkeypatch.setattr(live_text, "_said_processor", False)
     with caplog.at_level(logging.INFO, logger="tuxtalk.live_text"):
         live_text.tick(now=100.0)
         live_text.tick(now=101.0)
     assert heard == [] and window.shown == []
+    assert floated == [live_text.ON_PROCESSOR]
     assert len([r for r in caplog.records if "graphics card" in r.getMessage()]) == 1
+
+
+def test_a_model_still_loading_says_nothing_about_the_processor(talking, monkeypatch, floated):
+    """Power Saving let the model go: it's on its way back, wherever it runs."""
+    monkeypatch.setattr(engine, "model", None)
+    monkeypatch.setattr(live_text, "_said_processor", False)
+    live_text.tick(now=100.0)
+    assert floated == [] and live_text._said_processor is False
 
 
 def test_words_said_into_a_password_field_stay_hidden_after_leaving_it(talking, monkeypatch):

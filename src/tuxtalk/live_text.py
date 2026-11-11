@@ -43,13 +43,20 @@ from . import atspi_helper, dictation_text, dictation_worker, engine, focused_wi
 from . import recording, resampling
 from . import live_settings as live
 from . import recording_state as rs
-from . import type_at_pause, x11_desktop
+from . import screen_message, type_at_pause, x11_desktop
 from .logger import quietly, setup_logger
 
 logger = setup_logger(__name__)
 
 # How often the words are read again, at most.
 INTERVAL_S = 0.4
+# Said once a session over the window being dictated into, when the box
+# can't show: otherwise it looks like live text is broken.
+ON_PROCESSOR = ("Live text is off: your speech model runs on the processor. "
+                "Your text is still typed.")
+TOO_SLOW = ("Live text is off for now: your graphics chip is too slow for it. "
+            "Your text is still typed.")
+
 # Less audio than this holds a word or two at most: not worth a read.
 SHORTEST_S = 0.5
 # A phrase whose read took longer than this, checks included, isn't read
@@ -94,7 +101,7 @@ _seen = None
 # (recording, phrase number, samples at the recording's rate whose words
 # are kept, those words), once a long phrase's start has been settled.
 _settled = None
-# The processor was found doing the work, and the log said so.
+# The processor was found doing the work, and the user was told.
 _said_processor = False
 # (engine.running(), how many short reads with it were too slow since a
 # fast one of about as much audio, the seconds the last slow one heard); the engine as (model,
@@ -131,14 +138,17 @@ def _wanted(rec):
 
 
 def _on_graphics_card():
-    """Whether the model runs on a graphics card; the first time it doesn't,
-    the log says why the box stays closed."""
+    """Whether the model runs on a graphics card; the first time it runs on
+    the processor, the user is told why the box stays closed. Not while
+    it's loading or resting (Power Saving): that's no reason to say so."""
     global _said_processor
     if engine.on_graphics_card():
         return True
-    if not _said_processor:
+    running = engine.running()
+    if not _said_processor and engine.model is not None and running and running[1] == "cpu":
         _said_processor = True
         logger.info("Live text is on, but it needs the speech model on a graphics card")
+        screen_message.show_over_active_window(ON_PROCESSOR)
     return False
 
 
@@ -175,6 +185,7 @@ def _log_slow_read(took):
     if _model_too_slow():
         logger.info(f"Live text stays off while this engine runs: a read took {took:.2f}s, "
                     "too long to show the words without holding up the typing")
+        screen_message.show_over_active_window(TOO_SLOW)
     else:
         logger.info(f"Live text: a read took {took:.2f}s, so that phrase isn't read again")
 
