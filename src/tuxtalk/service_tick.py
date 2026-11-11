@@ -12,6 +12,7 @@ from . import (
     hotkey_keys,
     keyboard_grab,
     keyboard_output,
+    live_text,
     mouse_grid,
     pipeline,
     recording,
@@ -147,6 +148,7 @@ def tick(cfg, svc: "ServiceState") -> "hotkey_keys.Hotkeys | None":
     _take_start_request(cfg, svc, now)
     _take_stop_request(cfg, svc, now)
     _end_recording_a_command_cancelled()
+    live_text.tick(now)
     # Not mid-dictation, nor with one waiting to be typed; idle counts from key-up.
     if (svc.timeout_enabled and not rs.state.is_recording and engine.model is not None
             and dictation_worker.idle()

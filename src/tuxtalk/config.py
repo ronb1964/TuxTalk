@@ -219,6 +219,9 @@ class Settings:
     # TuxTalk Labs: apps, windows, keys and the mouse by voice ("open Firefox",
     # "close window", "new tab", "mouse grid"); the name is from when it only opened apps
     open_apps: bool = False
+    # TuxTalk Labs: what's been said so far, in a box under the indicator
+    # while dictating (live_text.py)
+    live_text: bool = False
     # No closing period in terminals and code editors, no starting capital in terminals
     adapt_to_app: bool = True
     # Press Enter after every dictation, as if each ended with "press enter"
@@ -938,6 +941,7 @@ LIVE_APPLIED_KEYS = {
     "numbers_small_as_words",
     "voice_navigation",
     "open_apps",
+    "live_text",
     "adapt_to_app",
     "press_enter_after",
     "press_enter_delay",

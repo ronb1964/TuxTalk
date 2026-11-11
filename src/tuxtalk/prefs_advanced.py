@@ -337,8 +337,24 @@ class AdvancedTab(Tab):
         row = self._labs_open_apps(grid, row)
         self.type_at_pause = TypeAtPause(self.win)
         row = self.type_at_pause.build(grid, row)
+        row = self._labs_live_text(grid, row)
 
         self._labs_links(grid, row)
+
+    def _labs_live_text(self, grid, row):
+        """Live text (live_text.py): its switch; returns the next row."""
+        grid.attach(subheading("Live text"), 0, row, 2, 1)
+        check = Gtk.CheckButton(label="Show the words while you talk")
+        check.set_active(bool(self.config.get("live_text", False)))
+        check.set_tooltip_text(
+            "A box under the recording indicator shows what you've said so far,\n"
+            "about once a second, so you can see it's hearing you right. What gets\n"
+            "typed doesn't change. Best with a graphics card; on the processor the\n"
+            "box updates less often.")
+        check.set_margin_start(LABS_INDENT)
+        check.connect("toggled", lambda c: self.update_config("live_text", c.get_active()))
+        grid.attach(check, 0, row + 1, 2, 1)
+        return row + 2
 
     def _labs_editing(self, grid, row):
         """Editing by voice: voice editing, select and move, Show tips again;

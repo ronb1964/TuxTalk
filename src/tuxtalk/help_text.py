@@ -722,6 +722,20 @@ you can go on talking.
     you're still talking, make the pause longer; if it never flashes when you pause,
     make it shorter.
 
+## 🧪 Live Text
+See what you've said so far while you're still talking, in a box under the recording
+indicator. What gets typed doesn't change.
+
+Turn it on in <b>Preferences → Advanced → TuxTalk Labs → Live text</b>. Then hold
+<b>{hold}</b>, say a few sentences, and watch them come up in the box; let go, and the box
+closes as your text is typed.
+
+### How it works
+  • The box updates about once a second. On a graphics card that costs next to
+    nothing; on the processor it updates less often.
+  • With Type at pause, the box holds only what hasn't been typed yet.
+  • It never takes the keyboard or a click, so you can keep working underneath it.
+
 ## Transcribe a File
 
 ### Turning a recording into text (TuxTalk menu → Transcribe a File...)

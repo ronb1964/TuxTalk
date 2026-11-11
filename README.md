@@ -155,7 +155,7 @@ You can copy the text or save it as a text file, or as subtitles for the video. 
 
 ### Try what's coming next
 
-TuxTalk Labs is at the bottom of Preferences, Advanced. It's for features that work but aren't finished, like Type at pause, voice editing ("edit that, make it shorter") and running your apps, windows and mouse by voice. They're off until you turn them on, and there's a link right there to tell me how they're working for you.
+TuxTalk Labs is at the bottom of Preferences, Advanced. It's for features that work but aren't finished, like Type at pause, Live text (a box that shows what you've said while you're still talking), voice editing ("edit that, make it shorter") and running your apps, windows and mouse by voice. They're off until you turn them on, and there's a link right there to tell me how they're working for you.
 
 </td>
 </tr>

@@ -146,6 +146,7 @@ _MIRRORED = [
     ({"swiss_spelling": True}, "swiss_spelling", True),
     ({"voice_navigation": True}, "voice_navigation", True),
     ({"open_apps": True}, "open_apps", True),
+    ({"live_text": True}, "live_text", True),
     ({"adapt_to_app": False}, "adapt_to_app", False),
     ({"press_enter_after": True}, "press_enter_after", True),
     ({"auto_languages": "en,es"}, "auto_languages", ("en", "es")),

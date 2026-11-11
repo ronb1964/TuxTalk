@@ -59,9 +59,12 @@ numbers_language = "en"
 # Select and move by voice (TuxTalk Labs, voice_navigation.py).
 voice_navigation = False
 
-# Open apps by voice (TuxTalk Labs, open_app.py). Off in the Flatpak, whose
-# Labs are hidden: a backup from another install can't turn it on there.
+# Open apps by voice (TuxTalk Labs, open_app.py); off in the Flatpak (_labs).
 open_apps = False
+
+# What's been said so far, shown while dictating (TuxTalk Labs, live_text.py);
+# off in the Flatpak (_labs).
+live_text = False
 
 # Plain text in terminals and code editors (app_kind, plain_for_app).
 adapt_to_app = True
@@ -91,12 +94,18 @@ chunk_cfg = None
 chunk_context_marks = True
 
 
+def _labs(on):
+    """A Labs setting's switch: off in the Flatpak, whose Labs are hidden, so
+    a backup from another install can't turn one on there."""
+    return bool(on) and not os.environ.get("FLATPAK_ID")
+
+
 def apply(cfg):
     """Bring every live option in line with *cfg*, at startup and on each
     settings reload; start or stop the AI engine."""
     global remove_fillers, ai_engine, auto_stop_seconds, ai_corrections, voice_editing
     global swiss_spelling, numbers_mode, numbers_language, voice_navigation, adapt_to_app
-    global open_apps
+    global open_apps, live_text
     global auto_languages, press_enter_after
     global chunk_pause_seconds, chunk_cfg, chunk_context_marks
     global log_transcripts, usage_stats, restore_clipboard, pause_media, duck_audio
@@ -122,7 +131,8 @@ def apply(cfg):
     remove_fillers = bool(cfg.remove_fillers)
     swiss_spelling = bool(cfg.swiss_spelling)
     voice_navigation = bool(cfg.voice_navigation)
-    open_apps = bool(cfg.open_apps) and not os.environ.get("FLATPAK_ID")
+    open_apps = _labs(cfg.open_apps)
+    live_text = _labs(cfg.live_text)
     adapt_to_app = bool(cfg.adapt_to_app)
     press_enter_after = bool(cfg.press_enter_after)
     send_countdown.configure(cfg)

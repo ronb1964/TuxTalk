@@ -418,8 +418,7 @@ def cancel_recording(rec, beeps_on: bool, notify_on: bool, reason="Cancelled"):
     if notify_on:
         notify_module.notify(reason, "")
 
-    if indicator:
-        indicator.hide_indicator()
+    _hide_windows()
     tray_link.notify_recording_state(False)
     _leave_held_send_unsent(rec)
 
@@ -515,9 +514,16 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
     resume_media_players()
     tray_link.notify_recording_state(False)  # the tray icon shows recording stopped
     trim_auto_stop_tail(rec, frames)
+    _hide_windows()
+    return frames, rec.samplerate
+
+
+def _hide_windows():
+    """The recording ended: the indicator and the live text window go."""
+    from . import live_text
     if indicator:
         indicator.hide_indicator()
-    return frames, rec.samplerate
+    live_text.hide()
 
 
 def _dropped_as_silent(rec, beeps_on: bool, notify_on: bool) -> bool:

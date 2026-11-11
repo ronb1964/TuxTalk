@@ -266,11 +266,17 @@ def _start_gtk(cfg) -> bool:
 
 
 def _make_gtk_parts(cfg) -> None:
-    """On GTK's thread: the stand-in D-Bus service, and the indicator if it's on."""
+    """On GTK's thread: the stand-in D-Bus service, the indicator if it's on,
+    and the live text window."""
     global dbus_service
     dbus_service = _start_dbus_stand_in(cfg)
     if cfg.recording_indicator:
         _make_indicator(cfg)
+    # Made whether or not live text is on: it's a Labs setting that applies
+    # without a restart, and the window costs nothing until it's shown.
+    from . import live_text
+    from .live_text_window import LiveTextWindow
+    live_text.window = LiveTextWindow(lambda: recording.indicator)
 
 
 def _start_dbus_stand_in(cfg):

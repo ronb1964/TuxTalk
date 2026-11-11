@@ -5,6 +5,8 @@ CUDA or the graphics card through Vulkan.
 
 Every engine takes 16 kHz mono (SAMPLE_RATE); recordings are resampled to
 it."""
+import contextlib
+import logging
 import sys
 import threading
 import time
@@ -16,6 +18,29 @@ from .config import Settings, load_config
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
+
+# Set on a thread inside quietly(): live text reads the unfinished audio again
+# about once a second, and those transcriptions would be most of the log.
+_quiet = threading.local()
+
+
+def _not_quiet(record):
+    """The logger's filter: drop info lines on a thread inside quietly()."""
+    return record.levelno > logging.INFO or not getattr(_quiet, "on", False)
+
+
+logger.addFilter(_not_quiet)
+
+
+@contextlib.contextmanager
+def quietly():
+    """Transcribe in this block without the usual info lines (timing, the
+    raw text); warnings are still logged."""
+    _quiet.on = True
+    try:
+        yield
+    finally:
+        _quiet.on = False
 
 # --- Runtime state ---
 SAMPLE_RATE = 16000

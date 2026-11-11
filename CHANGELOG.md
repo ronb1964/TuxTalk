@@ -5,6 +5,14 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- New in TuxTalk Labs: Live text. Turn it on under Preferences → Advanced →
+  TuxTalk Labs, and while you dictate, a box under the recording indicator
+  shows what you've said so far, the whole thing, updated about once a second.
+  What gets typed doesn't change, and the box takes no keys or clicks. It reads
+  the audio again with the model you already have, only when nothing else is
+  being transcribed, so there's nothing to download; on a graphics card that
+  costs a few hundredths of a second. Asked for in the live-text poll
+  (Discussion #24).
 - On a computer with more than one graphics card you can pick which one
   TuxTalk uses: Preferences → General → Change model, device or language →
   Graphics card, under Device. It lists each card, with how much of its memory
