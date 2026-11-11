@@ -87,8 +87,8 @@ class LiveTextWindow:
             if self._win is None:
                 self._build()
             self._layout.set_text(words, -1)
-            # For a screen reader, without announcing it: the box never has
-            # the focus, so a changed description is read only when asked for.
+            # For a screen reader to read out on request. The box never has
+            # the focus, so screen readers aren't told to announce each change.
             self._win.get_accessible().set_description(words)
             self._fit()
             self._win.queue_draw()

@@ -27,6 +27,10 @@ class Window:
         self.up = False
 
 
+class Model:
+    """Stands in for the loaded speech model; only its identity matters here."""
+
+
 def _speech(seconds, rate=16000):
     """*seconds* of int16 audio blocks, as the audio callback keeps them."""
     samples = (np.sin(np.arange(int(rate * seconds)) / 9) * 8000).astype(np.int16)
@@ -43,6 +47,8 @@ def talking(monkeypatch):
     monkeypatch.setattr(live_text, "window", window)
     monkeypatch.setattr(live_text, "_last_read", 0.0)
     monkeypatch.setattr(live_text, "_skip", None)
+    monkeypatch.setattr(live_text, "_slow", (None, 0))
+    monkeypatch.setattr(engine, "model", Model())
     monkeypatch.setattr(engine, "on_graphics_card", lambda: True)
     monkeypatch.setattr(live_text, "_shown", None)
     monkeypatch.setattr(live, "live_text", True)
@@ -160,6 +166,45 @@ def test_a_slow_read_ends_live_text_for_that_phrase_only(talking, monkeypatch):
     monkeypatch.setattr(live_text, "STOP_AFTER_S", 60.0)
     rec.chunks_submitted += 1
     live_text.tick(now=102.0)
+    assert window.shown == ["so far so good"]
+
+
+def test_parakeet_moving_to_the_processor_ends_the_reads(monkeypatch):
+    """After two failures on the chip Parakeet works on the processor for the
+    rest of the session, where a read could hold the typed text up."""
+    class Parakeet:
+        on_processor = False
+    model = Parakeet()
+    monkeypatch.setattr(engine, "_running_engine", ("parakeet", "vulkan"))
+    monkeypatch.setattr(engine, "model", model)
+    assert engine.on_graphics_card()
+    model.on_processor = True
+    assert not engine.on_graphics_card()
+
+
+@pytest.mark.parametrize("why", ["CUDA fell back", "resting"])
+def test_no_graphics_card_means_no_reads(monkeypatch, why):
+    """CUDA failing over to the processor records it there; Power Saving
+    lets the model go, and a read would wait for it to load again."""
+    monkeypatch.setattr(engine, "_running_engine", ("small", "cpu" if why == "CUDA fell back"
+                                                    else "cuda"))
+    monkeypatch.setattr(engine, "model", None if why == "resting" else Model())
+    assert not engine.on_graphics_card()
+
+
+def test_a_model_too_slow_twice_ends_live_text_while_it_runs(talking, monkeypatch):
+    """A built-in graphics chip can be no faster than the processor, and the
+    first read of every phrase would hold up the typing again."""
+    rec, window, heard = talking
+    monkeypatch.setattr(live_text, "STOP_AFTER_S", -1.0)
+    for phrase in range(3):
+        rec.chunks_submitted = phrase
+        live_text.tick(now=100.0 + phrase)
+    assert len(heard) == live_text.SLOW_READS and window.shown == []
+    monkeypatch.setattr(engine, "model", Model())       # another model loaded
+    monkeypatch.setattr(live_text, "STOP_AFTER_S", 60.0)
+    rec.chunks_submitted = 3
+    live_text.tick(now=110.0)
     assert window.shown == ["so far so good"]
 
 
@@ -292,8 +337,10 @@ def test_submit_if_idle_queues_nothing_while_the_worker_has_work(real_worker):
 def test_a_read_isnt_queued_alongside_a_phrase_being_handed_over(real_worker, monkeypatch):
     """The audio thread hands a phrase over while live text asks whether the
     worker is free: the read must see the phrase, not slip in before it."""
-    putting, finish = threading.Event(), threading.Event()
-    phrase = object()
+    putting, finish, typed = threading.Event(), threading.Event(), threading.Event()
+
+    def phrase():
+        typed.wait(5)                       # still being typed when the answer comes
     queue_put = real_worker._queue.put
 
     def slow_put(job):
@@ -302,18 +349,60 @@ def test_a_read_isnt_queued_alongside_a_phrase_being_handed_over(real_worker, mo
             finish.wait(5)
         queue_put(job)
     monkeypatch.setattr(real_worker._queue, "put", slow_put)
-    handing_over = threading.Thread(target=real_worker.submit, args=(phrase,))
-    handing_over.start()
-    assert putting.wait(5)
     answer = []
+    handing_over = threading.Thread(target=real_worker.submit, args=(phrase,))
     asking = threading.Thread(target=lambda: answer.append(real_worker.submit_if_idle(print)))
-    asking.start()
-    asking.join(0.2)
-    finish.set()
-    handing_over.join(5)
-    asking.join(5)
-    monkeypatch.setattr(real_worker._queue, "put", queue_put)
+    try:
+        handing_over.start()
+        assert putting.wait(5)
+        asking.start()
+        asking.join(0.2)
+        finish.set()
+        handing_over.join(5)
+        asking.join(5)
+    finally:
+        finish.set()
+        typed.set()
     assert answer == [False]
+
+
+def test_a_slow_read_ending_after_the_stop_keeps_no_recording(talking, real_worker,
+                                                              monkeypatch):
+    """Its audio (the whole dictation without Type at pause) mustn't stay in
+    memory until some later phrase is too slow."""
+    rec, _window, _heard = talking
+    reading, release = threading.Event(), threading.Event()
+
+    def held(audio, language):
+        reading.set()
+        release.wait(5)
+        return "late"
+    monkeypatch.setattr(engine, "transcribe", held)
+    monkeypatch.setattr(live_text, "STOP_AFTER_S", -1.0)
+    live_text.tick(now=100.0)
+    assert reading.wait(5)
+    monkeypatch.setattr(rs.state, "is_recording", False)
+    live_text.hide()
+    release.set()
+    assert real_worker.drain(5)
+    assert live_text._skip is None
+
+
+def test_only_the_newest_minute_is_converted(talking, monkeypatch):
+    """Converting the whole recording every second costs more as it grows."""
+    rec, _window, heard = talking
+    second = _speech(1)[0]
+    rec.frames = [second] * 90              # a minute and a half, in one-second blocks
+    converted = []
+    real = live_text.recording.frames_f32
+
+    def counting(frames):
+        converted.append(len(frames))
+        return real(frames)
+    monkeypatch.setattr(live_text.recording, "frames_f32", counting)
+    live_text.tick(now=100.0)
+    assert converted == [int(live_text.MAX_AUDIO_S)]
+    assert heard == [int(live_text.MAX_AUDIO_S * 16000)]
 
 
 def test_live_reads_leave_the_log_alone_but_not_its_warnings():
@@ -338,11 +427,17 @@ def test_a_read_leaves_no_info_lines_in_the_log(talking, monkeypatch):
     quiet = []
 
     def transcribe(audio, language):
-        quiet.append(tt_logger.is_quiet())
+        quiet.append(("read", tt_logger.is_quiet()))
         return "so far"
+
+    def is_password(budget=None):
+        quiet.append(("check", tt_logger.is_quiet()))
+        return False
     monkeypatch.setattr(engine, "transcribe", transcribe)
+    monkeypatch.setattr(focused_window, "is_password", is_password)
     live_text.tick(now=100.0)
-    assert quiet == [True] and window.shown == ["so far"]
+    assert quiet == [("check", True), ("read", True), ("check", True)]
+    assert window.shown == ["so far"]
 
 
 def test_the_labs_switch_turns_it_on(prefs_window):

@@ -13,9 +13,12 @@ only when it has nothing else to do (submit_if_idle), and does nothing if
 the phrase it was handed was cut, or the recording stopped, while it
 waited. A read already running can't be stopped, so reads run only with
 the model on a graphics card, where a minute of speech takes a fifth of a
-second, and a phrase stops being read once a read of it takes longer than
-STOP_AFTER_S. Each read holds about a second more audio than the one
-before, so none runs much past half a second.
+second on a desktop card. A read that takes longer than STOP_AFTER_S ends reads of
+that phrase, and the second with the same model ends live text while it
+runs: a built-in graphics chip can be no faster than the processor, and
+the first read of every phrase would cost that again. Nothing stops a read
+the driver itself stalls, but a stalled driver would hold up the
+dictation's own transcription just the same.
 
 Words said into a password field never show: the check that keeps them
 from being typed (focused_window.is_password) runs before and after every
@@ -24,8 +27,10 @@ the cursor leaves the field.
 """
 import threading
 import time
+import weakref
 
-from . import dictation_text, dictation_worker, engine, focused_window, recording, resampling
+from . import atspi_helper, dictation_text, dictation_worker, engine, focused_window
+from . import recording, resampling
 from . import live_settings as live
 from . import recording_state as rs
 from . import type_at_pause, x11_desktop
@@ -37,9 +42,11 @@ logger = setup_logger(__name__)
 INTERVAL_S = 1.0
 # Less audio than this holds a word or two at most: not worth a read.
 SHORTEST_S = 0.5
-# A phrase whose read took longer than this isn't read again: the next,
-# a second longer, could hold the typed text up past half a second.
+# A phrase whose read took longer than this isn't read again: the next
+# holds about a second more audio, and the typed text could wait on it.
 STOP_AFTER_S = 0.25
+# Slow reads with one model before live text stays off while it runs.
+SLOW_READS = 2
 # The newest audio a read looks at, which bounds how long a read takes
 # without Type at pause, where the audio grows for the whole dictation.
 MAX_AUDIO_S = 60.0
@@ -57,6 +64,9 @@ _skip = None
 _shown = None
 # The processor was found doing the work, and the log said so.
 _said_processor = False
+# (weak reference to the model, how many of its reads were too slow); weak,
+# so a model let go (Power Saving, a new model) isn't kept in memory.
+_slow = (None, 0)
 
 
 def tick(now=None):
@@ -69,7 +79,7 @@ def tick(now=None):
     _close_after_a_cut(rec)
     if _reading.is_set() or now - _last_read < INTERVAL_S:
         return
-    if not _on_graphics_card():
+    if not _on_graphics_card() or _model_too_slow():
         return
     with type_at_pause.chunk_lock:
         frames, phrase = list(rec.frames), rec.chunks_submitted
@@ -99,6 +109,28 @@ def _on_graphics_card():
     return False
 
 
+def _model_too_slow():
+    """Whether SLOW_READS reads with the model loaded now were too slow."""
+    ref, count = _slow
+    return count >= SLOW_READS and ref is not None and ref() is engine.model
+
+
+def _note_slow_read(took):
+    """Count a read over STOP_AFTER_S against the model loaded now."""
+    global _slow
+    ref, count = _slow
+    if engine.model is None:
+        return
+    if ref is None or ref() is not engine.model:
+        ref, count = weakref.ref(engine.model), 0
+    _slow = (ref, count + 1)
+    if count + 1 >= SLOW_READS:
+        logger.info(f"Live text stays off while this model runs: a read took {took:.2f}s, "
+                    "too long to show the words without holding up the typing")
+    else:
+        logger.info(f"Live text stops for this phrase: a read took {took:.2f}s")
+
+
 def _same(pair, rec, phrase):
     """Whether *pair* (_skip or _shown) is *phrase* of this very recording."""
     return pair is not None and pair[0] is rec and pair[1] == phrase
@@ -107,7 +139,7 @@ def _same(pair, rec, phrase):
 def _close_after_a_cut(rec):
     """Type at pause typed the phrase the window shows: its words go."""
     shown = _shown          # once: the worker may change it meanwhile
-    if shown is not None and shown[0] is rec and not _same(shown, rec, rec.chunks_submitted):
+    if shown is not None and shown[0] is rec and shown[1] != rec.chunks_submitted:
         _close()
 
 
@@ -126,11 +158,13 @@ def _read(rec, frames, rate, phrase):
         # The checks log too (a slow accessibility bus), once a second here.
         with quietly():
             words = _hear(rec, frames, rate, phrase)
-            fresh = words is not None and _current(rec, phrase) and _may_show(rec, phrase)
+            fresh = (words is not None and _current(rec, phrase)
+                     and _may_show(rec, phrase, atspi_helper.RECHECK_BUDGET_S))
         took = time.monotonic() - started
         if took > STOP_AFTER_S:
+            if _current(rec, phrase):
+                _note_slow_read(took)
             _stop_reading(rec, phrase)
-            logger.info(f"Live text stops for this phrase: reading it took {took:.2f}s")
         elif fresh:
             _show(rec, phrase, words)
     finally:
@@ -148,10 +182,11 @@ def _hear(rec, frames, rate, phrase):
     return engine.transcribe(audio, getattr(live.settings, "language", None)) or ""
 
 
-def _may_show(rec, phrase):
+def _may_show(rec, phrase, budget=None):
     """False, with the window closed, in a password field (and the phrase
-    not read again) or where the box would end Cinnamon's show desktop."""
-    if focused_window.is_password():
+    not read again) or where the box would end Cinnamon's show desktop.
+    *budget* is how long the accessibility bus may take to answer."""
+    if focused_window.is_password(budget):
         _stop_reading(rec, phrase)
         return False
     if x11_desktop.popup_ends_show_desktop():
@@ -161,9 +196,11 @@ def _may_show(rec, phrase):
 
 
 def _stop_reading(rec, phrase):
-    """No more reads of *phrase*, and its words come down."""
+    """No more reads of *phrase*, and its words come down. A read finishing
+    after the recording ended keeps nothing: hide() let it go already."""
     global _skip
-    _skip = (rec, phrase)
+    if _current(rec, phrase):
+        _skip = (rec, phrase)
     _close()
 
 

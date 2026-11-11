@@ -13,8 +13,9 @@ before 0.15.0, so older entries use that name.
   reads the audio again with the model you already have, only when nothing
   else is being transcribed, and a read there takes a few hundredths of a
   second. If one ever takes over a quarter of a second, the box stops until
-  your next pause or dictation, so your typed text is never held up for
-  long. The box shows the words as the model hears them, before numbers and
+  your next pause or dictation, and if that happens twice (a built-in
+  graphics chip can be that slow) it stays off until TuxTalk loads the model
+  again, so your typed text is never held up for long. The box shows the words as the model hears them, before numbers and
   commands are worked out, and it stays empty for words said into a password
   field. Asked for in the live-text poll (Discussion #24).
 - On a computer with more than one graphics card you can pick which one

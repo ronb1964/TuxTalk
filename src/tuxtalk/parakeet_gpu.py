@@ -215,6 +215,11 @@ class ParakeetGpuModel:
             steer(self._cpu, self._words)
             return self._cpu.recognize(audio)
 
+    @property
+    def on_processor(self) -> bool:
+        """Whether the chip failed and the processor does the work now."""
+        return self._cpu is not None
+
     def set_words(self, words) -> None:
         """Your Words: sent to the helper before the next recording (a
         Vulkan engine with TuxTalk's patch steers Parakeet with them), and

@@ -422,8 +422,11 @@ def _record_engine(model, device):
 
 
 def on_graphics_card() -> bool:
-    """Whether the model loaded runs on a graphics card (see _running_engine)."""
-    return _running_engine is not None and _running_engine[1] != "cpu"
+    """Whether a model is loaded, not resting (Power Saving), and runs on a
+    graphics card now (see _running_engine); Parakeet on the chip can move
+    to the processor later in the session (ParakeetGpuModel.on_processor)."""
+    return (model is not None and _running_engine is not None and _running_engine[1] != "cpu"
+            and not getattr(model, "on_processor", False))
 
 
 def notify_tray():

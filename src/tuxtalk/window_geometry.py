@@ -1,4 +1,5 @@
-"""Where the active window is, in the coordinates TuxTalk's own windows use.
+"""Where the active window is, in the coordinates TuxTalk's own windows use,
+and the monitors those windows go on (main_monitor_rect, monitor_rect_at).
 
 Wayland doesn't let an app ask where other apps' windows are, so this asks
 whoever does know, first answer wins:
@@ -71,10 +72,7 @@ def to_screen_rect(rect, output, output_rect, monitors):
 def screen_monitors():
     """[(name, Rect)] for each monitor as GDK sees it. The name is the
     connector ("DP-6") where GDK knows it; none without a display."""
-    import gi
-    gi.require_version("Gdk", "3.0")
-    from gi.repository import Gdk
-    display = Gdk.Display.get_default()
+    display = _gdk_display()
     if display is None:
         return []
     out = []
