@@ -671,8 +671,9 @@ def test_parakeet_never_uses_the_whisper_engine(monkeypatch):
 
 
 class FakeParakeetGpu:
-    def __init__(self, device_index):
+    def __init__(self, device_index, on_fallback=None):
         self.device_index = device_index
+        self.on_fallback = on_fallback
 
     def recognize(self, audio):
         return "Hello there."
@@ -689,6 +690,7 @@ def test_service_runs_parakeet_on_the_graphics_chip(monkeypatch):
     monkeypatch.setattr(wv, "update_in_background", lambda: updates.append(1))
     model = engine.build(_settings(model=PARAKEET_MODEL))
     assert isinstance(model, FakeParakeetGpu) and model.device_index == 0
+    assert model.on_fallback is engine.processor_took_over      # the menus follow a move
     assert updates == [1]
 
 
@@ -713,7 +715,7 @@ def test_parakeet_falls_back_to_the_processor_when_the_helper_fails(monkeypatch)
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
     told = []
 
-    def broken(device_index):
+    def broken(device_index, on_fallback=None):
         raise RuntimeError("driver said no")
 
     monkeypatch.setattr(wv, "is_installed", lambda m: True)

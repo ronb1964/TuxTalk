@@ -392,7 +392,7 @@ def _build_parakeet_gpu_model(settings: Settings):
         if device_index is None:
             reason = "no graphics chip was found"
         else:
-            model = parakeet_gpu.ParakeetGpuModel(device_index)
+            model = parakeet_gpu.ParakeetGpuModel(device_index, on_fallback=processor_took_over)
     except Exception as e:          # any failure here falls back to the processor
         logger.warning(f"Parakeet's graphics helper failed to start: {e}")
         reason = "the graphics helper failed to start"

@@ -159,24 +159,32 @@ def test_a_helper_started_again_runs_the_engine_on_disk_now(fake, monkeypatch):
 
 
 def test_falls_back_to_the_processor_when_the_helper_keeps_failing(fake, monkeypatch):
-    """And the menus' line and live text then go by the processor."""
-    from tuxtalk import engine
-
+    """Once, saying so (the service then tells the menus and live text)."""
     class Cpu:
         def recognize(self, audio):
             return "from the processor"
 
     monkeypatch.setattr(parakeet_gpu, "load_parakeet_model", lambda: Cpu())
-    monkeypatch.setattr(engine, "_running_engine", ("parakeet-tdt-0.6b-v3", "vulkan"))
-    told = []
-    monkeypatch.setattr(engine, "notify_tray", lambda: told.append(engine.running()))
-    model = parakeet_gpu.ParakeetGpuModel(0, command=fake("die"))
+    moved = []
+    model = parakeet_gpu.ParakeetGpuModel(0, command=fake("die"),
+                                          on_fallback=lambda: moved.append(True))
     try:
         assert model.recognize(_audio()) == "from the processor"
         assert model.recognize(_audio()) == "from the processor"   # stays there
     finally:
         model.close()
-    assert told == [("parakeet-tdt-0.6b-v3", "cpu")]
+    assert moved == [True]
+
+
+def test_the_menus_and_live_text_follow_parakeet_to_the_processor(monkeypatch):
+    from tuxtalk import engine
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
+    monkeypatch.setattr(engine, "_running_engine", (PARAKEET_MODEL, "vulkan"))
+    monkeypatch.setattr(engine, "model", object())
+    told = []
+    monkeypatch.setattr(engine, "notify_tray", lambda: told.append(engine.running()))
+    engine.processor_took_over()
+    assert told == [(PARAKEET_MODEL, "cpu")] and not engine.on_graphics_card()
 
 
 def test_no_processor_model_to_fall_back_to_is_an_error(fake, monkeypatch):

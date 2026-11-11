@@ -11,15 +11,19 @@ stops or pauses.
 The typed text must never wait long on a preview. A read goes to the worker
 only when it has nothing else to do (submit_if_idle), and does nothing if
 the phrase it was handed was cut, or the recording stopped, while it
-waited. A read already running can't be stopped, so reads run only with
-the model on a graphics card, where a minute of speech takes a fifth of a
-second on a desktop card. A read that takes longer than STOP_AFTER_S ends
-reads of that phrase. A read of a few seconds of audio (SHORT_AUDIO_S) that
-alone took that long says the chip itself is slow, and the second ends
-live text while that engine runs: a built-in graphics chip can be no faster
-than the processor, and the first read of every phrase would cost that
-again. Nothing stops a read the driver itself stalls, but a stalled driver
-would hold up the dictation's own transcription just the same.
+waited. A read already running can't be stopped, so:
+  - reads run only with the model on a graphics card, where a few seconds
+    of speech take a fifth of a second on a desktop card;
+  - each sees at most GROWTH_S more audio than the read of the phrase
+    before it, so none is much slower than the last, and a phrase's first
+    read holds a few seconds at most, even after waiting for the worker;
+  - a read that takes longer than STOP_AFTER_S ends reads of that phrase;
+  - two reads in a row of SHORT_AUDIO_S or less whose transcription alone
+    took that long say the chip itself is slow, and end live text while
+    that engine runs: a built-in graphics chip can be no faster than the
+    processor, and the first read of every phrase would cost that again.
+Nothing stops a read the driver itself stalls, but a stalled driver would
+hold up the dictation's own transcription just the same.
 
 Words said into a password field never show: the check that keeps them
 from being typed (focused_window.is_password) runs before and after every
@@ -42,14 +46,20 @@ logger = setup_logger(__name__)
 INTERVAL_S = 1.0
 # Less audio than this holds a word or two at most: not worth a read.
 SHORTEST_S = 0.5
-# A phrase whose read took longer than this isn't read again: the next
-# holds about a second more audio, and the typed text could wait on it.
-STOP_AFTER_S = 0.25
-# Slow reads of no more than SHORT_AUDIO_S of audio, with one engine, before
-# live text stays off while it runs. A longer read is slow on any card once
-# a dictation without Type at pause grows long enough: that ends only it.
+# A phrase whose read took longer than this, checks included, isn't read
+# again: the next holds about a second more audio, and the typed text could
+# wait on it. Parakeet on Vulkan, on an RTX 4070 Super, took 0.19 s on
+# average for 4 s of audio and never over 0.5 s for 5 s or less (501 typed
+# phrases), so a desktop card stays well under it.
+STOP_AFTER_S = 0.6
+# Reads in a row of no more than SHORT_AUDIO_S of audio whose transcription
+# alone took over STOP_AFTER_S, with one engine, before live text stays off
+# while it runs. A longer read is slow on any card once a dictation without
+# Type at pause grows long enough: that ends reads of it only.
 SLOW_READS = 2
 SHORT_AUDIO_S = 5.0
+# The most audio a read may see beyond what the phrase's read before it saw.
+GROWTH_S = SHORT_AUDIO_S
 # The newest audio a read looks at, which bounds how long a read takes
 # without Type at pause, where the audio grows for the whole dictation.
 MAX_AUDIO_S = 60.0
@@ -65,10 +75,13 @@ _last_read = 0.0
 # number is rec.chunks_submitted. Both are let go when the recording ends.
 _skip = None
 _shown = None
+# (recording, phrase number, seconds of audio) of the last read: each read
+# sees at most GROWTH_S more of the phrase.
+_seen = None
 # The processor was found doing the work, and the log said so.
 _said_processor = False
-# (engine.running(), how many short reads with it were too slow); the engine
-# as (model, device), so Power Saving letting the model go doesn't reset it.
+# (engine.running(), how many short reads with it in a row were too slow);
+# the engine as (model, device), so Power Saving letting it go doesn't reset it.
 _slow = (None, 0)
 
 
@@ -118,18 +131,22 @@ def _model_too_slow():
     return count >= SLOW_READS and running == engine.running()
 
 
-def _note_slow_read(took, heard):
-    """Log a read over STOP_AFTER_S (*took*, checks included), and count it
-    against the engine when *heard* (audio seconds, transcription seconds)
-    shows the transcription alone was slow on a few seconds of audio."""
+def _judge_engine(heard):
+    """Count a short read (*heard*: audio seconds, transcription seconds)
+    whose transcription was slow against the engine running; a short fast
+    one starts the count again. None (nothing was read) changes nothing."""
     global _slow
+    if heard is None or heard[0] > SHORT_AUDIO_S:
+        return
     running, count = _slow
-    if heard is not None and heard[0] <= SHORT_AUDIO_S and heard[1] > STOP_AFTER_S:
-        if running != engine.running():
-            running, count = engine.running(), 0
-        count += 1
-        _slow = (running, count)
-    if count >= SLOW_READS and running == engine.running():
+    if running != engine.running():
+        count = 0
+    _slow = (engine.running(), count + 1 if heard[1] > STOP_AFTER_S else 0)
+
+
+def _log_slow_read(took):
+    """Say why the box went away after a read that took *took* seconds."""
+    if _model_too_slow():
         logger.info(f"Live text stays off while this engine runs: a read took {took:.2f}s, "
                     "too long to show the words without holding up the typing")
     else:
@@ -166,10 +183,11 @@ def _read(rec, frames, rate, phrase):
             fresh = (words is not None and _current(rec, phrase)
                      and _may_show(rec, phrase, atspi_helper.RECHECK_BUDGET_S))
         took = time.monotonic() - started
+        # Judged even when the phrase ended meanwhile: a slow one is a read
+        # the typed text waited on.
+        _judge_engine(heard)
         if took > STOP_AFTER_S:
-            # Noted even when the phrase ended meanwhile: those are the
-            # reads the typed text waited on.
-            _note_slow_read(took, heard)
+            _log_slow_read(took)
             _stop_reading(rec, phrase)
         elif fresh:
             _show(rec, phrase, words)
@@ -183,9 +201,10 @@ def _hear(rec, frames, rate, phrase):
     typed or is private, or there's too little audio."""
     if not _current(rec, phrase) or not _may_show(rec, phrase):
         return None, None
-    audio = _newest_audio(frames, rate)
+    audio = _newest_audio(frames, rate, _allowed(rec, phrase))
     if audio is None:
         return None, None
+    _remember_seen(rec, phrase, audio.size / engine.SAMPLE_RATE)
     started = time.monotonic()
     words = engine.transcribe(audio, getattr(live.settings, "language", None)) or ""
     return words, (audio.size / engine.SAMPLE_RATE, time.monotonic() - started)
@@ -213,11 +232,24 @@ def _stop_reading(rec, phrase):
     _close()
 
 
-def _newest_audio(frames, rate):
-    """The last MAX_AUDIO_S of *frames* (int16 blocks) at the engine's rate,
+def _allowed(rec, phrase):
+    """Seconds of audio the next read of *phrase* may see."""
+    seen = _seen
+    before = seen[2] if seen is not None and _same(seen, rec, phrase) else 0.0
+    return min(MAX_AUDIO_S, before + GROWTH_S)
+
+
+def _remember_seen(rec, phrase, seconds):
+    """Note how much of *phrase* the read now starting sees."""
+    global _seen
+    _seen = (rec, phrase, seconds)
+
+
+def _newest_audio(frames, rate, seconds):
+    """The last *seconds* of *frames* (int16 blocks) at the engine's rate,
     or None when it's too short to hold a word. Only the newest blocks are
     converted: the whole recording would cost more with every read."""
-    keep = int(MAX_AUDIO_S * rate)
+    keep = int(seconds * rate)
     newest, size = [], 0
     for block in reversed(frames):
         newest.append(block)
@@ -254,8 +286,8 @@ def _close():
 
 def hide():
     """The recording ended: the window goes (the text is typed now)."""
-    global _last_read, _shown, _skip
+    global _last_read, _shown, _skip, _seen
     _last_read = 0.0
-    _shown = _skip = None
+    _shown = _skip = _seen = None
     if window is not None:
         window.hide()

@@ -79,7 +79,8 @@ def loads(monkeypatch):
     monkeypatch.setattr(whisper_vulkan, "is_installed", lambda m: True)
     monkeypatch.setattr(whisper_vulkan, "find_device", lambda wanted="": 0)
     monkeypatch.setattr(whisper_vulkan, "VulkanWhisperModel", lambda m, d: "whisper on vulkan")
-    monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", lambda d: "parakeet on vulkan")
+    monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel",
+                        lambda d, on_fallback=None: "parakeet on vulkan")
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
     monkeypatch.setattr(config, "load_config", config.Settings)
     monkeypatch.setattr(config, "save_config", lambda cfg: None)

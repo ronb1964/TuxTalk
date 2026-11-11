@@ -47,11 +47,13 @@ class ParakeetGpuModel:
     Offers recognize(), like the processor's ParakeetModel, so the dictation
     code treats the two the same."""
 
-    def __init__(self, device_index, threads=None, command=None):
+    def __init__(self, device_index, threads=None, command=None, on_fallback=None):
         """Start the graphics card's Parakeet helper on *device_index* with
         *threads* processor threads, or *command* instead (the tests'
-        stand-in). Raises when the helper doesn't come up."""
+        stand-in). *on_fallback* is called once if the work moves to the
+        processor for good. Raises when the helper doesn't come up."""
         self.device_index = device_index
+        self._on_fallback = on_fallback
         self._threads = threads or max(1, (os.cpu_count() or 2) // 2)
         self._command = command
         self._proc = None
@@ -212,8 +214,8 @@ class ParakeetGpuModel:
                 raise RuntimeError("Parakeet failed on the graphics chip, and its processor "
                                    f"version isn't available ({e})") from e
             logger.warning("Parakeet moved to the processor for the rest of this session")
-            from . import engine
-            engine.processor_took_over()
+            if self._on_fallback is not None:
+                self._on_fallback()
             steer(self._cpu, self._words)
             return self._cpu.recognize(audio)
 
