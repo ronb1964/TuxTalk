@@ -234,7 +234,8 @@ class Settings:
     mic: str = ""               # substring to match input device (empty = default)
     notify: bool = False        # desktop notifications
     language: str = ""          # optional language code (e.g., "en"); empty = auto-detect
-    # prepend a space before new utterance when not starting a new line/tab
+    # a space after each dictation, so the next one doesn't run into it (none
+    # after a line break); TuxTalk can't see what's typed by hand before one
     auto_space: bool = True
     auto_period: bool = True   # append a period when an utterance ends without terminal punctuation
     # "auto" (smart detection), "type" (the virtual keyboard), or "paste" (wl-copy + Ctrl+V)

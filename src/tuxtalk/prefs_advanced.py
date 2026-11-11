@@ -171,8 +171,10 @@ class AdvancedTab(Tab):
         space_check.set_active(self.config["auto_space"])
         space_check.connect("toggled", lambda x: self.update_config("auto_space", x.get_active()))
         space_check.set_tooltip_text(
-            "Automatically add a space before each new dictation.\n"
-            "Turn off if you want to control spacing manually.")
+            "Add a space after each dictation, so the next one doesn't run into it.\n"
+            "Text you type yourself before dictating needs its own space: TuxTalk\n"
+            "can't see what's already in most apps' text boxes.\n"
+            "Turn off if you want to control spacing yourself.")
         fine.attach(space_check, 0, frow, 2, 1)
         frow += 1
 
