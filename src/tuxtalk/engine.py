@@ -421,12 +421,25 @@ def _record_engine(model, device):
     _running_engine = (str(model), str(device).lower())
 
 
+def running():
+    """What runs, as (model, device), or None before a model was loaded
+    (see _running_engine)."""
+    return _running_engine
+
+
+def processor_took_over():
+    """The model moved to the processor partway through the session
+    (Parakeet after the graphics chip failed twice): the menus and live
+    text go by what really runs."""
+    if _running_engine is not None and _running_engine[1] != "cpu":
+        _record_engine(_running_engine[0], "cpu")
+        notify_tray()
+
+
 def on_graphics_card() -> bool:
     """Whether a model is loaded, not resting (Power Saving), and runs on a
-    graphics card now (see _running_engine); Parakeet on the chip can move
-    to the processor later in the session (ParakeetGpuModel.on_processor)."""
-    return (model is not None and _running_engine is not None and _running_engine[1] != "cpu"
-            and not getattr(model, "on_processor", False))
+    graphics card now (see _running_engine)."""
+    return model is not None and _running_engine is not None and _running_engine[1] != "cpu"
 
 
 def notify_tray():

@@ -13,12 +13,13 @@ only when it has nothing else to do (submit_if_idle), and does nothing if
 the phrase it was handed was cut, or the recording stopped, while it
 waited. A read already running can't be stopped, so reads run only with
 the model on a graphics card, where a minute of speech takes a fifth of a
-second on a desktop card. A read that takes longer than STOP_AFTER_S ends reads of
-that phrase, and the second with the same model ends live text while it
-runs: a built-in graphics chip can be no faster than the processor, and
-the first read of every phrase would cost that again. Nothing stops a read
-the driver itself stalls, but a stalled driver would hold up the
-dictation's own transcription just the same.
+second on a desktop card. A read that takes longer than STOP_AFTER_S ends
+reads of that phrase. A read of a few seconds of audio (SHORT_AUDIO_S) that
+alone took that long says the chip itself is slow, and the second ends
+live text while that engine runs: a built-in graphics chip can be no faster
+than the processor, and the first read of every phrase would cost that
+again. Nothing stops a read the driver itself stalls, but a stalled driver
+would hold up the dictation's own transcription just the same.
 
 Words said into a password field never show: the check that keeps them
 from being typed (focused_window.is_password) runs before and after every
@@ -27,7 +28,6 @@ the cursor leaves the field.
 """
 import threading
 import time
-import weakref
 
 from . import atspi_helper, dictation_text, dictation_worker, engine, focused_window
 from . import recording, resampling
@@ -45,8 +45,11 @@ SHORTEST_S = 0.5
 # A phrase whose read took longer than this isn't read again: the next
 # holds about a second more audio, and the typed text could wait on it.
 STOP_AFTER_S = 0.25
-# Slow reads with one model before live text stays off while it runs.
+# Slow reads of no more than SHORT_AUDIO_S of audio, with one engine, before
+# live text stays off while it runs. A longer read is slow on any card once
+# a dictation without Type at pause grows long enough: that ends only it.
 SLOW_READS = 2
+SHORT_AUDIO_S = 5.0
 # The newest audio a read looks at, which bounds how long a read takes
 # without Type at pause, where the audio grows for the whole dictation.
 MAX_AUDIO_S = 60.0
@@ -64,8 +67,8 @@ _skip = None
 _shown = None
 # The processor was found doing the work, and the log said so.
 _said_processor = False
-# (weak reference to the model, how many of its reads were too slow); weak,
-# so a model let go (Power Saving, a new model) isn't kept in memory.
+# (engine.running(), how many short reads with it were too slow); the engine
+# as (model, device), so Power Saving letting the model go doesn't reset it.
 _slow = (None, 0)
 
 
@@ -110,25 +113,27 @@ def _on_graphics_card():
 
 
 def _model_too_slow():
-    """Whether SLOW_READS reads with the model loaded now were too slow."""
-    ref, count = _slow
-    return count >= SLOW_READS and ref is not None and ref() is engine.model
+    """Whether SLOW_READS short reads with the engine running now were too slow."""
+    running, count = _slow
+    return count >= SLOW_READS and running == engine.running()
 
 
-def _note_slow_read(took):
-    """Count a read over STOP_AFTER_S against the model loaded now."""
+def _note_slow_read(took, heard):
+    """Log a read over STOP_AFTER_S (*took*, checks included), and count it
+    against the engine when *heard* (audio seconds, transcription seconds)
+    shows the transcription alone was slow on a few seconds of audio."""
     global _slow
-    ref, count = _slow
-    if engine.model is None:
-        return
-    if ref is None or ref() is not engine.model:
-        ref, count = weakref.ref(engine.model), 0
-    _slow = (ref, count + 1)
-    if count + 1 >= SLOW_READS:
-        logger.info(f"Live text stays off while this model runs: a read took {took:.2f}s, "
+    running, count = _slow
+    if heard is not None and heard[0] <= SHORT_AUDIO_S and heard[1] > STOP_AFTER_S:
+        if running != engine.running():
+            running, count = engine.running(), 0
+        count += 1
+        _slow = (running, count)
+    if count >= SLOW_READS and running == engine.running():
+        logger.info(f"Live text stays off while this engine runs: a read took {took:.2f}s, "
                     "too long to show the words without holding up the typing")
     else:
-        logger.info(f"Live text stops for this phrase: a read took {took:.2f}s")
+        logger.info(f"Live text: a read took {took:.2f}s, so that phrase isn't read again")
 
 
 def _same(pair, rec, phrase):
@@ -157,13 +162,14 @@ def _read(rec, frames, rate, phrase):
     try:
         # The checks log too (a slow accessibility bus), once a second here.
         with quietly():
-            words = _hear(rec, frames, rate, phrase)
+            words, heard = _hear(rec, frames, rate, phrase)
             fresh = (words is not None and _current(rec, phrase)
                      and _may_show(rec, phrase, atspi_helper.RECHECK_BUDGET_S))
         took = time.monotonic() - started
         if took > STOP_AFTER_S:
-            if _current(rec, phrase):
-                _note_slow_read(took)
+            # Noted even when the phrase ended meanwhile: those are the
+            # reads the typed text waited on.
+            _note_slow_read(took, heard)
             _stop_reading(rec, phrase)
         elif fresh:
             _show(rec, phrase, words)
@@ -172,14 +178,17 @@ def _read(rec, frames, rate, phrase):
 
 
 def _hear(rec, frames, rate, phrase):
-    """What *frames* say ("" for nothing), or None when they mustn't be
-    read: the phrase was typed or is private, or there's too little audio."""
+    """(what *frames* say, "" for nothing; (audio seconds, transcription
+    seconds)), or (None, None) when they mustn't be read: the phrase was
+    typed or is private, or there's too little audio."""
     if not _current(rec, phrase) or not _may_show(rec, phrase):
-        return None
+        return None, None
     audio = _newest_audio(frames, rate)
     if audio is None:
-        return None
-    return engine.transcribe(audio, getattr(live.settings, "language", None)) or ""
+        return None, None
+    started = time.monotonic()
+    words = engine.transcribe(audio, getattr(live.settings, "language", None)) or ""
+    return words, (audio.size / engine.SAMPLE_RATE, time.monotonic() - started)
 
 
 def _may_show(rec, phrase, budget=None):

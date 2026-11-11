@@ -212,13 +212,10 @@ class ParakeetGpuModel:
                 raise RuntimeError("Parakeet failed on the graphics chip, and its processor "
                                    f"version isn't available ({e})") from e
             logger.warning("Parakeet moved to the processor for the rest of this session")
+            from . import engine
+            engine.processor_took_over()
             steer(self._cpu, self._words)
             return self._cpu.recognize(audio)
-
-    @property
-    def on_processor(self) -> bool:
-        """Whether the chip failed and the processor does the work now."""
-        return self._cpu is not None
 
     def set_words(self, words) -> None:
         """Your Words: sent to the helper before the next recording (a

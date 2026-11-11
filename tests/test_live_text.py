@@ -1,6 +1,7 @@
 """Live text (TuxTalk Labs): the words so far, shown while the user talks."""
 import logging
 import threading
+import time
 
 import numpy as np
 import pytest
@@ -27,6 +28,10 @@ class Window:
         self.up = False
 
 
+# The real check, before the talking fixture stands in for it.
+ON_GRAPHICS_CARD = engine.on_graphics_card
+
+
 class Model:
     """Stands in for the loaded speech model; only its identity matters here."""
 
@@ -49,6 +54,7 @@ def talking(monkeypatch):
     monkeypatch.setattr(live_text, "_skip", None)
     monkeypatch.setattr(live_text, "_slow", (None, 0))
     monkeypatch.setattr(engine, "model", Model())
+    monkeypatch.setattr(engine, "_running_engine", ("parakeet", "vulkan"))
     monkeypatch.setattr(engine, "on_graphics_card", lambda: True)
     monkeypatch.setattr(live_text, "_shown", None)
     monkeypatch.setattr(live, "live_text", True)
@@ -154,32 +160,100 @@ def test_fillers_left_out_of_the_typed_text_are_left_out_here_too(talking, monke
     assert window.shown == ["so we should go"]
 
 
+def _taking(seconds, words="so far so good"):
+    """A transcribe that really takes *seconds*, as a slow graphics chip would."""
+    def transcribe(audio, language):
+        time.sleep(seconds)
+        return words
+    return transcribe
+
+
+SLOW = live_text.STOP_AFTER_S + 0.05
+
+
 def test_a_slow_read_ends_live_text_for_that_phrase_only(talking, monkeypatch):
     """A read takes the worker the typed text needs, and the next is a
     second longer: once one is slow the phrase isn't read again."""
-    rec, window, heard = talking
-    monkeypatch.setattr(live_text, "STOP_AFTER_S", -1.0)      # every read is too slow
+    rec, window, _heard = talking
+    monkeypatch.setattr(engine, "transcribe", _taking(SLOW))
     live_text.tick(now=100.0)
     assert window.shown == [] and not window.up
+    monkeypatch.setattr(engine, "transcribe", _taking(0.0, "next"))
     live_text.tick(now=101.0)
-    assert len(heard) == 1                  # no more reads for this phrase
-    monkeypatch.setattr(live_text, "STOP_AFTER_S", 60.0)
+    assert window.shown == []               # no more reads for this phrase
     rec.chunks_submitted += 1
     live_text.tick(now=102.0)
+    assert window.shown == ["next"]
+
+
+def test_a_read_just_under_the_limit_is_shown(talking, monkeypatch):
+    _rec, window, _heard = talking
+    monkeypatch.setattr(engine, "transcribe", _taking(live_text.STOP_AFTER_S / 2))
+    live_text.tick(now=100.0)
     assert window.shown == ["so far so good"]
 
 
-def test_parakeet_moving_to_the_processor_ends_the_reads(monkeypatch):
+def test_a_chip_too_slow_twice_ends_live_text_while_it_runs(talking, monkeypatch):
+    """A built-in graphics chip can be no faster than the processor, and the
+    first read of every phrase would hold up the typing again."""
+    rec, window, _heard = talking
+    reads = []
+
+    def slow(audio, language):
+        reads.append(1)
+        return _taking(SLOW)(audio, language)
+    monkeypatch.setattr(engine, "transcribe", slow)
+    for phrase in range(3):
+        rec.chunks_submitted = phrase
+        live_text.tick(now=100.0 + phrase)
+    assert len(reads) == live_text.SLOW_READS and window.shown == []
+    monkeypatch.setattr(engine, "model", Model())       # Power Saving let it go, and back
+    rec.chunks_submitted = 3
+    live_text.tick(now=110.0)
+    assert len(reads) == live_text.SLOW_READS           # still the same slow chip
+    monkeypatch.setattr(engine, "_running_engine", ("small", "cuda"))   # another engine
+    monkeypatch.setattr(engine, "transcribe", _taking(0.0))
+    rec.chunks_submitted = 4
+    live_text.tick(now=111.0)
+    assert window.shown == ["so far so good"]
+
+
+def test_long_dictations_slow_to_read_dont_end_it_for_good(talking, monkeypatch):
+    """Without Type at pause the audio grows: a minute of it can be slow on
+    any card. That ends reads of that dictation only."""
+    rec, window, _heard = talking
+    monkeypatch.setattr(engine, "transcribe", _taking(SLOW))
+    for dictation in range(3):
+        rec.frames = _speech(live_text.SHORT_AUDIO_S + 25)
+        rec.chunks_submitted = dictation
+        live_text.tick(now=100.0 + dictation)
+    assert not live_text._model_too_slow()
+
+
+def test_a_slow_password_check_isnt_blamed_on_the_card(talking, monkeypatch):
+    """An app hanging on the accessibility bus ends that phrase's reads,
+    but the card is fine."""
+    rec, _window, _heard = talking
+
+    def slow_check(budget=None):
+        time.sleep(SLOW)
+        return False
+    monkeypatch.setattr(focused_window, "is_password", slow_check)
+    for phrase in range(3):
+        rec.chunks_submitted = phrase
+        live_text.tick(now=100.0 + phrase)
+    assert not live_text._model_too_slow()
+
+
+def test_parakeet_moving_to_the_processor_ends_the_reads(talking, monkeypatch):
     """After two failures on the chip Parakeet works on the processor for the
     rest of the session, where a read could hold the typed text up."""
-    class Parakeet:
-        on_processor = False
-    model = Parakeet()
-    monkeypatch.setattr(engine, "_running_engine", ("parakeet", "vulkan"))
-    monkeypatch.setattr(engine, "model", model)
-    assert engine.on_graphics_card()
-    model.on_processor = True
-    assert not engine.on_graphics_card()
+    _rec, window, heard = talking
+    monkeypatch.setattr(engine, "on_graphics_card", ON_GRAPHICS_CARD)
+    monkeypatch.setattr(engine, "notify_tray", lambda: None)
+    engine.processor_took_over()
+    live_text.tick(now=100.0)
+    assert heard == [] and engine.running() == ("parakeet", "cpu")
 
 
 @pytest.mark.parametrize("why", ["CUDA fell back", "resting"])
@@ -190,22 +264,6 @@ def test_no_graphics_card_means_no_reads(monkeypatch, why):
                                                     else "cuda"))
     monkeypatch.setattr(engine, "model", None if why == "resting" else Model())
     assert not engine.on_graphics_card()
-
-
-def test_a_model_too_slow_twice_ends_live_text_while_it_runs(talking, monkeypatch):
-    """A built-in graphics chip can be no faster than the processor, and the
-    first read of every phrase would hold up the typing again."""
-    rec, window, heard = talking
-    monkeypatch.setattr(live_text, "STOP_AFTER_S", -1.0)
-    for phrase in range(3):
-        rec.chunks_submitted = phrase
-        live_text.tick(now=100.0 + phrase)
-    assert len(heard) == live_text.SLOW_READS and window.shown == []
-    monkeypatch.setattr(engine, "model", Model())       # another model loaded
-    monkeypatch.setattr(live_text, "STOP_AFTER_S", 60.0)
-    rec.chunks_submitted = 3
-    live_text.tick(now=110.0)
-    assert window.shown == ["so far so good"]
 
 
 def test_on_the_processor_nothing_is_read(talking, monkeypatch, caplog):

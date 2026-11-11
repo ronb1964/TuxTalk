@@ -159,17 +159,24 @@ def test_a_helper_started_again_runs_the_engine_on_disk_now(fake, monkeypatch):
 
 
 def test_falls_back_to_the_processor_when_the_helper_keeps_failing(fake, monkeypatch):
+    """And the menus' line and live text then go by the processor."""
+    from tuxtalk import engine
+
     class Cpu:
         def recognize(self, audio):
             return "from the processor"
 
     monkeypatch.setattr(parakeet_gpu, "load_parakeet_model", lambda: Cpu())
+    monkeypatch.setattr(engine, "_running_engine", ("parakeet-tdt-0.6b-v3", "vulkan"))
+    told = []
+    monkeypatch.setattr(engine, "notify_tray", lambda: told.append(engine.running()))
     model = parakeet_gpu.ParakeetGpuModel(0, command=fake("die"))
     try:
         assert model.recognize(_audio()) == "from the processor"
         assert model.recognize(_audio()) == "from the processor"   # stays there
     finally:
         model.close()
+    assert told == [("parakeet-tdt-0.6b-v3", "cpu")]
 
 
 def test_no_processor_model_to_fall_back_to_is_an_error(fake, monkeypatch):
