@@ -91,7 +91,7 @@ def _transcribe_chunk(frames, rec_sr, number, pause, message, detector):
     # Logged here, on the worker, to keep file writes off the audio thread.
     seconds = sum(len(f) for f in frames) / 2 / rec_sr
     logger.info(f"Chunk {number}: {seconds:.1f}s of audio, cut after a {pause:.2f}s pause")
-    cfg = live.chunk_cfg
+    cfg = live.settings
     try:
         transcribe_phrase(frames, rec_sr, cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                           cfg.auto_space, cfg.auto_period, cfg.injection_mode,

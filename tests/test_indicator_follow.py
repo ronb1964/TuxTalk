@@ -55,7 +55,7 @@ class _Ind:
 
 def test_the_indicator_asks_for_the_window_when_following(monkeypatch):
     monkeypatch.setattr(wg, "active_window_rect", lambda: Rect(100, 200, 800, 600))
-    monkeypatch.setattr(ri, "_monitor_rect_at", lambda x, y: Rect(0, 0, 3440, 1440))
+    monkeypatch.setattr(ri, "monitor_rect_at", lambda x, y: Rect(0, 0, 3440, 1440))
     assert _Ind()._follow_target(200, 80) == ri.follow_position(Rect(100, 200, 800, 600), 200, 80,
                                                                  Rect(0, 0, 3440, 1440))
 
@@ -179,7 +179,7 @@ def test_the_audio_tab_position_applies_inside_the_window(position, expected):
 
 def test_the_indicator_uses_its_configured_position_when_following(monkeypatch):
     monkeypatch.setattr(wg, "active_window_rect", lambda: WIN)
-    monkeypatch.setattr(ri, "_monitor_rect_at", lambda x, y: MON)
+    monkeypatch.setattr(ri, "monitor_rect_at", lambda x, y: MON)
     ind = _Ind()
     ind.position = "top-right"
     assert ind._follow_target(200, 80) == ri.follow_position(WIN, 200, 80, MON, "top-right")

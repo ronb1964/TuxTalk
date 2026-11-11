@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import indicator_styles
-from tuxtalk.recording_indicator import RecordingIndicator, _main_monitor_rect, fixed_position
+from tuxtalk.recording_indicator import RecordingIndicator, main_monitor_rect, fixed_position
 
 
 def _apply(indicator, *args, **kwargs):
@@ -187,7 +187,7 @@ def test_the_indicator_appears_where_it_belongs_not_in_the_corner_first(position
         ind.show_at_position()
         _settle()
         width, height = ind.get_default_size()
-        assert mapped_at == [fixed_position(position, width, height, _main_monitor_rect())]
+        assert mapped_at == [fixed_position(position, width, height, main_monitor_rect())]
 
         # The next dictation, after Preferences moved it, appears in the new place.
         ind.hide_indicator()
@@ -195,7 +195,7 @@ def test_the_indicator_appears_where_it_belongs_not_in_the_corner_first(position
         _apply(ind, "top-right", "medium", 0, 0)
         ind.show_at_position()
         _settle()
-        assert mapped_at[1] == fixed_position("top-right", width, height, _main_monitor_rect())
+        assert mapped_at[1] == fixed_position("top-right", width, height, main_monitor_rect())
     finally:
         ind.destroy()
         _settle(0)

@@ -1,4 +1,5 @@
 """Lightweight logging setup for TuxTalk."""
+import contextlib
 import logging
 import logging.handlers
 import os
@@ -129,6 +130,33 @@ class FailureNotes:
             return self._last.pop(what, None) is not None
 
 
+# How deep this thread is in quietly() blocks.
+_quiet = threading.local()
+
+
+def is_quiet() -> bool:
+    """Whether this thread is inside quietly()."""
+    return getattr(_quiet, "depth", 0) > 0
+
+
+def _not_quiet(record) -> bool:
+    """The log file's filter: drop info lines from a thread inside quietly()."""
+    return record.levelno > logging.INFO or not is_quiet()
+
+
+@contextlib.contextmanager
+def quietly():
+    """Run the block without its info lines in the log, from any module;
+    warnings still go in. Live text transcribes the unfinished audio again
+    about once a second, and every engine's timing and raw-text lines for
+    those reads would be most of the log."""
+    _quiet.depth = getattr(_quiet, "depth", 0) + 1
+    try:
+        yield
+    finally:
+        _quiet.depth -= 1
+
+
 def _private_open(path, flags):
     """os.open for the log: a new file only this user can read."""
     return os.open(path, flags, 0o600)
@@ -188,6 +216,7 @@ def _shared_handler() -> logging.Handler:
 
     handler = _PrivateLogHandler(log_file)
     handler.setLevel(logging.DEBUG)
+    handler.addFilter(_not_quiet)
     handler.setFormatter(logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     _handler = handler

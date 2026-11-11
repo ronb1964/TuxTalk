@@ -119,7 +119,7 @@ def fixed_position(position, width, height, monitor, offset_x=0, offset_y=0):
     return x, y
 
 
-def _main_monitor_rect():
+def main_monitor_rect():
     """The primary monitor (or the first one), as a window_geometry.Rect.
     The screen's own size spans every monitor, which would put "center" on
     the seam between two side-by-side screens."""
@@ -129,7 +129,7 @@ def _main_monitor_rect():
     return Rect(g.x, g.y, g.width, g.height)
 
 
-def _monitor_rect_at(x, y):
+def monitor_rect_at(x, y):
     """The monitor holding (x, y), as a window_geometry.Rect."""
     from .window_geometry import Rect
     display = Gdk.Display.get_default()
@@ -205,11 +205,7 @@ class RecordingIndicator(Gtk.Window):
         # Try to allow positioning (may not work on all compositors)
         self.set_position(Gtk.WindowPosition.NONE)
 
-        # Make window support transparency
-        screen = self.get_screen()
-        visual = screen.get_rgba_visual()
-        if visual:
-            self.set_visual(visual)
+        ui_style.click_through(self)
 
         # Animation state
         self.start_time = time.time()
@@ -231,13 +227,6 @@ class RecordingIndicator(Gtk.Window):
         # (not via hide_indicator) — otherwise the 60fps callback keeps firing
         # queue_draw() on a destroyed widget, spamming GLib-GObject-CRITICALs.
         self.connect('destroy', self._on_destroy)
-
-        self.set_app_paintable(True)
-
-        # An empty input region lets every click fall through to the window
-        # underneath. None would remove the shape instead, and then the whole
-        # transparent rectangle takes clicks.
-        self.connect("realize", lambda w: w.input_shape_combine_region(cairo.Region()))
 
     def _on_destroy(self, _widget):
         if self.animation_timeout_id is not None:
@@ -264,7 +253,7 @@ class RecordingIndicator(Gtk.Window):
                 else:
                     window_x, window_y = fixed_position(
                         self.position, window_width, window_height,
-                        _main_monitor_rect(), self.offset_x, self.offset_y)
+                        main_monitor_rect(), self.offset_x, self.offset_y)
 
                 # Moved before it's shown: no window manager places a popup,
                 # so it appears exactly there. Shown first, it appeared in
@@ -298,7 +287,7 @@ class RecordingIndicator(Gtk.Window):
         rect = window_geometry.active_window_rect()
         if not rect:
             return None
-        monitor = _monitor_rect_at(rect.x + rect.w // 2, rect.y + rect.h // 2)
+        monitor = monitor_rect_at(rect.x + rect.w // 2, rect.y + rect.h // 2)
         return follow_position(rect, width, height, monitor, self.position)
 
     def hide_indicator(self):

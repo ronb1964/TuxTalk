@@ -1274,7 +1274,7 @@ def test_a_phrase_cut_at_a_pause_takes_its_recordings_message_to_the_queue(chat,
     focus, heard, typed, notices = chat
     jobs = []
     monkeypatch.setattr(dictation_worker, "_instance", types.SimpleNamespace(submit=jobs.append))
-    monkeypatch.setattr(live, "chunk_cfg", types.SimpleNamespace(
+    monkeypatch.setattr(live, "settings", types.SimpleNamespace(
         beeps=False, smart_quotes=False, notify=False, language=None, auto_space=True,
         auto_period=True, injection_mode="type"))
     next_recording(engine.SAMPLE_RATE)               # recording A

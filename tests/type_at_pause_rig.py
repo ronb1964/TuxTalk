@@ -95,7 +95,7 @@ def start_chunked_recording(monkeypatch):
     """A recording in progress at 16 kHz with chunking on and no real stream.
     The caller sets rs.state.is_recording back to False afterwards."""
     monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
-    monkeypatch.setattr(live, "chunk_cfg", SimpleNamespace(
+    monkeypatch.setattr(live, "settings", SimpleNamespace(
         beeps=True, smart_quotes=True, notify=False, language=None,
         auto_space=True, auto_period=False, injection_mode="type"))
     monkeypatch.setattr(capture, "indicator", None)

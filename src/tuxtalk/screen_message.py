@@ -133,7 +133,7 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
         gi.require_version("PangoCairo", "1.0")
         from gi.repository import Gdk, GLib, Gtk, PangoCairo
         import cairo
-        from .ui_style import is_x11
+        from .ui_style import LABEL_FILL, LABEL_TEXT, NEWS_EDGE, click_through, is_x11
         from .window_geometry import Rect
 
         display = Gdk.Display.get_default()
@@ -155,11 +155,7 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
         monitor = Rect(g.x, g.y, g.width, g.height)
 
         win = Gtk.Window(type=Gtk.WindowType.POPUP)
-        win.set_app_paintable(True)
-        visual = win.get_screen().get_rgba_visual()
-        if visual is not None:
-            win.set_visual(visual)
-        win.set_accept_focus(False)
+        click_through(win)
         win.set_keep_above(True)
 
         layout = win.create_pango_layout("")
@@ -186,22 +182,20 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
             cr.arc(width - r, r, r, -1.5708, 1.5708)
             cr.arc(r, r, r, 1.5708, 4.7124)
             cr.close_path()
-            cr.set_source_rgba(0.12, 0.12, 0.13, 0.94)
+            cr.set_source_rgba(*LABEL_FILL)
             cr.fill_preserve()
             if warning:
                 cr.set_source_rgba(0.94, 0.62, 0.15, 1.0)     # amber edge: a warning
             else:
-                cr.set_source_rgba(0.45, 0.62, 0.90, 1.0)     # blue edge: news
+                cr.set_source_rgba(*NEWS_EDGE)
             cr.set_line_width(1.5)
             cr.stroke()
             cr.move_to(_PAD_X, _PAD_Y)
-            cr.set_source_rgba(0.98, 0.93, 0.85, 1.0)
+            cr.set_source_rgba(*LABEL_TEXT)
             PangoCairo.show_layout(cr, layout)
             return True
 
         win.connect("draw", draw)
-        # Clicks go through to whatever is underneath.
-        win.connect("realize", lambda w: w.input_shape_combine_region(cairo.Region()))
         def relabel_this(words):
             # Same size label: a countdown's text keeps its length.
             set_text(words)

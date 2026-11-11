@@ -73,6 +73,29 @@ def is_x11(display):
     return gtype is not None and gtype.name == "GdkX11Display"
 
 
+# The floating labels' dark see-through box (screen_message, live text), the
+# blue edge of one that brings news rather than a warning, and their text.
+LABEL_FILL = (0.12, 0.12, 0.13, 0.94)
+NEWS_EDGE = (0.45, 0.62, 0.90, 1.0)
+LABEL_TEXT = (0.98, 0.93, 0.85, 1.0)
+
+
+def click_through(win):
+    """Make the popup *win* see-through where it isn't painted, never take
+    the focus, and let every click fall through to the window underneath:
+    the recording indicator, the floating labels and the live text box sit
+    over the app being dictated into, which must keep the keyboard."""
+    import cairo
+    win.set_app_paintable(True)
+    visual = win.get_screen().get_rgba_visual()
+    if visual is not None:
+        win.set_visual(visual)
+    win.set_accept_focus(False)
+    # An empty input region takes no clicks. None would remove the shape
+    # instead, and then the whole transparent rectangle takes them.
+    win.connect("realize", lambda w: w.input_shape_combine_region(cairo.Region()))
+
+
 def _match_menu_width(combo, allocation):
     """size-allocate handler: make a wrap-mode popup as wide as its button
     (GTK sizes it to the longest item). The menu hangs from the button's text,

@@ -350,7 +350,7 @@ class AdvancedTab(Tab):
             "A box under the recording indicator shows what you've said so far,\n"
             "about once a second, so you can see it's hearing you right. What gets\n"
             "typed doesn't change. Best with a graphics card; on the processor the\n"
-            "box updates less often.")
+            "box may go away during a long stretch of talking.")
         check.set_margin_start(LABS_INDENT)
         check.connect("toggled", lambda c: self.update_config("live_text", c.get_active()))
         grid.attach(check, 0, row + 1, 2, 1)

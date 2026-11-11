@@ -24,11 +24,23 @@ class DictationWorker:
 
     def __init__(self):
         self._queue = queue.Queue()
+        # Held for each put, so nothing is queued between submit_if_idle's
+        # look at the queue and its own put.
+        self._submit_lock = threading.Lock()
         self.thread = threading.Thread(target=self._run, daemon=True, name="tt-dictation")
         self.thread.start()
 
     def submit(self, job) -> None:
-        self._queue.put(job)
+        with self._submit_lock:
+            self._queue.put(job)
+
+    def submit_if_idle(self, job) -> bool:
+        """Queue *job* only when nothing is running or waiting; whether it was."""
+        with self._submit_lock:
+            if self._queue.unfinished_tasks:
+                return False
+            self._queue.put(job)
+            return True
 
     def idle(self) -> bool:
         """Whether nothing is running or waiting to."""
@@ -74,6 +86,12 @@ def worker() -> DictationWorker:
 def submit(job) -> None:
     """Run *job* on the worker, after everything submitted before it."""
     worker().submit(job)
+
+
+def submit_if_idle(job) -> bool:
+    """Run *job* on the worker if it has nothing else to do; whether it
+    will. For work that must never hold up a dictation (live text's reads)."""
+    return worker().submit_if_idle(job)
 
 
 def call(job):

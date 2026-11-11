@@ -302,6 +302,7 @@ REQUIRED_TYPELIBS=(
     "GdkPixbuf-2.0.typelib"
     "Gio-2.0.typelib"
     "Pango-1.0.typelib"
+    "PangoCairo-1.0.typelib"
 )
 MISSING_TYPELIBS=()
 for _tl in "${REQUIRED_TYPELIBS[@]}"; do

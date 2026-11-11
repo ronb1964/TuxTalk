@@ -5,8 +5,6 @@ CUDA or the graphics card through Vulkan.
 
 Every engine takes 16 kHz mono (SAMPLE_RATE); recordings are resampled to
 it."""
-import contextlib
-import logging
 import sys
 import threading
 import time
@@ -15,32 +13,9 @@ from . import gtk_loop, hallucinations, silence, tray_link
 from . import live_settings as live
 from . import notify as notify_module
 from .config import Settings, load_config
-from .logger import setup_logger
+from .logger import is_quiet, setup_logger
 
 logger = setup_logger(__name__)
-
-# Set on a thread inside quietly(): live text reads the unfinished audio again
-# about once a second, and those transcriptions would be most of the log.
-_quiet = threading.local()
-
-
-def _not_quiet(record):
-    """The logger's filter: drop info lines on a thread inside quietly()."""
-    return record.levelno > logging.INFO or not getattr(_quiet, "on", False)
-
-
-logger.addFilter(_not_quiet)
-
-
-@contextlib.contextmanager
-def quietly():
-    """Transcribe in this block without the usual info lines (timing, the
-    raw text); warnings are still logged."""
-    _quiet.on = True
-    try:
-        yield
-    finally:
-        _quiet.on = False
 
 # --- Runtime state ---
 SAMPLE_RATE = 16000
@@ -163,7 +138,8 @@ def _transcribe_whisper(engine, audio_f32, language, limit_to, words_prompt, sta
                                                  limit_to, **options)
     transcribe_time = time.time() - started
     logger.info(f"TIMING: Transcription completed in {transcribe_time:.2f}s")
-    if transcribe_time > 2.0:
+    # Live text's reads (quietly) watch their own time and give up when slow.
+    if transcribe_time > 2.0 and not is_quiet():
         logger.warning(f"Transcription took {transcribe_time:.2f}s "
                        "(first run may be slower due to CUDA compilation)")
     seg_list = list(segments)       # a generator, read once

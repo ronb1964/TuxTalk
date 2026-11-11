@@ -326,7 +326,7 @@ def test_chunk_setting_follows_config(monkeypatch):
     on = Settings(chunked_dictation=True, chunk_pause_seconds=1.0)
     live.apply(on)
     assert live.chunk_pause_seconds == 1.0
-    assert live.chunk_cfg is on
+    assert live.settings is on
     live.apply(Settings(chunked_dictation=False, chunk_pause_seconds=1.0))
     assert live.chunk_pause_seconds == 0.0
 
@@ -649,7 +649,7 @@ def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch
                           timeout_enabled=False, last_config_check=time.time())
     monkeypatch.setattr(capture, "toggles_asked", 0)
     capture.stop_requested.set()
-    service_tick.tick(live.chunk_cfg, svc)
+    service_tick.tick(live.settings, svc)
     assert dictation_worker.worker().drain(5)
     assert "".join(typed) == "We meet at three "
 
@@ -1250,7 +1250,7 @@ def test_a_phrase_waiting_its_turn_holds_hands_free_open(monkeypatch):
         def release(self):
             events.append("release")
     from tuxtalk.config import Settings
-    monkeypatch.setattr(live, "chunk_cfg", Settings())
+    monkeypatch.setattr(live, "settings", Settings())
     monkeypatch.setattr(type_at_pause, "transcribe_phrase", lambda *a, **k: events.append("work"))
     monkeypatch.setattr(dictation_worker, "_instance", SimpleNamespace(submit=jobs.append))
     pause = SimpleNamespace(cut_from_end=lambda: (0, 0), last_pause=1.0)

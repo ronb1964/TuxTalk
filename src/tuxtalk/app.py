@@ -274,9 +274,8 @@ def _make_gtk_parts(cfg) -> None:
         _make_indicator(cfg)
     # Made whether or not live text is on: it's a Labs setting that applies
     # without a restart, and the window costs nothing until it's shown.
-    from . import live_text
-    from .live_text_window import LiveTextWindow
-    live_text.window = LiveTextWindow(lambda: recording.indicator)
+    from . import live_text, live_text_window
+    live_text.window = live_text_window.make(lambda: recording.indicator)
 
 
 def _start_dbus_stand_in(cfg):

@@ -278,14 +278,17 @@ def _audio_rngs_from_their_seed():
 
 
 class InlineWorker:
-    """Stands in for the dictation worker: a job runs as it's submitted, on
-    the test's own thread, so a test sees the text typed when the key is let
-    go. Tests of the real worker's order and timing use DictationWorker."""
+    """Stands in for the dictation worker: a job runs at once, on the test's
+    thread, so the text is typed when the key is let go. Order and timing: DictationWorker."""
 
     thread = None               # no thread of its own: a job never runs "on" it
 
     def submit(self, job):
         job()
+
+    def submit_if_idle(self, job):
+        job()
+        return True
 
     def idle(self):
         return True

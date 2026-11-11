@@ -731,9 +731,13 @@ Turn it on in <b>Preferences → Advanced → TuxTalk Labs → Live text</b>. Th
 closes as your text is typed.
 
 ### How it works
-  • The box updates about once a second. On a graphics card that costs next to
-    nothing; on the processor it updates less often.
+  • The box updates about once a second. On the processor a long stretch of
+    talking can take too long to read again, and the box goes away until your next
+    pause or dictation; your text is still typed as usual.
+  • It shows the words as they're heard: numbers, commands like "new line" and AI
+    corrections are worked out when the text is typed.
   • With Type at pause, the box holds only what hasn't been typed yet.
+  • In a password field the box stays closed.
   • It never takes the keyboard or a click, so you can keep working underneath it.
 
 ## Transcribe a File

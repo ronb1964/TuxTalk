@@ -177,11 +177,20 @@ def test_a_change_in_preferences_is_in_force_after_the_reload(app, monkeypatch,
     assert getattr(live, name) == expected
 
 
+@pytest.mark.parametrize("name", ["open_apps", "live_text"])
+def test_the_flatpak_keeps_the_labs_switches_off(app, monkeypatch, name):
+    """Labs are hidden there, so a backup from another install can't turn one on."""
+    monkeypatch.setattr(ai_download, "is_installed", lambda: False)
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
+    live.apply(_settings(**{name: True}))
+    assert getattr(live, name) is False
+
+
 def test_every_setting_apply_keeps_is_in_the_table_above():
     """A setting added to live_settings.apply() later gets a row there too."""
     kept = {i.argval for i in dis.get_instructions(live.apply) if i.opname == "STORE_GLOBAL"}
     # The settings object itself, and the AI engine the AI settings start.
-    kept -= {"chunk_cfg", "ai_engine"}
+    kept -= {"settings", "ai_engine"}
     assert kept == {name for _c, name, _e in _MIRRORED}
 
 

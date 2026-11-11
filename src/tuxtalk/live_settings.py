@@ -85,10 +85,13 @@ voice_editing = False
 # Seconds of silence that end a toggle recording (0 = auto-stop off).
 auto_stop_seconds = 0.0
 
-# Seconds of silence that end a chunk (0 = chunked dictation off), and the live
-# settings object middle chunks read beeps, quotes and language from.
+# Seconds of silence that end a chunk (0 = chunked dictation off).
 chunk_pause_seconds = 0.0
-chunk_cfg = None
+
+# The settings as last applied: what work the recording loop doesn't hand
+# its settings to reads beeps, quotes and the language from (Type at pause's
+# middle phrases, live text's reads).
+settings = None
 
 # Type at pause fine-tuning (Preferences → Advanced → TuxTalk Labs).
 chunk_context_marks = True
@@ -107,7 +110,7 @@ def apply(cfg):
     global swiss_spelling, numbers_mode, numbers_language, voice_navigation, adapt_to_app
     global open_apps, live_text
     global auto_languages, press_enter_after
-    global chunk_pause_seconds, chunk_cfg, chunk_context_marks
+    global chunk_pause_seconds, settings, chunk_context_marks
     global log_transcripts, usage_stats, restore_clipboard, pause_media, duck_audio
     global paste_last_hotkey
     log_transcripts = cfg.log_transcripts
@@ -117,7 +120,7 @@ def apply(cfg):
     duck_audio = cfg.duck_audio
     paste_last_hotkey = cfg.paste_last_hotkey
     auto_stop_seconds = float(cfg.auto_stop_seconds) if cfg.auto_stop_silence else 0.0
-    chunk_cfg = cfg
+    settings = cfg
     chunk_context_marks = bool(cfg.chunk_context_marks)
     pause = float(cfg.chunk_pause_seconds) if cfg.chunked_dictation else 0.0
     if pause > 0 and auto_stop_seconds > 0 and pause >= auto_stop_seconds:
