@@ -333,6 +333,9 @@ NEEDED_HELPER_VERSION = "1.11"
 # word: one the input group may only read, and one that's a mouse too.
 READ_ONLY_KEYBOARDS_SINCE = "1.12"
 KEYBOARDS_ALSO_MICE_SINCE = "1.13"
+# The first helper that puts the lock lights back after letting go of the
+# keyboards (issue #34).
+LOCK_LIGHTS_SINCE = "1.16"
 # Why to update a helper before 1.13 on a computer with one: not certain,
 # since a Logitech mouse is one too.
 ALSO_MICE_REASON = ("A keyboard or mouse here is both at once, as Logitech's are, and the "
@@ -356,6 +359,23 @@ def missed_keyboard_reason(running):
             < _version(KEYBOARDS_ALSO_MICE_SINCE) and access.keyboards_also_mice()):
         return ALSO_MICE_REASON
     return None
+
+
+def lock_lights_reason(running):
+    """Why to update the running helper (version *running*) on KDE Plasma,
+    in one sentence without a full stop, or None. Every helper before
+    LOCK_LIGHTS_SINCE leaves the keyboards with the text console's lock
+    lights, all off, when it lets go of them, and KWin follows the lights:
+    there Num Lock goes off after every dictation and the number pad stops
+    typing numbers. Not a reason to update anywhere else, where only the
+    light was seen to go."""
+    if running is None or _version(running) >= _version(LOCK_LIGHTS_SINCE):
+        return None
+    from .desktop_detect import get_desktop_environment
+    if get_desktop_environment() != "kde":
+        return None
+    return ("On KDE Plasma, the hotkey helper on this computer turns Num Lock and Caps Lock "
+            "off after each dictation")
 
 
 def outdated_reason(running):

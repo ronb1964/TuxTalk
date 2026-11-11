@@ -160,6 +160,26 @@ def test_a_helper_too_old_for_a_read_only_keyboard_here_is_asked_about(helper, m
     assert asked == ["1.11"]                    # 1.12 reads it: nothing to ask
 
 
+@pytest.mark.parametrize("desktop, asks", [("kde", True), ("gnome", False)])
+def test_a_helper_that_turns_num_lock_off_is_asked_about_on_kde(helper, monkeypatch,
+                                                               desktop, asks):
+    """Issue #34: on KDE Plasma every helper before 1.16 turns Num Lock off
+    after each dictation, and the number pad stops typing numbers. Elsewhere
+    only the light was seen to go, so System check offers it without asking."""
+    asked, updates, restarts, answer, parakeet = helper
+    monkeypatch.setattr(secure_input, "running_version", lambda: "1.15")
+    monkeypatch.setattr("tuxtalk.desktop_detect.get_desktop_environment", lambda: desktop)
+    answer["update"] = False
+    offers._offer_in_turn(restarts.append)
+    assert asked == (["1.15"] if asks else [])
+    if asks:
+        text = offers.helper_update_text("1.15")
+        assert "Num Lock" in text and "number pad" in text
+    monkeypatch.setattr(secure_input, "running_version", lambda: secure_input.LOCK_LIGHTS_SINCE)
+    offers._offer_in_turn(restarts.append)
+    assert asked == (["1.15"] if asks else [])  # 1.16 puts the lights back: nothing to ask
+
+
 def _saved(monkeypatch, hold, toggle="F9"):
     monkeypatch.setattr("tuxtalk.config.load_config",
                         lambda: types.SimpleNamespace(hotkey=hold, toggle_hotkey=toggle))

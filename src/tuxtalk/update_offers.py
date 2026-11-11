@@ -52,7 +52,8 @@ def _offer_in_turn(restart) -> bool:
 
 def offer_helper_update() -> bool:
     """While the installed hotkey helper is older than the one this TuxTalk
-    or a dictation key set needs (secure_input.needs_update), ask to update
+    or a dictation key set needs (secure_input.needs_update), or turns Num
+    Lock off on KDE Plasma (secure_input.lock_lights_reason), ask to update
     it, at every start until it is. True when it asked. One only older than
     the helper this TuxTalk brings is left to System check, which offers it
     without asking. The Flatpak has no helper to update."""
@@ -61,7 +62,8 @@ def offer_helper_update() -> bool:
         if os.environ.get("FLATPAK_ID") or not secure_input.is_installed():
             return False
         running = secure_input.running_version()
-        if not secure_input.needs_update(running, secure_input.saved_keys()):
+        if not (secure_input.needs_update(running, secure_input.saved_keys())
+                or secure_input.lock_lights_reason(running)):
             return False
         if _ask_helper_update(running):
             update_helper(say_helper_updated)
@@ -84,6 +86,8 @@ def helper_update_text(running) -> str:
         names = keys[0] if len(keys) == 1 else f"{', '.join(keys[:-1])} and {keys[-1]}"
         can_t = "can't be a dictation key" if len(keys) == 1 else "can't be dictation keys"
         why = f": until it's updated, {names} {can_t}, and it misses this version's fixes."
+    elif lights := secure_input.lock_lights_reason(running):
+        why = f". {lights}, so the number pad can stop typing numbers until it's updated."
     else:
         why = ", with fixes the one you have doesn't get."
     return ("The hotkey helper is the small background service that reads your dictation "
