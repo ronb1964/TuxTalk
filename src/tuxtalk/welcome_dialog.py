@@ -58,17 +58,23 @@ def outdated_helper():
     if os.environ.get("FLATPAK_ID") or not secure_input.is_installed():
         return None
     running = secure_input.running_version()
-    if (secure_input.needs_update(running, secure_input.saved_keys())
-            or secure_input.lock_lights_reason(running)):
+    if _helper_needed_for_keys(running) or secure_input.lock_lights_reason(running):
         return running
     return None
+
+
+def _helper_needed_for_keys(running):
+    """Whether helper *running* is too old for this TuxTalk's keys
+    (secure_input.needs_update with the saved keys), not only for Num Lock."""
+    from . import secure_input
+    return secure_input.needs_update(running, secure_input.saved_keys())
 
 
 def _helper_update_explanation(running):
     """Why first run asks to update helper *running* (outdated_helper), as
     markup: the keys when it's too old for them, else Num Lock on KDE."""
-    from tuxtalk import secure_input
-    if secure_input.needs_update(running, secure_input.saved_keys()):
+    from . import secure_input
+    if _helper_needed_for_keys(running):
         goal, reason = "your dictation keys work", secure_input.outdated_reason(running)
     else:
         goal, reason = "Num Lock stays on", secure_input.lock_lights_reason(running)
@@ -383,6 +389,10 @@ class WelcomeDialog:
             has_uinput = check_uinput_permission()[0]
         self.outdated_helper = None if self.sees_no_keyboard else outdated_helper()
         self.needs_uinput_fix = not has_uinput or self.outdated_helper is not None
+        # Typing and the keys work, and the update is for Num Lock alone:
+        # skipping it costs that, not dictation.
+        self.update_for_lights_only = (has_uinput and self.outdated_helper is not None
+                                       and not _helper_needed_for_keys(self.outdated_helper))
         self._fix_label = ("🔧 Update Helper" if self.outdated_helper is not None
                            else "🔧 Fix Typing (Recommended)")
 
@@ -776,7 +786,12 @@ class WelcomeDialog:
         details = [f"🔧 {GLib.markup_escape_text(line)}" for line in lines]
         details.append("🔄 Restart your computer to apply (logging out is often not enough)"
                        if needs_restart else "✓ No restart needed")
-        if self.outdated_helper is not None:
+        if self.outdated_helper is not None and self.update_for_lights_only:
+            title = '🔵 Hotkey Helper Update Recommended'
+            status = "⚠ A hotkey helper update keeps Num Lock on"
+            action = "Update Helper"
+            explain = _helper_update_explanation(self.outdated_helper)
+        elif self.outdated_helper is not None:
             title = '🔴 Hotkey Helper Update Required'
             status = "❌ The hotkey helper needs an update"
             action = "Update Helper"
@@ -814,6 +829,9 @@ class WelcomeDialog:
         # virtual keyboard, so it needs these permissions too.
         alt_note = Gtk.Label()
         alt_note.set_markup(
+            '<span><i>💡 If you skip this, dictation still works, but Num Lock can go off\n'
+            '   after each dictation until the helper is updated.</i></span>'
+            if self.update_for_lights_only else
             '<span><i>💡 If you skip this, TuxTalk can\'t type into other apps, but every\n'
             '   dictation is kept in Recent Dictations in the TuxTalk menu to copy and '
             'paste.</i></span>')
@@ -853,8 +871,16 @@ class WelcomeDialog:
             self.dialog.response(Gtk.ResponseType.OK)
 
     def _continue_without_typing(self):
-        """Warn that the hotkey and typing won't work; continue if the user
-        says so, otherwise stay on this screen."""
+        """Warn that the hotkey and typing won't work, or for an update only
+        for Num Lock what that costs; continue if the user says so,
+        otherwise stay on this screen."""
+        if self.update_for_lights_only:
+            self._continue_without(
+                "The hotkey helper isn't updated yet",
+                "Until it is, Num Lock can go off after each dictation. Go back and click "
+                "Update Helper, or continue and update it later: Preferences, Advanced, "
+                "Show system check.")
+            return
         self._continue_without(
             "Typing isn't set up yet",
             "Without it your dictation key and typing won't work. Go back and "

@@ -475,3 +475,27 @@ def test_a_python_that_doesnt_answer_isnt_called_missing(monkeypatch):
     monkeypatch.setattr(si.subprocess, "run", hangs)
     ok, why = CAN_INSTALL()
     assert not ok and "didn't answer" in why and "isn't installed" not in why
+
+
+def test_a_python_that_isnt_there_is_called_missing(monkeypatch):
+    """A minimal system running the AppImage may have none: installing it is the fix."""
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(si.os.path, "isdir", lambda path: True)
+
+    def missing(*args, **kwargs):
+        raise FileNotFoundError(args[0][0])
+    monkeypatch.setattr(si.subprocess, "run", missing)
+    ok, why = CAN_INSTALL()
+    assert not ok and "isn't installed" in why
+
+
+def test_an_installed_helper_is_updated_even_when_its_check_fails(monkeypatch):
+    """Swapped for the input group, the old helper would stay, bugs and all,
+    and the update would still say it worked."""
+    ran = []
+    monkeypatch.setattr(si, "can_install", lambda: (False, "Python didn't answer"))
+    monkeypatch.setattr(si, "is_installed", lambda: True)
+    monkeypatch.setattr(si, "install_with_pkexec", lambda: ran.append("helper") or (True, ""))
+    monkeypatch.setattr("tuxtalk.uinput_helper.install_udev_rule_with_pkexec",
+                        lambda: ran.append("group") or (True, ""))
+    assert si.fix_permissions() == (True, "", False) and ran == ["helper"]

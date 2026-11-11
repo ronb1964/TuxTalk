@@ -163,6 +163,51 @@ def test_a_cancelled_fix_can_still_continue(needs_uinput, monkeypatch):
     assert d.responses == [Gtk.ResponseType.OK]
 
 
+@pytest.fixture
+def lights_only(welcome_screen, monkeypatch, message_boxes):
+    """First run on KDE with typing working and helper 1.15 installed: the
+    update is only for Num Lock (issue #34)."""
+    from tuxtalk import secure_input, welcome_dialog
+    monkeypatch.setattr(secure_input, "is_installed", lambda: True)
+    monkeypatch.setattr(secure_input, "running_version", lambda: "1.15")
+    monkeypatch.setattr(secure_input, "saved_keys", lambda: ["F8", "F9"])
+    monkeypatch.setattr("tuxtalk.desktop_detect.get_desktop_environment", lambda: "kde")
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(welcome_dialog, "helper_sees_no_keyboard", lambda: False)
+    d = welcome_screen(typing_ok=True)
+    d.responses = []
+    monkeypatch.setattr(d.dialog, "response", d.responses.append)
+    d.boxes = message_boxes
+    return d
+
+
+def _texts(widget):
+    """Every label's text under *widget*."""
+    if isinstance(widget, Gtk.Label):
+        yield widget.get_text()
+    if isinstance(widget, Gtk.Container):
+        for child in widget.get_children():
+            yield from _texts(child)
+
+
+def test_first_run_offers_the_num_lock_update_for_what_it_is(lights_only):
+    """Not "so your dictation keys work": they do."""
+    text = " ".join(_texts(lights_only.dialog))
+    assert "so Num Lock stays on" in text and "dictation keys work" not in text
+    assert "Recommended" in text and "Required" not in text
+    assert "dictation still works" in text and "can't type into other apps" not in text
+
+
+def test_skipping_the_num_lock_update_warns_about_num_lock_only(lights_only, monkeypatch):
+    d = lights_only
+    d.boxes.answer = Gtk.ResponseType.CANCEL     # "Go back"
+    monkeypatch.setattr(d, "_on_fix_typing_clicked",
+                        lambda button: d._finish_fix_typing(button, _fix_outcome(False)))
+    d.continue_button.clicked()
+    shown = " ".join(box.title + box.text for box in d.boxes.shown)
+    assert "Num Lock" in shown and "won't work" not in shown
+
+
 def test_set_it_up_goes_straight_on_when_nothing_is_needed(dialog, monkeypatch):
     responses = []
     monkeypatch.setattr(dialog.dialog, "response", lambda r: responses.append(r))

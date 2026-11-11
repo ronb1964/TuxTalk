@@ -266,7 +266,9 @@ def can_install():
         ok = subprocess.run([PYTHON, "-I", "-S", "-c",
                              "import sys; sys.exit(sys.version_info < (3, 8))"],
                             timeout=10).returncode == 0
-    except (OSError, subprocess.TimeoutExpired) as e:
+    except OSError:             # not there, or not something that runs
+        ok = False
+    except subprocess.TimeoutExpired as e:
         logger.info(f"Couldn't ask {PYTHON} its version: {e}")
         return False, f"{PYTHON} didn't answer when asked its version"
     if not ok:
@@ -390,8 +392,8 @@ def outdated_reason(running):
 
 def needs_update(running, keys=()):
     """Whether this TuxTalk needs a newer helper for its keys to work, and
-    asks at start to update the running one (lock_lights_reason asks too)
-    (version *running*): it's older than NEEDED_HELPER_VERSION, can't
+    asks at start to update the running one (version *running*;
+    lock_lights_reason asks too): it's older than NEEDED_HELPER_VERSION, can't
     report one of the dictation *keys* set (hears_key; saved_keys), or
     leaves out a keyboard here (missed_keyboard_reason)."""
     return running is not None and (_version(running) < _version(NEEDED_HELPER_VERSION)
@@ -469,7 +471,10 @@ def fix_permissions():
     Typing Permissions: the hotkey helper where this system can run it, the
     "input" group where it can't. Returns (ok, message, needs_restart)."""
     usable, why = can_install()
-    if usable:
+    # A helper already installed is updated, never swapped for the group:
+    # its check failing now (a Python slow to answer) doesn't undo the fact
+    # that it runs here, and the old helper would stay with its bugs.
+    if usable or is_installed():
         ok, message = install_with_pkexec()
         return ok, message, False
     logger.info(f"Hotkey helper not used ({why}); using the input group instead")

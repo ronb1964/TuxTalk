@@ -3,8 +3,7 @@ for this computer (once, a notification), and the offers of what it brings
 that the computer doesn't have yet: a hotkey helper new enough for this
 TuxTalk (asked at every start until it's updated: without it the dictation
 keys can stop working, or on KDE Plasma Num Lock goes off) and Parakeet
-Ultra (asked once). At most one offer
-a start, so two never stack.
+Ultra (asked once). At most one offer a start, so two never stack.
 
 They come up while people may be typing, so Not Now is the default: an
 Enter meant for their own window must not start a download or a password
@@ -82,14 +81,12 @@ def helper_update_text(running) -> str:
     from . import secure_input
     from .hotkey_helper import VERSION
     keys = [key for key in secure_input.KEYS_SINCE if not secure_input.hears_key(running, key)]
-    saved_unheard = [key for key in secure_input.saved_keys()
-                     if not secure_input.hears_key(running, key)]
     lights = secure_input.lock_lights_reason(running)
     if missed := secure_input.missed_keyboard_reason(running):
         why = f". {missed}, so your dictation keys may not work until it's updated."
-    # Num Lock before keys this person doesn't use: a key that helper can't
-    # report says nothing to them unless it's one of theirs.
-    elif lights and not saved_unheard:
+    # Num Lock before keys this person doesn't use, when their own keys work:
+    # a key that helper can't report says nothing to them unless it's theirs.
+    elif lights and not secure_input.needs_update(running, secure_input.saved_keys()):
         why = f". {lights}, so the number pad can stop typing numbers until it's updated."
     elif keys:
         names = keys[0] if len(keys) == 1 else f"{', '.join(keys[:-1])} and {keys[-1]}"
