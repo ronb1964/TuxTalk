@@ -163,17 +163,22 @@ def test_a_cancelled_fix_can_still_continue(needs_uinput, monkeypatch):
     assert d.responses == [Gtk.ResponseType.OK]
 
 
-@pytest.fixture
-def lights_only(welcome_screen, monkeypatch, message_boxes):
-    """First run on KDE with typing working and helper 1.15 installed: the
-    update is only for Num Lock (issue #34)."""
-    from tuxtalk import secure_input, welcome_dialog
+def _kde_with_helper_1_15(monkeypatch):
+    """KDE Plasma with helper 1.15 installed and F8 and F9 saved: keys it
+    reports, and the lock lights it turns off (issue #34)."""
     monkeypatch.setattr(secure_input, "is_installed", lambda: True)
     monkeypatch.setattr(secure_input, "running_version", lambda: "1.15")
     monkeypatch.setattr(secure_input, "saved_keys", lambda: ["F8", "F9"])
     monkeypatch.setattr("tuxtalk.desktop_detect.get_desktop_environment", lambda: "kde")
     monkeypatch.delenv("FLATPAK_ID", raising=False)
-    monkeypatch.setattr(welcome_dialog, "helper_sees_no_keyboard", lambda: False)
+    monkeypatch.setattr(wd, "helper_sees_no_keyboard", lambda: False)
+
+
+@pytest.fixture
+def lights_only(welcome_screen, monkeypatch, message_boxes):
+    """First run on KDE with typing working and helper 1.15 installed: the
+    update is only for Num Lock (issue #34)."""
+    _kde_with_helper_1_15(monkeypatch)
     d = welcome_screen(typing_ok=True)
     d.responses = []
     monkeypatch.setattr(d.dialog, "response", d.responses.append)
@@ -206,6 +211,29 @@ def test_skipping_the_num_lock_update_warns_about_num_lock_only(lights_only, mon
     d.continue_button.clicked()
     shown = " ".join(box.title + box.text for box in d.boxes.shown)
     assert "Num Lock" in shown and "won't work" not in shown
+
+
+def test_a_num_lock_update_that_worked_says_the_helper_was_updated(lights_only):
+    """Not "Typing Setup Complete!": typing worked before it."""
+    d = lights_only
+    d._finish_fix_typing(d.fix_typing_button, _fix_outcome(True))
+    assert d._uinput_status_label.get_text() == "✅ Hotkey helper updated"
+    assert "Hotkey helper updated" in d.typing_status_label.get_text()
+    [box] = d.boxes.shown
+    assert box.title == "Hotkey Helper Updated" and "Num Lock" in box.text
+
+
+def test_without_typing_the_helper_update_is_asked_for_typing_not_num_lock(welcome_screen,
+                                                                          monkeypatch):
+    """Helper 1.15 runs on KDE, but TuxTalk can't type yet: the update sets
+    that up too, so the step says so, as the note under it does, instead
+    of offering it for Num Lock."""
+    _kde_with_helper_1_15(monkeypatch)
+    d = welcome_screen(typing_ok=False)
+    text = " ".join(_texts(d.dialog))
+    assert "Hotkey Helper Update Required" in text
+    assert "so TuxTalk can type into your apps" in text and "can't type into other apps" in text
+    assert "Num Lock stays on" not in text
 
 
 def test_set_it_up_goes_straight_on_when_nothing_is_needed(dialog, monkeypatch):

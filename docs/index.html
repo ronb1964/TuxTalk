@@ -338,18 +338,10 @@
 
     <div class="feature" style="margin-top:44px">
       <div class="prose">
-        <h3>Type at pause</h3>
-        <p>Each phrase gets typed when you pause, instead of all at once when you're done. Put it together with hands-free on F9 and you can say a message, look it over, say "edit that, make it friendlier", and say "press enter" to send it. No keyboard at all. guelz built this one.</p>
-        <aside class="ask" aria-labelledby="ask-labs-h">
-          <p class="ask-tag">Quick question</p>
-          <p class="ask-q" id="ask-labs-h">Would you want to see words appear while you're still talking?</p>
-          <p class="ask-sub">Tell me in a two-minute poll. You don't need to use TuxTalk to answer.</p>
-          <div class="ask-btns">
-            <a class="btn btn-ask" href="https://docs.google.com/forms/d/e/1FAIpQLSfCQk7K5CmhXC3UvIJuoasmfBBESN0vzB1a9H84YMtwtCYAtg/viewform" target="_blank" rel="noopener">Answer in a Google Form<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg><span class="visually-hidden"> (opens in a new tab)</span></a>
-            <a class="btn btn-ask-2" href="https://github.com/ronb1964/TuxTalk/discussions/24" target="_blank" rel="noopener">Answer on GitHub<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg><span class="visually-hidden"> (opens in a new tab)</span></a>
-          </div>
-          <p class="ask-note">The form needs no account, but it sends your answer to Google. TuxTalk itself never sends anything.</p>
-        </aside>
+        <h3>While you talk</h3>
+        <p>Pick one thing to happen while you're still talking. "Show the words in a box" puts what you've said so far in a little box by the recording indicator, so you can watch TuxTalk keep up. It needs the speech model on a graphics card, and what gets typed when you let go is the same as always.</p>
+        <p>"Type each phrase when you pause" types each phrase when you pause, instead of all at once when you're done. Put it together with hands-free on F9 and you can say a message, look it over, say "edit that, make it friendlier", and say "press enter" to send it. No keyboard at all. guelz built this one.</p>
+        <p>The box came out of the poll in <a href="https://github.com/ronb1964/TuxTalk/discussions/24" target="_blank" rel="noopener">Discussion #24</a>. If you try it, tell me there how it's going.</p>
         <h3 style="margin-top:14px">Voice editing</h3>
         <p>Select some text, hold Shift+F8 and say what you want changed. Or skip the selecting: right after you dictate, say "edit that, make it shorter". There's no fixed wording, and Ctrl+Z puts it back if you don't like it. Jobs like all caps or taking out commas are done exactly in code. Rewording goes to a small AI model that runs on your computer, and that one's a download you only get if you turn it on.</p>
         <h3 style="margin-top:14px">Select and move by voice</h3>
@@ -360,7 +352,7 @@
         <h3 style="margin-top:14px">Click with your voice</h3>
         <p>Say "mouse grid" and the screen splits into nine numbered parts. Say a number and that part gets its own grid, and on KDE, GNOME and Cinnamon the desktop zooms in on it so you can actually see the button you're after. "left 3" nudges the yellow dot a few pixels, then say "click". If TuxTalk can't put the pointer exactly where the grid shows, it doesn't click at all.</p>
         <figure class="shot-frame" style="margin:14px 0 0">
-          <video autoplay muted loop playsinline preload="metadata" width="720" height="474" aria-label="Saying mouse grid, then three, one and eight: the screen zooms in on a website's top bar with a finer grid, right four moves the yellow dot, and click lands on the Download button">
+          <video controls autoplay muted loop playsinline preload="metadata" width="720" height="474" aria-label="Saying mouse grid, then three, one and eight: the screen zooms in on a website's top bar with a finer grid, right four moves the yellow dot, and click lands on the Download button">
             <source src="img/mouse-grid.mp4" type="video/mp4">
           </video>
           <figcaption>"mouse grid", then a number or two, then "click".</figcaption>

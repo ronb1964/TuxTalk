@@ -6,6 +6,16 @@
 
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  /* ---------- Clips that play by themselves stand still for reduced motion ----------
+     The mouse-grid clip loops on its own; with less motion asked for it waits,
+     paused, for its own play button. */
+  if (reduceMotion) {
+    document.querySelectorAll("video[autoplay]").forEach(function (v) {
+      v.removeAttribute("autoplay");
+      v.pause();
+    });
+  }
+
   /* ---------- Every page starts at the top (or at its #section) ----------
      Going from the long home page to Privacy must not keep the old scroll
      position. The browser normally handles this, but the preview's frame can

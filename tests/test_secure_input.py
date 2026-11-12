@@ -8,6 +8,7 @@ from stand_ins import ShownWidget
 from shell_stubs import recorders, stub
 from tuxtalk import secure_input as si
 from tuxtalk import hotkey_helper
+from tuxtalk.config import CTRL_SPACE
 
 # The real check, before conftest stands in for it (no test may reach pkexec;
 # this one runs nothing as root).
@@ -440,7 +441,25 @@ def test_a_helper_too_old_for_any_keyboard_says_what_is_certain(monkeypatch):
                         lambda: ["/dev/input/event5"])
     assert si.missed_keyboard_reason("1.4") is None and si.needs_update("1.4")
     assert "too old" in si.outdated_reason("1.4")
-    assert "Right Ctrl" in update_offers.helper_update_text("1.4")
+    assert "Right Ctrl" in update_offers.helper_update_text("1.4", "keys")
+
+
+@pytest.mark.parametrize("running, desktop, keys, reason", [
+    ("1.10", "gnome", ["F8", "F9"], "keys"),        # too old for this TuxTalk
+    ("1.13", "gnome", [CTRL_SPACE, "F9"], "keys"),  # a saved key it can't report
+    ("1.13", "kde", [CTRL_SPACE, "F9"], "keys"),    # the keys come first
+    ("1.15", "kde", ["F8", "F9"], "lights"),        # Num Lock on KDE, issue #34
+    ("1.15", "gnome", ["F8", "F9"], None),          # System check offers it there
+    (hotkey_helper.VERSION, "kde", [CTRL_SPACE], None),
+    (None, "kde", ["F8"], None)])                   # no helper answering
+def test_why_the_helper_is_asked_about_at_start(monkeypatch, running, desktop, keys, reason):
+    """One answer for the question at start and first run's screen: the
+    keys before Num Lock, so the offer says what stops dictation first."""
+    monkeypatch.setattr("tuxtalk.helper_keyboard_access.read_only_keyboards", lambda: [])
+    monkeypatch.setattr("tuxtalk.helper_keyboard_access.keyboards_also_mice", lambda: [])
+    monkeypatch.setattr("tuxtalk.desktop_detect.get_desktop_environment", lambda: desktop)
+    monkeypatch.setattr(si, "saved_keys", lambda: keys)
+    assert si.update_reason(running) == reason
 
 
 @pytest.mark.parametrize("helper_possible, wording", [

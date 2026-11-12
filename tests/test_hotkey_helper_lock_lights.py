@@ -132,3 +132,13 @@ def test_lights_the_kernel_cant_read_are_left_as_they_are_and_said(keyboard, cap
     assert kb.grab(False) and not kb.grabbed
     assert written(r) == []
     assert "couldn't read the lock lights of 'Fake keyboard'" in capsys.readouterr().out
+
+
+def test_the_numbers_the_helper_asks_linux_with_are_linux_s_own():
+    """The tests above take them from the helper, so a wrong one would pass
+    them all while the real read fails and Num Lock goes off again. From
+    linux/input.h: EVIOCGLED(len) is _IOC(_IOC_READ, 'E', 0x19, len), here
+    with 2 bytes (LED_MAX is 0x0f); input-event-codes.h has the rest."""
+    assert hh.EVIOCGLED == 0x80024519
+    assert hh.EV_LED == 0x11
+    assert (hh.LED_NUML, hh.LED_CAPSL, hh.LED_SCROLLL) == (0, 1, 2)

@@ -13,7 +13,7 @@ judge is Ron's: two screens, his own screen scale, and how it feels.
 import contextlib
 import json
 import re
-import sys
+import runpy
 import time
 from collections import namedtuple
 from pathlib import Path
@@ -23,8 +23,10 @@ from checks_desktop_commands import _said
 from harness import Outcome, check, squash
 from vmlib import REMOTE
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from tuxtalk.mouse_grid_model import NUDGE_PX  # noqa: E402
+# The model's file alone, by path: importing the tuxtalk package would run
+# its start-up (moving a TalkType install's folders) on this computer.
+NUDGE_PX = runpy.run_path(
+    str(Path(__file__).resolve().parents[2] / "src/tuxtalk/mouse_grid_model.py"))["NUDGE_PX"]
 
 SECTION = "Mouse by voice"
 BUTTONS = "TT Buttons"

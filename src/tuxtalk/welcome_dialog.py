@@ -48,9 +48,9 @@ def helper_sees_no_keyboard():
 
 
 def outdated_helper():
-    """The running hotkey helper's version when this TuxTalk, or a
-    dictation key saved, needs a newer one (secure_input.needs_update),
-    or on KDE Plasma one that can turn Num Lock off (lock_lights_reason),
+    """(the running hotkey helper's version, why to update it) when this
+    TuxTalk or a dictation key saved needs a newer one ("keys"), or on KDE
+    Plasma one that can turn Num Lock off ("lights"; secure_input.update_reason),
     else None. Fix Typing installs the new one, so first run, which asks
     nothing at start, offers it there rather than leave it to the question
     at the next start."""
@@ -58,28 +58,25 @@ def outdated_helper():
     if os.environ.get("FLATPAK_ID") or not secure_input.is_installed():
         return None
     running = secure_input.running_version()
-    if _helper_needed_for_keys(running) or secure_input.lock_lights_reason(running):
-        return running
-    return None
+    reason = secure_input.update_reason(running)
+    return (running, reason) if reason else None
 
 
-def _helper_needed_for_keys(running):
-    """Whether helper *running* is too old for this TuxTalk's keys
-    (secure_input.needs_update with the saved keys), not only for Num Lock."""
+def _helper_update_explanation(running, reason, lights_only):
+    """Why first run asks to update helper *running* for *reason*
+    (outdated_helper), as markup: the keys when it's too old for them; Num
+    Lock on KDE when that's all (*lights_only*); else typing, which can't
+    work yet and which the update sets up too."""
     from . import secure_input
-    return secure_input.needs_update(running, secure_input.saved_keys())
-
-
-def _helper_update_explanation(running):
-    """Why first run asks to update helper *running* (outdated_helper), as
-    markup: the keys when it's too old for them, else Num Lock on KDE."""
-    from . import secure_input
-    if _helper_needed_for_keys(running):
-        goal, reason = "your dictation keys work", secure_input.outdated_reason(running)
+    if reason == "keys":
+        goal, why = "your dictation keys work", secure_input.outdated_reason(running)
+    elif lights_only:
+        goal, why = "Num Lock stays on", secure_input.lock_lights_reason(running)
     else:
-        goal, reason = "Num Lock stays on", secure_input.lock_lights_reason(running)
+        goal, why = ("TuxTalk can type into your apps",
+                     "Without it, dictated text can't be typed into your applications")
     return (f'<span><b>Update the hotkey helper so {goal}.</b>\n'
-            f'{GLib.markup_escape_text(reason)}.\nClick "Update Helper" below.</span>')
+            f'{GLib.markup_escape_text(why)}.\nClick "Update Helper" below.</span>')
 
 
 def _no_keyboard_label():
@@ -387,12 +384,12 @@ class WelcomeDialog:
         if self.sees_no_keyboard:
             from .uinput_helper import check_uinput_permission
             has_uinput = check_uinput_permission()[0]
-        self.outdated_helper = None if self.sees_no_keyboard else outdated_helper()
+        outdated = None if self.sees_no_keyboard else outdated_helper()
+        self.outdated_helper, self.helper_update_reason = outdated or (None, None)
         self.needs_uinput_fix = not has_uinput or self.outdated_helper is not None
         # Typing and the keys work, and the update is for Num Lock alone:
         # skipping it costs that, not dictation.
-        self.update_for_lights_only = (has_uinput and self.outdated_helper is not None
-                                       and not _helper_needed_for_keys(self.outdated_helper))
+        self.update_for_lights_only = has_uinput and self.helper_update_reason == "lights"
         self._fix_label = ("🔧 Update Helper" if self.outdated_helper is not None
                            else "🔧 Fix Typing (Recommended)")
 
@@ -786,16 +783,14 @@ class WelcomeDialog:
         details = [f"🔧 {GLib.markup_escape_text(line)}" for line in lines]
         details.append("🔄 Restart your computer to apply (logging out is often not enough)"
                        if needs_restart else "✓ No restart needed")
-        if self.outdated_helper is not None and self.update_for_lights_only:
-            title = '🔵 Hotkey Helper Update Recommended'
-            status = "⚠ A hotkey helper update keeps Num Lock on"
+        if self.outdated_helper is not None:
+            title, status = (
+                ('🔵 Hotkey Helper Update Recommended', "⚠ A hotkey helper update keeps Num Lock on")
+                if self.update_for_lights_only else
+                ('🔴 Hotkey Helper Update Required', "❌ The hotkey helper needs an update"))
             action = "Update Helper"
-            explain = _helper_update_explanation(self.outdated_helper)
-        elif self.outdated_helper is not None:
-            title = '🔴 Hotkey Helper Update Required'
-            status = "❌ The hotkey helper needs an update"
-            action = "Update Helper"
-            explain = _helper_update_explanation(self.outdated_helper)
+            explain = _helper_update_explanation(self.outdated_helper, self.helper_update_reason,
+                                                 self.update_for_lights_only)
         else:
             title, status = '🔴 Typing Setup Required', "❌ Input device permissions needed"
             action = "Fix Typing"
@@ -931,6 +926,8 @@ class WelcomeDialog:
 
         if self.uinput_fixed and outcome["sees_no_keyboard"]:
             self._report_no_keyboard(button)
+        elif self.uinput_fixed and self.update_for_lights_only:
+            self._report_lights_update(button)
         elif self.uinput_fixed:
             button.set_label("✅ Fixed!")
             button.set_sensitive(False)  # Disable - no more action needed
@@ -956,6 +953,18 @@ class WelcomeDialog:
             button.set_label(self._fix_label)
             result_text = "\n".join(outcome["results"]) or "Setup was cancelled"
             self.typing_status_label.set_markup(_status_markup(result_text, "#FF9800"))
+
+    def _report_lights_update(self, button):
+        """Update Helper worked where only Num Lock needed it: typing was set
+        up already, so it's the hotkey helper that's said to be done."""
+        button.set_label("✅ Updated!")
+        button.set_sensitive(False)
+        if self._uinput_status_label is not None:
+            self._uinput_status_label.set_markup("✅ Hotkey helper updated")
+        self.typing_status_label.set_markup(
+            '<span color="#4CAF50"><b>✓ Ready!</b> Hotkey helper updated.</span>')
+        show_message(self.dialog, Gtk.MessageType.INFO, "Hotkey Helper Updated",
+                     "Num Lock and Caps Lock now stay as they were after each dictation.")
 
     def _report_no_keyboard(self, button):
         """Fix Typing worked, but the hotkey helper it installed reads no

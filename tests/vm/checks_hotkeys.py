@@ -8,7 +8,7 @@ window on KDE and GNOME) belongs to the app, so it mustn't dictate as well.
 On GNOME these run after the extension is installed: only it holds keys back.
 """
 import json
-import sys
+import runpy
 import time
 from pathlib import Path
 
@@ -17,8 +17,10 @@ from checks_prefs import PREFS, open_fold
 from harness import Abort, Outcome, check, heard_in
 from vmlib import REMOTE
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from tuxtalk.hotkey_helper import VERSION  # noqa: E402
+# The helper's file alone, by path: importing the tuxtalk package would run
+# its start-up (moving a TalkType install's folders) on this computer.
+VERSION = runpy.run_path(
+    str(Path(__file__).resolve().parents[2] / "src/tuxtalk/hotkey_helper.py"))["VERSION"]
 
 SECTION = "Hotkeys and keyboard layouts"
 COSMIC_XKB = "~/.config/cosmic/com.system76.CosmicComp/v1/xkb_config"
@@ -397,8 +399,15 @@ def ctrl_space_input_method_log(run):
     return Outcome("pass", f"The log says {who} also uses Ctrl+Space")
 
 
+# What the question at start says on KDE Plasma about a helper before 1.16
+# (update_offers.helper_update_text, issue #34): tests/test_vm_ctrl_space_checks.py
+# fails if the question stops saying it.
+NUM_LOCK_WORDING = "the number pad can stop typing numbers"
+
+
 @check(SECTION, "ctrl_space_quiet_helper_update",
-       "Helper 1.13 gets no question at start; System check offers the new one quietly")
+       "Helper 1.13: asked about at start on KDE only (Num Lock); System check offers "
+       "the new one")
 def ctrl_space_quiet_helper_update(run):
     missing = _helper_missing(run)
     if missing:
@@ -416,18 +425,44 @@ def ctrl_space_quiet_helper_update(run):
         return _quiet_update_outcome(run)
 
 
-def _quiet_update_outcome(run):
-    """ctrl_space_quiet_helper_update's look at the start and System check."""
+def _question_at_start(run):
+    """Restart, and close the helper question if it comes: (whether it came,
+    whether it named the number pad, the log of the start)."""
     mark = run.log_mark()
     _reboot(run)
     time.sleep(30)      # the helper offer comes about 20 seconds after the start
     question = run.vm.ui("find", "label", "TuxTalk's hotkey helper needs an update", timeout=3)
+    num_lock = question is not None and run.vm.ui(
+        "find", "label", f"~{NUM_LOCK_WORDING}", timeout=3) is not None
     if question is not None:
         # Left open, it would stand in front of every later check here.
         run.vm.ui("click", "button", "Not Now", timeout=5)
-    # Only an answered question is logged; "offer skipped" is an error, not one.
-    asked_in_log = any(line in run.log_since(mark) for line in (
-        "Hotkey helper update offer: not now", "Updated the hotkey helper from the offer"))
+    return question is not None, num_lock, run.log_since(mark)
+
+
+def _start_problems(run, asked, num_lock, log):
+    """What's wrong with the start: on KDE Plasma helper 1.13 is asked
+    about, for Num Lock (issue #34); elsewhere nothing asks. An offer that
+    failed ("skipped") is a problem on both, not "no update needed"."""
+    skipped = next((line.strip() for line in log.splitlines()
+                    if "Hotkey helper update offer skipped" in line), None)
+    problems = [f"The offer at start failed: {skipped}"] if skipped else []
+    if "kde" in run.vm.spec.tags:
+        if not asked:
+            problems.append("TuxTalk didn't ask at start to update the helper, which on KDE "
+                            "Plasma turns Num Lock off")
+        elif not num_lock:
+            problems.append(f"The question at start doesn't say {NUM_LOCK_WORDING!r}")
+    # Only an answered question is logged.
+    elif asked or any(line in log for line in (
+            "Hotkey helper update offer: not now", "Updated the hotkey helper from the offer")):
+        problems.append("TuxTalk asked about updating the helper at start")
+    return problems
+
+
+def _quiet_update_outcome(run):
+    """ctrl_space_quiet_helper_update's look at the start and System check."""
+    asked, num_lock, log = _question_at_start(run)
     run.dbus("OpenPreferences")
     if run.vm.ui("tab", "Advanced", PREFS, timeout=30) is None:
         raise Abort("Preferences didn't open")
@@ -435,9 +470,7 @@ def _quiet_update_outcome(run):
     texts = run.vm.ui("texts", PREFS) or []
     shot = run.shot("system-check-helper-update")
     run.vm.ui("click", "button", "Cancel", PREFS, timeout=5)
-    problems = []
-    if question is not None or asked_in_log:
-        problems.append("TuxTalk asked about updating the helper at start")
+    problems = _start_problems(run, asked, num_lock, log)
     offer = f"(1.13 → {VERSION})"
     if not any(offer in t for t in texts):
         problems.append(f"System check doesn't offer {offer}")
@@ -445,5 +478,6 @@ def _quiet_update_outcome(run):
         problems.append("System check doesn't say ✓ Ready")
     if problems:
         return Outcome("fail", "; ".join(problems), screenshot=shot)
-    return Outcome("pass", f"No question at start; System check reads ✓ Ready and offers "
-                   f"{offer}", screenshot=shot)
+    start = "Asked about Num Lock at start" if asked else "No question at start"
+    return Outcome("pass", f"{start}; System check reads ✓ Ready and offers {offer}",
+                   screenshot=shot)

@@ -2,6 +2,8 @@
 phrases that exist, and read the helper's report strictly: the pair and
 nothing else, and never a pass on an empty file.
 """
+from types import SimpleNamespace
+
 import pytest
 from conftest import import_vm_tool
 
@@ -88,11 +90,13 @@ def test_the_helper_version_comes_from_its_hello():
 
 class _Guest:
     """What the quiet-update and input-method checks ask of a VM: a helper
-    that runs, the question on screen or not, and the log so far."""
+    that runs, the question on screen (its text) or not, the log so far,
+    and the desktop."""
 
-    def __init__(self, question=None, log=""):
+    def __init__(self, question=None, log="", desktop="gnome"):
         self.question, self.log, self.clicked, self.needles = question, log, [], []
         self.config = {}
+        self.spec = SimpleNamespace(tags=(desktop,))
 
     def ssh(self, command, check=False):
         return type("Done", (), {"stdout": "active", "returncode": 0})()
@@ -101,7 +105,10 @@ class _Guest:
         if action == "click":
             self.clicked.append(args)
         if action == "find":
-            return self.question
+            name = args[1]
+            if self.question is None or (name.startswith("~") and name[1:] not in self.question):
+                return None
+            return "label"
         if action == "texts":
             return ["✓ Ready", f"(1.13 → {checks.VERSION})"]
         return "found"
@@ -138,14 +145,41 @@ def quiet_update(monkeypatch):
 
 def test_a_found_update_question_fails_the_check_and_is_closed(quiet_update):
     """Left open, it would sit in front of every later check on that VM."""
-    guest = _Guest(question="label")
+    guest = _Guest(question="This computer runs version 1.13")
     assert quiet_update(guest).status == "fail"
     assert ("button", "Not Now") in guest.clicked
 
 
-def test_an_offer_that_was_skipped_is_not_a_question_asked(quiet_update):
-    guest = _Guest(log="Hotkey helper update offer skipped: no D-Bus yet")
-    assert quiet_update(guest).status == "pass"
+def test_an_offer_that_was_skipped_is_an_error_not_a_quiet_start(quiet_update):
+    """The offer raised, so nothing was asked: that says nothing about
+    whether it would have."""
+    for desktop in ("gnome", "kde"):
+        guest = _Guest(log="Hotkey helper update offer skipped: no D-Bus yet", desktop=desktop,
+                       question=f"It {checks.NUM_LOCK_WORDING}" if desktop == "kde" else None)
+        outcome = quiet_update(guest)
+        assert outcome.status == "fail" and "offer at start failed" in outcome.detail
+
+
+@pytest.mark.parametrize("question, status", [
+    (f"On KDE Plasma ... off, so {checks.NUM_LOCK_WORDING} until it's updated.", "pass"),
+    ("This computer runs version 1.13, with fixes the one you have doesn't get.", "fail"),
+    (None, "fail")])
+def test_on_kde_helper_1_13_is_asked_about_for_num_lock(quiet_update, question, status):
+    """On KDE Plasma every helper before 1.16 can turn Num Lock off (issue
+    #34), so there the question at start is right, and it must say why."""
+    guest = _Guest(question=question, desktop="kde")
+    assert quiet_update(guest).status == status
+    if question is not None:
+        assert ("button", "Not Now") in guest.clicked
+
+
+def test_the_num_lock_wording_looked_for_is_what_the_question_says(monkeypatch):
+    from tuxtalk import secure_input, update_offers
+    monkeypatch.setattr("tuxtalk.desktop_detect.get_desktop_environment", lambda: "kde")
+    monkeypatch.setattr("tuxtalk.helper_keyboard_access.keyboards_also_mice", lambda: [])
+    monkeypatch.setattr(secure_input, "saved_keys", lambda: ["F8", "F9"])
+    assert secure_input.update_reason("1.13") == "lights"
+    assert checks.NUM_LOCK_WORDING in update_offers.helper_update_text("1.13", "lights")
 
 
 def test_the_quiet_check_runs_with_keys_helper_1_13_reports(quiet_update):

@@ -401,6 +401,19 @@ def needs_update(running, keys=()):
                                     or missed_keyboard_reason(running) is not None)
 
 
+def update_reason(running):
+    """Why TuxTalk asks to update the running helper (version *running*),
+    at start or on first run's screen: "keys" when this TuxTalk or a saved
+    dictation key needs a newer one (needs_update), "lights" when it only
+    turns Num Lock off on KDE Plasma (lock_lights_reason), else None. Both
+    read the settings or /dev/input: ask once a screen."""
+    if needs_update(running, saved_keys()):
+        return "keys"
+    if lock_lights_reason(running):
+        return "lights"
+    return None
+
+
 def saved_keys():
     """The hold and toggle keys in the settings, for needs_update."""
     from .config import HOTKEY_KEYS, load_config

@@ -26,7 +26,7 @@ def helper(monkeypatch):
     monkeypatch.setattr(secure_input, "is_installed", lambda: True)
     monkeypatch.setattr(secure_input, "running_version", lambda: "1.4")
     monkeypatch.setattr(offers, "_ask_helper_update",
-                        lambda running: asked.append(running) or answer["update"])
+                        lambda running, reason: asked.append(running) or answer["update"])
     monkeypatch.setattr(secure_input, "install_with_pkexec",
                         lambda: updates.append(1) or answer["result"])
 
@@ -95,11 +95,12 @@ def test_no_offer_without_an_older_helper_to_update(helper, monkeypatch, running
 
 
 def test_the_offer_says_what_the_helper_does_and_what_doesn_t_work_yet():
-    text = offers.helper_update_text("1.4")
+    text = offers.helper_update_text("1.4", "keys")
     assert "reads your dictation keys" in text and "1.4" in text
     assert "Right Ctrl, Right Alt and Left Ctrl+Space can't be dictation keys" in text
-    assert "Right Ctrl" not in offers.helper_update_text("1.5")
-    assert "Left Ctrl+Space can't be a dictation key" in offers.helper_update_text("1.10")
+    assert "Right Ctrl" not in offers.helper_update_text("1.5", "keys")
+    assert "Left Ctrl+Space can't be a dictation key" in offers.helper_update_text("1.10",
+                                                                                   "keys")
 
 
 def test_not_now_is_the_default_button(monkeypatch):
@@ -115,7 +116,7 @@ def test_not_now_is_the_default_button(monkeypatch):
         def run(self):
             return update_offers.Gtk.ResponseType.CANCEL
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: Dialog())
-    assert update_offers._ask_helper_update("1.4") is False
+    assert update_offers._ask_helper_update("1.4", "keys") is False
     assert ("set_default_response", (update_offers.Gtk.ResponseType.CANCEL,)) in calls
     assert ("add_button", ("Update Helper", update_offers.Gtk.ResponseType.OK)) in calls
 
@@ -154,7 +155,7 @@ def test_a_helper_too_old_for_a_read_only_keyboard_here_is_asked_about(helper, m
     answer["update"] = False
     offers._offer_in_turn(restarts.append)
     assert asked == ["1.11"] and parakeet == []
-    text = offers.helper_update_text("1.11")
+    text = offers.helper_update_text("1.11", "keys")
     assert "keyboard can only be read" in text and "can't use such a keyboard" in text
     monkeypatch.setattr(secure_input, "running_version", lambda: hotkey_helper.VERSION)
     offers._offer_in_turn(restarts.append)
@@ -178,7 +179,8 @@ def test_a_helper_that_turns_num_lock_off_is_asked_about_on_kde(helper, monkeypa
     assert parakeet == ([] if asks else [restarts.append])     # one offer a start
     if asks:
         for running in ("1.15", "1.13"):    # 1.13 can't report Ctrl+Space, unused here
-            text = offers.helper_update_text(running)
+            assert secure_input.update_reason(running) == "lights"
+            text = offers.helper_update_text(running, "lights")
             assert "Num Lock" in text and "number pad" in text and "Ctrl+Space" not in text
     monkeypatch.setattr(secure_input, "running_version", lambda: secure_input.LOCK_LIGHTS_SINCE)
     offers._offer_in_turn(restarts.append)
@@ -202,7 +204,7 @@ def test_a_saved_key_the_helper_cant_report_is_asked_about_at_start(helper, monk
     assert asked == (["1.13"] if asks else [])
 
 
-@pytest.mark.parametrize("toggle, outdated", [(CTRL_SPACE, "1.13"), ("F9", None)])
+@pytest.mark.parametrize("toggle, outdated", [(CTRL_SPACE, ("1.13", "keys")), ("F9", None)])
 def test_the_welcome_screen_offers_the_helper_a_saved_key_needs(helper, monkeypatch,
                                                                 toggle, outdated):
     monkeypatch.setattr(secure_input, "running_version", lambda: "1.13")
@@ -218,7 +220,7 @@ def test_first_run_on_kde_offers_the_helper_that_keeps_num_lock_on(helper, monke
     monkeypatch.setattr(secure_input, "running_version", lambda: "1.15")
     monkeypatch.setattr("tuxtalk.desktop_detect.get_desktop_environment", lambda: desktop)
     _saved(monkeypatch, "F8")
-    assert welcome_dialog.outdated_helper() == ("1.15" if offered else None)
+    assert welcome_dialog.outdated_helper() == (("1.15", "lights") if offered else None)
     if offered:
-        text = welcome_dialog._helper_update_explanation("1.15")
+        text = welcome_dialog._helper_update_explanation("1.15", "lights", lights_only=True)
         assert "so Num Lock stays on" in text and "dictation keys work" not in text

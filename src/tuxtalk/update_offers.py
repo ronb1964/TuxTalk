@@ -52,21 +52,20 @@ def _offer_in_turn(restart) -> bool:
 
 def offer_helper_update() -> bool:
     """While the installed hotkey helper is older than the one this TuxTalk
-    or a dictation key set needs (secure_input.needs_update), or turns Num
-    Lock off on KDE Plasma (secure_input.lock_lights_reason), ask to update
-    it, at every start until it is. True when it asked. One only older than
-    the helper this TuxTalk brings, with nothing wrong here, is left to
-    System check, which offers it without asking. The Flatpak has no helper
-    to update."""
+    or a dictation key set needs, or turns Num Lock off on KDE Plasma
+    (secure_input.update_reason), ask to update it, at every start until it
+    is. True when it asked. One only older than the helper this TuxTalk
+    brings, with nothing wrong here, is left to System check, which offers
+    it without asking. The Flatpak has no helper to update."""
     try:
         from . import secure_input
         if os.environ.get("FLATPAK_ID") or not secure_input.is_installed():
             return False
         running = secure_input.running_version()
-        if not (secure_input.needs_update(running, secure_input.saved_keys())
-                or secure_input.lock_lights_reason(running)):
+        reason = secure_input.update_reason(running)
+        if reason is None:
             return False
-        if _ask_helper_update(running):
+        if _ask_helper_update(running, reason):
             update_helper(say_helper_updated)
         else:
             logger.info("Hotkey helper update offer: not now")
@@ -76,17 +75,18 @@ def offer_helper_update() -> bool:
         return False
 
 
-def helper_update_text(running) -> str:
-    """What the offer says to someone running helper version *running*."""
+def helper_update_text(running, reason) -> str:
+    """What the offer says to someone running helper version *running*,
+    asked about for *reason* (secure_input.update_reason)."""
     from . import secure_input
     from .hotkey_helper import VERSION
     keys = [key for key in secure_input.KEYS_SINCE if not secure_input.hears_key(running, key)]
-    lights = secure_input.lock_lights_reason(running)
     if missed := secure_input.missed_keyboard_reason(running):
         why = f". {missed}, so your dictation keys may not work until it's updated."
     # Num Lock before keys this person doesn't use, when their own keys work:
     # a key that helper can't report says nothing to them unless it's theirs.
-    elif lights and not secure_input.needs_update(running, secure_input.saved_keys()):
+    elif reason == "lights":
+        lights = secure_input.lock_lights_reason(running)
         why = f". {lights}, so the number pad can stop typing numbers until it's updated."
     elif keys:
         names = keys[0] if len(keys) == 1 else f"{', '.join(keys[:-1])} and {keys[-1]}"
@@ -100,12 +100,12 @@ def helper_update_text(running) -> str:
             "it's updated, TuxTalk asks each time it starts.")
 
 
-def _ask_helper_update(running) -> bool:
+def _ask_helper_update(running, reason) -> bool:
     """The question; True for Update Helper."""
     from .ui_style import show_message
     answer = show_message(
         None, Gtk.MessageType.QUESTION, "TuxTalk's hotkey helper needs an update",
-        helper_update_text(running),
+        helper_update_text(running, reason),
         [("Not Now", Gtk.ResponseType.CANCEL), ("Update Helper", Gtk.ResponseType.OK)],
         keep_above=True, default=Gtk.ResponseType.CANCEL)
     return answer == Gtk.ResponseType.OK
