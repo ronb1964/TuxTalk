@@ -150,7 +150,7 @@ You can copy the text or save it as a text file, or as subtitles for the video. 
 <td width="50%"><img src="screenshots/transcribe-file.png" alt="Transcribe a File: shop-meeting.mp3 turned into three paragraphs of text with times, and buttons to copy it or save it as text or subtitles"></td>
 </tr>
 <tr>
-<td width="50%"><img src="screenshots/prefs-labs.png" alt="Preferences, Advanced: TuxTalk Labs with voice editing, select and move, apps, windows, keys and the mouse by voice, and Type at pause"></td>
+<td width="50%"><img src="screenshots/prefs-labs.png" alt="Preferences, Advanced: TuxTalk Labs with voice editing, select and move, apps, windows, keys and the mouse by voice, and the While you talk choice"></td>
 <td>
 
 ### Try what's coming next
