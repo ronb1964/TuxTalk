@@ -20,7 +20,7 @@ class Window:
     def __init__(self):
         self.shown, self.hidden, self.up = [], 0, False
 
-    def show(self, words, rec, phrase):
+    def show(self, words, rec):
         self.shown.append(words)
         self.up = True
 
@@ -41,6 +41,14 @@ def _speech(seconds, rate=16000):
     """*seconds* of int16 audio blocks, as the audio callback keeps them."""
     samples = (np.sin(np.arange(int(rate * seconds)) / 9) * 8000).astype(np.int16)
     return [samples.tobytes()]
+
+
+def _next_dictation(monkeypatch, frames=None):
+    """A new recording running, the next dictation, holding *frames*."""
+    rec = rs.Recording()
+    rec.frames = frames if frames is not None else _speech(3)
+    monkeypatch.setattr(rs.state, "current", rec)
+    return rec
 
 
 @pytest.fixture
@@ -69,7 +77,6 @@ def talking(monkeypatch, floated):
     monkeypatch.setattr(engine, "model", Model())
     monkeypatch.setattr(engine, "_running_engine", ("parakeet", "vulkan"))
     monkeypatch.setattr(engine, "on_graphics_card", lambda: True)
-    monkeypatch.setattr(live_text, "_shown", None)
     monkeypatch.setattr(live, "live_text", True)
     monkeypatch.setattr(live, "remove_fillers", False)
     monkeypatch.setattr(rs.state, "current", rec)
@@ -135,26 +142,19 @@ def test_cinnamons_show_desktop_isnt_ended_by_the_box(talking, monkeypatch):
     assert window.shown == []
 
 
-def test_a_phrase_typed_at_a_pause_leaves_the_box(talking):
-    """With Type at pause the words just typed mustn't stay up as if unsaid."""
-    rec, window, _heard = talking
+def test_a_recording_typed_at_its_pauses_isnt_read(talking):
+    """Type at pause switched on during it cuts its audio under a read: it's
+    one or the other."""
+    rec, window, heard = talking
+    rec.chunker = object()
     live_text.tick(now=100.0)
-    rec.chunks_submitted += 1               # the phrase was cut and typed
-    live_text.tick(now=100.2)
-    assert not window.up
-
-
-def test_a_read_of_a_phrase_already_typed_shows_nothing(talking):
-    """A read handed the audio before a cut, finishing after it."""
-    rec, window, _heard = talking
-    live_text._read(rec, _speech(2), 16000, rec.chunks_submitted - 1)
-    assert window.shown == []
+    assert heard == [] and window.shown == []
 
 
 def test_a_read_after_the_stop_shows_nothing(talking, monkeypatch):
     rec, window, _heard = talking
     monkeypatch.setattr(rs.state, "is_recording", False)
-    live_text._read(rec, _speech(2), 16000, rec.chunks_submitted)
+    live_text._read(rec, _speech(2), 16000)
     assert window.shown == []
 
 
@@ -188,17 +188,17 @@ LIMIT = 0.2
 SLOW = LIMIT + 0.1
 
 
-def test_a_slow_read_ends_live_text_for_that_phrase_only(talking, monkeypatch):
+def test_a_slow_read_ends_live_text_for_that_dictation_only(talking, monkeypatch):
     """A read takes the worker the typed text needs, and the next is a
-    second longer: once one is slow the phrase isn't read again."""
+    second longer: once one is slow the dictation isn't read again."""
     rec, window, _heard = talking
     monkeypatch.setattr(engine, "transcribe", _taking(SLOW))
     live_text.tick(now=100.0)
     assert window.shown == [] and not window.up
     monkeypatch.setattr(engine, "transcribe", _taking(0.0, "next"))
     live_text.tick(now=101.0)
-    assert window.shown == []               # no more reads for this phrase
-    rec.chunks_submitted += 1
+    assert window.shown == []               # no more reads for this dictation
+    rec = _next_dictation(monkeypatch, rec.frames)
     live_text.tick(now=102.0)
     assert window.shown == ["next"]
 
@@ -220,7 +220,7 @@ def test_a_read_just_under_the_limit_is_shown(talking, monkeypatch):
 
 def test_a_chip_too_slow_twice_ends_live_text_while_it_runs(talking, monkeypatch, floated):
     """A built-in graphics chip can be no faster than the processor, and the
-    first read of every phrase would hold up the typing again. The user is
+    first read of every dictation would hold up the typing again. The user is
     told, once: a box that goes away for good looks broken."""
     rec, window, _heard = talking
     reads = []
@@ -229,24 +229,24 @@ def test_a_chip_too_slow_twice_ends_live_text_while_it_runs(talking, monkeypatch
         reads.append(1)
         return _taking(SLOW)(audio, language)
     monkeypatch.setattr(engine, "transcribe", slow)
-    for phrase in range(3):
-        rec.chunks_submitted = phrase
-        live_text.tick(now=100.0 + phrase)
+    for n in range(3):
+        rec = _next_dictation(monkeypatch, rec.frames)
+        live_text.tick(now=100.0 + n)
     assert len(reads) == live_text.SLOW_READS and window.shown == []
     assert floated == [live_text.TOO_SLOW]
     monkeypatch.setattr(engine, "model", Model())       # Power Saving let it go, and back
-    rec.chunks_submitted = 3
+    rec = _next_dictation(monkeypatch, rec.frames)
     live_text.tick(now=110.0)
     assert len(reads) == live_text.SLOW_READS           # still the same slow chip
     monkeypatch.setattr(engine, "_running_engine", ("small", "cuda"))   # another engine
     monkeypatch.setattr(engine, "transcribe", _taking(0.0))
-    rec.chunks_submitted = 4
+    rec = _next_dictation(monkeypatch, rec.frames)
     live_text.tick(now=111.0)
     assert window.shown == ["so far so good"]
 
 
 def test_long_dictations_slow_to_read_dont_end_it_for_good(talking, monkeypatch):
-    """Without Type at pause the audio grows: a minute of it can be slow on
+    """The audio grows with the dictation: a minute of it can be slow on
     any card. That ends reads of that dictation only."""
     rec, window, _heard = talking
     short, slow_reads = int(live_text.SHORT_AUDIO_S * 16000), []
@@ -259,19 +259,19 @@ def test_long_dictations_slow_to_read_dont_end_it_for_good(talking, monkeypatch)
     monkeypatch.setattr(engine, "transcribe", slow_when_long)
     for dictation in range(3):
         rec.frames = _speech(live_text.SHORT_AUDIO_S + 25)
-        rec.chunks_submitted = dictation
+        rec = _next_dictation(monkeypatch, rec.frames)
         for second in range(4):
             live_text.tick(now=100.0 + 10 * dictation + second)
     assert len(slow_reads) == 3             # one per dictation, then it stopped
     monkeypatch.setattr(engine, "transcribe", _taking(0.0, "still on"))
-    rec.chunks_submitted = 3
+    rec = _next_dictation(monkeypatch, rec.frames)
     live_text.tick(now=200.0)
     assert window.shown[-1] == "still on"
 
 
 def test_a_first_read_held_back_by_typing_still_tells_a_slow_chip(talking, monkeypatch):
-    """With Type at pause the worker can be busy typing the last phrase
-    until the next one is seconds long: its first read sees a few seconds
+    """The worker can be busy typing the dictation before until the next
+    one is seconds long: its first read sees a few seconds
     of it at most, and is counted when the chip is slow."""
     rec, _window, heard = talking
     read = []
@@ -280,24 +280,24 @@ def test_a_first_read_held_back_by_typing_still_tells_a_slow_chip(talking, monke
         read.append(len(audio))
         return _taking(SLOW)(audio, language)
     monkeypatch.setattr(engine, "transcribe", slow)
-    for phrase in range(live_text.SLOW_READS):
+    for n in range(live_text.SLOW_READS):
         rec.frames = _speech(live_text.SHORT_AUDIO_S + 3)
-        rec.chunks_submitted = phrase
-        live_text.tick(now=100.0 + phrase)
+        rec = _next_dictation(monkeypatch, rec.frames)
+        live_text.tick(now=100.0 + n)
     assert read == [int(live_text.GROWTH_S * 16000)] * live_text.SLOW_READS
     _off_while_that_engine_runs(rec, _window, monkeypatch)
 
 
 def _off_while_that_engine_runs(rec, window, monkeypatch):
-    """Assert a new phrase isn't read at all: live text is off."""
+    """Assert a new dictation isn't read at all: live text is off."""
     reads, shown = [], len(window.shown)
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: reads.append(1) or "x")
-    rec.chunks_submitted += 1
+    rec = _next_dictation(monkeypatch, rec.frames)
     live_text.tick(now=500.0)
     assert reads == [] and len(window.shown) == shown
 
 
-def test_a_slow_read_counts_even_when_the_phrase_ended_meanwhile(talking, monkeypatch):
+def test_a_slow_read_counts_even_when_the_dictation_ended_meanwhile(talking, monkeypatch):
     """Those are the reads the typed text waited on."""
     rec, window, _heard = talking
 
@@ -306,7 +306,7 @@ def test_a_slow_read_counts_even_when_the_phrase_ended_meanwhile(talking, monkey
     def slow_then_typed(audio, language):
         read.append(1)
         time.sleep(SLOW)
-        rec.chunks_submitted += 1           # typed at a pause while it read
+        _next_dictation(monkeypatch)        # the next one started while it read
         return "late"
     monkeypatch.setattr(engine, "transcribe", slow_then_typed)
     for second in range(live_text.SLOW_READS):
@@ -315,9 +315,10 @@ def test_a_slow_read_counts_even_when_the_phrase_ended_meanwhile(talking, monkey
     _off_while_that_engine_runs(rec, window, monkeypatch)
 
 
-def test_a_slow_chip_isnt_excused_by_each_phrases_short_first_reads(talking, monkeypatch):
-    """Every phrase starts with reads shorter than the one that turned out
-    slow; those mustn't wipe the count, or every phrase pays a slow read."""
+def test_a_slow_chip_isnt_excused_by_each_dictations_short_first_reads(talking, monkeypatch):
+    """Every dictation starts with reads shorter than the one that turned
+    out slow; those mustn't wipe the count, or every dictation pays a slow
+    read."""
     rec, window, _heard = talking
     two_seconds = 2 * 16000
 
@@ -326,11 +327,11 @@ def test_a_slow_chip_isnt_excused_by_each_phrases_short_first_reads(talking, mon
             time.sleep(SLOW)
         return "so far"
     monkeypatch.setattr(engine, "transcribe", slow_from_two_seconds)
-    for phrase in range(live_text.SLOW_READS):
-        rec.chunks_submitted = phrase
+    for n in range(live_text.SLOW_READS):
+        rec = _next_dictation(monkeypatch, rec.frames)
         for seconds in (1, 2):
             rec.frames = _speech(seconds)
-            live_text.tick(now=100.0 + 10 * phrase + seconds)
+            live_text.tick(now=100.0 + 10 * n + seconds)
     _off_while_that_engine_runs(rec, window, monkeypatch)
 
 
@@ -338,15 +339,15 @@ def test_one_slow_read_between_fast_ones_doesnt_end_it(talking, monkeypatch):
     """A card that's fast but slow once in a while (another app on it) keeps
     live text: a fast read of as much audio clears the slow one."""
     rec, window, _heard = talking
-    for phrase, seconds in enumerate([SLOW, 0.0, SLOW, 0.0]):
-        monkeypatch.setattr(engine, "transcribe", _taking(seconds, f"phrase {phrase}"))
-        rec.chunks_submitted = phrase
-        live_text.tick(now=100.0 + phrase)
-    assert window.shown == ["phrase 1", "phrase 3"]
+    for n, seconds in enumerate([SLOW, 0.0, SLOW, 0.0]):
+        monkeypatch.setattr(engine, "transcribe", _taking(seconds, f"dictation {n}"))
+        rec = _next_dictation(monkeypatch, rec.frames)
+        live_text.tick(now=100.0 + n)
+    assert window.shown == ["dictation 1", "dictation 3"]
 
 
 def test_a_slow_password_check_isnt_blamed_on_the_card(talking, monkeypatch):
-    """An app hanging on the accessibility bus ends that phrase's reads,
+    """An app hanging on the accessibility bus ends that dictation's reads,
     but the card is fine."""
     rec, _window, _heard = talking
 
@@ -354,12 +355,12 @@ def test_a_slow_password_check_isnt_blamed_on_the_card(talking, monkeypatch):
         time.sleep(SLOW)
         return False
     monkeypatch.setattr(focused_window, "is_password", slow_check)
-    for phrase in range(3):
-        rec.chunks_submitted = phrase
-        live_text.tick(now=100.0 + phrase)
-    assert len(_heard) == 3                 # each phrase was read
+    for n in range(3):
+        rec = _next_dictation(monkeypatch, rec.frames)
+        live_text.tick(now=100.0 + n)
+    assert len(_heard) == 3                 # each dictation was read
     monkeypatch.setattr(focused_window, "is_password", lambda budget=None: False)
-    rec.chunks_submitted = 3
+    rec = _next_dictation(monkeypatch, rec.frames)
     live_text.tick(now=200.0)
     assert _window.shown == ["so far so good"]
 
@@ -410,14 +411,14 @@ def test_a_model_still_loading_says_nothing_about_the_processor(talking, monkeyp
 
 
 def test_words_said_into_a_password_field_stay_hidden_after_leaving_it(talking, monkeypatch):
-    """The phrase still holds them, so it isn't read again until the next one."""
+    """The dictation still holds them, so it isn't read again until the next one."""
     rec, window, heard = talking
     monkeypatch.setattr(focused_window, "is_password", lambda budget=None: True)
     live_text.tick(now=100.0)
     monkeypatch.setattr(focused_window, "is_password", lambda budget=None: False)
     live_text.tick(now=101.0)
     assert heard == [] and window.shown == []
-    rec.chunks_submitted += 1               # typed at a pause: a new phrase
+    rec = _next_dictation(monkeypatch, rec.frames)
     live_text.tick(now=102.0)
     assert window.shown == ["so far so good"]
 
@@ -460,13 +461,13 @@ def _numbered_reads(monkeypatch):
 
 
 def test_a_long_dictations_start_is_read_once_at_a_pause_and_then_kept(talking, monkeypatch):
-    """Without Type at pause the audio grows for the whole dictation: its
-    start is settled at a gap between words, and its words stay put on screen
-    while the rest goes on being read."""
+    """The audio grows for the whole dictation: its start is settled at a
+    gap between words, and its words stay put on screen while the rest goes
+    on being read."""
     rec, window, _heard = talking
     heard = _numbered_reads(monkeypatch)
     rec.frames = _talk_with_a_gap(20, 15)
-    monkeypatch.setattr(live_text, "_seen", (rec, rec.chunks_submitted, 35.0))
+    monkeypatch.setattr(live_text, "_seen", (rec, 35.0))
     live_text.tick(now=100.0)
     settled, rest = heard
     assert abs(settled / 16000 - 20.25) <= live_text.QUIET_S
@@ -483,7 +484,7 @@ def test_nothing_is_kept_from_a_read_that_skipped_words(talking, monkeypatch):
     rec, _window, _heard = talking
     heard = _numbered_reads(monkeypatch)
     rec.frames = _talk_with_a_gap(20, 30)
-    monkeypatch.setattr(live_text, "_seen", (rec, rec.chunks_submitted, 35.0))
+    monkeypatch.setattr(live_text, "_seen", (rec, 35.0))
     live_text.tick(now=100.0)
     assert heard == [40 * 16000] and live_text._settled is None
 
@@ -539,10 +540,10 @@ def test_no_read_is_queued_behind_a_dictation_being_typed(talking, real_worker):
     assert heard == [] and not live_text._reading.is_set()
 
 
-def test_a_phrase_cut_during_a_read_is_typed_right_after_it(talking, real_worker,
-                                                            monkeypatch):
-    """The read already running finishes, its words (now typed) aren't
-    shown, and the phrase's own job runs next."""
+def test_a_dictation_stopped_during_a_read_is_typed_right_after_it(talking, real_worker,
+                                                                   monkeypatch):
+    """The read already running finishes, its words (being typed now) aren't
+    shown, and the dictation's own job runs next."""
     rec, window, _heard = talking
     reading, release, order = threading.Event(), threading.Event(), []
 
@@ -550,11 +551,11 @@ def test_a_phrase_cut_during_a_read_is_typed_right_after_it(talking, real_worker
         reading.set()
         release.wait(5)
         order.append("read")
-        return "the phrase"
+        return "the words"
     monkeypatch.setattr(engine, "transcribe", slow_transcribe)
     live_text.tick(now=100.0)
     assert reading.wait(5)
-    rec.chunks_submitted += 1               # Type at pause cut it meanwhile
+    monkeypatch.setattr(rs.state, "is_recording", False)    # the key came up
     real_worker.submit(lambda: order.append("typed"))
     release.set()
     assert real_worker.drain(5)
@@ -572,23 +573,23 @@ def test_submit_if_idle_queues_nothing_while_the_worker_has_work(real_worker):
     assert ran.wait(5)
 
 
-def test_a_read_isnt_queued_alongside_a_phrase_being_handed_over(real_worker, monkeypatch):
-    """The audio thread hands a phrase over while live text asks whether the
-    worker is free: the read must see the phrase, not slip in before it."""
+def test_a_read_isnt_queued_alongside_a_job_being_handed_over(real_worker, monkeypatch):
+    """The dictation before is handed to the worker while live text asks
+    whether it's free: the read must see that job, not slip in before it."""
     putting, finish, typed = threading.Event(), threading.Event(), threading.Event()
 
-    def phrase():
+    def handed():
         typed.wait(5)                       # still being typed when the answer comes
     queue_put = real_worker._queue.put
 
     def slow_put(job):
-        if job is phrase:
+        if job is handed:
             putting.set()
             finish.wait(5)
         queue_put(job)
     monkeypatch.setattr(real_worker._queue, "put", slow_put)
     answer = []
-    handing_over = threading.Thread(target=real_worker.submit, args=(phrase,))
+    handing_over = threading.Thread(target=real_worker.submit, args=(handed,))
     asking = threading.Thread(target=lambda: answer.append(real_worker.submit_if_idle(print)))
     try:
         handing_over.start()
@@ -606,8 +607,8 @@ def test_a_read_isnt_queued_alongside_a_phrase_being_handed_over(real_worker, mo
 
 def test_a_slow_read_ending_after_the_stop_keeps_no_recording(talking, real_worker,
                                                               monkeypatch):
-    """Its audio (the whole dictation without Type at pause) mustn't stay in
-    memory until some later phrase is too slow."""
+    """Its audio, the whole dictation, mustn't stay in memory until some
+    later dictation is too slow."""
     rec, _window, _heard = talking
     reading, release = threading.Event(), threading.Event()
 
@@ -631,11 +632,11 @@ def test_a_hiccup_on_a_five_second_read_doesnt_linger(talking, monkeypatch):
     helper restarting) must be cleared by ordinary fast reads, or the next
     hiccup, however short, would end live text for the session."""
     rec, window, _heard = talking
-    for phrase, (seconds, slow) in enumerate([(5, True), (4.8, False), (1, True), (2, False)]):
+    for n, (seconds, slow) in enumerate([(5, True), (4.8, False), (1, True), (2, False)]):
         rec.frames = _speech(seconds)
-        rec.chunks_submitted = phrase
-        monkeypatch.setattr(engine, "transcribe", _taking(SLOW if slow else 0.0, f"p{phrase}"))
-        live_text.tick(now=100.0 + phrase)
+        rec = _next_dictation(monkeypatch, rec.frames)
+        monkeypatch.setattr(engine, "transcribe", _taking(SLOW if slow else 0.0, f"p{n}"))
+        live_text.tick(now=100.0 + n)
     assert window.shown == ["p1", "p3"]
 
 
@@ -655,8 +656,8 @@ def test_a_read_ending_after_the_stop_keeps_nothing_it_saw(talking, monkeypatch)
     monkeypatch.setattr(focused_window, "is_password", stop_during_the_check)
     live_text.tick(now=100.0)
     monkeypatch.setattr(rs.state, "is_recording", False)
-    live_text._let_go_if_ended(rec, rec.chunks_submitted)
-    assert live_text._seen is None and live_text._shown is None and live_text._settled is None
+    live_text._let_go_if_ended(rec)
+    assert live_text._seen is None and live_text._settled is None
 
 
 def test_only_the_newest_audio_is_converted(talking, monkeypatch):

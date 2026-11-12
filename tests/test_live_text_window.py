@@ -72,13 +72,13 @@ def shown(monkeypatch):
 
 def test_the_words_show_while_the_recording_runs(shown):
     window, rec = shown
-    window._show_now("Dear Sam, thanks for the photos", rec, 0)
+    window._show_now("Dear Sam, thanks for the photos", rec)
     assert window._win is not None and window._win.get_visible()
 
 
 def test_it_never_takes_the_keyboard(shown):
     window, rec = shown
-    window._show_now("Dear Sam", rec, 0)
+    window._show_now("Dear Sam", rec)
     assert window._win.get_window_type() == ltw.Gtk.WindowType.POPUP
     assert not window._win.get_accept_focus()
 
@@ -90,13 +90,13 @@ def test_clicks_go_through_to_the_app_underneath(shown, monkeypatch):
     shapes = []
     monkeypatch.setattr(ltw.Gtk.Widget, "input_shape_combine_region",
                         lambda widget, region: shapes.append(region))
-    window._show_now("Dear Sam", rec, 0)
+    window._show_now("Dear Sam", rec)
     assert len(shapes) == 1 and shapes[0] is not None and shapes[0].is_empty()
 
 
 def test_a_screen_reader_can_read_the_words(shown):
     window, rec = shown
-    window._show_now("Dear Sam, thanks for the photos", rec, 0)
+    window._show_now("Dear Sam, thanks for the photos", rec)
     accessible = window._win.get_accessible()
     assert accessible.get_name() == "Live text"
     assert accessible.get_description() == "Dear Sam, thanks for the photos"
@@ -105,35 +105,26 @@ def test_a_screen_reader_can_read_the_words(shown):
 def test_a_read_finishing_after_the_stop_doesnt_bring_it_back(shown, monkeypatch):
     window, rec = shown
     monkeypatch.setattr(rs.state, "is_recording", False)
-    window._show_now("too late", rec, 0)
+    window._show_now("too late", rec)
     assert window._win is None
 
 
 def test_a_read_for_the_last_recording_isnt_shown_in_the_next(shown, monkeypatch):
     window, rec = shown
     monkeypatch.setattr(rs.state, "current", rs.Recording())
-    window._show_now("from before", rec, 0)
-    assert window._win is None
-
-
-def test_words_from_a_phrase_already_typed_dont_come_back(shown):
-    """Type at pause typed the phrase while GTK was busy: its words are in
-    the document now, not still being said."""
-    window, rec = shown
-    rec.chunks_submitted = 1
-    window._show_now("typed already", rec, 0)
+    window._show_now("from before", rec)
     assert window._win is None
 
 
 def test_it_grows_with_the_words_up_to_the_room_it_has(shown):
     """Then the newest lines show and the first ones fade out at the top."""
     window, rec = shown
-    window._show_now("A short start.", rec, 0)
+    window._show_now("A short start.", rec)
     short = window._size[1]
-    window._show_now("And then it goes on and on. " * 4, rec, 0)
+    window._show_now("And then it goes on and on. " * 4, rec)
     longer = window._size[1]
     assert longer > short and window._shift == 0
-    window._show_now("And then it goes on and on. " * 400, rec, 0)
+    window._show_now("And then it goes on and on. " * 400, rec)
     anchor = window._anchor()
     tallest = ltw.room(anchor, ltw.monitor_rect_at(anchor[0], anchor[1]))
     assert window._size[1] == tallest and window._shift > 0
@@ -141,8 +132,8 @@ def test_it_grows_with_the_words_up_to_the_room_it_has(shown):
 
 def test_closing_it_lets_the_next_recording_open_a_fresh_one(shown):
     window, rec = shown
-    window._show_now("one", rec, 0)
+    window._show_now("one", rec)
     window._hide_now()
     assert window._win is None
-    window._show_now("two", rec, 0)
+    window._show_now("two", rec)
     assert window._win is not None

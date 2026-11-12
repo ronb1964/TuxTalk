@@ -84,21 +84,18 @@ class LiveTextWindow:
         self._size = (0, 0)
         self._shift = 0             # how far the text is drawn up, past the top
 
-    def show(self, words, rec, phrase):
-        """Show *words*, if they're still from the phrase being said when GTK
-        gets to it: a read finishing after the stop, or after Type at pause
-        typed the phrase (*phrase*, rec.chunks_submitted), mustn't bring
-        them back."""
-        GLib.idle_add(self._show_now, words, rec, phrase)
+    def show(self, words, rec):
+        """Show *words*, if *rec* is still the recording running when GTK
+        gets to it: a read finishing after the stop mustn't bring them back."""
+        GLib.idle_add(self._show_now, words, rec)
 
     def hide(self):
         """Close it, when shown."""
         GLib.idle_add(self._hide_now)
 
-    def _show_now(self, words, rec, phrase):
+    def _show_now(self, words, rec):
         """On GTK's thread."""
-        if (rs.state.current is not rec or not rs.state.is_recording
-                or rec.chunks_submitted != phrase):
+        if rs.state.current is not rec or not rs.state.is_recording:
             return False
         try:
             if self._win is None:
