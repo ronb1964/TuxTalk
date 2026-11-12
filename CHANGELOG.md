@@ -30,8 +30,8 @@ before 0.15.0, so older entries use that name.
   model runs on the processor, the graphics chip is too slow, or there's no
   XWayland for the box (Wayland desktops nearly all have it), a short
   message over your window and a notification (which a screen reader reads)
-  say so once (without XWayland, only the notification), and Preferences says so beside the choice when the model is
-  set to run on the processor. A reread that fails closes the box for that
+  say so once (without XWayland, only the notification), and Preferences
+  says so beside the choice when the model is set to run on the processor. A reread that fails closes the box for that
   dictation instead of leaving old words up. Asked for in the
   live-text poll (Discussion #24).
 - TuxTalk Labs has one While you talk choice instead of two tickboxes: show
@@ -42,9 +42,10 @@ before 0.15.0, so older entries use that name.
   TuxTalk uses: Preferences → General → Change model, device or language →
   Graphics card, under Device. It lists each card, with how much of its memory
   is free on CUDA, and only shows up with Device on CUDA or Vulkan and more
-  than one card to choose from. Automatic works as before: CUDA takes the card it ranks fastest and
-  Vulkan the first one that isn't built into the processor, which on a machine
-  with several cards might not be the one you wanted. Dictation, Transcribe a
+  than one card to choose from. Automatic works as before: CUDA takes the
+  card it ranks fastest and Vulkan the first one that isn't built into the
+  processor, which on a machine with several cards might not be the one you
+  wanted. Dictation, Transcribe a
   File and Vulkan's speed check all use the card you pick. On CUDA, if the
   model can't load on the card you picked (a busy card, say), the notice
   names it and says to pick another card or Automatic. Help says where the

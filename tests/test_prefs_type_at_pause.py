@@ -149,7 +149,7 @@ def test_the_box_says_when_this_computer_cant_show_it(win, model, device, on_pro
 
 
 def test_the_note_follows_a_device_changed_on_another_tab(win):
-    """Device is on the Model tab: switched to the processor there, the
+    """Device is on the General tab: switched to the processor there, the
     Advanced tab mustn't still say the box will open."""
     win.win.config["model"], win.win.config["device"] = "small", "vulkan"
     win.while_talking.set_active_id("box")
