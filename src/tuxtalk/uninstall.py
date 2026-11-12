@@ -42,10 +42,10 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from . import (ai_download, config, cosmic_hotkeys, custom_words,  # noqa: E402
-               desktop_detect, extension_helper, file_transcribe, gnome_extensions,
-               gnome_keybindings, installation, kwin_hotkeys, menu_cache, model_helper,
-               parakeet_engine, rename_migration, secure_input, service_launcher,
-               settings_backup, single_instance, source_install, uinput_helper,
+               desktop_detect, extension_helper, gnome_extensions, gnome_keybindings,
+               installation, kwin_hotkeys, menu_cache, model_helper, parakeet_engine,
+               rename_migration, secure_input, service_launcher, settings_backup,
+               single_instance, source_install, transcript_history, uinput_helper,
                update_install, whisper_vulkan, ydotoold_leftovers)
 from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
 from .ui_style import message_dialog, show_message  # noqa: E402
@@ -54,8 +54,8 @@ logger = setup_logger(__name__)
 
 # The files in the data folder that are the user's own: kept unless they
 # ask for them to go.
-PERSONAL_DATA = ("stats.json", "stats.json.bak", file_transcribe.RECENT_FILE,
-                 file_transcribe.OLD_LAST_FILE)
+PERSONAL_DATA = ("stats.json", "stats.json.bak", transcript_history.RECENT_FILE,
+                 transcript_history.OLD_LAST_FILE)
 # The rest of what TuxTalk puts there, downloaded or rebuilt by itself
 # (tests/test_uninstall.py makes every name in the code pick one of the two).
 # A source install's venv is the program, gone whether settings stay or not.
@@ -105,10 +105,11 @@ _CONFIG_COPIES = _copies(
     *(re.escape(name) + r"\.old" for name in (LOG_FILE_NAME, "talktype.log")))
 # Stats save through a temp file of their own (stats._write), the
 # transcripts through their name and .tmp, and a damaged transcript list is
-# kept as .corrupt-<time>, -2 for a second in the same second (file_transcribe).
+# kept as .corrupt-<time>, -2 for a second in the same second (transcript_history).
 _PERSONAL_COPIES = _copies(r"\.stats-[a-z0-9_]{8}",
-                           re.escape(file_transcribe.RECENT_FILE) + r"\.tmp",
-                           re.escape(file_transcribe.RECENT_FILE) + file_transcribe.SET_ASIDE)
+                           re.escape(transcript_history.RECENT_FILE) + r"\.tmp",
+                           re.escape(transcript_history.RECENT_FILE)
+                           + transcript_history.SET_ASIDE_PATTERN)
 _DOWNLOADED_COPIES = _copies(*_saved("remote_desktop_token", gnome_keybindings.BACKUP_NAME))
 # (names, copies) for each kind of file, for _known.
 _CONFIG = ((CONFIG_NAMES, _CONFIG_COPIES),)

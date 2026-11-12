@@ -268,12 +268,6 @@ def test_files_are_transcribed_on_the_card_picked_in_preferences(monkeypatch):
     assert (used["device"], used["device_index"]) == ("cuda", 3)
 
 
-def test_a_new_card_pick_reloads_the_open_transcription_window():
-    before = config.Settings(model="small", device="cuda")
-    after = config.Settings(model="small", device="cuda", graphics_card="NVIDIA GeForce RTX 5090")
-    assert ft.engine_settings(before) != ft.engine_settings(after)
-
-
 # --- the menu and the window ------------------------------------------------------------------
 
 def test_the_d_bus_method_opens_the_window():

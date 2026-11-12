@@ -872,6 +872,10 @@ class SpeechSection(Tab):
             if self.config.get("device") == "vulkan":
                 from . import whisper_vulkan
                 if whisper_vulkan.supports_model(model):
+                    # Here already: the card list stays, as asking for it again
+                    # starts the engine (and wakes every graphics card).
+                    if whisper_vulkan.is_installed(model):
+                        return True
                     from .vulkan_setup_dialogs import ensure_files
                     ready = ensure_files(self.window, model, False)
                     if ready:

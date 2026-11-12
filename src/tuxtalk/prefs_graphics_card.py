@@ -120,9 +120,10 @@ class GraphicsCardRow(Tab):
         self.combo.set_visible(shown)
 
     def _fill(self, cards):
-        """The entries: Automatic, then each card. A saved card that isn't
-        there any more stays listed and selected, so opening Preferences
-        doesn't quietly change the setting."""
+        """The entries: Automatic, then each card. A saved card the device
+        can't use (taken out, or an AMD card with the Device on CUDA) stays
+        listed and selected, so opening Preferences doesn't quietly change
+        the setting."""
         saved = self.config.get("graphics_card", graphics_cards.AUTOMATIC)
         self._filling = True
         try:
@@ -131,7 +132,7 @@ class GraphicsCardRow(Tab):
             for card in cards:
                 self.combo.append(card.key, card.label)
             if saved not in {graphics_cards.AUTOMATIC, *(card.key for card in cards)}:
-                self.combo.append(saved, f"{saved} (not found, Automatic is used)")
+                self.combo.append(saved, f"{saved} (not usable here, Automatic is used)")
             self.combo.set_active_id(saved)
         finally:
             self._filling = False

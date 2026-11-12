@@ -394,7 +394,7 @@ def _engine_env(folder=None):
     return {**os.environ, "LD_LIBRARY_PATH": folder or engine_dir()}
 
 
-def find_device(wanted=""):
+def find_device(wanted):
     """Index of the graphics chip the engine should use, or None: the card
     saved as *wanted* (graphics_cards, the Graphics card setting) when it's
     there, otherwise choose_device's."""

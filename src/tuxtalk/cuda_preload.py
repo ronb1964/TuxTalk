@@ -20,6 +20,13 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 
+# (name, CUDA number) of the card _order_cards_by_pci_bus found, None when it
+# set no order. graphics_cards.cuda_index uses it rather than asking
+# nvidia-smi again: a second answer that failed or timed out loaded the model
+# on the first slot's card, and every wake from Power Saving waited for it.
+picked_card = None
+
+
 def _cuda_lib_dir():
     """Where the CUDA download unpacks to (cuda_helper.get_appdir_cuda_path's
     lib): this copy's data folder, dev or not, the private one in a Flatpak."""
@@ -46,6 +53,7 @@ def _order_cards_by_pci_bus():
     Must run before anything loads CUDA. A CUDA_DEVICE_ORDER the user set is
     kept; with one other than PCI_BUS_ID the pick is left out
     (graphics_cards.cuda_index)."""
+    global picked_card
     if "CUDA_DEVICE_ORDER" in os.environ:
         return
     try:
@@ -58,10 +66,12 @@ def _order_cards_by_pci_bus():
     if not picked:
         return
     from . import graphics_cards
-    if graphics_cards.index_for(graphics_cards.cuda_cards(), picked) is None:
+    index = graphics_cards.index_for(graphics_cards.cuda_cards(), picked)
+    if index is None:
         return                  # taken out: Automatic's fastest card, not the first slot
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ[CUDA_ORDER_SET_BY_TUXTALK] = "1"
+    picked_card = (picked, index)
 
 
 _forget_what_tuxtalk_set()

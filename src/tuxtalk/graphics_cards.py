@@ -9,7 +9,8 @@ Vulkan's #1. Identical cards do the same work, so that only matters for how
 busy each one is. Each engine has its own list: CUDA's from nvidia-smi, sorted
 by PCI bus, the order cuda_preload has CUDA count in once a card is picked,
 and Vulkan's from the list the graphics engine prints when it starts
-(whisper_vulkan.list_devices).
+(whisper_vulkan.list_devices). Inside the Flatpak there is no nvidia-smi, so
+CUDA's list is empty there and Automatic is used.
 """
 import os
 import re
@@ -17,6 +18,7 @@ import subprocess
 from collections import Counter
 from dataclasses import dataclass
 
+from .cuda_helper import NVIDIA_SMI_TIMEOUT
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -77,7 +79,6 @@ def parse_nvidia_smi(output):
 
 def cuda_cards(run=subprocess.run):
     """The NVIDIA cards CUDA can use, [] when nvidia-smi is missing or fails."""
-    from .cuda_helper import NVIDIA_SMI_TIMEOUT
     try:
         result = run(["nvidia-smi", "--query-gpu=pci.bus_id,name,memory.free,memory.total",
                       "--format=csv,noheader,nounits"],
@@ -101,8 +102,12 @@ def from_vulkan(devices):
 
 
 def vulkan_cards():
-    """The cards the Vulkan engine can use, [] when it isn't downloaded."""
+    """The cards the Vulkan engine can use, [] when it isn't downloaded:
+    the engine is what lists them, and starting one that isn't there only
+    logs a warning."""
     from . import whisper_vulkan
+    if not whisper_vulkan.is_engine_installed():
+        return []
     return from_vulkan(whisper_vulkan.list_devices())
 
 
@@ -127,16 +132,27 @@ def worth_choosing(cards):
 
 def cuda_index(key, run=subprocess.run):
     """CUDA's number for the card saved as *key*: 0, CUDA's first, when
-    nothing is picked or that card is gone. The number only means that card
-    while CUDA counts by PCI bus (cuda_preload); a CUDA_DEVICE_ORDER or
-    CUDA_VISIBLE_DEVICES the user set counts another way, so then they decide
-    and the pick is left out."""
+    nothing is picked or that card can't be used. The number only means that
+    card while CUDA counts by PCI bus: cuda_preload sets that when the process
+    starts, with the card picked then and its number, used here as they are.
+    A CUDA_DEVICE_ORDER or CUDA_VISIBLE_DEVICES the user set counts another
+    way, so then they decide and the pick is left out."""
     if key == AUTOMATIC:
         return 0
-    if os.environ.get("CUDA_VISIBLE_DEVICES") or \
-            os.environ.get("CUDA_DEVICE_ORDER") != "PCI_BUS_ID":
+    order = os.environ.get("CUDA_DEVICE_ORDER")
+    if os.environ.get("CUDA_VISIBLE_DEVICES") or order not in (None, "PCI_BUS_ID"):
         logger.info("CUDA_VISIBLE_DEVICES or CUDA_DEVICE_ORDER chooses the card here, "
                     "not Preferences")
         return 0
+    if order is None:
+        # cuda_preload set no order: the card wasn't there when this process
+        # started, or was picked after (a Transcribe a File window left open).
+        logger.info(f"The graphics card chosen in Preferences ({key}) wasn't there, or "
+                    "not chosen yet, when this TuxTalk process started; using the "
+                    "automatic choice")
+        return 0
+    from . import cuda_preload
+    if cuda_preload.picked_card is not None and cuda_preload.picked_card[0] == key:
+        return cuda_preload.picked_card[1]
     picked = index_for(cuda_cards(run), key)
     return 0 if picked is None else picked

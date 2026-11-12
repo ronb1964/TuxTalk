@@ -2,7 +2,8 @@
 
 Pick or drop an audio or video file and its words come up in the window, to
 copy, or to save as text or as subtitles (.srt). The work is done by
-file_transcribe.py; this is only the window around it.
+file_transcribe.py, and transcript_history.py keeps the transcripts for next
+time; this is only the window around them.
 
 It runs as its own process, like Preferences, with its own copy of the
 speech model, so dictation keeps working while a long file is transcribed.
@@ -29,6 +30,7 @@ gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from . import file_transcribe as ft  # noqa: E402
+from . import transcript_history as history  # noqa: E402
 from .logger import error_without_words, setup_logger  # noqa: E402
 
 logger = setup_logger(__name__)
@@ -128,7 +130,7 @@ class TranscribeWindow:
         # nothing. A copy doesn't count: the next copy replaces it.
         self.kept = False
         self.copied = False
-        # The transcript is kept under Earlier transcripts (file_transcribe.
+        # The transcript is kept under Earlier transcripts (transcript_history.
         # remember), so another file or closing the window loses nothing.
         self.remembered = False
         self._cancel = threading.Event()
@@ -155,7 +157,7 @@ class TranscribeWindow:
         self.earlier_btn = Gtk.MenuButton()
         self.earlier_btn.set_label("Earlier Transcripts")
         self.earlier_btn.set_tooltip_text(
-            f"Your last {ft.MAX_RECENT} transcripts, to open again and save another way")
+            f"Your last {history.MAX_RECENT} transcripts, to open again and save another way")
         self.earlier_menu = Gtk.Menu()
         self.earlier_btn.set_popup(self.earlier_menu)
         top.pack_end(self.earlier_btn, False, False, 0)
@@ -412,9 +414,9 @@ class TranscribeWindow:
         self.kept = self.copied = False
         # A re-run stopped early doesn't replace the copy kept of a run that
         # got further: a whole transcript isn't lost to a second try.
-        longer = ft.further_kept(self.path, pieces) if stopped else None
+        longer = history.further_kept(self.path, pieces) if stopped else None
         self.remembered = (bool(pieces) and longer is None
-                           and ft.remember(self.path, pieces, total) is not None)
+                           and history.remember(self.path, pieces, total) is not None)
         self._refresh_earlier()
         self._set_busy(False)
         self._show_text()
@@ -438,7 +440,7 @@ class TranscribeWindow:
     def recall(self):
         """On opening: show the newest transcript kept, with every button."""
         self._refresh_earlier()
-        entries = ft.recent()
+        entries = history.recent()
         if entries:
             self.show_kept(entries[0])
 
@@ -466,7 +468,7 @@ class TranscribeWindow:
         menu = self.earlier_menu
         for child in menu.get_children():
             menu.remove(child)
-        entries = ft.recent()
+        entries = history.recent()
         for entry in entries:
             item = Gtk.MenuItem(label=f"{entry.name}  ·  {_when(entry.when)}")
             item.connect("activate", lambda _i, e=entry: self._open_kept(e))
@@ -481,12 +483,12 @@ class TranscribeWindow:
 
     def _on_clear_earlier(self):
         if self._ask("Clear earlier transcripts?",
-                     f"The last {ft.MAX_RECENT} transcripts kept here are deleted. "
+                     f"The last {history.MAX_RECENT} transcripts kept here are deleted. "
                      "Files you saved aren't touched.",
                      [("Cancel", Gtk.ResponseType.CANCEL),
                       ("Clear", Gtk.ResponseType.ACCEPT)]) != Gtk.ResponseType.ACCEPT:
             return
-        if ft.forget_all():
+        if history.forget_all():
             self.remembered = False     # what's shown is now only here
             self.status.set_text("Earlier transcripts cleared.")
         self._refresh_earlier()

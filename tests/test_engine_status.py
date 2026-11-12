@@ -77,7 +77,7 @@ def loads(monkeypatch):
     monkeypatch.setattr(engine, "_running_engine", None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: None)
     monkeypatch.setattr(whisper_vulkan, "is_installed", lambda m: True)
-    monkeypatch.setattr(whisper_vulkan, "find_device", lambda wanted="": 0)
+    monkeypatch.setattr(whisper_vulkan, "find_device", lambda wanted: 0)
     monkeypatch.setattr(whisper_vulkan, "VulkanWhisperModel", lambda m, d: "whisper on vulkan")
     monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel",
                         lambda d, on_fallback=None: "parakeet on vulkan")
@@ -125,6 +125,34 @@ def test_whisper_on_cuda_loads_on_the_card_picked_in_preferences(monkeypatch):
     engine.build(config.Settings(model="large-v3", device="cuda",
                                  graphics_card="NVIDIA GeForce RTX 5070 Ti"))
     assert used == {"device": "cuda", "card": 3}
+
+
+@pytest.mark.parametrize("picked,title,advice", [
+    ("NVIDIA GeForce RTX 5070 Ti #2", "Couldn't use NVIDIA GeForce RTX 5070 Ti #2",
+     "another graphics card or Automatic"),
+    ("", "Couldn't use the NVIDIA graphics card", "try the graphics card"),
+])
+def test_a_cuda_load_that_fails_says_which_card_was_picked(monkeypatch, picked, title, advice):
+    """A picked card that's busy (out of memory) fails to load: naming it, and
+    that another card or Automatic can be chosen, says where to look."""
+    from tuxtalk import config, cuda_helper, graphics_cards, model_helper
+    monkeypatch.setattr(engine, "_running_engine", None)
+    monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
+    monkeypatch.setattr(cuda_helper, "ctranslate2_has_cuda", lambda: True)
+    monkeypatch.setattr(graphics_cards, "cuda_index", lambda key: 1 if key else 0)
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    monkeypatch.setattr(config, "save_config", lambda cfg: None)
+    notices = []
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: notices.append(a))
+
+    def download(name, device, **k):
+        if device == "cuda":
+            raise RuntimeError("CUDA failed to allocate memory")
+        return f"{name} on {device}"
+    monkeypatch.setattr(model_helper, "download_model_with_progress", download)
+    engine.build(config.Settings(model="large-v3", device="cuda", graphics_card=picked))
+    assert notices[0][0] == title
+    assert advice in notices[0][1]
 
 
 def test_the_service_tells_the_tray_once_the_model_is_loaded(service_main):

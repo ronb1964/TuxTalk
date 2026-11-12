@@ -2,6 +2,7 @@
 from types import SimpleNamespace
 
 import gi
+import pytest
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
@@ -71,13 +72,16 @@ def test_opening_preferences_shows_the_saved_card_and_changes_nothing():
     assert config["graphics_card"] == "NVIDIA GeForce RTX 5070 Ti"
 
 
-def test_a_saved_card_thats_gone_stays_listed_instead_of_being_dropped():
-    config = {"device": "cuda", "graphics_card": "NVIDIA GeForce RTX 3090"}
+@pytest.mark.parametrize("saved", ["NVIDIA GeForce RTX 3090",
+                                   "AMD Radeon RX 7900 XTX (RADV NAVI31)"])
+def test_a_saved_card_the_device_cant_use_stays_listed_instead_of_being_dropped(saved):
+    """Taken out, or an AMD card picked under Vulkan with the Device now on
+    CUDA: "not found" was untrue for the second, which is still in the computer."""
+    config = {"device": "cuda", "graphics_card": saved}
     row, _ = _row(config, {"cuda": TWO_CARDS})
-    assert row.combo.get_active_id() == "NVIDIA GeForce RTX 3090"
-    assert _entries(row.combo)[-1] == ("NVIDIA GeForce RTX 3090",
-                                       "NVIDIA GeForce RTX 3090 (not found, Automatic is used)")
-    assert config["graphics_card"] == "NVIDIA GeForce RTX 3090"
+    assert row.combo.get_active_id() == saved
+    assert _entries(row.combo)[-1] == (saved, f"{saved} (not usable here, Automatic is used)")
+    assert config["graphics_card"] == saved
 
 
 def test_the_processor_has_no_cards_and_nothing_is_asked():

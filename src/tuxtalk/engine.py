@@ -136,13 +136,14 @@ def _transcribe_whisper(engine, audio_f32, language, limit_to, words_prompt, sta
     options = dict(WHISPER_OPTIONS, hotwords=words_prompt)
     segments, _ = language_limit.whisper_held_to(engine.transcribe, audio_f32, language,
                                                  limit_to, **options)
+    # A generator: the decoding happens as it is read, so read it before timing.
+    seg_list = list(segments)
     transcribe_time = time.time() - started
     logger.info(f"TIMING: Transcription completed in {transcribe_time:.2f}s")
     # Live text's reads (quietly) watch their own time and give up when slow.
     if transcribe_time > 2.0 and not is_quiet():
         logger.warning(f"Transcription took {transcribe_time:.2f}s "
                        "(first run may be slower due to CUDA compilation)")
-    seg_list = list(segments)       # a generator, read once
     raw = " ".join(seg.text for seg in seg_list).strip()
     max_no_speech_prob = max((seg.no_speech_prob for seg in seg_list), default=0.0)
     logger.info(f"Raw transcription (before hallucination filter): {live.loggable(raw)}  "
@@ -430,10 +431,12 @@ def running():
 def processor_took_over():
     """The model moved to the processor partway through the session
     (Parakeet after the graphics chip failed twice): the menus and live
-    text go by what really runs."""
+    text go by what really runs. The tray is told on a thread of its own:
+    its D-Bus call can take over a second, and the dictation that found the
+    fallback is waiting to be typed."""
     if _running_engine is not None and _running_engine[1] != "cpu":
         _record_engine(_running_engine[0], "cpu")
-        notify_tray()
+        threading.Thread(target=notify_tray, name="tell-tray-processor", daemon=True).start()
 
 
 def on_graphics_card() -> bool:
@@ -533,6 +536,19 @@ def _without_missing_cuda(settings):
     return Settings(**{**vars(settings), "device": "cpu"})
 
 
+def _cuda_failed_notice(picked_card):
+    """The title and text saying CUDA wasn't used. A picked card is named:
+    a busy one (out of memory) is the likeliest cause, and another card or
+    Automatic may work where it didn't."""
+    if not picked_card:
+        return ("Couldn't use the NVIDIA graphics card",
+                "TuxTalk switched to the processor. Choose the device again in "
+                "Preferences to try the graphics card.")
+    return (f"Couldn't use {picked_card}",
+            "TuxTalk switched to the processor. The card may be busy: choose the device "
+            "again in Preferences, with another graphics card or Automatic.")
+
+
 def _cpu_fallback_after_cuda(settings, error):
     """The model on the processor after loading it on CUDA failed with
     *error*; the saved device becomes the processor, and the user is told."""
@@ -561,9 +577,7 @@ def _cpu_fallback_after_cuda(settings, error):
             f"The {settings.model} model was not downloaded (cancelled or failed)")
     logger.info("Model loaded on CPU (fallback from CUDA)")
     _record_engine(settings.model, "cpu")
-    notify_module.notify("Couldn't use the NVIDIA graphics card",
-                         "TuxTalk switched to the processor. Choose the device again in "
-                         "Preferences to try the graphics card.")
+    notify_module.notify(*_cuda_failed_notice(settings.graphics_card))
     # Saved, so future service restarts don't try CUDA again and crash in a loop.
     try:
         from .config import save_config

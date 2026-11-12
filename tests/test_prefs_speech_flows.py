@@ -232,3 +232,19 @@ def test_the_graphics_card_row_asks_again_once_vulkans_engine_is_set_up(speech, 
         section.config.update(device="vulkan", model="small")
         section.download_selected_model()
     assert row.combo.get_visible()
+
+
+def test_apply_with_vulkans_files_here_doesnt_list_the_cards_again(speech, monkeypatch):
+    """Listing Vulkan's cards starts the graphics engine, which wakes every
+    card: each Apply and OK on Vulkan did it, with nothing downloaded."""
+    from tuxtalk import whisper_vulkan
+    section = speech("amd")
+    row = section.graphics_card
+    listed = []
+    monkeypatch.setattr(row, "_list_cards", lambda device: listed.append(device) or [])
+    monkeypatch.setattr(whisper_vulkan, "is_installed", lambda model: True)
+    monkeypatch.setattr(vulkan_setup_dialogs, "ensure_files",
+                        lambda parent, model, confirm: pytest.fail("nothing to download"))
+    section.config.update(device="vulkan", model="small")
+    assert section.download_selected_model() is True
+    assert listed == []

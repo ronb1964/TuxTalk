@@ -6,14 +6,15 @@ import pytest
 from gi.repository import Gdk, Gtk
 
 from tuxtalk import file_transcribe as ft
+from tuxtalk import transcript_history as history
 
 
 @pytest.fixture
 def win(monkeypatch, tmp_path):
     from tuxtalk import transcribe_window as tw
     # Transcripts are kept here, never in the real data folder.
-    monkeypatch.setattr(ft, "recent_path", lambda: str(tmp_path / "recent-transcripts.json"))
-    monkeypatch.setattr(ft, "_reported", set())     # each test sees its own warnings
+    monkeypatch.setattr(history, "recent_path", lambda: str(tmp_path / "recent-transcripts.json"))
+    monkeypatch.setattr(history, "_reported", set())     # each test sees its own warnings
     monkeypatch.setattr(Gtk, "main_quit", lambda: None)
     # Never on the desktop: the windows are built but not shown.
     monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)
@@ -34,12 +35,12 @@ def done(w, text="Hello there.", kept_for_next_time=False):
     """A file finished. Keeping it for next time is off unless asked for, so
     the close question can be tested; it's on in real use."""
     if not kept_for_next_time:
-        ft_remember, ft.remember = ft.remember, lambda *a: None
+        kept_remember, history.remember = history.remember, lambda *a: None
     try:
         w._on_done([ft.Piece(0.0, 5.0, text)], 5.0, 1.0, False)
     finally:
         if not kept_for_next_time:
-            ft.remember = ft_remember
+            history.remember = kept_remember
 
 
 def test_nothing_to_lose_closes_without_asking(win):
@@ -163,7 +164,7 @@ def test_choosing_an_earlier_one_shows_it(win):
     done(win, "First.", kept_for_next_time=True)
     win.path = "/videos/second.mov"
     done(win, "Second.", kept_for_next_time=True)
-    first = [e for e in ft.recent() if e.path == "/videos/first.mov"][0]
+    first = [e for e in history.recent() if e.path == "/videos/first.mov"][0]
     win.show_kept(first)
     assert [p.text for p in win.pieces] == ["First."] and win.path == "/videos/first.mov"
 
@@ -174,7 +175,7 @@ def test_an_earlier_one_asks_first_when_the_text_shown_wasnt_kept(win):
     only copy: choosing an earlier transcript replaced it without a word."""
     win.path = "/videos/first.mov"
     done(win, "First.", kept_for_next_time=True)
-    first = ft.recent()[0]
+    first = history.recent()[0]
     win.path = "/videos/second.mov"
     done(win, "Second, only here.")                 # not kept
     item = next(i for i in win.earlier_menu.get_children()
@@ -188,10 +189,10 @@ def test_an_earlier_one_asks_first_when_the_text_shown_wasnt_kept(win):
 
 def test_only_ten_are_kept_and_a_file_done_again_replaces_its_copy(win):
     for n in range(12):
-        ft.remember(f"/videos/{n}.mov", [ft.Piece(0, 1, str(n))], 1.0)
-    ft.remember("/videos/5.mov", [ft.Piece(0, 1, "again")], 1.0)
-    kept = ft.recent()
-    assert len(kept) == ft.MAX_RECENT
+        history.remember(f"/videos/{n}.mov", [ft.Piece(0, 1, str(n))], 1.0)
+    history.remember("/videos/5.mov", [ft.Piece(0, 1, "again")], 1.0)
+    kept = history.recent()
+    assert len(kept) == history.MAX_RECENT
     assert kept[0].path == "/videos/5.mov" and kept[0].pieces[0].text == "again"
     assert sum(e.path == "/videos/5.mov" for e in kept) == 1
 
@@ -200,7 +201,7 @@ def test_clearing_the_list(win):
     done(win, kept_for_next_time=True)
     win.answer = Gtk.ResponseType.ACCEPT
     win._on_clear_earlier()
-    assert ft.recent() == [] and not win.remembered
+    assert history.recent() == [] and not win.remembered
     assert not win.earlier_btn.get_sensitive()
     win.answer = Gtk.ResponseType.CANCEL
     assert win._on_close() is True              # now closing would lose it
@@ -241,10 +242,10 @@ def test_a_damaged_list_survives_the_next_transcript(win, tmp_path, caplog):
     transcript is kept, set aside under the name a damaged config gets."""
     damaged = '[{"path": "/videos/hour.mov", "pieces": [[0, 3600, "An hour of'
     (tmp_path / "recent-transcripts.json").write_text(damaged)
-    assert ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0) is not None
+    assert history.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0) is not None
     [aside] = _aside(tmp_path)
     assert (tmp_path / aside).read_text() == damaged
-    assert [e.path for e in ft.recent()] == ["/videos/new.mov"]
+    assert [e.path for e in history.recent()] == ["/videos/new.mov"]
     assert "set aside" in caplog.text
 
 
@@ -255,20 +256,20 @@ def test_a_list_with_one_damaged_transcript_keeps_it_aside(win, tmp_path):
     original = json.dumps(good + [{"path": "/videos/hour.mov", "total": "damaged",
                                    "pieces": [[0, 3600, "An hour of talk."]]}])
     (tmp_path / "recent-transcripts.json").write_text(original)
-    ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
+    history.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
     [aside] = _aside(tmp_path)
     assert (tmp_path / aside).read_text() == original
-    assert [e.path for e in ft.recent()] == ["/videos/new.mov", "/videos/good.mov"]
+    assert [e.path for e in history.recent()] == ["/videos/new.mov", "/videos/good.mov"]
 
 
 def test_a_second_damaged_list_in_the_same_second_keeps_the_first(win, tmp_path, monkeypatch):
     import time
     import types
-    monkeypatch.setattr(ft, "time", types.SimpleNamespace(
+    monkeypatch.setattr(history, "time", types.SimpleNamespace(
         **{**vars(time), "strftime": lambda fmt: "20261111-093000"}))
     for damaged in ("{first", "{second"):
         (tmp_path / "recent-transcripts.json").write_text(damaged)
-        ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
+        history.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
     assert [(tmp_path / a).read_text() for a in _aside(tmp_path)] == ["{first", "{second"]
 
 
@@ -279,7 +280,7 @@ def test_a_damaged_list_that_cant_be_moved_is_left_alone(win, tmp_path, monkeypa
 
     def cant_move(*args):
         raise OSError("read-only")
-    monkeypatch.setattr(ft, "os", types.SimpleNamespace(**{**vars(os), "rename": cant_move}))
+    monkeypatch.setattr(history, "os", types.SimpleNamespace(**{**vars(os), "rename": cant_move}))
     (tmp_path / "recent-transcripts.json").write_text("{not json")
     done(win, kept_for_next_time=True)
     assert not win.remembered
@@ -293,8 +294,8 @@ def test_a_list_that_cant_be_read_just_now_is_neither_moved_nor_written(win, tmp
 
     def busy(target):
         raise OSError(24, "Too many open files")
-    monkeypatch.setattr(ft, "_read_list", busy)
-    assert ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0) is None
+    monkeypatch.setattr(history, "_read_list", busy)
+    assert history.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0) is None
     assert _aside(tmp_path) == []
     assert (tmp_path / "recent-transcripts.json").read_text() == _kept_list("/videos/good.mov")
 
@@ -303,10 +304,19 @@ def test_clearing_the_list_clears_every_copy_kept(win, tmp_path):
     """The damaged ones set aside, and an older TuxTalk's one transcript,
     which would otherwise come back as the list."""
     (tmp_path / "recent-transcripts.json").write_text("{not json")
-    ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
+    history.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
     (tmp_path / "last-transcript.json").write_text(_kept_list("/videos/old.mov"))
-    assert ft.forget_all()
-    assert ft.recent() == [] and sorted(p.name for p in tmp_path.iterdir()) == []
+    assert history.forget_all()
+    assert history.recent() == [] and sorted(p.name for p in tmp_path.iterdir()) == []
+
+
+def test_clearing_the_list_clears_a_half_written_one_too(win, tmp_path):
+    """A write killed midway leaves the transcripts in full in the .tmp
+    beside the list: Clear This List left them there."""
+    history.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
+    (tmp_path / "recent-transcripts.json.tmp").write_text(_kept_list("/videos/private.mov"))
+    assert history.forget_all()
+    assert sorted(p.name for p in tmp_path.iterdir()) == []
 
 
 def test_a_clear_that_cant_see_the_copies_says_so_and_keeps_the_list(win, tmp_path,
@@ -319,17 +329,17 @@ def test_a_clear_that_cant_see_the_copies_says_so_and_keeps_the_list(win, tmp_pa
 
     def unreadable(folder):
         raise PermissionError(13, "Permission denied")
-    monkeypatch.setattr(ft, "os", types.SimpleNamespace(**{**vars(os), "scandir": unreadable}))
-    assert not ft.forget_all()
-    assert [e.path for e in ft.recent()] == ["/videos/good.mov"]
+    monkeypatch.setattr(history, "os", types.SimpleNamespace(**{**vars(os), "scandir": unreadable}))
+    assert not history.forget_all()
+    assert [e.path for e in history.recent()] == ["/videos/good.mov"]
 
 
 def test_a_damaged_transcript_an_older_tuxtalk_kept_isnt_deleted(win, tmp_path):
     damaged = ('{"path": "/videos/hour.mov", "total": "damaged", '
                '"pieces": [[0, 3600, "An hour of talk."]]}')
     (tmp_path / "last-transcript.json").write_text(damaged)
-    assert ft.recent() == []
-    ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
+    assert history.recent() == []
+    history.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
     assert (tmp_path / "last-transcript.json").read_text() == damaged
 
 
@@ -345,8 +355,8 @@ def test_a_transcript_with_a_field_it_cant_use_counts_as_damaged(win, tmp_path, 
     # A key given twice keeps its last value, so the damaged field wins.
     original = '[{"total": 5, "when": 1.0, "pieces": [[0, 5, "Kept."]], ' + damage + '}]'
     (tmp_path / "recent-transcripts.json").write_text(original)
-    assert ft.recent() == []
-    ft.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
+    assert history.recent() == []
+    history.remember("/videos/new.mov", [ft.Piece(0, 1, "New.")], 1.0)
     [aside] = _aside(tmp_path)
     assert (tmp_path / aside).read_text() == original
 
@@ -356,7 +366,7 @@ def test_the_one_kept_before_the_list_comes_along(win, tmp_path):
     old = tmp_path / "last-transcript.json"
     old.write_text(json.dumps({"path": "/videos/old.mov", "total": 5, "when": 1.0,
                                "pieces": [[0, 5, "Old one."]]}))
-    kept = ft.recent()
+    kept = history.recent()
     assert [e.path for e in kept] == ["/videos/old.mov"]
     assert not old.exists() and (tmp_path / "recent-transcripts.json").exists()
 
@@ -469,10 +479,10 @@ def test_a_rerun_stopped_early_keeps_the_whole_transcript_from_before(win):
     """An hour transcribed and kept, the same file chosen again and stopped
     five minutes in: the hour stays under Earlier Transcripts."""
     hour = [ft.Piece(n * 10.0, n * 10.0 + 10.0, f"part {n}.") for n in range(360)]
-    ft.remember("/m/interview.mp3", hour, 3600.0)
+    history.remember("/m/interview.mp3", hour, 3600.0)
     win.path = "/m/interview.mp3"
     win._on_done(hour[:30], 3600.0, 60.0, True)
-    kept = ft.recent()
+    kept = history.recent()
     assert len(kept) == 1 and len(kept[0].pieces) == 360
     assert "The longer transcript from before is still under" in win.status.get_text()
     assert win._on_close() is True          # the part shown isn't kept: closing asks
@@ -480,10 +490,10 @@ def test_a_rerun_stopped_early_keeps_the_whole_transcript_from_before(win):
 
 def test_a_rerun_stopped_further_on_replaces_the_shorter_copy(win):
     first = [ft.Piece(0.0, 10.0, "one.")]
-    ft.remember("/m/talk.mp3", first, 600.0)
+    history.remember("/m/talk.mp3", first, 600.0)
     win.path = "/m/talk.mp3"
     win._on_done(first + [ft.Piece(10.0, 20.0, "two.")], 600.0, 5.0, True)
-    assert [p.text for p in ft.recent()[0].pieces] == ["one.", "two."]
+    assert [p.text for p in history.recent()[0].pieces] == ["one.", "two."]
 
 
 def test_a_web_link_dropped_says_only_files_can_be_transcribed(win, monkeypatch):
@@ -549,3 +559,36 @@ def test_a_failed_file_never_writes_what_was_heard_to_the_log(win, monkeypatch, 
     assert "File transcription failed: ValueError" in caplog.text
     assert "secret" not in caplog.text
     assert any("my secret words" in str(args) for args in shown)
+
+
+def test_a_new_card_pick_reloads_the_open_windows_model(win, monkeypatch):
+    """The window keeps its model between files: one picked on another card
+    since the last file must load there, not stay on the old one."""
+    import numpy as np
+    from gi.repository import GLib
+    from tuxtalk import config
+    loaded = []
+
+    class Engine:
+        describe = "Small on the graphics card (CUDA)"
+
+        def __init__(self, cfg):
+            self.card, self.closed = cfg.graphics_card, False
+            loaded.append(self)
+
+        def reload_words(self):
+            pass
+
+        def close(self):
+            self.closed = True
+
+    cards = iter(["", "NVIDIA GeForce RTX 5090"])
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(
+        model="small", device="cuda", graphics_card=next(cards)))
+    monkeypatch.setattr(ft, "decode", lambda path: np.zeros(ft.SAMPLE_RATE, dtype=np.float32))
+    monkeypatch.setattr(ft, "load_engine", Engine)
+    monkeypatch.setattr(GLib, "idle_add", lambda fn, *args: None)
+    win._work("/first.mp3")
+    win._work("/second.mp3")
+    assert [(e.card, e.closed) for e in loaded] == [("", True), ("NVIDIA GeForce RTX 5090", False)]
+    assert win.engine is loaded[1]

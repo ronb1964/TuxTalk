@@ -214,10 +214,13 @@ class ParakeetGpuModel:
                 raise RuntimeError("Parakeet failed on the graphics chip, and its processor "
                                    f"version isn't available ({e})") from e
             logger.warning("Parakeet moved to the processor for the rest of this session")
-            if self._on_fallback is not None:
-                self._on_fallback()
             steer(self._cpu, self._words)
-            return self._cpu.recognize(audio)
+            text = self._cpu.recognize(audio)
+        # Once this dictation's text is in hand, and outside the lock, so the
+        # menus' update doesn't hold up this dictation or the next.
+        if self._on_fallback is not None:
+            self._on_fallback()
+        return text
 
     def set_words(self, words) -> None:
         """Your Words: sent to the helper before the next recording (a

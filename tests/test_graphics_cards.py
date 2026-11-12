@@ -78,6 +78,16 @@ def test_vulkan_lists_only_cards_not_the_chip_built_into_the_processor():
     ]
 
 
+def test_vulkan_lists_no_cards_before_its_engine_is_downloaded(monkeypatch):
+    """The engine is what lists them: starting one that isn't there only
+    logged a warning each time Preferences showed Vulkan."""
+    from tuxtalk import whisper_vulkan
+    monkeypatch.setattr(whisper_vulkan, "is_engine_installed", lambda model_name=None: False)
+    monkeypatch.setattr(whisper_vulkan, "list_devices",
+                        lambda: pytest.fail("started an engine that isn't there"))
+    assert gc.vulkan_cards() == []
+
+
 def test_an_nvidia_card_has_the_same_name_under_cuda_and_vulkan():
     """So a card picked with the Device on CUDA stays picked on Vulkan."""
     cuda = gc.parse_nvidia_smi(ONE_CARD)
@@ -108,7 +118,23 @@ def _smi(output):
     return lambda args, **kwargs: subprocess.CompletedProcess(args, 0, stdout=output, stderr="")
 
 
-def test_cuda_uses_the_picked_cards_number(monkeypatch):
+@pytest.fixture
+def no_pick_at_start(monkeypatch):
+    """cuda_preload found no picked card when the process started."""
+    from tuxtalk import cuda_preload
+    monkeypatch.setattr(cuda_preload, "picked_card", None)
+
+
+def _logged(monkeypatch):
+    """The lines graphics_cards logs at info from here on."""
+    lines = []
+    monkeypatch.setattr(gc.logger, "info", lambda msg, *a, **k: lines.append(msg))
+    return lines
+
+
+def test_cuda_uses_the_picked_cards_number(monkeypatch, no_pick_at_start):
+    """With CUDA counting by slot (the user's own CUDA_DEVICE_ORDER, or a
+    pick changed since the process started) nvidia-smi finds the card."""
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
     monkeypatch.setenv("CUDA_DEVICE_ORDER", "PCI_BUS_ID")
     assert gc.cuda_index("NVIDIA GeForce RTX 5070 Ti #2", run=_smi(FIVE_CARDS)) == 4
@@ -127,6 +153,31 @@ def test_cuda_settings_the_user_made_win_over_the_pick(monkeypatch, variable, va
     assert gc.cuda_index("NVIDIA GeForce RTX 5070 Ti #2", run=_smi(FIVE_CARDS)) == 0
 
 
+def test_the_card_found_at_start_is_used_without_asking_nvidia_smi_again(monkeypatch):
+    """Each load (service start, every wake from Power Saving) asked again:
+    an answer that failed or timed out put the model on the first slot's
+    card, and the wake waited up to 5 s for it."""
+    from tuxtalk import cuda_preload
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    monkeypatch.setenv("CUDA_DEVICE_ORDER", "PCI_BUS_ID")
+    monkeypatch.setattr(cuda_preload, "picked_card", ("NVIDIA GeForce RTX 5070 Ti #2", 4))
+
+    def hangs(*args, **kwargs):
+        raise subprocess.TimeoutExpired("nvidia-smi", 5)
+    assert gc.cuda_index("NVIDIA GeForce RTX 5070 Ti #2", run=hangs) == 4
+
+
+def test_a_card_not_found_at_start_says_so_not_that_the_user_set_cuda(monkeypatch,
+                                                                       no_pick_at_start):
+    """The user set no CUDA variable: blaming one sent them looking for it."""
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    monkeypatch.delenv("CUDA_DEVICE_ORDER", raising=False)
+    lines = _logged(monkeypatch)
+    assert gc.cuda_index("NVIDIA GeForce RTX 3090", run=_smi(FIVE_CARDS)) == 0
+    assert any("NVIDIA GeForce RTX 3090" in line and "wasn't there" in line for line in lines)
+    assert not any("CUDA_VISIBLE_DEVICES" in line for line in lines)
+
+
 @pytest.mark.parametrize("picked,order", [("NVIDIA GeForce RTX 5090 #2", "PCI_BUS_ID"),
                                           ("", None),
                                           ("NVIDIA GeForce RTX 3090", None)])
@@ -136,11 +187,13 @@ def test_cuda_counts_by_slot_only_with_a_picked_card_thats_there(monkeypatch, pi
     whatever card sits in the first slot."""
     from tuxtalk import config, cuda_preload
     monkeypatch.setattr(os, "environ", {})      # what the call sets stays in this test
+    monkeypatch.setattr(cuda_preload, "picked_card", None)
     monkeypatch.setattr(config, "load_config",
                         lambda: config.Settings(device="cuda", graphics_card=picked))
     monkeypatch.setattr(gc, "cuda_cards", lambda: gc.parse_nvidia_smi(FIVE_CARDS))
     cuda_preload._order_cards_by_pci_bus()
     assert os.environ.get("CUDA_DEVICE_ORDER") == order
+    assert cuda_preload.picked_card == ((picked, 2) if order else None)
 
 
 def test_an_order_the_user_set_is_kept(monkeypatch):

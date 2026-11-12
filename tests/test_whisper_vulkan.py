@@ -641,7 +641,7 @@ def test_service_runs_whisper_on_the_amd_or_intel_chip(monkeypatch):
     """And brings an earlier engine build up to date once it runs."""
     updates = []
     monkeypatch.setattr(wv, "is_installed", lambda m: True)
-    monkeypatch.setattr(wv, "find_device", lambda wanted="": 1)
+    monkeypatch.setattr(wv, "find_device", lambda wanted: 1)
     monkeypatch.setattr(wv, "VulkanWhisperModel", FakeEngine)
     monkeypatch.setattr(wv, "update_in_background", lambda: updates.append(1))
     model = engine.build(_settings())
@@ -685,7 +685,7 @@ def test_service_runs_parakeet_on_the_graphics_chip(monkeypatch):
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
     updates = []
     monkeypatch.setattr(wv, "is_installed", lambda m: True)
-    monkeypatch.setattr(wv, "find_device", lambda wanted="": 0)
+    monkeypatch.setattr(wv, "find_device", lambda wanted: 0)
     monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", FakeParakeetGpu)
     monkeypatch.setattr(wv, "update_in_background", lambda: updates.append(1))
     model = engine.build(_settings(model=PARAKEET_MODEL))
@@ -720,7 +720,7 @@ def test_parakeet_falls_back_to_the_processor_when_the_helper_fails(monkeypatch)
         raise RuntimeError("driver said no")
 
     monkeypatch.setattr(wv, "is_installed", lambda m: True)
-    monkeypatch.setattr(wv, "find_device", lambda wanted="": 0)
+    monkeypatch.setattr(wv, "find_device", lambda wanted: 0)
     monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", broken)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: told.append(a))
     monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
@@ -817,7 +817,7 @@ def test_speed_check_remembers_which_won(monkeypatch, times, slower):
     from tuxtalk import vulkan_setup_dialogs as vsd
     saved = {}
     cfg = types.SimpleNamespace(vulkan_slower=not slower, graphics_card="")
-    monkeypatch.setattr(vsd.wv, "find_device", lambda wanted="": 0)
+    monkeypatch.setattr(vsd.wv, "find_device", lambda wanted: 0)
     monkeypatch.setattr(vsd.wv, "speed_check", lambda model, dev, cancel: times)
     monkeypatch.setattr(vsd, "message", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
@@ -836,7 +836,7 @@ def test_the_speed_check_times_the_picked_card(monkeypatch, card, saved, timed):
     from tuxtalk import vulkan_setup_dialogs as vsd
     asked = []
     cfg = types.SimpleNamespace(vulkan_slower=False, graphics_card=saved)
-    monkeypatch.setattr(vsd.wv, "find_device", lambda wanted="": asked.append(wanted) or 0)
+    monkeypatch.setattr(vsd.wv, "find_device", lambda wanted: asked.append(wanted) or 0)
     monkeypatch.setattr(vsd.wv, "speed_check", lambda model, dev, cancel: (1.0, 5.0))
     monkeypatch.setattr(vsd, "message", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
@@ -1004,7 +1004,7 @@ def test_the_device_check_runs_one_builds_program_with_its_own_libraries(tmp_pat
         server.chmod(0o755)
     chosen = iter([str(builds[0]), str(builds[1])])
     monkeypatch.setattr(wv, "engine_dir", lambda: next(chosen))     # updated after one look
-    assert wv.find_device() == 0
+    assert wv.find_device("") == 0
 
 
 def test_orphaned_servers_of_every_build_are_looked_for(monkeypatch):

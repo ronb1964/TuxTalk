@@ -8,6 +8,7 @@ and fallback paths are all exercised through a real process and real pipes.
 import io
 import sys
 import textwrap
+import threading
 
 import numpy as np
 import pytest
@@ -176,15 +177,47 @@ def test_falls_back_to_the_processor_when_the_helper_keeps_failing(fake, monkeyp
     assert moved == [True]
 
 
+def test_the_fallback_is_told_once_the_dictations_text_is_in_hand(fake, monkeypatch):
+    """Telling the menus is a D-Bus call to the tray: made first, inside the
+    lock, it held up the dictation that found the fallback, and the next."""
+    events = []
+
+    class Cpu:
+        def recognize(self, audio):
+            events.append("recognized")
+            return "from the processor"
+
+    monkeypatch.setattr(parakeet_gpu, "load_parakeet_model", lambda: Cpu())
+    model = parakeet_gpu.ParakeetGpuModel(
+        0, command=fake("die"),
+        on_fallback=lambda: events.append(("told", model._lock.locked())))
+    try:
+        assert model.recognize(_audio()) == "from the processor"
+    finally:
+        model.close()
+    assert events == ["recognized", ("told", False)]
+
+
 def test_the_menus_and_live_text_follow_parakeet_to_the_processor(monkeypatch):
+    """What runs changes at once; the tray is told without the dictation
+    waiting for it."""
     from tuxtalk import engine
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
     monkeypatch.setattr(engine, "_running_engine", (PARAKEET_MODEL, "vulkan"))
     monkeypatch.setattr(engine, "model", object())
-    told = []
-    monkeypatch.setattr(engine, "notify_tray", lambda: told.append(engine.running()))
+    tray_answers, told = threading.Event(), []
+
+    def slow_tray():
+        tray_answers.wait(5)
+        told.append(engine.running())
+    monkeypatch.setattr(engine, "notify_tray", slow_tray)
     engine.processor_took_over()
-    assert told == [(PARAKEET_MODEL, "cpu")] and not engine.on_graphics_card()
+    assert not engine.on_graphics_card() and told == []      # returned before the tray answered
+    tray_answers.set()
+    for thread in threading.enumerate():
+        if thread.name == "tell-tray-processor":
+            thread.join(5)
+    assert told == [(PARAKEET_MODEL, "cpu")]
 
 
 def test_no_processor_model_to_fall_back_to_is_an_error(fake, monkeypatch):
