@@ -26,8 +26,10 @@ before 0.15.0, so older entries use that name.
   before numbers and commands are worked out, and it stays empty for words
   said into a password field. When the box can't show, because the speech
   model runs on the processor or the graphics chip is too slow, a short
-  message over your window says so once, and Preferences says so beside the
-  choice when the model is set to run on the processor. Asked for in the
+  message over your window and a notification (which a screen reader reads)
+  say so once, and Preferences says so beside the choice when the model is
+  set to run on the processor. A reread that fails closes the box for that
+  dictation instead of leaving old words up. Asked for in the
   live-text poll (Discussion #24).
 - TuxTalk Labs has one While you talk choice instead of two tickboxes: show
   the words in a box, or type each phrase when you pause. With both on, the
@@ -40,8 +42,10 @@ before 0.15.0, so older entries use that name.
   from. Automatic works as before: CUDA takes the card it ranks fastest and
   Vulkan the first one that isn't built into the processor, which on a machine
   with several cards might not be the one you wanted. Dictation, Transcribe a
-  File and Vulkan's speed check all use the card you pick. Asked for by q5sys
-  in Discussion #32.
+  File and Vulkan's speed check all use the card you pick. If the model can't
+  load on the card you picked (a busy card, say), the notice names it and
+  says to pick another card or Automatic. Asked for by q5sys in Discussion
+  #32.
 - Transcribe a File keeps your last 10 transcripts, and if that list ever got
   damaged, even one transcript in it, the next transcript was saved over it
   and the earlier ones were gone. Now a damaged list is moved aside in
@@ -50,15 +54,17 @@ before 0.15.0, so older entries use that name.
   If it can't be moved it's left alone, and the window asks before you close
   it so the new transcript isn't lost. A damaged transcript saved by an older
   TuxTalk (last-transcript.json) is kept as it is instead of being deleted.
-  Clear This List and uninstalling with your data clear the set-aside copies
-  and that older file too. Found by a code review.
+  Clear This List and uninstalling with your data clear the set-aside copies,
+  that older file and a half-written copy a crash could leave. Found by a code review.
 - With the hotkey helper, Num Lock and Caps Lock no longer go off after
   each dictation (issue #34). When the helper gave the keyboard back, Linux
   set the lock lights to the text console's own, usually all off, and on
   some KDE Plasma setups the number pad then stopped typing numbers. The
   helper (now 1.16) puts back the lights that changed. On KDE Plasma
   TuxTalk asks at start to update the helper; elsewhere System check offers
-  it. Either way it asks for your password once.
+  it. Either way it asks for your password once. When first-run setup finds
+  that same helper update needed and TuxTalk can't type yet, it says the
+  update is what lets TuxTalk type, not only that Num Lock stays on.
 
 ## [0.22.0] - 2026-11-08
 
