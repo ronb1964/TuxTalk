@@ -1,11 +1,12 @@
 """Report the focused window to TuxTalk on KDE, the way the extension does on GNOME.
 
-Paste keys off which window has focus: it sends Ctrl+Shift+V to terminals (they
-treat plain Ctrl+V as readline's quoted-insert and show nothing), and routes
-Electron apps that swallow synthetic paste to a typing fallback. Floating
-messages and the follow-window indicator need where that window is. Both are
-cached by the D-Bus service (SetFocusedWindow, SetFocusedWindowGeometry),
-and on KDE nothing else fills that cache.
+Typing keys off which window has focus: paste sends Ctrl+Shift+V to terminals
+(they treat plain Ctrl+V as readline's quoted-insert and show nothing), and a
+tab goes in as four spaces in Claude Desktop, where Tab can send the message
+half-written (window_classes.tab_may_send). Floating messages and the
+follow-window indicator need where that window is. Both are cached by the
+D-Bus service (SetFocusedWindow, SetFocusedWindowGeometry), and on KDE
+nothing else fills that cache.
 
 KWin has no D-Bus property for the active window — queryWindowInfo() asks the
 user to click one, and getWindowInfo() needs a UUID you do not have. The usable

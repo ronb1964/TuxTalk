@@ -52,7 +52,16 @@ def _next_dictation(monkeypatch, frames=None):
 
 
 @pytest.fixture
-def floated(monkeypatch):
+def notified(monkeypatch):
+    """The desktop notifications sent, by their text."""
+    sent = []
+    monkeypatch.setattr(live_text.notify_module, "notify",
+                        lambda title, body: sent.append(body))
+    return sent
+
+
+@pytest.fixture
+def floated(monkeypatch, notified):
     """The messages shown over the window being dictated into."""
     shown = []
     monkeypatch.setattr(live_text.screen_message, "show_over_active_window",
@@ -69,10 +78,8 @@ def talking(monkeypatch, floated):
     rec.frames = _speech(3)
     monkeypatch.setattr(live_text, "window", window)
     monkeypatch.setattr(live_text, "_last_read", 0.0)
-    monkeypatch.setattr(live_text, "_skip", None)
+    monkeypatch.setattr(live_text, "_dictation", None)
     monkeypatch.setattr(live_text, "_slow", (None, 0, 0.0))
-    monkeypatch.setattr(live_text, "_seen", None)
-    monkeypatch.setattr(live_text, "_settled", None)
     monkeypatch.setattr(live_text, "STOP_AFTER_S", LIMIT)
     monkeypatch.setattr(engine, "model", Model())
     monkeypatch.setattr(engine, "_running_engine", ("parakeet", "vulkan"))
@@ -143,8 +150,8 @@ def test_cinnamons_show_desktop_isnt_ended_by_the_box(talking, monkeypatch):
 
 
 def test_a_recording_typed_at_its_pauses_isnt_read(talking):
-    """Type at pause switched on during it cuts its audio under a read: it's
-    one or the other."""
+    """Started with Type at pause on, and live text turned on during it, its
+    pause detector would cut its audio under a read: it's one or the other."""
     rec, window, heard = talking
     rec.chunker = object()
     live_text.tick(now=100.0)
@@ -218,10 +225,12 @@ def test_a_read_just_under_the_limit_is_shown(talking, monkeypatch):
     assert window.shown == ["just in time"]
 
 
-def test_a_chip_too_slow_twice_ends_live_text_while_it_runs(talking, monkeypatch, floated):
+def test_a_chip_too_slow_twice_ends_live_text_while_it_runs(talking, monkeypatch, floated,
+                                                             notified):
     """A built-in graphics chip can be no faster than the processor, and the
     first read of every dictation would hold up the typing again. The user is
-    told, once: a box that goes away for good looks broken."""
+    told, once, on screen and in a notification a screen reader reads: a box
+    that goes away for good looks broken."""
     rec, window, _heard = talking
     reads = []
 
@@ -233,7 +242,7 @@ def test_a_chip_too_slow_twice_ends_live_text_while_it_runs(talking, monkeypatch
         rec = _next_dictation(monkeypatch, rec.frames)
         live_text.tick(now=100.0 + n)
     assert len(reads) == live_text.SLOW_READS and window.shown == []
-    assert floated == [live_text.TOO_SLOW]
+    assert floated == notified == [live_text.TOO_SLOW]
     monkeypatch.setattr(engine, "model", Model())       # Power Saving let it go, and back
     rec = _next_dictation(monkeypatch, rec.frames)
     live_text.tick(now=110.0)
@@ -377,19 +386,23 @@ def test_parakeet_moving_to_the_processor_ends_the_reads(talking, monkeypatch):
 
 
 @pytest.mark.parametrize("why", ["CUDA fell back", "resting"])
-def test_no_graphics_card_means_no_reads(monkeypatch, why):
+def test_no_graphics_card_means_no_reads(talking, monkeypatch, why):
     """CUDA failing over to the processor records it there; Power Saving
     lets the model go, and a read would wait for it to load again."""
+    _rec, window, heard = talking
+    monkeypatch.setattr(engine, "on_graphics_card", ON_GRAPHICS_CARD)
     monkeypatch.setattr(engine, "_running_engine", ("small", "cpu" if why == "CUDA fell back"
                                                     else "cuda"))
     monkeypatch.setattr(engine, "model", None if why == "resting" else Model())
-    assert not engine.on_graphics_card()
+    live_text.tick(now=100.0)
+    assert heard == [] and window.shown == []
 
 
 def test_on_the_processor_nothing_is_read_and_the_user_is_told_once(talking, monkeypatch,
-                                                                     caplog, floated):
+                                                                     caplog, floated, notified):
     """A read there can't be kept short, and the typed text would wait on it;
-    a box that never opens, with no word why, looks broken."""
+    a box that never opens, with no word why, looks broken. The notification
+    is what a screen reader reads."""
     _rec, window, heard = talking
     monkeypatch.setattr(engine, "_running_engine", ("parakeet", "cpu"))
     monkeypatch.setattr(engine, "on_graphics_card", lambda: False)
@@ -398,7 +411,7 @@ def test_on_the_processor_nothing_is_read_and_the_user_is_told_once(talking, mon
         live_text.tick(now=100.0)
         live_text.tick(now=101.0)
     assert heard == [] and window.shown == []
-    assert floated == [live_text.ON_PROCESSOR]
+    assert floated == notified == [live_text.ON_PROCESSOR]
     assert len([r for r in caplog.records if "graphics card" in r.getMessage()]) == 1
 
 
@@ -449,6 +462,13 @@ def _talk_with_a_gap(before, after, rate=16000):
     return [np.concatenate([talk(before), gap, talk(after)]).tobytes()]
 
 
+def _heard_before(monkeypatch, rec, seconds):
+    """*rec* as read before, its last read hearing *seconds* of audio."""
+    dictation = live_text._Dictation(rec)
+    dictation.seen = seconds
+    monkeypatch.setattr(live_text, "_dictation", dictation)
+
+
 def _numbered_reads(monkeypatch):
     """Each read answers "read 1", "read 2"...; returns how much each heard."""
     heard = []
@@ -467,7 +487,7 @@ def test_a_long_dictations_start_is_read_once_at_a_pause_and_then_kept(talking, 
     rec, window, _heard = talking
     heard = _numbered_reads(monkeypatch)
     rec.frames = _talk_with_a_gap(20, 15)
-    monkeypatch.setattr(live_text, "_seen", (rec, 35.0))
+    _heard_before(monkeypatch, rec, 35.0)
     live_text.tick(now=100.0)
     settled, rest = heard
     assert abs(settled / 16000 - 20.25) <= live_text.QUIET_S
@@ -484,9 +504,9 @@ def test_nothing_is_kept_from_a_read_that_skipped_words(talking, monkeypatch):
     rec, _window, _heard = talking
     heard = _numbered_reads(monkeypatch)
     rec.frames = _talk_with_a_gap(20, 30)
-    monkeypatch.setattr(live_text, "_seen", (rec, 35.0))
+    _heard_before(monkeypatch, rec, 35.0)
     live_text.tick(now=100.0)
-    assert heard == [40 * 16000] and live_text._settled is None
+    assert heard == [40 * 16000] and live_text._dictation.kept == ""
 
 
 def test_a_moment_of_sound_isnt_read(talking):
@@ -511,6 +531,29 @@ def test_a_failed_read_lets_the_next_one_run(talking, monkeypatch):
     with pytest.raises(RuntimeError):
         live_text.tick(now=100.0)
     assert not live_text._reading.is_set()
+
+
+def test_a_read_that_fails_closes_the_box_and_ends_that_dictations_reads(talking,
+                                                                          monkeypatch):
+    """An engine failing on one read would likely fail on the next too, each
+    one holding up the typed text, and the words up would stay frozen."""
+    rec, window, heard = talking
+    live_text.tick(now=100.0)
+    assert window.up
+
+    def broken(audio, language):
+        heard.append(len(audio))
+        raise RuntimeError("engine hiccup")
+    monkeypatch.setattr(engine, "transcribe", broken)
+    with pytest.raises(RuntimeError):
+        live_text.tick(now=101.0)
+    assert not window.up
+    live_text.tick(now=102.0)
+    assert len(heard) == 2                  # not read again
+    monkeypatch.setattr(engine, "transcribe", _taking(0.0, "next"))
+    rec = _next_dictation(monkeypatch, rec.frames)
+    live_text.tick(now=103.0)
+    assert window.shown[-1] == "next"       # the next dictation is
 
 
 def test_stopping_closes_the_window(talking):
@@ -624,7 +667,7 @@ def test_a_slow_read_ending_after_the_stop_keeps_no_recording(talking, real_work
     live_text.hide()
     release.set()
     assert real_worker.drain(5)
-    assert live_text._skip is None and live_text._seen is None and live_text._settled is None
+    assert live_text._dictation is None
 
 
 def test_a_hiccup_on_a_five_second_read_doesnt_linger(talking, monkeypatch):
@@ -640,24 +683,14 @@ def test_a_hiccup_on_a_five_second_read_doesnt_linger(talking, monkeypatch):
     assert window.shown == ["p1", "p3"]
 
 
-def test_a_read_ending_after_the_stop_keeps_nothing_it_saw(talking, monkeypatch):
-    """The key came up while the read checked for a password field: the
-    recording, and all its audio, mustn't stay in memory."""
-    rec, _window, _heard = talking
-    first = []
-
-    def stop_during_the_check(budget=None):
-        if not first:
-            first.append(True)
-            monkeypatch.setattr(rs.state, "is_recording", False)
-            live_text.hide()
-            monkeypatch.setattr(rs.state, "is_recording", True)
-        return False
-    monkeypatch.setattr(focused_window, "is_password", stop_during_the_check)
-    live_text.tick(now=100.0)
+def test_a_read_starting_after_the_stop_keeps_nothing(talking, monkeypatch):
+    """The key came up, and the window went, before the worker got to the
+    read: the recording, and all its audio, mustn't stay in memory."""
+    rec, window, _heard = talking
     monkeypatch.setattr(rs.state, "is_recording", False)
-    live_text._let_go_if_ended(rec)
-    assert live_text._seen is None and live_text._settled is None
+    live_text.hide()
+    live_text._read(rec, _speech(2), 16000)
+    assert live_text._dictation is None and window.shown == []
 
 
 def test_only_the_newest_audio_is_converted(talking, monkeypatch):
@@ -710,12 +743,3 @@ def test_a_read_leaves_no_info_lines_in_the_log(talking, monkeypatch):
     live_text.tick(now=100.0)
     assert quiet == [("check", True), ("read", True), ("check", True)]
     assert window.shown == ["so far"]
-
-
-def test_the_labs_choice_turns_it_on(prefs_window):
-    """Off until it's picked; picking it changes the setting to be saved."""
-    win = prefs_window()
-    choice = win.advanced_tab.type_at_pause.while_talking
-    assert choice.get_active_id() == "nothing"
-    choice.set_active_id("box")
-    assert win.config["live_text"] is True

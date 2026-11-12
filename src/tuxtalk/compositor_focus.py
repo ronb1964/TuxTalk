@@ -2,9 +2,10 @@
 and X11.
 
 Paste sends Ctrl+Shift+V to terminals (plain Ctrl+V is readline's
-quoted-insert there and shows nothing), and some Electron apps get typed
-instead of pasted. Both need the focused window's class; typing that waited,
-and an automatic send, need to know which window it is too. GNOME's
+quoted-insert there and shows nothing), and a tab goes in as four spaces in
+Claude Desktop, where Tab can send the message half-written
+(window_classes.tab_may_send). Both need the focused window's class; typing
+that waited, and an automatic send, need to know which window it is too. GNOME's
 extension and KDE's KWin script push both to the tray; these compositors
 have nothing to push them, but each answers the question over a local
 socket, so the dictation service asks them when nobody has reported it

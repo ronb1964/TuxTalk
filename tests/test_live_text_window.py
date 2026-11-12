@@ -137,3 +137,21 @@ def test_closing_it_lets_the_next_recording_open_a_fresh_one(shown):
     assert window._win is None
     window._show_now("two", rec)
     assert window._win is not None
+
+
+def test_its_corners_stay_see_through_while_the_first_lines_fade(shown):
+    """The fade over the first lines is cut to the rounded box: square dark
+    corners would show over the app underneath."""
+    window, rec = shown
+    window._show_now("And then it goes on and on. " * 400, rec)
+    assert window._shift > 0
+    width, height = window._size
+    surface = ltw.cairo.ImageSurface(ltw.cairo.FORMAT_ARGB32, width, height)
+    window._draw(None, ltw.cairo.Context(surface))
+    data, stride = surface.get_data(), surface.get_stride()
+
+    def alpha(x, y):
+        return data[y * stride + x * 4 + 3]     # ARGB32 is BGRA in memory on x86
+    assert alpha(0, 0) == 0 and alpha(width - 1, 0) == 0
+    assert alpha(0, height - 1) == 0 and alpha(width - 1, height - 1) == 0
+    assert alpha(width // 2, 3) > 200 and alpha(width // 2, height // 2) > 200

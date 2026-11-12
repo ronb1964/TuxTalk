@@ -148,7 +148,7 @@ def _not_quiet(record) -> bool:
 def quietly():
     """Run the block without its info lines in the log, from any module;
     warnings still go in. Live text transcribes the unfinished audio again
-    about once a second, and every engine's timing and raw-text lines for
+    about twice a second, and every engine's timing and raw-text lines for
     those reads would be most of the log."""
     _quiet.depth = getattr(_quiet, "depth", 0) + 1
     try:

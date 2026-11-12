@@ -14,19 +14,19 @@ and hide may be called from any thread.
 import gi
 gi.require_version("Gdk", "3.0")
 gi.require_version("Gtk", "3.0")
-gi.require_version("PangoCairo", "1.0")
 import cairo
-from gi.repository import Gdk, GLib, Gtk, Pango, PangoCairo
+from gi.repository import Gdk, GLib, Gtk, Pango
 
 from . import recording_state as rs
 from .logger import setup_logger
-from .ui_style import LABEL_FILL, LABEL_TEXT, NEWS_EDGE, click_through, is_x11
+from .ui_style import LABEL_FILL, NEWS_EDGE, click_through, is_x11, paint_label, rounded_box
 from .window_geometry import main_monitor_rect, monitor_rect_at
 
 logger = setup_logger(__name__)
 
 WIDTH = 560                 # pixels, or the screen's width less a margin
 _PAD = 14
+_RADIUS = 12                # the box's corners
 _GAP = 8                    # between the indicator and the window under it
 _GAP_ABOVE = 40             # above it, to clear the text box it sits on
 _FADE = 28                  # the fade over the first lines, when they don't fit
@@ -159,23 +159,11 @@ class LiveTextWindow:
         """A dark rounded box with a blue edge and the text, its first lines
         fading out at the top when they don't all fit."""
         width, height = self._size
-        cr.set_operator(cairo.OPERATOR_SOURCE)
-        cr.set_source_rgba(0, 0, 0, 0)
-        cr.paint()
-        cr.set_operator(cairo.OPERATOR_OVER)
-        _rounded(cr, width, height, 12)
-        cr.set_source_rgba(*LABEL_FILL)
-        cr.fill_preserve()
-        cr.set_source_rgba(*NEWS_EDGE)
-        cr.set_line_width(1.5)
-        cr.stroke()
-        cr.save()
-        _rounded(cr, width, height, 12)
-        cr.clip()
-        cr.move_to(_PAD, _PAD - self._shift)
-        cr.set_source_rgba(*LABEL_TEXT)
-        PangoCairo.show_layout(cr, self._layout)
+        paint_label(cr, self._size, _RADIUS, NEWS_EDGE, self._layout,
+                    (_PAD, _PAD - self._shift))
         if self._shift:
+            rounded_box(cr, width, height, _RADIUS)
+            cr.clip()
             fill = LABEL_FILL[:3]
             fade = cairo.LinearGradient(0, 0, 0, _PAD + _FADE)
             fade.add_color_stop_rgba(0, *fill, 1.0)
@@ -183,15 +171,4 @@ class LiveTextWindow:
             cr.rectangle(0, 0, width, _PAD + _FADE)
             cr.set_source(fade)
             cr.fill()
-        cr.restore()
         return True
-
-
-def _rounded(cr, width, height, radius):
-    """A rounded rectangle path the size of the window."""
-    cr.new_sub_path()
-    cr.arc(width - radius, radius, radius, -1.5708, 0)
-    cr.arc(width - radius, height - radius, radius, 0, 1.5708)
-    cr.arc(radius, height - radius, radius, 1.5708, 3.1416)
-    cr.arc(radius, radius, radius, 3.1416, 4.7124)
-    cr.close_path()

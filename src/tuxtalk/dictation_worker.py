@@ -1,7 +1,8 @@
 """The one thread that transcribes and types, in the order the recordings
 were made: whole dictations, Type at pause's phrases, voice edits, and the
 few keys the hotkey loop would otherwise type itself (Paste Last Dictation,
-the space a held send owes).
+the space a held send owes), and live text's reads of the dictation so far
+when it has nothing else to do (submit_if_idle).
 
 Off the hotkey loop, so a dictation key pressed while text is still being
 typed is read at once and starts the next recording; and off the audio
@@ -27,8 +28,8 @@ class DictationWorker:
         # Held for each put, so nothing is queued between submit_if_idle's
         # look at the queue and its own put: its job is never queued ahead
         # of one being handed over at that moment. (Live text's reads would
-        # give way anyway, by checking at their start that their phrase is
-        # still unsaid; this keeps even that wasted start out of the way.)
+        # give way anyway, by checking at their start that their recording
+        # is still running; this keeps even that wasted start out of the way.)
         self._submit_lock = threading.Lock()
         self.thread = threading.Thread(target=self._run, daemon=True, name="tt-dictation")
         self.thread.start()

@@ -19,6 +19,7 @@ logger = setup_logger(__name__)
 # same: it's glanced at.
 MIN_SECONDS, MAX_SECONDS, SECONDS_PER_WORD = 4.0, 8.0, 0.4
 _PAD_X, _PAD_Y = 18, 10
+_WARNING_EDGE = (0.94, 0.62, 0.15, 1.0)     # amber
 _current = None          # the label on screen, replaced by the next one
 _current_tag = None      # what the caller called it, so hide() takes only its own
 _current_relabel = None  # changes the text of the label on screen (relabel)
@@ -130,10 +131,8 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
     try:
         import gi
         gi.require_version("Gtk", "3.0")
-        gi.require_version("PangoCairo", "1.0")
-        from gi.repository import Gdk, GLib, Gtk, PangoCairo
-        import cairo
-        from .ui_style import LABEL_FILL, LABEL_TEXT, NEWS_EDGE, click_through, is_x11
+        from gi.repository import Gdk, GLib, Gtk
+        from .ui_style import NEWS_EDGE, click_through, is_x11, paint_label
         from .window_geometry import main_monitor_rect, monitor_rect_at
 
         display = Gdk.Display.get_default()
@@ -168,29 +167,11 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
         win.set_default_size(width, height)
         win.move(*place(width, height, center, monitor))
 
+        # An amber edge for a warning, a blue one for news.
+        edge = _WARNING_EDGE if warning else NEWS_EDGE
+
         def draw(_widget, cr):
-            """Paint the message: a dark rounded label with an amber edge for a
-            warning or a blue one for news, on a see-through window."""
-            cr.set_operator(cairo.OPERATOR_SOURCE)
-            cr.set_source_rgba(0, 0, 0, 0)
-            cr.paint()
-            cr.set_operator(cairo.OPERATOR_OVER)
-            r = height / 2
-            cr.new_sub_path()
-            cr.arc(width - r, r, r, -1.5708, 1.5708)
-            cr.arc(r, r, r, 1.5708, 4.7124)
-            cr.close_path()
-            cr.set_source_rgba(*LABEL_FILL)
-            cr.fill_preserve()
-            if warning:
-                cr.set_source_rgba(0.94, 0.62, 0.15, 1.0)     # amber edge: a warning
-            else:
-                cr.set_source_rgba(*NEWS_EDGE)
-            cr.set_line_width(1.5)
-            cr.stroke()
-            cr.move_to(_PAD_X, _PAD_Y)
-            cr.set_source_rgba(*LABEL_TEXT)
-            PangoCairo.show_layout(cr, layout)
+            paint_label(cr, (width, height), height / 2, edge, layout, (_PAD_X, _PAD_Y))
             return True
 
         win.connect("draw", draw)

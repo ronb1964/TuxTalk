@@ -88,8 +88,9 @@ class PauseMeter(SegmentedVUMeter):
 
 
 class TypeAtPause(Tab):
-    """The Labs entry: the switch, and under it the fine-tuning with its test,
-    which holds the microphone until it's stopped (stop_test)."""
+    """The Labs entry: the While you talk dropdown, and under it Type at
+    pause's fine-tuning with its test, which holds the microphone until it's
+    stopped (stop_test)."""
 
     def __init__(self, win):
         super().__init__(win)
@@ -127,7 +128,7 @@ class TypeAtPause(Tab):
             self.update_config("chunk_context_marks", c.get_active()),
             self._tap_update_summary()))
         self.tap_test_btn.connect("clicked", self._tap_toggle_test)
-        self._tap_sync_sensitivity()
+        self._show_choice()
         return row
 
     def _build_choice(self, grid, row):
@@ -157,17 +158,15 @@ class TypeAtPause(Tab):
         return row + 2
 
     def _while_talking_changed(self, combo):
-        """Write the two settings the choice stands for, the one going off
-        first: the service reads each write, and never sees both on. Then
-        show the choice's parts."""
+        """Change the two settings the choice stands for (Apply or OK saves
+        them together), then show the choice's parts."""
         choice = combo.get_active_id()
         if choice is None:
             return
         _label, pause, box, _note = WHILE_TALKING[choice]
-        for key, on in sorted((("chunked_dictation", pause), ("live_text", box)),
-                              key=lambda setting: setting[1]):
-            self.update_config(key, on)
-        self._tap_sync_sensitivity()
+        self.update_config("chunked_dictation", pause)
+        self.update_config("live_text", box)
+        self._show_choice()
 
     def _build_settings(self, fine):
         """Punctuation from context and the pause length; returns the next
@@ -230,14 +229,16 @@ class TypeAtPause(Tab):
             f"pause {self.tap_pause_spin.get_value():.1f} s"
             f" \u00b7 punctuation from context {context}")
 
-    def _tap_sync_sensitivity(self):
-        """Type at pause's settings show only while it's the choice; the
-        line under the dropdown says what the choice does."""
+    def _show_choice(self):
+        """Say under the dropdown what the choice does, also to a screen
+        reader on the dropdown itself, and show Type at pause's settings
+        only while it's the choice."""
         choice = self.while_talking.get_active_id() or "nothing"
         note = WHILE_TALKING[choice][3]
         if choice == "box" and self.config.get("device", "cpu") == "cpu":
             note = BOX_ON_PROCESSOR
         self.while_talking_note.set_text(note)
+        self.while_talking.get_accessible().set_description(note)
         on = choice == "pause"
         self.tap_fold.set_visible(on)
         if on:

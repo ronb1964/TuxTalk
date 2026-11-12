@@ -146,12 +146,17 @@ def test_the_box_says_when_this_computer_cant_show_it(win, device):
     assert on_processor is (device == "cpu")
 
 
-def test_the_setting_going_off_is_written_first(win):
-    """The service reads each write: it must never see both on."""
-    win.while_talking.set_active_id("box")
-    win.win.updates.clear()
-    win.while_talking.set_active_id("pause")
-    assert win.win.updates == [("live_text", False), ("chunked_dictation", True)]
+@pytest.mark.parametrize("choice", ["nothing", "box", "pause"])
+def test_a_screen_reader_hears_what_the_choice_does(win, choice):
+    """The line under the dropdown is read out with the dropdown itself,
+    not left as a label nothing points to."""
+    win.win.config["device"] = "cpu"
+    win.while_talking.set_active_id("box" if choice != "box" else "pause")
+    win.while_talking.set_active_id(choice)
+    description = win.while_talking.get_accessible().get_description()
+    assert description == win.while_talking_note.get_text()
+    assert description == (prefs_type_at_pause.BOX_ON_PROCESSOR if choice == "box"
+                           else prefs_type_at_pause.WHILE_TALKING[choice][3])
 
 
 def test_the_controls_write_their_settings(win):

@@ -8,13 +8,15 @@ CSS. Duplicating the rule invites fixing it in one and forgetting the other.
 
 import ctypes
 import logging
+import math
 import os
 
 import gi
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import GLib, Gtk, Gdk, GObject
+gi.require_version("PangoCairo", "1.0")
+from gi.repository import GLib, Gtk, Gdk, GObject, PangoCairo
 
 from . import desktop_detect
 
@@ -78,6 +80,42 @@ def is_x11(display):
 LABEL_FILL = (0.12, 0.12, 0.13, 0.94)
 NEWS_EDGE = (0.45, 0.62, 0.90, 1.0)
 LABEL_TEXT = (0.98, 0.93, 0.85, 1.0)
+
+
+def paint_label(cr, size, radius, edge, layout, text_at):
+    """Paint a floating label on its see-through window: a dark box *size*
+    (width, height) with corners of *radius*, an *edge* of that colour, and
+    *layout*'s text at *text_at* (x, y), kept inside the box."""
+    import cairo
+    width, height = size
+    cr.set_operator(cairo.OPERATOR_SOURCE)
+    cr.set_source_rgba(0, 0, 0, 0)
+    cr.paint()
+    cr.set_operator(cairo.OPERATOR_OVER)
+    rounded_box(cr, width, height, radius)
+    cr.set_source_rgba(*LABEL_FILL)
+    cr.fill_preserve()
+    cr.set_source_rgba(*edge)
+    cr.set_line_width(1.5)
+    cr.stroke()
+    cr.save()
+    rounded_box(cr, width, height, radius)
+    cr.clip()
+    cr.move_to(*text_at)
+    cr.set_source_rgba(*LABEL_TEXT)
+    PangoCairo.show_layout(cr, layout)
+    cr.restore()
+
+
+def rounded_box(cr, width, height, radius):
+    """Add a *width* x *height* box with corners of *radius* to *cr*'s path;
+    half the height makes a pill."""
+    cr.new_sub_path()
+    cr.arc(width - radius, radius, radius, -math.pi / 2, 0)
+    cr.arc(width - radius, height - radius, radius, 0, math.pi / 2)
+    cr.arc(radius, height - radius, radius, math.pi / 2, math.pi)
+    cr.arc(radius, radius, radius, math.pi, 3 * math.pi / 2)
+    cr.close_path()
 
 
 def click_through(win):
