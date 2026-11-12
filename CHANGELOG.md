@@ -30,7 +30,7 @@ before 0.15.0, so older entries use that name.
   model runs on the processor, the graphics chip is too slow, or there's no
   XWayland for the box (Wayland desktops nearly all have it), a short
   message over your window and a notification (which a screen reader reads)
-  say so once, and Preferences says so beside the choice when the model is
+  say so once (without XWayland, only the notification), and Preferences says so beside the choice when the model is
   set to run on the processor. A reread that fails closes the box for that
   dictation instead of leaving old words up. Asked for in the
   live-text poll (Discussion #24).
@@ -41,8 +41,8 @@ before 0.15.0, so older entries use that name.
 - On a computer with more than one graphics card you can pick which one
   TuxTalk uses: Preferences → General → Change model, device or language →
   Graphics card, under Device. It lists each card, with how much of its memory
-  is free on CUDA, and only shows up when there's more than one card to choose
-  from. Automatic works as before: CUDA takes the card it ranks fastest and
+  is free on CUDA, and only shows up with Device on CUDA or Vulkan and more
+  than one card to choose from. Automatic works as before: CUDA takes the card it ranks fastest and
   Vulkan the first one that isn't built into the processor, which on a machine
   with several cards might not be the one you wanted. Dictation, Transcribe a
   File and Vulkan's speed check all use the card you pick. On CUDA, if the
@@ -74,8 +74,12 @@ before 0.15.0, so older entries use that name.
   the whole line on Ctrl+C then (on by default), and moves the cursor while
   it does. So "select the last sentence" said that way selected text in the
   paragraph before, and the next dictation could land at the line's start.
-  Right after a dictation TuxTalk now puts the cursor back where it was.
-  Found in testing for this release; older than 0.23.
+  Right after a dictation TuxTalk now puts the cursor back at its end, after
+  the space. And before anything had been highlighted in that session, the
+  copied line counted as the selection, so an edit like "make this
+  uppercase" with nothing selected typed a copy of the line at its start;
+  now it says to select some text first. Found in testing for this release;
+  older than 0.23.
 - Help's Labs part points to Live text, and the Text Injection tooltip and
   Help now say what Auto really does: it pastes on Wayland (Ctrl+Shift+V in
   a terminal) and types on X11, typing instead if a paste fails.

@@ -771,11 +771,15 @@ class PreferencesWindow:
 
     def on_tab_switched(self, notebook, page, page_num):
         """Scroll the newly shown tab to the top, refresh Stats, which the
-        service updates while this window is open, and stop the microphone
-        test of the tab left: it holds the mic."""
+        service updates while this window is open, and Advanced, whose Labs
+        note depends on the Device chosen on another tab, and stop the
+        microphone test of the tab left: it holds the mic."""
         page.get_vadjustment().set_value(0)     # each page is a _scrollable_tab
-        if notebook.get_tab_label_text(page) == "Stats":
+        label = notebook.get_tab_label_text(page)
+        if label == "Stats":
             self.stats_tab.refresh()
+        elif label == "Advanced":
+            self.advanced_tab.refresh()
         self._stop_tests(shown=page)
 
     def _save_and_download(self):

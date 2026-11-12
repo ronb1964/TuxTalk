@@ -864,8 +864,8 @@ models are about half that.
 
 <b>What works with what?</b>, in the same place, shows which models run on the
 processor, Vulkan and CUDA, and which of those your computer has. With more than one
-graphics card, a <b>Graphics card</b> choice shows under Device: Automatic, or the card
-to use.
+graphics card and Device on CUDA or Vulkan, a <b>Graphics card</b> choice shows under
+Device: Automatic, or the card to use.
 
 ### Dictation stopped working
 Choose <b>Restart Service</b> in the TuxTalk menu, or turn dictation off and on

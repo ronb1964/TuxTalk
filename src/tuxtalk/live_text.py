@@ -63,8 +63,8 @@ ON_PROCESSOR = ("Live text is off: your speech model runs on the processor. "
                 "Your text is still typed.")
 TOO_SLOW = ("Live text is off for now: your graphics chip is too slow for it. "
             "Your text is still typed.")
-NO_X_DISPLAY = ("Live text can't show here: its box needs XWayland, which this desktop "
-                "doesn't run. Your text is still typed.")
+NO_X_DISPLAY = ("Live text can't show here: its box needs XWayland, which TuxTalk "
+                "can't reach on this desktop. Your text is still typed.")
 
 # Less audio than this holds a word or two at most: not worth a read.
 SHORTEST_S = 0.5

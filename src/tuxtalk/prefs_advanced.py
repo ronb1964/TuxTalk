@@ -58,6 +58,11 @@ class AdvancedTab(Tab):
         if self.type_at_pause is not None:
             self.type_at_pause.stop_test(closing)
 
+    def refresh(self):
+        """Bring the While you talk note up to the Device chosen since it was shown."""
+        if self.type_at_pause is not None:
+            self.type_at_pause.show_choice()
+
     def build(self):
         """The tab's page: Text, Fine-tuning, System check and TuxTalk Labs."""
         grid = Gtk.Grid()
@@ -265,7 +270,8 @@ class AdvancedTab(Tab):
                 "Leave it off if you like to re-paste a dictation that went into the wrong "
                 "window.\n"
                 "Recent Dictations in the tray menu keeps your last 20 either way.\n\n"
-                "Dictations are always kept out of clipboard history (like KDE's Klipper).")
+                "Dictations are marked to stay out of clipboard history, which KDE's Klipper\n"
+                "honours (on Wayland that needs wl-clipboard 2.3 or newer).")
             fine.attach(restore_check, 0, frow, 2, 1)
             frow += 1
         return frow

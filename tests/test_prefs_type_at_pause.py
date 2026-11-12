@@ -148,6 +148,20 @@ def test_the_box_says_when_this_computer_cant_show_it(win, model, device, on_pro
     assert said is on_processor
 
 
+def test_the_note_follows_a_device_changed_on_another_tab(win):
+    """Device is on the Model tab: switched to the processor there, the
+    Advanced tab mustn't still say the box will open."""
+    win.win.config["model"], win.win.config["device"] = "small", "vulkan"
+    win.while_talking.set_active_id("box")
+    win.win.config["device"] = "cpu"
+    notebook, page = Gtk.Notebook(), Gtk.ScrolledWindow()
+    notebook.append_page(page, Gtk.Label(label="Advanced"))
+    win.win.on_tab_switched(notebook, page, 0)
+    assert win.while_talking_note.get_text() == prefs_type_at_pause.BOX_ON_PROCESSOR
+    assert (win.while_talking.get_accessible().get_description()
+            == prefs_type_at_pause.BOX_ON_PROCESSOR)
+
+
 @pytest.mark.parametrize("choice", ["nothing", "box", "pause"])
 def test_a_screen_reader_hears_what_the_choice_does(win, choice):
     """The line under the dropdown is read out with the dropdown itself,

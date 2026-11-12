@@ -105,6 +105,7 @@
           <li>Num Lock and Caps Lock stay on after a dictation with the hotkey helper (version 1.16)</li>
           <li>Claude Desktop is pasted into at once, as other apps are</li>
           <li>Transcribe a File keeps earlier transcripts when their saved list is damaged</li>
+          <li>In KWrite and Kate, voice editing with nothing selected leaves the cursor where the dictation left it</li>
         </ul>
       </description>
     </release>

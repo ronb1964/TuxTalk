@@ -64,7 +64,7 @@
 
       <div class="prose">
         <h2>Your keyboard</h2>
-        <p>To hear F8 while you're in another app, something has to read the keyboard. In TuxTalk that's the hotkey helper, a small system service that's the only part that reads it. It passes on F-keys, Esc, Scroll Lock, Right Ctrl, Right Alt and shortcuts with Ctrl, Alt or Super (and Left Ctrl+Space, if you pick it), never letters or numbers, and only to whoever's at the screen. So other programs you run don't get to read your typing the way they could if you were in the <code>input</code> group, which is how a lot of Linux tools that read keys work.</p>
+        <p>To hear F8 while you're in another app, something has to read the keyboard. In TuxTalk that's the hotkey helper, a small system service that's the only part that reads it. It passes on F-keys, Esc, Pause, Scroll Lock, Right Ctrl, Right Alt and shortcuts that hold two of Ctrl, Alt and Super (and Left Ctrl+Space, if you pick it), never letters or numbers you type, and only to whoever's at the screen. So other programs you run don't get to read your typing the way they could if you were in the <code>input</code> group, which is how a lot of Linux tools that read keys work.</p>
         <p>To type your words, TuxTalk makes a virtual keyboard, the same way Steam does for game controllers. That lets programs type, but not read anything. On a system without systemd TuxTalk falls back to the <code>input</code> group, and it tells you so when it sets up.</p>
       </div>
 

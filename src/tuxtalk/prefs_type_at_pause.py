@@ -128,7 +128,7 @@ class TypeAtPause(Tab):
             self.update_config("chunk_context_marks", c.get_active()),
             self._tap_update_summary()))
         self.tap_test_btn.connect("clicked", self._tap_toggle_test)
-        self._show_choice()
+        self.show_choice()
         return row
 
     def _build_choice(self, grid, row):
@@ -174,7 +174,7 @@ class TypeAtPause(Tab):
         _label, pause, box, _note = WHILE_TALKING[choice]
         self.update_config("chunked_dictation", pause)
         self.update_config("live_text", box)
-        self._show_choice()
+        self.show_choice()
 
     def _build_settings(self, fine):
         """Punctuation from context and the pause length; returns the next
@@ -237,7 +237,7 @@ class TypeAtPause(Tab):
             f"pause {self.tap_pause_spin.get_value():.1f} s"
             f" \u00b7 punctuation from context {context}")
 
-    def _show_choice(self):
+    def show_choice(self):
         """Say under the dropdown what the choice does, also to a screen
         reader on the dropdown itself, and show Type at pause's settings
         only while it's the choice."""

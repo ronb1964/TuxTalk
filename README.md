@@ -50,7 +50,7 @@ Claude, Anthropic's AI, writes the code. I test it and use it every day, and I h
 
 Type at pause is the other choice in that same spot, so it's one or the other now. I had both on the first time I tried it and it was a mess.
 
-**Pick your graphics card.** If you've got more than one, there's a Graphics card setting under Device in Preferences, General, Change model, device or language. It only shows up when there's a choice to make. Somebody running five NVIDIA cards asked for it in [Discussions](https://github.com/ronb1964/TuxTalk/discussions/32). I've only got one card, so that part I tested with fake ones.
+**Pick your graphics card.** If you've got more than one, there's a Graphics card setting under Device in Preferences, General, Change model, device or language. It only shows up when there's a choice to make, with Device on CUDA or Vulkan. Somebody running five NVIDIA cards asked for it in [Discussions](https://github.com/ronb1964/TuxTalk/discussions/32). I've only got one card, so that part I tested with fake ones.
 
 **Num Lock stays on.** On some KDE setups Num Lock went off after every dictation and the number pad stopped typing numbers ([#34](https://github.com/ronb1964/TuxTalk/issues/34)). The hotkey helper now puts the lock lights back the way they were. On KDE, TuxTalk asks to update the helper when it starts, one password and no restart.
 
@@ -553,7 +553,7 @@ Before switching to Vulkan, TuxTalk times your graphics chip against your proces
 
 Parakeet doesn't need a graphics card, since it's already fast on the processor. With the device set to Vulkan it runs on the graphics card anyway: on an RTX 4070 Super, a minute of speech took 0.2 seconds instead of 2, with the same accuracy. That needs a second copy of Parakeet in the graphics engine's format (669 MB). The processor copy stays too, as a fallback. CUDA can't run Parakeet.
 
-With more than one graphics card, a **Graphics card** setting shows up under Device, listing each card (on CUDA with how much of its memory is free). Automatic leaves the choice to TuxTalk as before: CUDA takes the card it ranks fastest, Vulkan the first one that isn't built into the processor. The graphics built into a processor isn't listed, since it's no faster than the processor itself. If the card you picked is taken out, TuxTalk goes back to the automatic choice.
+With more than one graphics card and Device on CUDA or Vulkan, a **Graphics card** setting shows up under Device, listing each card (on CUDA with how much of its memory is free). Automatic leaves the choice to TuxTalk as before: CUDA takes the card it ranks fastest, Vulkan the first one that isn't built into the processor. The graphics built into a processor isn't listed, since it's no faster than the processor itself. If the card you picked is taken out, TuxTalk goes back to the automatic choice.
 
 </details>
 
