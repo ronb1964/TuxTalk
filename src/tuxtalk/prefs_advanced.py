@@ -211,13 +211,13 @@ class AdvancedTab(Tab):
         inject_label = tip_label(
             "Text Injection",
             "How to insert transcribed text:\n"
-            "• Auto (Smart Detection): chooses paste or typing based on the focused app\n"
+            "• Auto (Smart Detection): pastes on Wayland (Ctrl+Shift+V in a terminal),\n"
+            "  types on X11\n"
             "• Keystroke Typing: simulates typing character-by-character (most reliable)\n"
             "• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long "
             "text)\n"
             "\n"
-            "Auto mode uses paste for terminals and normal text fields, and falls back to\n"
-            "typing where paste is unreliable.\n"
+            "If a paste fails, Auto types the text instead.\n"
             "\n"
             "TuxTalk doesn't type into password fields it can recognise: most GTK apps,\n"
             "KDE apps and Firefox with accessibility on, and the desktop's own password prompt.\n"

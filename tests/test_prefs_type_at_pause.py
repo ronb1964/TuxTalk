@@ -136,14 +136,16 @@ def test_one_choice_never_leaves_both_on(win, choice, pause, box):
     assert (win.win.config["chunked_dictation"], win.win.config["live_text"]) == (pause, box)
 
 
-@pytest.mark.parametrize("device", ["cpu", "vulkan"])
-def test_the_box_says_when_this_computer_cant_show_it(win, device):
+@pytest.mark.parametrize("model, device, on_processor", [
+    ("small", "cpu", True), ("small", "vulkan", False), ("parakeet-v3", "cuda", True)],
+    ids=["processor", "graphics card", "Parakeet with CUDA, which runs it on the processor"])
+def test_the_box_says_when_this_computer_cant_show_it(win, model, device, on_processor):
     """On the processor the box never opens: picked anyway, with no word
     why, it would look broken."""
-    win.win.config["device"] = device
+    win.win.config["model"], win.win.config["device"] = model, device
     win.while_talking.set_active_id("box")
-    on_processor = win.while_talking_note.get_text() == prefs_type_at_pause.BOX_ON_PROCESSOR
-    assert on_processor is (device == "cpu")
+    said = win.while_talking_note.get_text() == prefs_type_at_pause.BOX_ON_PROCESSOR
+    assert said is on_processor
 
 
 @pytest.mark.parametrize("choice", ["nothing", "box", "pause"])

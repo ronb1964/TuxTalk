@@ -196,8 +196,8 @@ def chords(command: Command, last_text: str):
     else:
         span = last_text[-calculate_undo_length(last_text, command.said_unit, command.count):]
     # The cursor sits after the span: step over its trailing spaces without
-    # selecting them, then select back over the words. Its leading space (auto-
-    # space before a dictation) stays out of the selection.
+    # selecting them, then select back over the words. Its leading space (the
+    # auto-space after the dictation before) stays out of the selection.
     core = span.rstrip()
     if command.said_unit == "word":
         # A word without the sentence's mark after it: "select the last word"

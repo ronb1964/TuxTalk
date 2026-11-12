@@ -156,7 +156,7 @@ def _values():
     else:
         typing_para = (
             "Still nothing in one particular app? <b>Preferences → Advanced → Fine-tuning →\n"
-            "    Text Injection</b>: Auto picks paste or typing for each app; try\n"
+            "    Text Injection</b>: Auto pastes (it types on X11); try\n"
             "    <b>Keystroke Typing</b> or <b>Clipboard Paste</b> there.")
 
     no_hotkey_block = _no_hotkey_tips(is_flatpak, keys_where)
@@ -376,7 +376,7 @@ One box at a time, each box a dictation of its own:
 Labs features are experimental: they work, but they're still being refined, may
 change, and won't always get it right. Turn them on in <b>Preferences → Advanced →
 TuxTalk Labs</b>. Voice editing, select and move, and opening apps (and windows, keys
-and the mouse) are below; Type at pause is in the
+and the mouse) are below; Type at pause and Live text are in the
 Hands-free section. Your feedback decides what gets finished:
 <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>.
 
@@ -744,6 +744,8 @@ in the box; let go, and the box closes as your text is typed.
     and then be typed away at the pause.
   • In a password field the box stays closed.
   • It never takes the keyboard or a click, so you can keep working underneath it.
+  • On Wayland the box needs XWayland, which nearly every desktop has; without it a
+    short message says the box can't show.
 
 ## Transcribe a File
 
@@ -861,7 +863,9 @@ models are about half that.
     large-v3 wants a graphics card.
 
 <b>What works with what?</b>, in the same place, shows which models run on the
-processor, Vulkan and CUDA, and which of those your computer has.
+processor, Vulkan and CUDA, and which of those your computer has. With more than one
+graphics card, a <b>Graphics card</b> choice shows under Device: Automatic, or the card
+to use.
 
 ### Dictation stopped working
 Choose <b>Restart Service</b> in the TuxTalk menu, or turn dictation off and on

@@ -63,6 +63,8 @@ ON_PROCESSOR = ("Live text is off: your speech model runs on the processor. "
                 "Your text is still typed.")
 TOO_SLOW = ("Live text is off for now: your graphics chip is too slow for it. "
             "Your text is still typed.")
+NO_X_DISPLAY = ("Live text can't show here: its box needs XWayland, which this desktop "
+                "doesn't run. Your text is still typed.")
 
 # Less audio than this holds a word or two at most: not worth a read.
 SHORTEST_S = 0.5
@@ -105,6 +107,8 @@ _last_read = 0.0
 _dictation = None
 # The processor was found doing the work, and the user was told.
 _said_processor = False
+# There's no window to show (no X display), and the user was told.
+_said_no_display = False
 # (engine.running(), how many short reads with it were too slow since a
 # fast one of about as much audio, the seconds the last slow one heard);
 # the engine as (model, device), so Power Saving letting it go doesn't
@@ -135,6 +139,9 @@ def tick(now=None):
     rec = rs.state.current
     if not _wanted(rec):
         return
+    if window is None:
+        _say_no_display()
+        return
     if _reading.is_set() or now - _last_read < INTERVAL_S:
         return
     if not _on_graphics_card() or _model_too_slow():
@@ -153,8 +160,17 @@ def _wanted(rec):
     not typed at its pauses. A pause detector is armed only as a recording
     starts: one started with Type at pause on keeps it (rec.chunker) when
     live text is turned on during it, and would cut its audio under a read."""
-    return (window is not None and live.live_text and rs.state.is_recording
+    return (live.live_text and rs.state.is_recording
             and rec is not None and not rec.edit_mode and rec.chunker is None)
+
+
+def _say_no_display():
+    """The box can't be made without an X display (live_text_window.make):
+    say so the first time, or live text would just seem broken."""
+    global _said_no_display
+    if not _said_no_display:
+        _said_no_display = True
+        _tell(NO_X_DISPLAY)
 
 
 def _on_graphics_card():

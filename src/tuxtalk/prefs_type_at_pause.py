@@ -29,7 +29,7 @@ WHILE_TALKING = {
     "nothing": ("Nothing extra", False, False,
                 "Your words are typed when you let go."),
     "box": ("Show the words in a box", False, True,
-            "A box above the recording indicator shows what you've said so far. Your "
+            "A box by the recording indicator shows what you've said so far. Your "
             "words are typed when you let go. Needs the speech model on a graphics card."),
     "pause": ("Type each phrase when you pause", True, False,
               "Each phrase is typed as soon as you pause. Nothing typed is changed "
@@ -157,6 +157,14 @@ class TypeAtPause(Tab):
         grid.attach(self.while_talking_note, 0, row + 1, 2, 1)
         return row + 2
 
+    def _model_on_processor(self):
+        """Whether the speech model runs on the processor with the settings
+        in this window: Device set to it, or Parakeet with Device on CUDA
+        (parakeet_engine.effective_device)."""
+        from .parakeet_engine import effective_device
+        return effective_device(self.config.get("model", ""),
+                                self.config.get("device", "cpu")) == "cpu"
+
     def _while_talking_changed(self, combo):
         """Change the two settings the choice stands for (Apply or OK saves
         them together), then show the choice's parts."""
@@ -223,7 +231,7 @@ class TypeAtPause(Tab):
         fine.attach(self.tap_status, 0, r, 2, 1)
 
     def _tap_update_summary(self):
-        """The values beside the Adjust Settings button, as they are now."""
+        """The values beside the Adjust Type at pause button, as they are now."""
         context = "on" if self.tap_context_check.get_active() else "off"
         self.tap_fold.set_summary(
             f"pause {self.tap_pause_spin.get_value():.1f} s"
@@ -235,7 +243,7 @@ class TypeAtPause(Tab):
         only while it's the choice."""
         choice = self.while_talking.get_active_id() or "nothing"
         note = WHILE_TALKING[choice][3]
-        if choice == "box" and self.config.get("device", "cpu") == "cpu":
+        if choice == "box" and self._model_on_processor():
             note = BOX_ON_PROCESSOR
         self.while_talking_note.set_text(note)
         self.while_talking.get_accessible().set_description(note)

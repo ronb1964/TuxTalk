@@ -744,3 +744,15 @@ def test_a_read_leaves_no_info_lines_in_the_log(talking, monkeypatch):
     live_text.tick(now=100.0)
     assert quiet == [("check", True), ("read", True), ("check", True)]
     assert window.shown == ["so far"]
+
+
+def test_with_no_x_display_the_user_is_told_once(talking, monkeypatch, floated, notified):
+    """There the window couldn't be made (live_text_window.make), and a box
+    that never opens, with no word why, looks broken."""
+    _rec, _window, heard = talking
+    monkeypatch.setattr(live_text, "window", None)
+    monkeypatch.setattr(live_text, "_said_no_display", False)
+    live_text.tick(now=100.0)
+    live_text.tick(now=101.0)
+    assert heard == []
+    assert floated == notified == [live_text.NO_X_DISPLAY]
