@@ -21,7 +21,7 @@
 <p align="center">
   <a href="https://tuxtalk.app/"><b>Website</b></a> &nbsp;&bull;&nbsp;
   <a href="#installation">Install</a> &nbsp;&bull;&nbsp;
-  <a href="#new-in-022">New in 0.22</a> &nbsp;&bull;&nbsp;
+  <a href="#new-in-023">New in 0.23</a> &nbsp;&bull;&nbsp;
   <a href="#what-it-does">What it does</a> &nbsp;&bull;&nbsp;
   <a href="#all-the-features">All the features</a> &nbsp;&bull;&nbsp;
   <a href="#how-its-made">How it's made</a> &nbsp;&bull;&nbsp;
@@ -44,31 +44,19 @@ Claude, Anthropic's AI, writes the code. I test it and use it every day, and I h
 
 ---
 
-## New in 0.22
+## New in 0.23
 
-This is the biggest one yet, and honestly a pretty ambitious one. Up to now TuxTalk typed what you said. Now it can run a good part of your computer too, the mouse included. It's all in TuxTalk Labs, so nothing changes until you turn it on: Preferences, Advanced, TuxTalk Labs, "Apps, windows, keys and the mouse by voice".
+**See the words while you talk.** This is the one the poll in [Discussions](https://github.com/ronb1964/TuxTalk/discussions/24) asked about. In Preferences, Advanced, TuxTalk Labs, pick "Show the words in a box" under While you talk. While you dictate, a box by the recording indicator shows what you've said so far and grows with it, so on a long paragraph you can read back what it heard before you let go. What gets typed is still the final read when you let go, nothing gets typed and then fixed. It needs the speech model on a graphics card. On the processor it's too slow, and TuxTalk tells you so instead of just doing nothing.
 
-I'm an amateur at this, not some company with a team behind it. With this much new stuff there are going to be bugs I haven't run into yet. If something doesn't work for you, open an issue or say so in Discussions and I'll get it fixed.
+Type at pause is the other choice in that same spot, so it's one or the other now. I had both on the first time I tried it and it was a mess.
 
-<p align="center">
-  <img src="screenshots/mouse-grid.gif" alt="Saying mouse grid, then three, one and eight: the screen zooms in on the website's top bar with a finer grid, right four moves the yellow dot, and click lands on the Download button" width="600">
-</p>
+**Pick your graphics card.** If you've got more than one, there's a Graphics card setting under Device in Preferences, General, Change model, device or language. It only shows up when there's a choice to make. Somebody running five NVIDIA cards asked for it in [Discussions](https://github.com/ronb1964/TuxTalk/discussions/32). I've only got one card, so that part I tested with fake ones.
 
-**Click anything by voice.** Say "mouse grid" and the screen gets nine numbered parts. Say a number and that part gets its own grid, and on KDE, GNOME and Cinnamon the whole desktop zooms in on it about three times so you can actually see the button you're after. "left 3" or "up two" moves the yellow dot a little, and then "click". If TuxTalk can't put the pointer exactly where the grid shows, it doesn't click at all. I tried it on a toolbar button in Brave and it worked better than I expected.
+**Num Lock stays on.** On some KDE setups Num Lock went off after every dictation and the number pad stopped typing numbers ([#34](https://github.com/ronb1964/TuxTalk/issues/34)). The hotkey helper now puts the lock lights back the way they were. On KDE, TuxTalk asks to update the helper when it starts, one password and no restart.
 
-**Open apps and handle your windows.** "open Firefox", "switch to Firefox", "close window", "snap left", "move window to the other screen". Tabs and pages work the same way, "new tab", "go back a page", "scroll down 5", "go to youtube.com" or "web search cheap tires".
+**Claude Desktop gets pasted into now.** It used to get typed a letter at a time, which on a long message took a few seconds. Now it lands all at once like everywhere else.
 
-**And the rest of the desktop.** "show desktop", "switch to desktop two", "volume down", "pause music", "lock screen", "take a screenshot". If you forget one, say "what can I say" and the whole list comes up.
-
-Only a dictation that's just the command does anything, so "I opened Firefox yesterday" gets typed like always, and "literal" in front of any command types the words. KDE gets all of it. GNOME gets it with the TuxTalk extension (log out and back in once after updating), and X11 desktops like Linux Mint get nearly all of it. On COSMIC and Sway the window commands can't be done yet and TuxTalk tells you so.
-
-**Left Ctrl+Space as a dictation key.** For keyboards where the F-keys need Fn. Somebody asked for it in [Discussions](https://github.com/ronb1964/TuxTalk/discussions/28), and it's in Preferences, General. Picking it updates the hotkey helper, one password and no restart, and while dictation's on your apps don't get Ctrl+Space, so code completion on that shortcut waits until it's off.
-
-**The recording indicator follows your window.** It shows up in the window you're talking into, wherever that is on the screen. It was in Labs and I've used it every day since, so it's on for everybody now. You can turn it off under Preferences, Audio, Customize.
-
-**Every command in one place.** Help has a Commands tab with all of them as cards, and the rest of Help got the same look.
-
-One fix worth knowing about. With "Send each dictation automatically" on, TuxTalk doesn't press Enter in a terminal anymore, because "testing 1 2 3" kept coming back "command not found". Say "press enter" when you do want it to run. The [changelog](CHANGELOG.md) has the rest.
+Plus a fix for Transcribe a File, where a damaged list of earlier transcripts could get saved over and lose them. The [changelog](CHANGELOG.md) has the rest.
 
 ---
 
@@ -169,7 +157,7 @@ I'm Ron, and I don't write code. TuxTalk is written by Claude, Anthropic's AI, a
 
 I know what a lot of people think of AI-written apps, and plenty of the time they've earned it. Thing is, I don't want TuxTalk to be one of those. Keeping the code clean matters to me as much as the app working. That means nothing left lying around that isn't used, no two pieces of code doing the same job, comments that explain why something is there, and a [written checklist](CLAUDE.md#code-a-human-reviewer-would-respect--every-change) every change has to meet before it goes in. The goal is that an experienced developer can open any file and think it's well put together, not just that it happens to work.
 
-And it's not only my word. Over 3,700 automated tests run on every change. Before a release it gets tested in virtual machines on Ubuntu, Linux Mint, Fedora Silverblue, Fedora KDE, Zorin, Pop!_OS, openSUSE Tumbleweed and Debian, plus Nobara, which I use it on every day. The hotkey helper had a security review from another developer, guelz, who went on to contribute a feature too. If you read the code and something looks off, open an issue. I'd rather hear it.
+And it's not only my word. Over 8,000 automated tests run on every change. Before a release it gets tested in virtual machines on Ubuntu, Linux Mint, Fedora Silverblue, Fedora KDE, Zorin, Pop!_OS, openSUSE Tumbleweed and Debian, plus Nobara, which I use it on every day. The hotkey helper had a security review from another developer, guelz, who went on to contribute a feature too. If you read the code and something looks off, open an issue. I'd rather hear it.
 
 There's more about who's behind TuxTalk on the [About page](https://tuxtalk.app/about.html).
 
@@ -405,7 +393,8 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Hands-free if you want it.** Double-tap F9, talk, and it stops by itself when you go quiet. A single tap still works as a plain on/off switch, so a long dictation with thinking pauses never gets cut off. Say nothing for 10 seconds and it stops without typing anything.
 - **Your choice of speech model.** NVIDIA's Parakeet is the default: fast on any processor, for English and 24 European languages. OpenAI's Whisper covers 99 languages, from Tiny up to Large-v3. Not sure which? **What works with what?** in Preferences lays it out.
 - **Only these languages.** Tick the languages you actually speak and Whisper's auto-detect sticks to those.
-- **Any graphics card.** NVIDIA, AMD or Intel through Vulkan, a 22 MB download. On NVIDIA you can use CUDA instead. TuxTalk times your graphics chip against your processor first and only uses it if it's really faster.
+- **Any graphics card.** NVIDIA, AMD or Intel through Vulkan, a 22 MB download. On NVIDIA you can use CUDA instead. TuxTalk times your graphics chip against your processor first and only uses it if it's really faster. With more than one card, you pick which one.
+- **See the words while you talk (Labs).** A box by the recording indicator shows what you've said so far, on a graphics card. Or pick Type at pause instead, and each phrase is typed as soon as you pause.
 - **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. A separate setting with no AI drops "um", "uh" and stutters.
 - **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
 - **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com.

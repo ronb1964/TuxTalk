@@ -58,7 +58,7 @@
       <div class="prose">
         <h2>Who's writing this</h2>
         <p>I'm Ron, and I make TuxTalk. I don't write the code, though. Claude, Anthropic's AI, writes it, and I decide what it does, test it on real machines and use it for nearly everything I type.</p>
-        <p>I hold Claude to one rule on the code. An experienced developer should be able to open any file and find code they'd respect, not an AI mess, so it has to be easy to read and there can't be anything left lying around that isn't used. Every change also has to get through over 3,700 automated tests. There's more on that on the About page, under <a href="about.html#clean-code">Keeping the code clean</a>.</p>
+        <p>I hold Claude to one rule on the code. An experienced developer should be able to open any file and find code they'd respect, not an AI mess, so it has to be easy to read and there can't be anything left lying around that isn't used. Every change also has to get through over 8,000 automated tests. There's more on that on the About page, under <a href="about.html#clean-code">Keeping the code clean</a>.</p>
         <p>So keep in mind this comparison is written by the guy who makes the other app. I've tried hard to be fair to Myna, and every fact about it below links to where I got it, mostly Canonical's own announcement and Myna's code and release notes.</p>
 
         <h2>What Myna is</h2>
@@ -67,8 +67,7 @@
         <p>Officially it's for Ubuntu 24.04, 26.04 and 26.10 on GNOME with Wayland (<a href="https://ubuntu.com/blog/myna-speech-to-text-technology-preview-available" target="_blank" rel="noopener">Ubuntu blog</a>). Version 0.2.2 added Xubuntu, which its developer calls very experimental (<a href="https://github.com/canonical/myna/issues/63" target="_blank" rel="noopener">issue #63</a>). On KDE Plasma it stops with "Typing unavailable" for now, and they've said getting KDE working is a goal (<a href="https://github.com/canonical/myna/issues/65" target="_blank" rel="noopener">issue #65</a>).</p>
 
         <h2>Where Myna is better</h2>
-        <p>You see the words while you're talking. Myna shows the text in the field as you speak (<a href="https://github.com/canonical/myna/blob/8ce817b961d305dcae40a44ce02fb23920d03fe9/client/data/glib-2.0/schemas/com.canonical.Myna.Dictation.gschema.xml" target="_blank" rel="noopener">its settings</a>). The closest TuxTalk gets is Type at pause in TuxTalk Labs, where each phrase is typed as soon as you pause while you keep on talking. Without it, TuxTalk types when you let go of the key.</p>
-        <p>Real word-by-word live text is something I'd look into if enough people want it. If that's you, say so in <a href="https://github.com/ronb1964/TuxTalk/discussions/categories/feature-requests" target="_blank" rel="noopener">Feature Requests</a>.</p>
+        <p>You see the words while you're talking. Myna shows the text in the field as you speak (<a href="https://github.com/canonical/myna/blob/8ce817b961d305dcae40a44ce02fb23920d03fe9/client/data/glib-2.0/schemas/com.canonical.Myna.Dictation.gschema.xml" target="_blank" rel="noopener">its settings</a>). TuxTalk can show them too, since 0.23, in TuxTalk Labs: a box by its recording indicator shows what you've said so far, and the final text is typed when you let go. It needs a graphics card, though, and the words come in small jumps rather than one at a time. Or with Type at pause each phrase is typed as soon as you pause.</p>
         <p>It's Canonical's. Canonical calls it an optional feature of Ubuntu 26.10 (<a href="https://ubuntu.com/blog/myna-speech-to-text-technology-preview-available" target="_blank" rel="noopener">Ubuntu blog</a>), and they've put out five releases between October 7 and 19 (<a href="https://github.com/canonical/myna/releases" target="_blank" rel="noopener">releases</a>). If you're on stock Ubuntu with GNOME and want the one Ubuntu itself stands behind, that's Myna.</p>
         <p>The speech models run in strictly confined snaps (<a href="https://github.com/canonical/myna/blob/8ce817b961d305dcae40a44ce02fb23920d03fe9/README.md" target="_blank" rel="noopener">README</a>), and the Whisper one doesn't even get the microphone, the app hands it the audio (<a href="https://github.com/canonical/myna/blob/8ce817b961d305dcae40a44ce02fb23920d03fe9/whisper-snap/README.md" target="_blank" rel="noopener">Whisper snap</a>). And Myna starts with your desktop's own shortcut. TuxTalk isn't sandboxed like that, and to make hold-to-talk work on every desktop it installs a small hotkey helper that reads the keyboard, which asks for your password once during setup.</p>
         <p>Myna's windows already come in a bunch of languages, 0.2.4 alone added ten (<a href="https://github.com/canonical/myna/releases/tag/v0.2.4" target="_blank" rel="noopener">0.2.4 release notes</a>), and its setup talks to screen readers (<a href="https://github.com/canonical/myna/releases/tag/v0.2.1" target="_blank" rel="noopener">0.2.1 release notes</a>). TuxTalk's windows are English only.</p>
@@ -90,16 +89,16 @@
           <tbody>
           <tr><th scope="row">Made by</th><td>Canonical</td><td>Ron Brand, with the code written by Claude</td></tr>
           <tr><th scope="row">License</th><td>AGPL-3.0</td><td>MIT</td></tr>
-          <tr><th scope="row">Stage</th><td>Technology preview, 0.2.4</td><td>0.17.0</td></tr>
+          <tr><th scope="row">Stage</th><td>Technology preview, 0.2.4</td><td>0.23.0</td></tr>
           <tr><th scope="row">Runs on</th><td>Ubuntu 24.04 and newer, GNOME on Wayland (Xubuntu experimental)</td><td>Most distros: KDE, GNOME, COSMIC, Sway, Hyprland, Cinnamon, X11</td></tr>
           <tr><th scope="row">Install</th><td>PPA, then snaps from the edge channel</td><td>.deb, .rpm, AppImage, AUR</td></tr>
           <tr><th scope="row">Start and stop</th><td>Tap a shortcut to start, tap to stop</td><td>Hold F8, or tap F9 to start and stop</td></tr>
-          <tr><th scope="row">Words as you speak</th><td>Yes, in the text field</td><td>Each phrase as you pause, with Type at pause in Labs</td></tr>
+          <tr><th scope="row">Words as you speak</th><td>Yes, in the text field</td><td>In a box by the indicator, on a graphics card, or each phrase as you pause (both in Labs)</td></tr>
           <tr><th scope="row">Works offline</th><td>Yes</td><td>Yes</td></tr>
           <tr><th scope="row">Speech engines</th><td>Parakeet, Whisper, SenseVoice</td><td>Parakeet, Whisper</td></tr>
           <tr><th scope="row">Graphics card</th><td>NVIDIA only</td><td>AMD, Intel or NVIDIA</td></tr>
           <tr><th scope="row">Your own words</th><td>Not yet, issue #1</td><td>Yes, Your Words and Fix a Word</td></tr>
-          <tr><th scope="row">Voice commands</th><td>No desktop control, on purpose</td><td>Punctuation, "press enter", editing in Labs</td></tr>
+          <tr><th scope="row">Voice commands</th><td>No desktop control, on purpose</td><td>Punctuation, "press enter"; editing, apps, windows and the mouse in Labs</td></tr>
           <tr><th scope="row">App in other languages</th><td>Yes, many</td><td>English only</td></tr>
           <tr><th scope="row">Price</th><td>Free</td><td>Free</td></tr>
           </tbody>
@@ -108,9 +107,9 @@
 
       <div class="prose">
         <h2>Which one?</h2>
-        <p>If you're on Ubuntu with GNOME and you'd like to watch the words show up as you talk, give Myna a try. It's early, but Canonical is clearly putting real work into it.</p>
+        <p>If you're on Ubuntu with GNOME and you'd like to watch the words show up right in the text field as you talk, give Myna a try. It's early, but Canonical is clearly putting real work into it.</p>
         <p>If you're on KDE or another desktop, or another distro, or you've got an AMD or Intel card, or you just want to hold a key and talk, that's what TuxTalk is for. And nothing stops you from trying both.</p>
-        <p class="note">Checked on October 20, 2026, against Myna 0.2.4 and TuxTalk 0.17.0. Myna is moving fast, so some of this will go out of date. If you spot something that's wrong, <a href="https://github.com/ronb1964/TuxTalk/discussions" target="_blank" rel="noopener">tell me in Discussions</a> and I'll fix it.</p>
+        <p class="note">Checked on October 20, 2026, against Myna 0.2.4 and TuxTalk 0.17.0; TuxTalk's side updated for 0.23.0 on November 12. Myna is moving fast, so some of this will go out of date. If you spot something that's wrong, <a href="https://github.com/ronb1964/TuxTalk/discussions" target="_blank" rel="noopener">tell me in Discussions</a> and I'll fix it.</p>
         <p>Also side by side: <a href="dragon-for-linux.html">Dragon</a> and <a href="wispr-flow-superwhisper-linux.html">Wispr Flow and Superwhisper</a>.</p>
         <p><a class="btn btn-main" href="index.html#download">Get TuxTalk</a> &nbsp; <a href="index.html">See what it does</a> &nbsp; <a href="linux-dictation-apps.html">Every Linux dictation app compared</a></p>
       </div>

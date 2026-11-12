@@ -13,8 +13,10 @@ before 0.15.0, so older entries use that name.
 - New in TuxTalk Labs: Live text. Pick "Show the words in a box" under
   Preferences → Advanced → TuxTalk Labs → While you talk, and while you
   dictate, a box by the recording indicator shows what you've said so far,
-  updated about twice a second. It grows with a long dictation, above the
-  text box you're typing into, and the older words settle and stop changing.
+  updated about twice a second. It grows with a long dictation, away from
+  the text box you're typing into (above the indicator in the lower half of
+  the screen, below it in the upper half), and the older words settle and
+  stop changing.
   What gets typed doesn't change, and the box takes no keys or clicks. It
   needs the speech model on a graphics card: it reads the audio again with
   the model you already have, only when nothing else is being transcribed,
@@ -25,7 +27,8 @@ before 0.15.0, so older entries use that name.
   never held up for long. The box shows the words as the model hears them,
   before numbers and commands are worked out, and it stays empty for words
   said into a password field. When the box can't show, because the speech
-  model runs on the processor or the graphics chip is too slow, a short
+  model runs on the processor, the graphics chip is too slow, or there's no
+  XWayland for the box (Wayland desktops nearly all have it), a short
   message over your window and a notification (which a screen reader reads)
   say so once, and Preferences says so beside the choice when the model is
   set to run on the processor. A reread that fails closes the box for that
@@ -42,9 +45,10 @@ before 0.15.0, so older entries use that name.
   from. Automatic works as before: CUDA takes the card it ranks fastest and
   Vulkan the first one that isn't built into the processor, which on a machine
   with several cards might not be the one you wanted. Dictation, Transcribe a
-  File and Vulkan's speed check all use the card you pick. If the model can't
-  load on the card you picked (a busy card, say), the notice names it and
-  says to pick another card or Automatic. Asked for by q5sys in Discussion
+  File and Vulkan's speed check all use the card you pick. On CUDA, if the
+  model can't load on the card you picked (a busy card, say), the notice
+  names it and says to pick another card or Automatic. Help says where the
+  choice is. Asked for by q5sys in Discussion
   #32.
 - Transcribe a File keeps your last 10 transcripts, and if that list ever got
   damaged, even one transcript in it, the next transcript was saved over it
@@ -65,6 +69,16 @@ before 0.15.0, so older entries use that name.
   it. Either way it asks for your password once. When first-run setup finds
   that same helper update needed and TuxTalk can't type yet, it says the
   update is what lets TuxTalk type, not only that Num Lock stays on.
+- In KWrite and Kate, holding Shift with the dictation key when nothing was
+  selected moved the cursor to the start of the line: KDE's editor copies
+  the whole line on Ctrl+C then (on by default), and moves the cursor while
+  it does. So "select the last sentence" said that way selected text in the
+  paragraph before, and the next dictation could land at the line's start.
+  Right after a dictation TuxTalk now puts the cursor back where it was.
+  Found in testing for this release; older than 0.23.
+- Help's Labs part points to Live text, and the Text Injection tooltip and
+  Help now say what Auto really does: it pastes on Wayland (Ctrl+Shift+V in
+  a terminal) and types on X11, typing instead if a paste fails.
 
 ## [0.22.0] - 2026-11-08
 
