@@ -405,7 +405,8 @@ def _read_text():
         types = _wl_paste_types()
         mime = next((t for t in TEXT_TYPES if t in types), None)
         return _wl_paste(mime).decode("utf-8", "replace") if mime else None
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.info(f"Couldn't read the clipboard: {e}")
         return None     # callers leave a clipboard they can't read alone
 
 
@@ -414,7 +415,8 @@ class ClipboardUnavailable(Exception):
     or is missing). Not the same as nothing being selected."""
 
 
-def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None):
+def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
+                   selections_on_primary=False):
     """The text selected in the focused app, and put_back() to restore what
     the user had on the clipboard. The text is None when nothing is selected.
 
@@ -424,8 +426,10 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None)
     clipboard alone, so the marker still being there means no selection.
     With nothing selected, the clipboard is put back before returning.
     *on_line_copied* is called with the line an editor copied instead of a
-    selection (some move the cursor when they do). Raises
-    ClipboardUnavailable when the marker can't be put on the clipboard."""
+    selection (some move the cursor when they do). *selections_on_primary*
+    says the app puts every selection on the primary selection, so with
+    nothing there nothing was selected. Raises ClipboardUnavailable when the
+    marker can't be put on the clipboard."""
     import secrets
     sleep = sleep or time.sleep
     saved = _read_clipboard()
@@ -474,13 +478,17 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None)
                 copied = current
                 break
             sleep(_COPY_POLL_S)
-    # Code editors (VS Code, JetBrains, Sublime) copy the whole current line,
-    # newline and all, when nothing is selected. A real selection is also the
-    # highlighted text (the primary selection); an app without one gets the
-    # benefit of the doubt.
-    primary = read_primary() if copied and copied.endswith("\n") else None
+    # Code editors (VS Code, JetBrains, Sublime, KDE's) copy the whole current
+    # line, newline and all, when nothing is selected. A real selection is
+    # also the highlighted text (the primary selection); an app that may not
+    # set one gets the benefit of the doubt when it's empty or unreadable.
+    primary = _primary_to_keep() if copied and copied.endswith("\n") else _UNREADABLE
     rejected = copied
-    if primary and primary != copied:
+    if primary is None or primary == "":
+        line_copied = selections_on_primary
+    else:
+        line_copied = primary is not _UNREADABLE and primary != copied
+    if line_copied:
         logger.info("Ctrl+C copied a whole line with nothing selected; not a selection")
         copied = None
         if on_line_copied is not None:

@@ -260,9 +260,8 @@ def _still_selected(expected, where) -> bool:
     user's clipboard over it."""
     from . import clipboard
     try:
-        selected, put_back = clipboard.copy_selection(
-            lambda: keyboard_output.send_copy_keystroke(_only_into(*where)),
-            on_line_copied=lambda line: _put_cursor_back(line, where))
+        selected, put_back = _copy_in(
+            where, lambda: keyboard_output.send_copy_keystroke(_only_into(*where)))
     except clipboard.ClipboardUnavailable:
         return False
     if selected is None:
@@ -481,8 +480,7 @@ def _copy_selection(where, beeps_on, message):
         copy_sent.append(keyboard_output.send_copy_keystroke(_only_into(*where)))
         return copy_sent[-1]
     try:
-        copied = clipboard.copy_selection(
-            send_copy, on_line_copied=lambda line: _put_cursor_back(line, where))
+        copied = _copy_in(where, send_copy, message)
     except clipboard.ClipboardUnavailable:
         notices.edit_problem("no_clipboard", beeps_on)
         return None
@@ -492,28 +490,63 @@ def _copy_selection(where, beeps_on, message):
     return copied
 
 
-def _put_cursor_back(line, where):
-    """KWrite and Kate copy the whole *line* on Ctrl+C with nothing selected,
+def _copy_in(where, send_copy, message=None):
+    """clipboard.copy_selection in *where*, with what KDE's editors (KWrite,
+    Kate) do differently: every selection they make is on the primary
+    selection, and a Ctrl+C with nothing selected moves the cursor
+    (_put_cursor_back). Esc on *message* stops the cursor going back."""
+    from . import clipboard
+    if (where[0] or "").lower() not in KDE_EDITOR_CLASSES_LOWER:
+        return clipboard.copy_selection(send_copy)
+    return clipboard.copy_selection(
+        send_copy, selections_on_primary=True,
+        on_line_copied=lambda line: _put_cursor_back(line, where, message))
+
+
+def _put_cursor_back(line, where, message=None):
+    """KDE's editors copy the whole *line* on Ctrl+C with nothing selected,
     and move the cursor to its start (KTextEditor's copy()): "select the last
     sentence" then counted back from there, into the paragraph before, and
-    the next dictation landed at the line's start. When the line ends with
-    the last dictation typed in *where*, the cursor was at its end, and End
-    twice puts it back (the first End stops at the end of a wrapped line's
-    first row). Anywhere else, where it was can't be known."""
-    if (where[0] or "").lower() not in KDE_EDITOR_CLASSES_LOWER:
-        return
+    the next dictation landed at the line's start. Where the cursor was
+    can't be read, only where the last dictation typed in *where* left it:
+    at the end of a line ending with it (a user who clicked inside that line
+    since finds the cursor at its end, not its start), or after the indent
+    Kate gave the line a dictation ended with a line break."""
     last = rs.state.last_inserted_text
-    tail = last.split("\n")[-1]
-    if last and not tail:
-        return      # the dictation ended its line: the cursor was at this one's start
-    if (not last or keyboard_output.not_where_typed(where[0], where)
-            or not line.rstrip("\n").endswith(tail)):
+    keys = None
+    if last and not keyboard_output.not_where_typed(where[0], where):
+        keys = _keys_back_to_dictation_end(line.removesuffix("\n"), last.split("\n")[-1])
+    if keys is None:
         logger.info("Voice edit: KDE's editor moved the cursor to the start of the line, "
                     "and where it was before isn't known")
         return
-    if not keyboard_output.output_backend().press_keys([((), "END"), ((), "END")],
-                                                       claim=_only_into(*where)):
+    if not keys:
+        return
+    if message is not None and message.cancelled:
+        logger.info("Voice edit: Esc; the cursor stays where KDE's editor moved it")
+        return
+    if not keyboard_output.output_backend().press_keys(keys, claim=_only_into(*where)):
         logger.warning("Voice edit: couldn't put the cursor back after KDE's editor moved it")
+
+
+def _keys_back_to_dictation_end(text, tail):
+    """The keys that take KTextEditor's cursor from the start of the line
+    *text* to where a dictation whose last line was *tail* left it: [] when
+    that is the start, None when *text* doesn't show where. In that editor
+    (KateViewInternal::moveCursorToLineEnd) End stops first at the end of a
+    wrapped line's row, and at the line's end goes back before its trailing
+    spaces (Smart End, on by default), such as the one after a dictation.
+    End twice reaches one of those, or the line's end; Left moves off them
+    all, and End from there goes to the line's end."""
+    if not tail:
+        # The dictation ended with a line break: the cursor was at this
+        # line's start, or after the indent Kate puts on a new line.
+        if not text:
+            return []
+        return [((), "END")] if not text.strip() else None
+    if tail.strip() and text.endswith(tail):
+        return [((), "END"), ((), "END"), ((), "LEFT"), ((), "END")]
+    return None
 
 
 def _rewrite_over_selection(result, injection_mode, message, beeps_on, where, went_in):
