@@ -95,6 +95,19 @@
   </screenshots>
 
   <releases>
+    <release version="0.23.0" date="2026-11-12">
+      <description>
+        <p>See the words while you talk (TuxTalk Labs)</p>
+        <ul>
+          <li>Live text: a box by the recording indicator shows what you have said so far, while you talk; needs the speech model on a graphics card</li>
+          <li>One "While you talk" choice in TuxTalk Labs: show the words in a box, or type each phrase when you pause</li>
+          <li>Pick which graphics card TuxTalk uses on a computer with more than one</li>
+          <li>Num Lock and Caps Lock stay on after a dictation with the hotkey helper (version 1.16)</li>
+          <li>Claude Desktop is pasted into at once, as other apps are</li>
+          <li>Transcribe a File keeps earlier transcripts when their saved list is damaged</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.22.0" date="2026-11-08">
       <description>
         <p>Run your apps, windows, desktop and mouse by voice (TuxTalk Labs)</p>

@@ -3,7 +3,7 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [Unreleased]
+## [0.23.0] - 2026-11-12
 
 - Dictating into Claude Desktop pastes the text in one go, as in every other
   app, instead of typing it key by key: a long dictation went in over
