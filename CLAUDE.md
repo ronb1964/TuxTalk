@@ -95,6 +95,29 @@ Ron, 2026-10-20: "I'm relying on you to ensure that it remains that way ...
 periodic code reviews and include Codex in there to catch anything that you
 may miss."
 
+### Step 1c: Every Word the User Reads, Checked Against the Code
+Ron, 2026-11-12: "make sure that these items are addressed and covered in
+future builds. I don't want the things like this to be falling through the
+cracks." What went wrong: 0.23 was built, VM-tested and Ron-tested before
+anyone read Help and the README against the new code, and a full read found
+12 stale or missing texts, four of them inside the AppImage (a rebuild).
+Code reviews read code, not prose; this is its own step, BEFORE the build.
+
+1. After Step 1b, before asking to build: a reviewer (a subagent, read-only)
+   reads IN FULL every text a user sees and checks each claim against the
+   code: Help (`help_text.py`, every page), the Voice Commands lists
+   (`commands_reference.py`), every Preferences and first-run label and
+   tooltip the release touched, the README (all of it, not only "New in"),
+   the website (`docs/*.html`, comparison and privacy pages included), the
+   AppStream file, and the CHANGELOG's section for this release. It also
+   says what's MISSING: each new feature or setting must be findable in
+   Help and the README. Grep the old wording of anything renamed or removed.
+2. Every finding is fixed before the build, or Ron says why not. A text
+   inside src/tuxtalk found after the build means a rebuild: that is the
+   cost this step exists to avoid.
+3. A known issue that ships (Ron's call) goes in the release notes and, if
+   Help teaches the broken path, Help says the workaround.
+
 ### Step 2: Ask Before Building
 - **NEVER run `./build-release.sh` without asking Ron first**
 - Say: "Ready to build the AppImage?" and WAIT for confirmation
