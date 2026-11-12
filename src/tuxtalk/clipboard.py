@@ -10,6 +10,7 @@ reads.
 """
 import functools
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -61,6 +62,9 @@ TEXT_TYPES = ("text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "STRING",
 NOTHING = object()          # nothing saved (setting off, or the clipboard couldn't be read)
 EMPTY = object()            # the clipboard was empty before the paste
 _UNREADABLE = object()      # the primary selection couldn't be read: left as it is
+# What wl-paste says for an empty clipboard: "Nothing is copied" since
+# wl-clipboard 2.2, "No selection" in 2.0 and 2.1.
+_NOTHING_COPIED = re.compile("Nothing is copied|No selection")
 # KeePassXC and friends mark a copied password with this type; Klipper skips it.
 PASSWORD_HINT = "x-kde-passwordManagerHint"
 
@@ -86,11 +90,17 @@ def wl_copy_command():
 
 
 def _wl_paste_types():
-    """The types the clipboard offers now; [] when it is empty. errors="replace":
-    an app may name a type with any bytes, and only text types are looked for."""
+    """The types the clipboard offers now; [] when it is empty. Raises
+    OSError when it can't be read: taken for empty, a clipboard restored
+    later would be emptied. errors="replace": an app may name a type with
+    any bytes, and only text types are looked for."""
     result = subprocess.run(["wl-paste", "--list-types"], capture_output=True, text=True,
                             errors="replace", timeout=1)
-    return [t for t in result.stdout.splitlines() if t.strip()] if result.returncode == 0 else []
+    if result.returncode == 0:
+        return [t for t in result.stdout.splitlines() if t.strip()]
+    if _NOTHING_COPIED.search(result.stderr):
+        return []
+    raise OSError(f"wl-paste --list-types exited {result.returncode}")
 
 
 def _wl_paste(mime):
@@ -386,8 +396,7 @@ def _primary_to_keep():
         return _UNREADABLE
     if result.returncode == 0:
         return result.stdout.decode("utf-8", "replace")
-    # wl-clipboard 2.2 says "Nothing is copied", 2.0 and 2.1 "No selection".
-    if b"Nothing is copied" in result.stderr or b"No selection" in result.stderr:
+    if _NOTHING_COPIED.search(result.stderr.decode("utf-8", "replace")):
         return None
     logger.info(f"Couldn't read the primary selection (wl-paste exit {result.returncode})")
     return _UNREADABLE
@@ -399,15 +408,39 @@ def read_primary():
     return None if text is _UNREADABLE else text
 
 
+_last_read_error = None
+
+
 def _read_text():
-    """The clipboard as text, or None when it holds no text."""
+    """The clipboard as text, or None when it holds no text. A read that
+    fails is logged once while it keeps failing the same way: the selection
+    check reads the clipboard every 50 ms."""
+    global _last_read_error
     try:
         types = _wl_paste_types()
         mime = next((t for t in TEXT_TYPES if t in types), None)
-        return _wl_paste(mime).decode("utf-8", "replace") if mime else None
+        text = _wl_paste(mime).decode("utf-8", "replace") if mime else None
     except (OSError, subprocess.SubprocessError) as e:
-        logger.info(f"Couldn't read the clipboard: {e}")
+        if str(e) != _last_read_error:
+            logger.info(f"Couldn't read the clipboard: {e}")
+            _last_read_error = str(e)
         return None     # callers leave a clipboard they can't read alone
+    _last_read_error = None
+    return text
+
+
+def _line_copied(copied, selections_on_primary):
+    """Whether *copied* is the whole current line a code editor (VS Code,
+    JetBrains, Sublime, KDE's) copies on Ctrl+C with nothing selected,
+    newline and all, rather than a selection. A real selection is also the
+    highlighted text (the primary selection); an app that may not set one
+    gets the benefit of the doubt when it's empty or unreadable."""
+    if not copied.endswith("\n"):
+        return False
+    primary = _primary_to_keep()
+    if not primary:
+        return selections_on_primary
+    return primary is not _UNREADABLE and primary != copied
 
 
 class ClipboardUnavailable(Exception):
@@ -478,17 +511,8 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
                 copied = current
                 break
             sleep(_COPY_POLL_S)
-    # Code editors (VS Code, JetBrains, Sublime, KDE's) copy the whole current
-    # line, newline and all, when nothing is selected. A real selection is
-    # also the highlighted text (the primary selection); an app that may not
-    # set one gets the benefit of the doubt when it's empty or unreadable.
-    primary = _primary_to_keep() if copied and copied.endswith("\n") else _UNREADABLE
     rejected = copied
-    if primary is None or primary == "":
-        line_copied = selections_on_primary
-    else:
-        line_copied = primary is not _UNREADABLE and primary != copied
-    if line_copied:
+    if copied and _line_copied(copied, selections_on_primary):
         logger.info("Ctrl+C copied a whole line with nothing selected; not a selection")
         copied = None
         if on_line_copied is not None:

@@ -6,6 +6,7 @@ clipboard the selection was copied through is put back afterwards."""
 import functools
 import threading
 import time
+import unicodedata
 
 from . import (
     beeps,
@@ -522,11 +523,11 @@ def _put_cursor_back(line, where, message=None):
         return
     if not keys:
         return
-    if message is not None and message.cancelled:
-        logger.info("Voice edit: Esc; the cursor stays where KDE's editor moved it")
-        return
-    if not keyboard_output.output_backend().press_keys(keys, claim=_only_into(*where)):
-        logger.warning("Voice edit: couldn't put the cursor back after KDE's editor moved it")
+    # Esc a moment before stops all four (checked right before the first).
+    with keyboard_output.until_cancelled(message):
+        if (not keyboard_output.output_backend().press_keys(keys, claim=_only_into(*where))
+                and not keyboard_output.esc_cancelled()):
+            logger.warning("Voice edit: couldn't put the cursor back after KDE's editor moved it")
 
 
 def _keys_back_to_dictation_end(text, tail):
@@ -537,16 +538,31 @@ def _keys_back_to_dictation_end(text, tail):
     wrapped line's row, and at the line's end goes back before its trailing
     spaces (Smart End, on by default), such as the one after a dictation.
     End twice reaches one of those, or the line's end; Left moves off them
-    all, and End from there goes to the line's end."""
+    all, and End from there goes to the line's end. On a right-to-left line
+    that editor's Left moves forward, so it's Right there. KWrite takes the
+    spaces off a line's end when it saves: the dictation's are not counted."""
     if not tail:
         # The dictation ended with a line break: the cursor was at this
         # line's start, or after the indent Kate puts on a new line.
         if not text:
             return []
         return [((), "END")] if not text.strip() else None
-    if tail.strip() and text.endswith(tail):
-        return [((), "END"), ((), "END"), ((), "LEFT"), ((), "END")]
+    if tail.strip() and text.rstrip().endswith(tail.rstrip()):
+        back = "RIGHT" if _right_to_left(text) else "LEFT"
+        return [((), "END"), ((), "END"), ((), back), ((), "END")]
     return None
+
+
+def _right_to_left(text):
+    """Whether Qt lays *text* out right to left (QString::isRightToLeft):
+    its first letter with a direction is Arabic, Hebrew or the like."""
+    for char in text:
+        direction = unicodedata.bidirectional(char)
+        if direction in ("R", "AL"):
+            return True
+        if direction == "L":
+            return False
+    return False
 
 
 def _rewrite_over_selection(result, injection_mode, message, beeps_on, where, went_in):

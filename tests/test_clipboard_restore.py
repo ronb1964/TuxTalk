@@ -537,3 +537,35 @@ def test_a_clipboard_type_name_in_another_encoding_does_not_stop_the_restore(
     assert "text/plain" in cb._wl_paste_types()
     assert "--sensitive" in cb._wl_copy_help()
 
+
+
+@pytest.mark.parametrize("message", ["Nothing is copied", "No selection"])
+def test_an_empty_clipboard_is_empty_in_every_wl_clipboard(tmp_path, monkeypatch, message):
+    from shell_stubs import stub
+    stub(tmp_path, "wl-paste", f"echo '{message}' >&2; exit 1")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert cb._wl_paste_types() == []
+    assert cb._read_clipboard() is cb.EMPTY
+
+
+def test_a_clipboard_that_cant_be_read_is_never_emptied_later(tmp_path, monkeypatch):
+    """Taken for empty, it was "put back" empty after the paste, and what
+    the user had copied was gone."""
+    from shell_stubs import stub
+    stub(tmp_path, "wl-paste", "echo 'Failed to connect to a Wayland server' >&2; exit 1")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    with pytest.raises(OSError):
+        cb._wl_paste_types()
+    assert cb._read_clipboard() is cb.NOTHING
+
+
+def test_a_clipboard_read_failing_again_and_again_is_logged_once(tmp_path, monkeypatch, caplog):
+    """The selection check reads it every 50 ms: one line, not thirteen."""
+    from shell_stubs import stub
+    stub(tmp_path, "wl-paste", "echo 'Failed to connect to a Wayland server' >&2; exit 1")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setattr(cb, "_last_read_error", None)
+    with caplog.at_level("INFO", logger="tuxtalk.clipboard"):
+        for _ in range(5):
+            assert cb._read_text() is None
+    assert sum("Couldn't read the clipboard" in r.message for r in caplog.records) == 1

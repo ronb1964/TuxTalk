@@ -11,6 +11,7 @@ from tuxtalk import recording_state as rs
 
 PARAGRAPH = ("Okay, this is another little dictation. It's going to be a new "
              "paragraph, and I'll see if select works. ")
+HEBREW = "שלום, זו הכתבה קצרה. היא ממשיכה עוד קצת כדי לבדוק את הבחירה. "
 KWRITE = ("org.kde.kwrite", "0x1")
 
 
@@ -18,15 +19,17 @@ class KateLine:
     """One line in KTextEditor, and its cursor, as its End and Left keys move
     it (KateViewInternal::moveCursorToLineEnd, in
     docs/superpowers/sdd/release-0.23/kte). *rows* are where each row of a
-    wrapped line starts; *smart_end* is the Smart Home setting, on by default."""
+    wrapped line starts; *smart_end* is the Smart Home setting, on by default.
+    On a right-to-left line Left and Right swap (ViewPrivate::cursorLeft)."""
 
-    def __init__(self, text, rows=(0,), smart_end=True):
-        self.text, self.rows, self.smart_end = text, list(rows), smart_end
+    def __init__(self, text, rows=(0,), smart_end=True, rtl=False):
+        self.text, self.rows, self.smart_end, self.rtl = text, list(rows), smart_end, rtl
         self.column = 0         # where copy() leaves it
 
     def press(self, key):
-        if key == "LEFT":
-            self.column -= 1    # below 0 is the line above
+        if key in ("LEFT", "RIGHT"):
+            # Below 0 is the line above, past the end the line below.
+            self.column += -1 if (key == "LEFT") != self.rtl else 1
             return
         assert key == "END"
         row = max(i for i, start in enumerate(self.rows) if start <= self.column)
@@ -52,8 +55,12 @@ def cursor_after(keys, line):
     (KateLine(PARAGRAPH, smart_end=False), PARAGRAPH),
     (KateLine(PARAGRAPH, rows=(0, 64), smart_end=False), PARAGRAPH),
     (KateLine(PARAGRAPH + "   "), PARAGRAPH + "   "),
+    (KateLine(PARAGRAPH.rstrip()), PARAGRAPH),
+    (KateLine(HEBREW, rtl=True), HEBREW),
+    (KateLine(HEBREW.rstrip(), rows=(0, 30), rtl=True), HEBREW.rstrip()),
 ], ids=["one row", "no space after", "wrapped in two rows", "three rows",
-        "Smart End off", "wrapped, Smart End off", "several spaces after"])
+        "Smart End off", "wrapped, Smart End off", "several spaces after",
+        "saved, which took the space off", "right to left", "right to left, wrapped"])
 def test_the_cursor_goes_back_to_the_end_of_the_dictation(line, dictated):
     """The space after a dictation counts: the next one mustn't join its last word."""
     keys = voice_edit._keys_back_to_dictation_end(line.text, dictated)
@@ -135,20 +142,54 @@ def test_other_apps_with_nothing_highlighted_keep_the_line_and_get_no_keys(kwrit
     assert kwrite["keys"] == []
 
 
+@pytest.mark.parametrize("text, rtl", [
+    (HEBREW, True), ("مرحبا بكم. ", True), (PARAGRAPH, False),
+    ("123 " + HEBREW, True), ("", False)],
+    ids=["Hebrew", "Arabic", "English", "digits first", "empty"])
+def test_a_line_is_right_to_left_as_qt_decides_it(text, rtl):
+    """By its first letter that has a direction; digits and spaces have none."""
+    assert voice_edit._right_to_left(text) is rtl
+
+
 def test_a_dictation_in_another_window_is_no_guide(kwrite, monkeypatch):
     monkeypatch.setattr(keyboard_output, "not_where_typed", lambda focused, now=None: True)
     assert copy_in(KWRITE) is None and kwrite["keys"] == []
 
 
-def test_esc_before_the_cursor_goes_back_sends_no_keys(kwrite):
-    """Esc stops every key the edit would send; the cursor gets none of the four."""
+@pytest.mark.parametrize("esc_during_check", [False, True],
+                         ids=["Esc before the copy", "Esc while the keys wait"])
+def test_esc_stops_all_four_keys(kwrite, keyboard, monkeypatch, esc_during_check):
+    """Esc can land before the copy, or while TuxTalk's keyboard waits for
+    the window check after it: none of the keys go, through the real one."""
+    from tuxtalk import focused_window, output_backends
+    monkeypatch.setattr(keyboard_output, "output_backend",
+                        lambda: output_backends.VirtualKeyboardOutputBackend())
     message = rs.Message()
-    message.cancelled = True
-    assert copy_in(KWRITE, message) is None and kwrite["keys"] == []
+    message.cancelled = not esc_during_check
+
+    def window_check(window, now=None):
+        message.cancelled = True
+        return lambda: None
+    monkeypatch.setattr(focused_window, "claim_into", window_check)
+    assert copy_in(KWRITE, message) is None
+    assert keyboard.events == []
 
 
-def test_the_selection_check_after_an_edit_puts_the_cursor_back_too(kwrite):
-    """Letting go of a selection copies it again: a selection lost meanwhile
-    is a whole-line copy, with the same cursor move."""
+def test_without_esc_the_keys_go_through_the_real_keyboard(kwrite, keyboard, monkeypatch):
+    """The Esc test's other half: the same path does send them."""
+    from tuxtalk import focused_window, output_backends
+    monkeypatch.setattr(keyboard_output, "output_backend",
+                        lambda: output_backends.VirtualKeyboardOutputBackend())
+    monkeypatch.setattr(focused_window, "claim_into", lambda window, now=None: lambda: None)
+    assert copy_in(KWRITE, rs.Message()) is None
+    assert keyboard.events
+
+
+def test_the_check_after_edit_that_leaves_the_cursor_alone(kwrite, monkeypatch):
+    """Letting go of a selection "edit that" made copies it again; one lost
+    meanwhile is a whole-line copy. "edit that" forgets the dictation it
+    selected (handle_spoken_edit), so where the cursor was isn't known, and
+    no keys go (CODE_HEALTH 96)."""
+    monkeypatch.setattr(rs.state, "last_inserted_text", "")
     assert voice_edit._still_selected("some words", KWRITE) is False
-    assert cursor_after(kwrite["keys"], KateLine(PARAGRAPH)) == len(PARAGRAPH)
+    assert kwrite["keys"] == []
