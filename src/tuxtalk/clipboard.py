@@ -414,7 +414,7 @@ class ClipboardUnavailable(Exception):
     or is missing). Not the same as nothing being selected."""
 
 
-def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
+def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None):
     """The text selected in the focused app, and put_back() to restore what
     the user had on the clipboard. The text is None when nothing is selected.
 
@@ -423,7 +423,9 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
     goes on the clipboard first: an app with nothing selected leaves the
     clipboard alone, so the marker still being there means no selection.
     With nothing selected, the clipboard is put back before returning.
-    Raises ClipboardUnavailable when the marker can't be put on the clipboard."""
+    *on_line_copied* is called with the line an editor copied instead of a
+    selection (some move the cursor when they do). Raises
+    ClipboardUnavailable when the marker can't be put on the clipboard."""
     import secrets
     sleep = sleep or time.sleep
     saved = _read_clipboard()
@@ -481,6 +483,8 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
     if primary and primary != copied:
         logger.info("Ctrl+C copied a whole line with nothing selected; not a selection")
         copied = None
+        if on_line_copied is not None:
+            on_line_copied(rejected)
     if not copied:
         # What the app copied instead of a selection (that whole line, or
         # nothing) is on the clipboard now, and may be replaced.

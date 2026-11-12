@@ -397,7 +397,7 @@ def test_an_edit_waiting_its_turn_leaves_another_windows_selection_alone(edit_en
     typing; a click into a second one and a selection there before the
     edit's turn came: that selection was rewritten."""
     copied = []
-    monkeypatch.setattr(cb, "copy_selection", lambda send_copy: copied.append(1))
+    monkeypatch.setattr(cb, "copy_selection", lambda send_copy, **_: copied.append(1))
     monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", ("tray", "{second}")))
     monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: edit_env["notices"].append(kind))
     run_edit(where=("org.kde.kwrite", ("tray", "{first}")))
@@ -458,7 +458,7 @@ def test_no_ctrl_c_goes_to_a_terminal_switched_to_during_the_password_check(edit
         return False
     monkeypatch.setattr(notices, "refuse_password_field", password_check)
 
-    def copy_selection(send_copy):
+    def copy_selection(send_copy, **_):
         return ("selected text" if send_copy() else None), lambda also=(): None
     monkeypatch.setattr(cb, "copy_selection", copy_selection)
     run_edit(where=kwrite)
@@ -528,7 +528,7 @@ def test_without_the_ai_downloaded_it_says_where_to_turn_it_on(edit_env, monkeyp
 def test_in_a_password_field_the_selection_isnt_even_read(edit_env, monkeypatch):
     from tuxtalk import atspi_helper
     monkeypatch.setattr(atspi_helper, "focused_is_password", lambda *a, **k: True)
-    monkeypatch.setattr(cb, "copy_selection", lambda send_copy: pytest.fail("read the selection"))
+    monkeypatch.setattr(cb, "copy_selection", lambda send_copy, **_: pytest.fail("read the selection"))
     run_edit()
     assert edit_env["typed"] == [] and edit_env["history"] == []
     assert edit_env["engine"].asked == [] and edit_env["beeps"] == [CANCEL_BEEP]
@@ -931,7 +931,7 @@ def test_a_copied_link_stays_text(monkeypatch):
 def test_a_line_by_line_pasted_rewrite_still_restores(edit_env, monkeypatch):
     """Paste mode pastes each line on its own, leaving only the last one."""
     alsos = []
-    monkeypatch.setattr(cb, "copy_selection", lambda send: ("old text", lambda also=(): alsos.append(set(also))))
+    monkeypatch.setattr(cb, "copy_selection", lambda send, **_: ("old text", lambda also=(): alsos.append(set(also))))
     edit_env["engine"].answer = "- Buy plywood\n- Call George"
     run_edit()
     assert "- Call George" in alsos[0]
@@ -1215,7 +1215,7 @@ def test_esc_before_the_edit_s_turn_copies_nothing(edit_env, monkeypatch):
     Ctrl+C goes to the app either."""
     copied = []
     monkeypatch.setattr(cb, "copy_selection",
-                        lambda send_copy: copied.append(send_copy) or ("x", lambda also=(): None))
+                        lambda send_copy, **_: copied.append(send_copy) or ("x", lambda also=(): None))
     monkeypatch.setattr(rs.state.current.message, "cancelled", True)
     run_edit()
     assert copied == [] and edit_env["typed"] == []
@@ -1245,7 +1245,7 @@ def test_on_x11_it_says_voice_editing_needs_wayland(edit_env, monkeypatch):
     would say "select some text first" with text selected."""
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: False)
     copied = []
-    monkeypatch.setattr(cb, "copy_selection", lambda send: copied.append(1))
+    monkeypatch.setattr(cb, "copy_selection", lambda send, **_: copied.append(1))
     run_edit()
     assert copied == [] and edit_env["typed"] == []
     assert len(edit_env["notices"]) == 1 and "Wayland" in edit_env["notices"][0]
@@ -1264,7 +1264,7 @@ def test_a_clipboard_that_cannot_be_used_is_not_called_no_selection(monkeypatch)
 
 
 def test_the_edit_says_the_clipboard_could_not_be_used(edit_env, monkeypatch):
-    def unavailable(send):
+    def unavailable(send, **_):
         raise cb.ClipboardUnavailable("wl-copy failed")
     monkeypatch.setattr(cb, "copy_selection", unavailable)
     run_edit()

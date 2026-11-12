@@ -21,7 +21,7 @@ from . import (
 from . import recording_state as rs
 from .logger import setup_logger
 from .normalize import LINE_BREAK
-from .window_classes import SMART_NEWLINE_CLASSES_LOWER, is_terminal_class, tab_may_send
+from .window_classes import KDE_EDITOR_CLASSES_LOWER, is_terminal_class, tab_may_send
 
 logger = setup_logger(__name__)
 
@@ -83,7 +83,7 @@ def plan_line_breaks(text: str, one_paste: bool) -> list[str]:
     terminal does accept is a newline inside pasted text: bracketed paste (on by
     default in modern bash and zsh) inserts it literally instead of executing at
     it. So a terminal gets one paste carrying real newlines, and so do KDE's
-    editors (SMART_NEWLINE_CLASSES_LOWER), where a pasted newline copies
+    editors (KDE_EDITOR_CLASSES_LOWER), where a pasted newline copies
     nothing from the line above (in a code mode Kate still indents it, as
     any paste). Not a plain Enter there: Kate's terminal panel would run it.
 
@@ -359,7 +359,7 @@ def _paste_in_parts(text, focused_class):
     # like Enter, so it gets one chunk carrying real newlines and no
     # keystrokes at all; so do KDE's editors (plan_line_breaks).
     parts = plan_line_breaks(text, is_terminal_class(focused_class)
-                             or (focused_class or "").lower() in SMART_NEWLINE_CLASSES_LOWER)
+                             or (focused_class or "").lower() in KDE_EDITOR_CLASSES_LOWER)
     logger.info(f"Smart hybrid mode: {len(parts)} part(s)")
     delivered = keyboard_output.deliver_lines(parts, _paste_part, 0, 0.05)
     if not delivered.stopped:

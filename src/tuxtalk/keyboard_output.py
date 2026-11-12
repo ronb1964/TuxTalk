@@ -23,7 +23,7 @@ from . import recording_state as rs
 from .key_commands import KEY_CODES
 from .logger import setup_logger
 from .normalize import LINE_BREAK
-from .window_classes import SMART_NEWLINE_CLASSES_LOWER, is_terminal_class
+from .window_classes import KDE_EDITOR_CLASSES_LOWER, is_terminal_class
 
 logger = setup_logger(__name__)
 
@@ -427,7 +427,7 @@ def type_text(text: str) -> bool:
     Raises virtual_keyboard.StoppedPartway when a later line or a line
     break failed after earlier lines went in: told "Couldn't type the
     dictation", the user would paste it all again over them."""
-    in_kde_editor = (focused_window.window_class() or "").lower() in SMART_NEWLINE_CLASSES_LOWER
+    in_kde_editor = (focused_window.window_class() or "").lower() in KDE_EDITOR_CLASSES_LOWER
     lines = text.split(LINE_BREAK)
     # The line breaks there are pastes, and so is a line holding an emoji:
     # the user's clipboard is kept from the first and comes back after the

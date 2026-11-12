@@ -1047,7 +1047,7 @@ def edit_that(chat, monkeypatch):
         press_keys=lambda chords, claim=None: (backend.press_keys(chords, claim=claim)
                                                if chords == [((), "ENTER")] else True)))
     monkeypatch.setattr(clipboard, "copy_selection",
-                        lambda send_copy: ("See you at noon.", lambda also=(): None))
+                        lambda send_copy, **_: ("See you at noon.", lambda also=(): None))
     monkeypatch.setattr(voice_edit, "EDIT_RESTORE_DELAY_S", 0)
     return chat
 

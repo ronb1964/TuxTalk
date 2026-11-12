@@ -167,9 +167,11 @@ def tab_may_send(wm_class) -> bool:
     return bool(wm_class) and wm_class.lower() in _TAB_SENDS_CLASSES_LOWER
 
 
-# KDE's text editor component takes Shift+Enter as Insert Smart Newline,
-# which starts the new line with the symbols the line above starts with: "$45",
-# new line, "$25" came out as "$$25", and one more "$" each line after.
-SMART_NEWLINE_CLASSES_LOWER = frozenset({
+# Apps built on KDE's text editor component (KTextEditor). Its Shift+Enter is
+# Insert Smart Newline, which starts the new line with the symbols the line
+# above starts with: "$45", new line, "$25" came out as "$$25", and one more
+# "$" each line after. And its Ctrl+C with nothing selected copies the whole
+# line and moves the cursor to the line's start (voice_edit._put_cursor_back).
+KDE_EDITOR_CLASSES_LOWER = frozenset({
     "org.kde.kwrite", "kwrite", "org.kde.kate", "kate", "org.kde.kdevelop",
 })

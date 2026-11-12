@@ -31,7 +31,7 @@ def fake_edit_world(monkeypatch):
     monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda a, sr: False)
     selection = {"text": "We finished the electrical today."}
 
-    def copy_selection(send_copy):
+    def copy_selection(send_copy, **_):
         def put_back(also=()):
             seen["put_back"] += 1
         return selection["text"], put_back

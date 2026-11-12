@@ -29,7 +29,7 @@ from . import recording_state as rs
 from .beeps import READY_BEEP
 from .logger import error_without_words, setup_logger
 from .normalize import PLAIN_LOOKALIKES, swiss_spelling
-from .window_classes import is_terminal_class, is_word_processor
+from .window_classes import KDE_EDITOR_CLASSES_LOWER, is_terminal_class, is_word_processor
 
 logger = setup_logger(__name__)
 
@@ -261,7 +261,8 @@ def _still_selected(expected, where) -> bool:
     from . import clipboard
     try:
         selected, put_back = clipboard.copy_selection(
-            lambda: keyboard_output.send_copy_keystroke(_only_into(*where)))
+            lambda: keyboard_output.send_copy_keystroke(_only_into(*where)),
+            on_line_copied=lambda line: _put_cursor_back(line, where))
     except clipboard.ClipboardUnavailable:
         return False
     if selected is None:
@@ -480,7 +481,8 @@ def _copy_selection(where, beeps_on, message):
         copy_sent.append(keyboard_output.send_copy_keystroke(_only_into(*where)))
         return copy_sent[-1]
     try:
-        copied = clipboard.copy_selection(send_copy)
+        copied = clipboard.copy_selection(
+            send_copy, on_line_copied=lambda line: _put_cursor_back(line, where))
     except clipboard.ClipboardUnavailable:
         notices.edit_problem("no_clipboard", beeps_on)
         return None
@@ -488,6 +490,30 @@ def _copy_selection(where, beeps_on, message):
         _not_pressed(*where, beeps_on, message)
         return None
     return copied
+
+
+def _put_cursor_back(line, where):
+    """KWrite and Kate copy the whole *line* on Ctrl+C with nothing selected,
+    and move the cursor to its start (KTextEditor's copy()): "select the last
+    sentence" then counted back from there, into the paragraph before, and
+    the next dictation landed at the line's start. When the line ends with
+    the last dictation typed in *where*, the cursor was at its end, and End
+    twice puts it back (the first End stops at the end of a wrapped line's
+    first row). Anywhere else, where it was can't be known."""
+    if (where[0] or "").lower() not in KDE_EDITOR_CLASSES_LOWER:
+        return
+    last = rs.state.last_inserted_text
+    tail = last.split("\n")[-1]
+    if last and not tail:
+        return      # the dictation ended its line: the cursor was at this one's start
+    if (not last or keyboard_output.not_where_typed(where[0], where)
+            or not line.rstrip("\n").endswith(tail)):
+        logger.info("Voice edit: KDE's editor moved the cursor to the start of the line, "
+                    "and where it was before isn't known")
+        return
+    if not keyboard_output.output_backend().press_keys([((), "END"), ((), "END")],
+                                                       claim=_only_into(*where)):
+        logger.warning("Voice edit: couldn't put the cursor back after KDE's editor moved it")
 
 
 def _rewrite_over_selection(result, injection_mode, message, beeps_on, where, went_in):

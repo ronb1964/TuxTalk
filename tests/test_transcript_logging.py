@@ -300,7 +300,7 @@ def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
     monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "make the zanzibar formal")
     monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda a, sr: False)
     monkeypatch.setattr(cb, "copy_selection",
-                        lambda send_copy: ("zanzibar quokka hunter", lambda also=(): None))
+                        lambda send_copy, **_: ("zanzibar quokka hunter", lambda also=(): None))
     monkeypatch.setattr(delivery, "inject_text", lambda text, mode, one_block=False, **kw:
                         typed.append(text) or "ok")
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
@@ -413,7 +413,7 @@ def test_a_voice_edit_typing_error_never_writes_the_words(monkeypatch, caplog, c
     monkeypatch.setattr(live, "ai_engine", engine)
     monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "make this formal")
     monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda a, sr: False)
-    monkeypatch.setattr(cb, "copy_selection", lambda send_copy: ("quokka", lambda also=(): None))
+    monkeypatch.setattr(cb, "copy_selection", lambda send_copy, **_: ("quokka", lambda also=(): None))
     monkeypatch.setattr(delivery, "inject_text", _words_in_an_error)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
