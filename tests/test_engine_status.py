@@ -127,15 +127,20 @@ def test_whisper_on_cuda_loads_on_the_card_picked_in_preferences(monkeypatch):
     assert used == {"device": "cuda", "card": 3}
 
 
-@pytest.mark.parametrize("picked,title,advice", [
-    ("NVIDIA GeForce RTX 5070 Ti #2", "Couldn't use NVIDIA GeForce RTX 5070 Ti #2",
+@pytest.mark.parametrize("picked,found_at_start,title,advice", [
+    ("NVIDIA GeForce RTX 5070 Ti #2", True, "Couldn't use NVIDIA GeForce RTX 5070 Ti #2",
      "another graphics card or Automatic"),
-    ("", "Couldn't use the NVIDIA graphics card", "try the graphics card"),
-])
-def test_a_cuda_load_that_fails_says_which_card_was_picked(monkeypatch, picked, title, advice):
+    ("NVIDIA GeForce RTX 5070 Ti #2", False, "Couldn't use the NVIDIA graphics card",
+     "try the graphics card"),
+    ("", False, "Couldn't use the NVIDIA graphics card", "try the graphics card"),
+], ids=["the picked card", "a saved card that wasn't there", "automatic"])
+def test_a_cuda_load_that_fails_says_which_card_was_picked(monkeypatch, picked, found_at_start,
+                                                           title, advice):
     """A picked card that's busy (out of memory) fails to load: naming it, and
-    that another card or Automatic can be chosen, says where to look."""
-    from tuxtalk import config, cuda_helper, graphics_cards, model_helper
+    that another card or Automatic can be chosen, says where to look. A saved
+    card CUDA wasn't pointed at isn't the one that failed."""
+    from tuxtalk import config, cuda_helper, cuda_preload, graphics_cards, model_helper
+    monkeypatch.setattr(cuda_preload, "picked_card", (picked, 1) if found_at_start else None)
     monkeypatch.setattr(engine, "_running_engine", None)
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
     monkeypatch.setattr(cuda_helper, "ctranslate2_has_cuda", lambda: True)

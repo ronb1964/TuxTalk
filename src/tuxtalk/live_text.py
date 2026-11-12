@@ -36,9 +36,8 @@ read, and once it has found one, that dictation isn't read again, even
 after the cursor leaves the field. One case gets past it: a recording
 started in a password field while the worker is still typing the one
 before gets no read, so no check, and if the cursor is in an ordinary
-field by its first read, that audio shows. Typing checks the field when
-the words are delivered, so they're typed there too: the box shows nothing
-that isn't about to be typed.
+field by its first read, that audio shows. Typing has the same gap: it
+checks the field only when it types, not where the recording started.
 """
 import threading
 import time
@@ -69,11 +68,11 @@ TOO_SLOW = ("Live text is off for now: your graphics chip is too slow for it. "
 SHORTEST_S = 0.5
 # A dictation whose read took longer than this, checks included, isn't
 # read again: the next holds more audio, and the typed text could wait on
-# it. Parakeet on Vulkan, on an RTX 4070 Super, took 0.19 s on average for
-# 4 s of audio and never over 0.5 s for 5 s or less (501 typed phrases).
-# Long reads stay under it too: rereading 30 s of speech took 0.09 s and
-# 60 s took 0.17 s, and a day of real use with dictations over 100 s had no
-# read over it (every read that is gets logged).
+# it. On an RTX 4070 Super with Parakeet on Vulkan, a bare reread of 30 s
+# of speech (about the most one hears, SETTLE_AFTER_S) took 0.09 s, and a
+# day of real use with dictations over 100 s had no read over it (every
+# read that is gets logged). Typed phrases, timed through the whole of Type
+# at pause, averaged 0.19 s for 4 s and never passed 0.5 s for 5 s or less.
 STOP_AFTER_S = 0.6
 # Reads of no more than SHORT_AUDIO_S of audio whose transcription alone
 # took over STOP_AFTER_S, with one engine and no fast read of about as much
@@ -214,9 +213,15 @@ def _log_slow_read(took):
 def _tell(text):
     """Float *text* over the window being dictated into, and send it as a
     notification too: a screen reader reads that one, and the notification
-    history keeps it."""
+    history keeps it. The notification goes on a thread of its own: a
+    notification service that hangs would hold up the typing for seconds."""
     screen_message.show_over_active_window(text)
-    notify_module.notify("Live text", text)
+    _in_background(notify_module.notify, "Live text", text)
+
+
+def _in_background(job, *args):
+    """Run *job* on a thread of its own that won't keep TuxTalk from quitting."""
+    threading.Thread(target=job, args=args, daemon=True, name="live-text-notice").start()
 
 
 def _stopped(rec):

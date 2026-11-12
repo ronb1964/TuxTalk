@@ -455,8 +455,6 @@ def test_a_helper_too_old_for_any_keyboard_says_what_is_certain(monkeypatch):
 def test_why_the_helper_is_asked_about_at_start(monkeypatch, running, desktop, keys, reason):
     """One answer for the question at start and first run's screen: the
     keys before Num Lock, so the offer says what stops dictation first."""
-    monkeypatch.setattr("tuxtalk.helper_keyboard_access.read_only_keyboards", lambda: [])
-    monkeypatch.setattr("tuxtalk.helper_keyboard_access.keyboards_also_mice", lambda: [])
     monkeypatch.setattr("tuxtalk.desktop_detect.get_desktop_environment", lambda: desktop)
     monkeypatch.setattr(si, "saved_keys", lambda: keys)
     assert si.update_reason(running) == reason

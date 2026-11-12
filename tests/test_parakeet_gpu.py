@@ -198,6 +198,26 @@ def test_the_fallback_is_told_once_the_dictations_text_is_in_hand(fake, monkeypa
     assert events == ["recognized", ("told", False)]
 
 
+def test_the_fallback_is_told_even_when_the_processors_first_read_fails(fake, monkeypatch):
+    """Every later dictation goes to the processor without a word to the
+    menus, so if this one isn't told, they say "graphics chip" all session."""
+    told = []
+
+    class Cpu:
+        def recognize(self, audio):
+            raise RuntimeError("the processor's read failed")
+
+    monkeypatch.setattr(parakeet_gpu, "load_parakeet_model", lambda: Cpu())
+    model = parakeet_gpu.ParakeetGpuModel(0, command=fake("die"),
+                                          on_fallback=lambda: told.append(True))
+    try:
+        with pytest.raises(RuntimeError, match="processor's read failed"):
+            model.recognize(_audio())
+    finally:
+        model.close()
+    assert told == [True]
+
+
 def test_the_menus_and_live_text_follow_parakeet_to_the_processor(monkeypatch):
     """What runs changes at once; the tray is told without the dictation
     waiting for it."""

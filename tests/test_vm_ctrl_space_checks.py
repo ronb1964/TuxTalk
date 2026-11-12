@@ -176,7 +176,6 @@ def test_on_kde_helper_1_13_is_asked_about_for_num_lock(quiet_update, question, 
 def test_the_num_lock_wording_looked_for_is_what_the_question_says(monkeypatch):
     from tuxtalk import secure_input, update_offers
     monkeypatch.setattr("tuxtalk.desktop_detect.get_desktop_environment", lambda: "kde")
-    monkeypatch.setattr("tuxtalk.helper_keyboard_access.keyboards_also_mice", lambda: [])
     monkeypatch.setattr(secure_input, "saved_keys", lambda: ["F8", "F9"])
     assert secure_input.update_reason("1.13") == "lights"
     assert checks.NUM_LOCK_WORDING in update_offers.helper_update_text("1.13", "lights")

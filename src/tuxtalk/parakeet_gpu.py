@@ -197,30 +197,34 @@ class ParakeetGpuModel:
         audio = np.ascontiguousarray(audio_f32, dtype="<f4")
         if len(audio) < MIN_SAMPLES:
             audio = np.pad(audio, (0, MIN_SAMPLES - len(audio)))
-        with self._lock:
-            if self._cpu is not None:
-                return self._cpu.recognize(audio)
-            for attempt in (1, 2):
+        fell_back = False
+        try:
+            with self._lock:
+                if self._cpu is not None:
+                    return self._cpu.recognize(audio)
+                for attempt in (1, 2):
+                    try:
+                        return self._recognize_on_gpu(audio)
+                    except Exception as e:
+                        logger.warning(f"Parakeet on the graphics chip failed (try {attempt}): {e}")
+                        self._stop()
+                # Twice in a row: something is wrong with the chip or its
+                # driver. Use the processor for the rest of this session.
                 try:
-                    return self._recognize_on_gpu(audio)
+                    self._cpu = load_parakeet_model()
                 except Exception as e:
-                    logger.warning(f"Parakeet on the graphics chip failed (try {attempt}): {e}")
-                    self._stop()
-            # Twice in a row: something is wrong with the chip or its driver.
-            # Use the processor for the rest of this session.
-            try:
-                self._cpu = load_parakeet_model()
-            except Exception as e:
-                raise RuntimeError("Parakeet failed on the graphics chip, and its processor "
-                                   f"version isn't available ({e})") from e
-            logger.warning("Parakeet moved to the processor for the rest of this session")
-            steer(self._cpu, self._words)
-            text = self._cpu.recognize(audio)
-        # Once this dictation's text is in hand, and outside the lock, so the
-        # menus' update doesn't hold up this dictation or the next.
-        if self._on_fallback is not None:
-            self._on_fallback()
-        return text
+                    raise RuntimeError("Parakeet failed on the graphics chip, and its processor "
+                                       f"version isn't available ({e})") from e
+                fell_back = True
+                logger.warning("Parakeet moved to the processor for the rest of this session")
+                steer(self._cpu, self._words)
+                return self._cpu.recognize(audio)
+        finally:
+            # Outside the lock, once this dictation's text is in hand, so the
+            # menus' update holds up neither it nor the next; and even when
+            # the processor's first read fails, as every later one goes there.
+            if fell_back and self._on_fallback is not None:
+                self._on_fallback()
 
     def set_words(self, words) -> None:
         """Your Words: sent to the helper before the next recording (a

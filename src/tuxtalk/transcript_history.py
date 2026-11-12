@@ -4,8 +4,8 @@ one on opening, and Earlier transcripts lists them all.
 
 They are kept in one JSON list in TuxTalk's data folder, readable only by
 this user, newest first and at most MAX_RECENT. The one transcript an older
-TuxTalk kept (last-transcript.json) comes into the list once. A list that
-can't be read is set aside, not written over, so the transcripts in it
+TuxTalk kept (last-transcript.json) comes into the list once. A damaged list
+is set aside, not written over, so the transcripts in it
 aren't lost; Clear This List removes those copies too.
 """
 import json

@@ -536,6 +536,17 @@ def _without_missing_cuda(settings):
     return Settings(**{**vars(settings), "device": "cpu"})
 
 
+def _card_tried(settings):
+    """The picked card's name when CUDA was really pointed at it at start
+    (cuda_preload.picked_card), else "": a saved card that wasn't there, or
+    that CUDA can't use, mustn't be named as the one that failed."""
+    from . import cuda_preload
+    tried = cuda_preload.picked_card
+    if settings.graphics_card and tried and tried[0] == settings.graphics_card:
+        return settings.graphics_card
+    return ""
+
+
 def _cuda_failed_notice(picked_card):
     """The title and text saying CUDA wasn't used. A picked card is named:
     a busy one (out of memory) is the likeliest cause, and another card or
@@ -577,7 +588,7 @@ def _cpu_fallback_after_cuda(settings, error):
             f"The {settings.model} model was not downloaded (cancelled or failed)")
     logger.info("Model loaded on CPU (fallback from CUDA)")
     _record_engine(settings.model, "cpu")
-    notify_module.notify(*_cuda_failed_notice(settings.graphics_card))
+    notify_module.notify(*_cuda_failed_notice(_card_tried(settings)))
     # Saved, so future service restarts don't try CUDA again and crash in a loop.
     try:
         from .config import save_config

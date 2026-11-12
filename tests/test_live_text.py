@@ -57,6 +57,7 @@ def notified(monkeypatch):
     sent = []
     monkeypatch.setattr(live_text.notify_module, "notify",
                         lambda title, body: sent.append(body))
+    monkeypatch.setattr(live_text, "_in_background", lambda job, *args: job(*args))
     return sent
 
 
