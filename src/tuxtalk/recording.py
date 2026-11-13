@@ -317,7 +317,28 @@ def open_input_stream(rec, device_idx) -> None:
     rec.stream = sd.InputStream(callback=functools.partial(_sd_callback, rec), dtype='int16',
                                 device=device_idx, channels=CHANNELS,
                                 samplerate=rec.samplerate)
-    rec.stream.start()
+    mic_stream.start(rec.stream)
+
+
+def _restart_for_stuck_microphone(notify_on: bool) -> None:
+    logger.error("A microphone stream is stuck starting; asking the tray to restart the service")
+    keyboard_grab.release_all()
+    if notify_on:
+        notify_module.notify("Audio system stopped answering", "Restarting the dictation service.")
+    tray_link.restart_service()
+
+
+def _give_up_starting(rec, beeps_on: bool, notify_on: bool, title: str, body: str) -> None:
+    rs.state.is_recording = False
+    # Counted already (recording_begins), so a send set up meanwhile was held
+    # for it: this one ended, cancelled, and that's said.
+    rec.message.cancelled = True
+    stop_stream_safely(rec)
+    keyboard_grab.release_all()
+    beeps.beep(beeps_on, *CANCEL_BEEP)
+    if notify_on:
+        notify_module.notify(title, body)
+    _leave_held_send_unsent(rec)
 
 
 def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
@@ -334,6 +355,9 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     keyboard is grabbed just before this is called, so without that release a
     microphone error would leave the user unable to type anywhere at all.
     """
+    if mic_stream.starting_stuck():
+        _restart_for_stuck_microphone(notify_on)
+        return None
     # Pressing a hotkey while a send counts down holds it: a tap leaves the
     # text unsent, a hold dictates more onto it. Counted before the
     # microphone opens, so a send set up meanwhile waits for this recording.
@@ -350,6 +374,13 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     input_device_idx = follow_system_default(input_device_idx)
     try:
         open_input_stream(rec, input_device_idx)
+    except mic_stream.NotAnswering:
+        # Left to its start, the stream holds PortAudio's lock: a second try
+        # would wait on it, and the next press restarts the service instead.
+        rec.stream = None
+        _give_up_starting(rec, beeps_on, notify_on, "Microphone isn't answering",
+                          "It sends no sound. Unplug it and plug it back in.")
+        return None
     except Exception as first_error:
         # The mic is stored as a device number, resolved at startup. PortAudio's
         # device list is fixed when it starts, so a mic chosen by name maps to
@@ -364,22 +395,17 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             logger.info(f"Microphone re-resolved to device {fresh_idx}")
             if fresh_idx != input_device_idx:
                 notices.warn_mic_switched(input_device_idx, fresh_idx)
+        except mic_stream.NotAnswering:
+            rec.stream = None
+            _give_up_starting(rec, beeps_on, notify_on, "Microphone isn't answering",
+                              "It sends no sound. Unplug it and plug it back in.")
+            return None
         except Exception as e:
             # Genuinely unavailable: unplugged, or held exclusively by another
-            # app. Undo everything and tell the user; failing silently would
-            # leave the keyboard grabbed and the machine unusable.
+            # app.
             logger.error(f"Could not start recording: {e}", exc_info=True)
-            rs.state.is_recording = False
-            # Counted already (recording_begins), so a send set up meanwhile
-            # was held for it: this one ended, cancelled, and that's said.
-            rec.message.cancelled = True
-            stop_stream_safely(rec)
-            keyboard_grab.release_all()
-            beeps.beep(beeps_on, *CANCEL_BEEP)
-            if notify_on:
-                notify_module.notify("Microphone unavailable",
-                                     "Check that no other app is using it.")
-            _leave_held_send_unsent(rec)
+            _give_up_starting(rec, beeps_on, notify_on, "Microphone unavailable",
+                              "Check that no other app is using it.")
             return None
 
     type_at_pause.arm_chunker(rec)

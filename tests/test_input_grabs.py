@@ -168,6 +168,71 @@ def test_failed_recording_start_releases_the_keyboard(monkeypatch, quiet_recordi
     assert not any(d.is_grabbed for d in devices), "keyboard left grabbed after mic failure"
 
 
+def test_a_microphone_stuck_starting_restarts_the_service_instead_of_freezing(
+        monkeypatch, quiet_recording):
+    opened, asked = [], []
+    monkeypatch.setattr(mic_stream, "starting_stuck", lambda: True)
+    monkeypatch.setattr(recording.sd, "InputStream", lambda *a, **k: opened.append(k))
+    monkeypatch.setattr(tray_link, "call", lambda method, *a, **k: asked.append(method))
+    devices = [keyboard()]
+    keyboard_grab.grab_all_devices(devices)
+
+    started = recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=0)
+
+    assert started is None
+    assert opened == []
+    assert asked == ["RestartService"]
+    assert not devices[0].is_grabbed
+    assert rs.state.is_recording is False
+
+
+def test_a_microphone_sending_no_sound_says_so_instead_of_freezing(monkeypatch,
+                                                                quiet_recording):
+    opened, seen = [], []
+
+    class SilentStream:
+        def __init__(self, **kwargs):
+            opened.append(kwargs)
+
+    def never_answers(stream):
+        raise mic_stream.NotAnswering("no audio within 3s")
+
+    monkeypatch.setattr(recording.sd, "InputStream", SilentStream)
+    monkeypatch.setattr(mic_stream, "start", never_answers)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: seen.append(title))
+    devices = [keyboard()]
+    keyboard_grab.grab_all_devices(devices)
+
+    started = recording.start_recording(beeps_on=False, notify_on=True, input_device_idx=0)
+
+    assert started is None
+    assert len(opened) == 1
+    assert seen == ["Microphone isn't answering"]
+    assert not devices[0].is_grabbed
+    assert rs.state.is_recording is False
+
+
+def test_a_silent_microphone_on_retry_reports_the_timeout(monkeypatch, quiet_recording):
+    attempts, notices = [], []
+
+    def start(_stream):
+        attempts.append(None)
+        if len(attempts) == 1:
+            raise recording.sd.PortAudioError("busy")
+        raise mic_stream.NotAnswering("no audio within 3s")
+
+    monkeypatch.setattr(recording.sd, "InputStream", lambda **_: object())
+    monkeypatch.setattr(mic_stream, "start", start)
+    monkeypatch.setattr(mic_stream, "close", lambda _stream: True)
+    monkeypatch.setattr(recording, "pick_input_device", lambda _mic: 0)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notices.append((title, body)))
+
+    assert recording.start_recording(False, True, 0) is None
+    assert len(attempts) == 2
+    assert notices == [("Microphone isn't answering", "It sends no sound. Unplug it and plug it back in.")]
+    assert rs.state.is_recording is False
+
+
 def test_failed_recording_start_clears_the_recording_flag(monkeypatch, quiet_recording):
     """A stuck is_recording flag makes every later press take the wrong branch."""
     monkeypatch.setattr(recording.sd, "InputStream", lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))

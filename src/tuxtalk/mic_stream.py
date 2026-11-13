@@ -17,6 +17,10 @@ logger = setup_logger(__name__)
 # muted) made PortAudio's stop() wait forever: in the service the indicator
 # stayed up and no hotkey worked again until it was restarted.
 STOP_TIMEOUT_S = 2.0
+# How long starting a stream may take. A USB microphone that stopped sending
+# audio kept PortAudio's start() waiting ten minutes for its first block, with
+# every hotkey queued behind it.
+START_TIMEOUT_S = 3.0
 # How long a stream being closed as TuxTalk quits may take to close.
 EXIT_WAIT_S = 0.5
 # Streams being stopped and closed, with those whose stop() never returned,
@@ -24,6 +28,7 @@ EXIT_WAIT_S = 0.5
 # each). _closed is notified as each one is closed.
 _closing = set()
 _closed = threading.Condition()
+_STARTING = set()
 # PortAudio's error for stopping a stream that was opened and never started
 # (its start failed): there was nothing to stop.
 _NEVER_STARTED = sd._lib.paStreamIsStopped
@@ -47,6 +52,48 @@ def input_samplerate(device, preferred):
         return preferred
     logger.info(f"Microphone {device} doesn't take {preferred} Hz; recording at {own} Hz")
     return own
+
+
+class NotAnswering(Exception):
+    """The microphone's stream didn't start within START_TIMEOUT_S."""
+
+
+def start(stream):
+    """Start *stream* on a thread of its own, for at most START_TIMEOUT_S.
+
+    Raises what start() raised, or NotAnswering once the time is up. The
+    stream is then left to its start, holding PortAudio's lock, so it counts
+    as stuck; should the start ever return, the stream is closed and stops
+    counting."""
+    errors = []
+    outcome = {"done": False, "gave_up": False}
+
+    def run():
+        try:
+            stream.start()
+        except Exception as e:
+            logger.info(f"The microphone stream didn't start: {e}")
+            errors.append(e)
+        with _closed:
+            outcome["done"] = True
+            late = outcome["gave_up"]
+        if late:
+            _stop_and_close(stream)
+
+    starter = threading.Thread(target=run, daemon=True, name="tt-mic-start")
+    starter.start()
+    starter.join(START_TIMEOUT_S)
+    with _closed:
+        if not outcome["done"]:
+            outcome["gave_up"] = True
+            _closing.add(stream)
+            _STARTING.add(stream)
+    if outcome["gave_up"]:
+        logger.error(f"The microphone stream didn't start within {START_TIMEOUT_S:g}s "
+                     "(the microphone sends no audio); giving up on it")
+        raise NotAnswering(f"no audio within {START_TIMEOUT_S:g}s")
+    if errors:
+        raise errors[0]
 
 
 def close(stream, wait=True):
@@ -96,7 +143,14 @@ def _stop_and_close(stream):
             logger.warning(f"Could not close the microphone stream: {e}")
         with _closed:
             _closing.discard(stream)
+            _STARTING.discard(stream)
             _closed.notify_all()
+
+
+def starting_stuck():
+    """Whether a timed-out start still holds PortAudio's lock."""
+    with _closed:
+        return bool(_STARTING)
 
 
 def leave_portaudio_running():

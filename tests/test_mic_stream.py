@@ -15,16 +15,25 @@ from tuxtalk import mic_stream
 
 
 class Stream:
-    """Stops and closes as asked; *stop* can hang until released, and *fails*
-    ("stop" or "close") with a PortAudio error, which sounddevice raises only
-    when asked not to ignore it. *never_started*: PortAudio says so when
-    stopping it, as it does for a stream whose start failed."""
+    """Starts, stops and closes as asked; *start* or *stop* can hang until
+    released, and *fails* ("start", "stop" or "close") with a PortAudio error,
+    which sounddevice raises on stop and close only when asked not to ignore
+    it. *never_started*: PortAudio says so when stopping it, as it does for a
+    stream whose start failed."""
 
-    def __init__(self, stop=None, fails=None, never_started=False):
+    def __init__(self, start=None, stop=None, fails=None, never_started=False):
         self.calls = []
-        self._stop, self._fails, self._never_started = stop, fails, never_started
+        self._start, self._stop = start, stop
+        self._fails, self._never_started = fails, never_started
         self.release = threading.Event()
         self.closed = threading.Event()
+
+    def start(self):
+        self.calls.append("start")
+        if self._start == "hangs":
+            self.release.wait(5)
+        if self._fails == "start":
+            raise sd.PortAudioError("Error starting stream: Device unavailable")
 
     def stop(self, ignore_errors=True):
         self.calls.append("stop")
@@ -46,7 +55,9 @@ class Stream:
 @pytest.fixture(autouse=True)
 def quick(monkeypatch):
     monkeypatch.setattr(mic_stream, "STOP_TIMEOUT_S", 0.1)
+    monkeypatch.setattr(mic_stream, "START_TIMEOUT_S", 0.1)
     monkeypatch.setattr(mic_stream, "_closing", set())
+    monkeypatch.setattr(mic_stream, "_STARTING", set())
 
 
 def test_a_stream_is_stopped_then_closed():
@@ -92,6 +103,40 @@ def test_a_stream_that_never_stops_is_given_up_on_and_kept(caplog):
     assert mic_stream._closing == {stream}, "kept, so nothing closes it again"
     assert any("didn't stop within" in r.getMessage() for r in caplog.records)
     stream.release.set()
+
+
+def test_a_microphone_sending_no_sound_gives_up_starting_within_the_timeout():
+    stream = Stream(start="hangs")
+    began = time.monotonic()
+    with pytest.raises(mic_stream.NotAnswering):
+        mic_stream.start(stream)
+    assert time.monotonic() - began < 1
+    assert mic_stream.starting_stuck() is True
+    stream.release.set()
+
+
+def test_a_start_that_returns_late_closes_its_stream_and_stops_counting_as_stuck():
+    stream = Stream(start="hangs")
+    with pytest.raises(mic_stream.NotAnswering):
+        mic_stream.start(stream)
+    stream.release.set()
+    assert stream.closed.wait(1)
+    assert stream.calls == ["start", "stop", "close"]
+    assert mic_stream.starting_stuck() is False
+
+
+def test_a_start_that_fails_raises_its_own_error():
+    """A busy or unplugged microphone still gets start_recording's second try."""
+    with pytest.raises(sd.PortAudioError, match="Device unavailable"):
+        mic_stream.start(Stream(fails="start"))
+    assert mic_stream.starting_stuck() is False
+
+
+def test_a_start_in_time_leaves_the_stream_running():
+    stream = Stream()
+    mic_stream.start(stream)
+    assert stream.calls == ["start"]
+    assert mic_stream.starting_stuck() is False
 
 
 def test_without_waiting_it_returns_at_once_and_still_says_when_a_stream_hangs(caplog):
