@@ -168,6 +168,24 @@ def test_failed_recording_start_releases_the_keyboard(monkeypatch, quiet_recordi
     assert not any(d.is_grabbed for d in devices), "keyboard left grabbed after mic failure"
 
 
+def test_a_microphone_stuck_closing_restarts_the_service_instead_of_freezing(
+        monkeypatch, quiet_recording):
+    opened, asked = [], []
+    monkeypatch.setattr(mic_stream, "stuck", lambda: True)
+    monkeypatch.setattr(recording.sd, "InputStream", lambda *a, **k: opened.append(k))
+    monkeypatch.setattr(tray_link, "call", lambda method, *a, **k: asked.append(method))
+    devices = [keyboard()]
+    keyboard_grab.grab_all_devices(devices)
+
+    started = recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=0)
+
+    assert started is None
+    assert opened == []
+    assert asked == ["RestartService"]
+    assert not devices[0].is_grabbed
+    assert rs.state.is_recording is False
+
+
 def test_failed_recording_start_clears_the_recording_flag(monkeypatch, quiet_recording):
     """A stuck is_recording flag makes every later press take the wrong branch."""
     monkeypatch.setattr(recording.sd, "InputStream", lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
