@@ -260,6 +260,9 @@ class TuxTalkDBusService(dbus.service.Object):
     def RestartService(self):
         """Restart the dictation service, as the user asked: with Dictation
         off it turns it on."""
+        if not hasattr(self.app, 'restart_service') or getattr(self.app, 'quitting', False):
+            raise dbus.exceptions.DBusException(
+                "The tray cannot restart the service", name=f"{DBUS_INTERFACE}.Error.CannotRestart")
         self._dispatch('restart_service')
 
     @dbus.service.method(DBUS_INTERFACE)

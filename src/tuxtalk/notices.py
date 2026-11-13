@@ -44,6 +44,12 @@ def warn_silent_mic():
     notify_module.notify(SILENT_MIC_TITLE, SILENT_MIC_NOTICE)
 
 
+def warn_mic_restart(requested: bool):
+    notify_module.notify("Audio system stopped answering",
+                         "Restarting the dictation service." if requested else
+                         "Restart TuxTalk manually.")
+
+
 def warn_no_keyboard(why: str):
     """The service started after setup and no keyboard reaches it, so the
     hold key will do nothing; *why* says so and where to fix it. Always

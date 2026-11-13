@@ -13,7 +13,7 @@ from evdev import ecodes
 from conftest import CHAT_WINDOW as FIRST, HELD_TITLE
 from stand_ins import held_timers
 from tuxtalk import (delivery, dictation_worker, focused_window, hotkeys, keyboard_grab,
-                     modifier_hotkeys, recording, send_countdown)
+                     mic_stream, modifier_hotkeys, recording, send_countdown, tray_link)
 from tuxtalk import recording_state as rs
 
 F8, F9, ESC = ecodes.KEY_F8, ecodes.KEY_F9, ecodes.KEY_ESC
@@ -161,6 +161,23 @@ def test_a_countdown_held_by_a_press_whose_microphone_fails_gets_its_space_at_th
     mic.fails()
     key(F8, 1)
     assert notices == [send_countdown.HELD_NOTICE] and typed == []
+    key(F8, 0)
+    assert typed == [(" ", FIRST[1])] and keyboard.events == []
+
+
+def test_a_countdown_held_by_a_stuck_microphone_stays_unsent(
+        chat, keyboard, mic, monkeypatch, notifications):
+    focus, heard, typed, notices = chat
+    counting_down(monkeypatch)
+    monkeypatch.setattr(mic_stream, "stuck", lambda: True)
+    monkeypatch.setattr(tray_link, "restart_service", lambda: False)
+    monkeypatch.setattr(recording, "_restart_requested", False)
+
+    key(F8, 1)
+    assert rs.state.is_recording is False
+    assert notices == [send_countdown.HELD_NOTICE]
+    assert sorted(notifications()) == sorted([HELD_TITLE, "Audio system stopped answering"])
+    assert typed == []
     key(F8, 0)
     assert typed == [(" ", FIRST[1])] and keyboard.events == []
 

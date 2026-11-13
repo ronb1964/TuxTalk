@@ -94,6 +94,7 @@ def quiet_recording(monkeypatch):
     monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr(mic_stream, "input_samplerate", lambda idx, rate: 16000)
     monkeypatch.setattr(recording, "indicator", None)
+    monkeypatch.setattr(recording, "_restart_requested", False)
     rs.state.is_recording = False
     yield
     rs.state.is_recording = False
@@ -170,10 +171,11 @@ def test_failed_recording_start_releases_the_keyboard(monkeypatch, quiet_recordi
 
 def test_a_microphone_stuck_closing_restarts_the_service_instead_of_freezing(
         monkeypatch, quiet_recording):
-    opened, asked = [], []
+    opened, asked, notices = [], [], []
     monkeypatch.setattr(mic_stream, "stuck", lambda: True)
     monkeypatch.setattr(recording.sd, "InputStream", lambda *a, **k: opened.append(k))
-    monkeypatch.setattr(tray_link, "call", lambda method, *a, **k: asked.append(method))
+    monkeypatch.setattr(tray_link, "restart_service", lambda: asked.append("restart") or False)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notices.append((title, body)))
     devices = [keyboard()]
     keyboard_grab.grab_all_devices(devices)
 
@@ -181,8 +183,39 @@ def test_a_microphone_stuck_closing_restarts_the_service_instead_of_freezing(
 
     assert started is None
     assert opened == []
-    assert asked == ["RestartService"]
+    assert asked == ["restart"]
+    assert notices == [("Audio system stopped answering", "Restart TuxTalk manually.")]
     assert not devices[0].is_grabbed
+    assert rs.state.is_recording is False
+
+    recording.start_recording(False, False, 0)
+    assert asked == ["restart"]
+    assert notices == [("Audio system stopped answering", "Restart TuxTalk manually.")]
+
+
+def test_a_failed_start_does_not_retry_while_its_close_is_stuck(monkeypatch, quiet_recording):
+    attempts, asked = [], []
+    stuck = [False]
+
+    class Stream:
+        def __init__(self, **kwargs):
+            attempts.append(kwargs)
+
+        def start(self):
+            raise OSError("microphone unavailable")
+
+    def close(_stream):
+        stuck[0] = True
+        return False
+
+    monkeypatch.setattr(recording.sd, "InputStream", Stream)
+    monkeypatch.setattr(mic_stream, "close", close)
+    monkeypatch.setattr(mic_stream, "stuck", lambda: stuck[0])
+    monkeypatch.setattr(tray_link, "restart_service", lambda: asked.append("restart") or True)
+
+    assert recording.start_recording(False, False, 0) is None
+    assert len(attempts) == 1
+    assert asked == ["restart"]
     assert rs.state.is_recording is False
 
 

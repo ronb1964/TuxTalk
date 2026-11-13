@@ -406,6 +406,20 @@ def _tray_with_dbus(slow_service):
     return t, bus_side, launched
 
 
+@pytest.mark.parametrize("app", [
+    pytest.param(object(), id="service stand-in"),
+    pytest.param(types.SimpleNamespace(restart_service=lambda: None, quitting=True), id="quitting tray"),
+])
+def test_restart_request_fails_without_available_tray(app):
+    import dbus
+    from tuxtalk.dbus_service import TuxTalkDBusService
+
+    service = TuxTalkDBusService.__new__(TuxTalkDBusService)
+    service.app = app
+    with pytest.raises(dbus.exceptions.DBusException, match="tray cannot restart"):
+        TuxTalkDBusService.RestartService(service)
+
+
 def test_an_automatic_restart_while_the_stopped_service_types_leaves_dictation_off(
         slow_service):
     """Dictation off while the old service still typed a long paragraph,

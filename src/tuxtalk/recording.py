@@ -320,13 +320,17 @@ def open_input_stream(rec, device_idx) -> None:
     rec.stream.start()
 
 
-def _restart_for_stuck_microphone(notify_on: bool) -> None:
+_restart_requested = False
+
+
+def _restart_for_stuck_microphone() -> None:
+    global _restart_requested
+    if _restart_requested:
+        return
+    _restart_requested = True
     # A timed-out close may still hold PortAudio's lock, blocking another open.
     logger.error("A microphone stream is stuck closing; asking the tray to restart the service")
-    keyboard_grab.release_all()
-    if notify_on:
-        notify_module.notify("Audio system stopped answering", "Restarting the dictation service.")
-    tray_link.restart_service()
+    notices.warn_mic_restart(tray_link.restart_service())
 
 
 def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
@@ -343,9 +347,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     keyboard is grabbed just before this is called, so without that release a
     microphone error would leave the user unable to type anywhere at all.
     """
-    if mic_stream.stuck():
-        _restart_for_stuck_microphone(notify_on)
-        return None
+    global _restart_requested
     # Pressing a hotkey while a send counts down holds it: a tap leaves the
     # text unsent, a hold dictates more onto it. Counted before the
     # microphone opens, so a send set up meanwhile waits for this recording.
@@ -355,6 +357,10 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
         held_send=held or held_send, press_t0=time.time())
     # Set before the stream starts — _sd_callback drops frames unless it's set.
     rs.state.is_recording = True
+    if mic_stream.stuck():
+        _give_up_starting_for_stuck(rec, beeps_on)
+        return None
+    _restart_requested = False
     if engine.model is None:
         # Power Saving let the model go: load it while the user talks.
         threading.Thread(target=engine.wake, kwargs={"fresh": True}, daemon=True,
@@ -370,6 +376,9 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
         # on another listed device. Resolve again and try once more.
         logger.warning(f"Microphone {input_device_idx} failed ({first_error}); re-resolving")
         stop_stream_safely(rec)
+        if mic_stream.stuck():
+            _give_up_starting_for_stuck(rec, beeps_on)
+            return None
         try:
             fresh_idx = pick_input_device(load_config().mic)
             open_input_stream(rec, fresh_idx)
@@ -414,6 +423,15 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     rec.toggle_started_at = time.time() if from_toggle else None
     logger.info(f"Recording started in {time.time() - rec.press_t0:.2f}s")
     return rec
+
+
+def _give_up_starting_for_stuck(rec, beeps_on: bool) -> None:
+    rs.state.is_recording = False
+    rec.message.cancelled = True
+    keyboard_grab.release_all()
+    beeps.beep(beeps_on, *CANCEL_BEEP)
+    _leave_held_send_unsent(rec)
+    _restart_for_stuck_microphone()
 
 
 def cancel_recording(rec, beeps_on: bool, notify_on: bool, reason="Cancelled"):
