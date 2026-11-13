@@ -583,3 +583,47 @@ def test_args_are_read_in_any_attribute_order_and_default_to_in():
         t.report(t.shell.proxySetups.at(-1).methods.Mixed);
     """)
     assert types == ["s", "u"]
+
+
+def test_turning_the_extension_off_takes_its_indicator_off_the_bus():
+    """A disabled extension still holding the indicator's name would make the
+    service send it frames that nothing draws, instead of using the X11 window."""
+    held, _logs = run("""
+        const {extension} = await t.enable();
+        const held = [[...t.shell.ownedNames.values()], t.shell.uiGroup.length];
+        extension.disable();
+        held.push([...t.shell.ownedNames.values()], t.shell.uiGroup.length);
+        t.report(held);
+    """)
+    assert held == [["io.github.ronb1964.TalkType.Indicator"], 1, [], 0]
+
+
+def test_shell_indicator_follows_the_focused_window():
+    shown, _logs = run("""
+        await t.enable();
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TalkType/Indicator').object;
+        const area = t.shell.uiGroup[0];
+        indicator.Show({position: t.variant('bottom-center'), follow: t.variant(true)});
+        const fixed = area.position;
+        t.focus(new t.Window('Firefox', 1));
+        t.report([area.visible, area.size, fixed, area.position]);
+    """)
+    assert shown == [True, [200, 180], [860, 880], [310, 320]]
+
+
+def test_shell_indicator_hides_and_stops_updates():
+    shown, _logs = run("""
+        await t.enable();
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TalkType/Indicator').object;
+        const area = t.shell.uiGroup[0];
+        indicator.Show({});
+        indicator.SetRecording(true);
+        indicator.Update(0.5, [0.25, 0.75]);
+        const before = [indicator._recording, indicator._level, indicator._values,
+            t.shell.timeouts.length];
+        indicator.Hide();
+        t.report([before, area.visible, indicator._values, t.shell.timeouts.length]);
+    """)
+    assert shown == [[True, 0.5, [0.25, 0.75], 1], False, [], 0]

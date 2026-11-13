@@ -1,5 +1,5 @@
-// Lets Node load the GNOME extension: its gi:// and resource:/// imports
-// get the stand-ins in gnome.mjs, and extension.js loads as an ES module.
+// Lets Node load the GNOME extension: its gi://, resource:/// and cairo
+// imports get the stand-ins in gnome.mjs, and its files load as ES modules.
 // Started with `node --import` by tests/gnome_extension_js.py.
 import module from 'node:module';
 import {isMainThread} from 'node:worker_threads';
@@ -12,7 +12,7 @@ const STAND_INS = new URL('./gnome.mjs', import.meta.url).href;
 // these stand-ins do (then one is added here).
 const GI = ['GLib', 'GObject', 'Gio', 'Meta', 'Pango', 'Shell', 'St'];
 const SHELL = {
-    'resource:///org/gnome/shell/ui/main.js': ['activateWindow', 'notify', 'overview', 'panel', 'wm'],
+    'resource:///org/gnome/shell/ui/main.js': ['activateWindow', 'layoutManager', 'notify', 'overview', 'panel', 'wm'],
     'resource:///org/gnome/shell/ui/panelMenu.js': ['Button'],
     'resource:///org/gnome/shell/ui/popupMenu.js': ['Ornament', 'PopupImageMenuItem',
         'PopupMenuItem', 'PopupMenuSection', 'PopupSeparatorMenuItem',
@@ -20,13 +20,19 @@ const SHELL = {
     'resource:///org/gnome/shell/extensions/extension.js': ['Extension'],
 };
 
+const EXTENSION_DIR = new URL('../../gnome-extension/talktype@ronb1964.github.io/', import.meta.url).href;
+
 export function resolve(specifier, context, nextResolve) {
     if (specifier.startsWith('gi://') || specifier.startsWith('resource:///'))
         return {url: specifier, shortCircuit: true};
+    if (specifier === 'cairo')
+        return {url: 'gjs:cairo', shortCircuit: true};
     return nextResolve(specifier, context);
 }
 
 export function load(url, context, nextLoad) {
+    if (url === 'gjs:cairo')
+        return {format: 'module', shortCircuit: true, source: `export {Cairo as default} from '${STAND_INS}';`};
     if (url.startsWith('gi://') || url.startsWith('resource:///')) {
         const library = url.slice('gi://'.length);
         let source;
@@ -38,7 +44,7 @@ export function load(url, context, nextLoad) {
             throw new Error(`No such module in GNOME Shell's stand-ins: ${url}`);
         return {format: 'module', shortCircuit: true, source};
     }
-    if (url.endsWith('/extension.js'))
+    if (url.startsWith(EXTENSION_DIR) && url.endsWith('.js'))
         return nextLoad(url, {...context, format: 'module'});
     return nextLoad(url, context);
 }

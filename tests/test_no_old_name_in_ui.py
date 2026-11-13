@@ -19,9 +19,11 @@ ALLOWED = (
     "Formerly TalkType",
     "TalkType-*.AppImage",              # glob patterns that find an old download
 )
-# Strings allowed only when they are the WHOLE string: the kept D-Bus names.
+# Strings allowed only when they are the WHOLE string: the kept D-Bus names,
+# and the Shell indicator's, which sit under them.
 # (A message like "flatpak update io.github.ronb1964.TalkType" is not one.)
-ALLOWED_WHOLE = {"io.github.ronb1964.TalkType", "/io/github/ronb1964/TalkType"}
+ALLOWED_WHOLE = {"io.github.ronb1964.TalkType", "/io/github/ronb1964/TalkType",
+                 "io.github.ronb1964.TalkType.Indicator", "/io/github/ronb1964/TalkType/Indicator"}
 
 
 # Whole strings that are the old name on purpose, per file.

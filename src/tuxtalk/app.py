@@ -22,8 +22,9 @@ from . import live_settings as live
 from . import recording_state as rs
 from .config import load_config, load_custom_commands
 from .logger import setup_logger
-from .recording_indicator import RecordingIndicator, settings_in
+from .recording_indicator import settings_in
 from .service_launcher import QUIT_LIMIT_S, QUIT_WAIT_S
+from .shell_indicator import create_recording_indicator
 
 logger = setup_logger(__name__)
 
@@ -309,7 +310,7 @@ def _start_dbus_stand_in(cfg):
 def _make_indicator(cfg) -> None:
     """The recording indicator, with its spectrum for the bars style."""
     try:
-        recording.indicator = RecordingIndicator(**settings_in(cfg))
+        recording.indicator = create_recording_indicator(**settings_in(cfg))
         # Spectrum processor for the bars style; recording.feed_indicator uses it.
         from .indicator_dsp import SpectrumProcessor
         recording.spectrum_processor = SpectrumProcessor(bins=20)

@@ -35,6 +35,8 @@ export const shell = {
     workspaces: 2,          // how many there are
     activeWorkspace: 0,     // the index of the current one
     workspaceWindows: [],   // the windows on the current workspace
+    uiGroup: [],            // actors added above the windows
+    ownedNames: new Map(),  // id -> bus name owned now
 };
 
 for (const level of ['error', 'warn']) {
@@ -70,6 +72,11 @@ class Signals {
 export const GLib = {
     PRIORITY_DEFAULT: 0,
     SOURCE_REMOVE: false,
+    SOURCE_CONTINUE: true,
+    get_monotonic_time: () => Math.round(performance.now() * 1000),
+    source_remove(id) {
+        GLib.Source.remove(id);
+    },
     timeout_add(_priority, _ms, callback) {
         shell.timeouts.push({id: ++lastId, callback});
         return lastId;
@@ -93,7 +100,38 @@ class Actor extends Signals {
     }
 }
 
+class DrawingArea extends Actor {
+    set_size(width, height) {
+        this.size = [width, height];
+    }
+
+    get_size() {
+        return this.size;
+    }
+
+    set_position(x, y) {
+        this.position = [x, y];
+    }
+
+    show() {
+        this.visible = true;
+    }
+
+    hide() {
+        this.visible = false;
+    }
+
+    queue_repaint() {
+        this.repaints = (this.repaints ?? 0) + 1;
+    }
+
+    destroy() {
+        shell.uiGroup = shell.uiGroup.filter(actor => actor !== this);
+    }
+}
+
 export const St = {
+    DrawingArea,
     Icon: Actor,
     ClipboardType: {CLIPBOARD: 0},
     Clipboard: {
@@ -122,7 +160,24 @@ export const Shell = {
     },
 };
 
+// cairo, GJS's built-in module: only its constants; nothing draws in these tests.
+export const Cairo = {
+    FontSlant: {NORMAL: 0},
+    FontWeight: {BOLD: 1},
+    Operator: {CLEAR: 0, OVER: 2},
+    RadialGradient: class {},
+};
+
 export const Gio = {
+    BusNameOwnerFlags: {NONE: 0},
+    bus_own_name_on_connection(_connection, name) {
+        shell.ownedNames.set(++lastId, name);
+        return lastId;
+    },
+    bus_unown_name(id) {
+        if (!shell.ownedNames.delete(id))
+            throw new Error(`No bus name owned with id ${id}`);
+    },
     DBusProxyFlags: {DO_NOT_AUTO_START: 1, DO_NOT_LOAD_PROPERTIES: 2},
     BusNameWatcherFlags: {NONE: 0},
     DBusError: {UNKNOWN_METHOD: 'UnknownMethod'},
@@ -204,6 +259,10 @@ export const overview = {
     toggle() {
         shell.overviewToggles++;
     },
+};
+
+export const layoutManager = {
+    uiGroup: {add_child: actor => shell.uiGroup.push(actor)},
 };
 
 export const panel = {
@@ -444,6 +503,10 @@ class Display extends Signals {
 
     get_monitor_geometry() {
         return {x: 0, y: 0, width: 1920, height: 1080};
+    }
+
+    get_current_monitor() {
+        return 0;
     }
 }
 
