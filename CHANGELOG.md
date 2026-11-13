@@ -79,7 +79,11 @@ before 0.15.0, so older entries use that name.
   copied line counted as the selection, so an edit like "make this
   uppercase" with nothing selected typed a copy of the line at its start;
   now it says to select some text first. Found in testing for this release;
-  older than 0.23.
+  older than 0.23. Known issue: with nothing selected and no dictation just
+  before on that line (after a click, or a select command), Shift with the
+  dictation key still moves the cursor to the line's start in KDE's editors;
+  say the select and move commands there with the dictation key alone. Help
+  says so, and 0.24 asks KDE's editor whether anything is selected instead.
 - Help's Labs part points to Live text, and the Text Injection tooltip and
   Help now say what Auto really does: it pastes on Wayland (Ctrl+Shift+V in
   a terminal) and types on X11, typing instead if a paste fails.

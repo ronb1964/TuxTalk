@@ -39,6 +39,7 @@ big ways. Roughly in order:
 
 ## Look and feel
 
+- [ ] A search box in Help that finds a word in every card and opens the right one. Finding the TuxTalk Labs card took a while in the 0.23 test. Planned for 0.24.
 - [ ] A custom symbolic icon for the tray and panel.
 - [ ] Native Wayland positioning for the recording indicator (gtk-layer-shell). Today it uses XWayland to place itself.
 - [~] Voice Commands reference (Ctrl+Alt+V) with a way to try a command and see what it types. The reference is done, the try-it part isn't.

@@ -496,6 +496,9 @@ These work <b>right after you dictate</b>, on what you just said.
   • With voice editing on, Shift+{hold} understands these too, so you can do it all on one
     key: Shift+{hold} <i>"select the last sentence"</i>, then
     Shift+{hold} <i>"make it more formal"</i>.
+  • In KWrite and Kate, say the commands around the cursor with {hold} alone, not
+    Shift+{hold}: with nothing selected, Shift+{hold} moves the cursor to the start of
+    the line first, unless you've just dictated there.
   • The commands around the cursor press the usual keys (Home, End, Ctrl+arrows), so
     they do what those keys do in each app.
   • It doesn't work in a terminal, where those keys mean other things.
