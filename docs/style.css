@@ -196,7 +196,6 @@ code, kbd, pre { font-family: var(--f-mono); }
 .btn-ask:hover { transform: translateY(-1px); text-decoration: none; }
 .btn-ask-2 { color: var(--ink); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ink) 40%, transparent); }
 .btn-ask-2:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); text-decoration: none; }
-.ask-note { margin-top: 12px; font-size: 0.8rem; line-height: 1.45; color: var(--ink-2); }
 
 /* The fake text window the demo types into */
 .desk { position: relative; display: grid; gap: 22px; justify-items: center; }
