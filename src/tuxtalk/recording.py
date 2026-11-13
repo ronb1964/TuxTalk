@@ -320,12 +320,16 @@ def open_input_stream(rec, device_idx) -> None:
     mic_stream.start(rec.stream)
 
 
-def _restart_for_stuck_microphone(notify_on: bool) -> None:
+_restart_requested = False
+
+
+def _restart_for_stuck_microphone() -> None:
+    global _restart_requested
+    if _restart_requested:
+        return
+    _restart_requested = True
     logger.error("A microphone stream is stuck starting; asking the tray to restart the service")
-    keyboard_grab.release_all()
-    if notify_on:
-        notify_module.notify("Audio system stopped answering", "Restarting the dictation service.")
-    tray_link.restart_service()
+    notices.warn_mic_restart(tray_link.restart_service())
 
 
 def _give_up_starting(rec, beeps_on: bool, notify_on: bool, title: str, body: str) -> None:
@@ -355,9 +359,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     keyboard is grabbed just before this is called, so without that release a
     microphone error would leave the user unable to type anywhere at all.
     """
-    if mic_stream.starting_stuck():
-        _restart_for_stuck_microphone(notify_on)
-        return None
+    global _restart_requested
     # Pressing a hotkey while a send counts down holds it: a tap leaves the
     # text unsent, a hold dictates more onto it. Counted before the
     # microphone opens, so a send set up meanwhile waits for this recording.
@@ -367,6 +369,11 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
         held_send=held or held_send, press_t0=time.time())
     # Set before the stream starts — _sd_callback drops frames unless it's set.
     rs.state.is_recording = True
+    if mic_stream.starting_stuck():
+        _give_up_starting(rec, beeps_on, False, "", "")
+        _restart_for_stuck_microphone()
+        return None
+    _restart_requested = False
     if engine.model is None:
         # Power Saving let the model go: load it while the user talks.
         threading.Thread(target=engine.wake, kwargs={"fresh": True}, daemon=True,
@@ -378,8 +385,9 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
         # Left to its start, the stream holds PortAudio's lock: a second try
         # would wait on it, and the next press restarts the service instead.
         rec.stream = None
-        _give_up_starting(rec, beeps_on, notify_on, "Microphone isn't answering",
+        _give_up_starting(rec, beeps_on, False, "Microphone isn't answering",
                           "It sends no sound. Unplug it and plug it back in.")
+        notices.warn_mic_not_answering()
         return None
     except Exception as first_error:
         # The mic is stored as a device number, resolved at startup. PortAudio's
@@ -397,8 +405,9 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
                 notices.warn_mic_switched(input_device_idx, fresh_idx)
         except mic_stream.NotAnswering:
             rec.stream = None
-            _give_up_starting(rec, beeps_on, notify_on, "Microphone isn't answering",
+            _give_up_starting(rec, beeps_on, False, "Microphone isn't answering",
                               "It sends no sound. Unplug it and plug it back in.")
+            notices.warn_mic_not_answering()
             return None
         except Exception as e:
             # Genuinely unavailable: unplugged, or held exclusively by another

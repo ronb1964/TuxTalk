@@ -121,6 +121,8 @@ def test_a_start_that_returns_late_closes_its_stream_and_stops_counting_as_stuck
         mic_stream.start(stream)
     stream.release.set()
     assert stream.closed.wait(1)
+    with mic_stream._closed:
+        assert mic_stream._closed.wait_for(lambda: not mic_stream._STARTING, 1)
     assert stream.calls == ["start", "stop", "close"]
     assert mic_stream.starting_stuck() is False
 

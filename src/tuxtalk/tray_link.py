@@ -9,7 +9,7 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 
-def call(method: str, *args, what: str, signature: str | None = None) -> None:
+def call(method: str, *args, what: str, signature: str | None = None) -> bool:
     """Call the tray's D-Bus *method* with *args*. A failure, dbus itself
     missing included, is logged as "Could not {what}" and never raised.
 
@@ -30,8 +30,10 @@ def call(method: str, *args, what: str, signature: str | None = None) -> None:
         from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
         dbus.SessionBus().call_blocking(DBUS_NAME, DBUS_PATH, DBUS_INTERFACE, method,
                                         signature, args, timeout=focused_window.TRAY_TIMEOUT_S)
+        return True
     except Exception as e:
         logger.info(f"Could not {what}: {e}")
+        return False
 
 
 def notify_recording_state(is_recording: bool):
@@ -47,7 +49,7 @@ def notify_hotkey_pressed(key_name: str):
 
 
 def restart_service():
-    call("RestartService", what="ask the tray to restart the service")
+    return call("RestartService", what="ask the tray to restart the service")
 
 
 def show_voice_commands():
