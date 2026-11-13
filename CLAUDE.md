@@ -215,6 +215,20 @@ Claude checks every item against the log too
 The full list of checks is in RELEASE_CHECKLIST.md. Read it at Step 8 and
 build Ron's panel from it.
 
+### Step 8b: Put Ron's Dev Version Back (every time his testing ends)
+Ron, 2026-11-13: "This should be standard procedure after testing." Without
+asking, as soon as he has finished testing (and before a rebuild replaces the
+AppImage he is running):
+1. Quit the AppImage's tray (its `python3 -m tuxtalk.tray` under a
+   `/tmp/.mount_TuxTal*` folder; the service and helpers go with it).
+2. Remove `~/.config/autostart/tuxtalk.desktop`, the start-at-login the
+   AppImage's first run makes: with dev's own entry, both start at login and
+   Ron gets "TuxTalk is already running".
+3. `./fresh-start-for-testing.sh --restore-dev`, then start dev as in
+   "RON'S DAILY SETUP" (`env -u GDK_BACKEND setsid -f ./run-dev.sh`), and check
+   its log says the model loaded (the fresh start took the shared models, so
+   dev may download them first).
+
 ### Step 9: Fix and Rebuild if Needed
 If ANY test fails: fix the issue, go back to Step 2, and repeat.
 
