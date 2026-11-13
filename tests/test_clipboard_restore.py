@@ -564,7 +564,7 @@ def test_a_clipboard_read_failing_again_and_again_is_logged_once(tmp_path, monke
     from shell_stubs import stub
     stub(tmp_path, "wl-paste", "echo 'Failed to connect to a Wayland server' >&2; exit 1")
     monkeypatch.setenv("PATH", str(tmp_path))
-    monkeypatch.setattr(cb, "_last_read_error", None)
+    monkeypatch.setattr(cb, "_read_failures", cb.FailureNotes())
     with caplog.at_level("INFO", logger="tuxtalk.clipboard"):
         for _ in range(5):
             assert cb._read_text() is None

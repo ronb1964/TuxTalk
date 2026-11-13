@@ -16,7 +16,7 @@ import subprocess
 import threading
 import time
 
-from .logger import setup_logger
+from .logger import FailureNotes, setup_logger
 
 logger = setup_logger(__name__)
 
@@ -408,24 +408,22 @@ def read_primary():
     return None if text is _UNREADABLE else text
 
 
-_last_read_error = None
+# The selection check reads the clipboard every 50 ms: a read failing the
+# same way again is logged once, and again by each selection check.
+_read_failures = FailureNotes()
 
 
 def _read_text():
-    """The clipboard as text, or None when it holds no text. A read that
-    fails is logged once while it keeps failing the same way: the selection
-    check reads the clipboard every 50 ms."""
-    global _last_read_error
+    """The clipboard as text, or None when it holds no text."""
     try:
         types = _wl_paste_types()
         mime = next((t for t in TEXT_TYPES if t in types), None)
         text = _wl_paste(mime).decode("utf-8", "replace") if mime else None
     except (OSError, subprocess.SubprocessError) as e:
-        if str(e) != _last_read_error:
+        if _read_failures.failed("read", e):
             logger.info(f"Couldn't read the clipboard: {e}")
-            _last_read_error = str(e)
         return None     # callers leave a clipboard they can't read alone
-    _last_read_error = None
+    _read_failures.worked("read")
     return text
 
 
@@ -465,6 +463,7 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
     marker can't be put on the clipboard."""
     import secrets
     sleep = sleep or time.sleep
+    _read_failures.worked("read")       # this check logs its own first failure
     saved = _read_clipboard()
     marker = f"tuxtalk-selection-probe-{secrets.token_hex(8)}"
     text = None

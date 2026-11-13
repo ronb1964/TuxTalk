@@ -514,15 +514,20 @@ def _put_cursor_back(line, where, message=None):
     since finds the cursor at its end, not its start), or after the indent
     Kate gave the line a dictation ended with a line break."""
     last = rs.state.last_inserted_text
+    text, tail = line.removesuffix("\n"), last.split("\n")[-1]
     keys = None
     if last and not keyboard_output.not_where_typed(where[0], where):
-        keys = _keys_back_to_dictation_end(line.removesuffix("\n"), last.split("\n")[-1])
+        keys = _keys_back_to_dictation_end(text, tail)
     if keys is None:
         logger.info("Voice edit: KDE's editor moved the cursor to the start of the line, "
                     "and where it was before isn't known")
         return
     if not keys:
         return
+    if not text.endswith(tail):
+        # KWrite took the dictation's spaces off the line's end when it
+        # saved: "select that" counting them would select a character off.
+        rs.state.last_inserted_text = last.rstrip()
     # Esc a moment before stops all four (checked right before the first).
     with keyboard_output.until_cancelled(message):
         if (not keyboard_output.output_backend().press_keys(keys, claim=_only_into(*where))
@@ -553,15 +558,26 @@ def _keys_back_to_dictation_end(text, tail):
     return None
 
 
+# Unicode's directional isolates (LRI, RLI, FSI) and their end (PDI).
+_ISOLATES, _END_ISOLATE = {"\u2066", "\u2067", "\u2068"}, "\u2069"
+
+
 def _right_to_left(text):
     """Whether Qt lays *text* out right to left (QString::isRightToLeft):
-    its first letter with a direction is Arabic, Hebrew or the like."""
+    its first letter with a direction, outside any isolate, is Arabic,
+    Hebrew or the like."""
+    depth = 0
     for char in text:
-        direction = unicodedata.bidirectional(char)
-        if direction in ("R", "AL"):
-            return True
-        if direction == "L":
-            return False
+        if char in _ISOLATES:
+            depth += 1
+        elif char == _END_ISOLATE:
+            depth = max(0, depth - 1)
+        elif depth == 0:
+            direction = unicodedata.bidirectional(char)
+            if direction in ("R", "AL"):
+                return True
+            if direction == "L":
+                return False
     return False
 
 

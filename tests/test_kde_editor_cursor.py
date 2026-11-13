@@ -30,6 +30,7 @@ class KateLine:
         if key in ("LEFT", "RIGHT"):
             # Below 0 is the line above, past the end the line below.
             self.column += -1 if (key == "LEFT") != self.rtl else 1
+            assert 0 <= self.column <= len(self.text), "the cursor left the line"
             return
         assert key == "END"
         row = max(i for i, start in enumerate(self.rows) if start <= self.column)
@@ -144,11 +145,27 @@ def test_other_apps_with_nothing_highlighted_keep_the_line_and_get_no_keys(kwrit
 
 @pytest.mark.parametrize("text, rtl", [
     (HEBREW, True), ("مرحبا بكم. ", True), (PARAGRAPH, False),
-    ("123 " + HEBREW, True), ("", False)],
-    ids=["Hebrew", "Arabic", "English", "digits first", "empty"])
+    ("123 " + HEBREW, True), ("", False),
+    ("hello \u05e9\u05dc\u05d5\u05dd ", False), ("\u05e9\u05dc\u05d5\u05dd hello ", True),
+    ("\u2066hello\u2069 \u05e9\u05dc\u05d5\u05dd ", True),
+    ("\u2067\u05e9\u05dc\u05d5\u05dd\u2069 hello ", False)],
+    ids=["Hebrew", "Arabic", "English", "digits first", "empty", "English first",
+         "Hebrew first", "English in an isolate", "Hebrew in an isolate"])
 def test_a_line_is_right_to_left_as_qt_decides_it(text, rtl):
-    """By its first letter that has a direction; digits and spaces have none."""
+    """By its first letter that has a direction, outside an isolate; digits
+    and spaces have none. The last four are Qt 6's own answers."""
     assert voice_edit._right_to_left(text) is rtl
+
+
+def test_after_a_save_select_that_selects_the_dictation_not_a_space_before_it(kwrite):
+    """KWrite took the space after the dictation off when it saved; still
+    counted, "select that" selected the space before it and left the period."""
+    from tuxtalk import voice_navigation as nav
+    kwrite["board"].selected = PARAGRAPH.rstrip() + "\n"
+    assert copy_in(KWRITE) is None
+    assert rs.state.last_inserted_text == PARAGRAPH.rstrip()
+    keys = nav.chords(nav.parse("select that"), rs.state.last_inserted_text)
+    assert keys and ((), "LEFT") not in keys      # no step over a space that's gone
 
 
 def test_a_dictation_in_another_window_is_no_guide(kwrite, monkeypatch):
