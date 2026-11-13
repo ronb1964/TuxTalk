@@ -31,9 +31,14 @@ def test_the_active_window_rect_follows_the_same_sources(monkeypatch):
 
 # --- where the indicator goes ----------------------------------------------------------------
 
-def test_centred_near_the_bottom_of_the_window():
+def test_centred_a_fifth_of_the_window_above_its_bottom():
     pos = ri.follow_position(Rect(100, 200, 800, 600), 200, 80, Rect(0, 0, 3440, 1440))
-    assert pos == (400, 200 + 600 - 80 - ri.FOLLOW_MARGIN)
+    assert pos == (400, 600)
+
+
+def test_a_short_window_keeps_the_minimum_gap_at_the_bottom():
+    pos = ri.follow_position(Rect(100, 200, 800, 150), 100, 40, Rect(0, 0, 3440, 1440))
+    assert pos == (450, 270)
 
 
 def test_kept_on_the_monitor():
@@ -165,11 +170,11 @@ MON = Rect(0, 0, 3440, 1440)
 
 
 @pytest.mark.parametrize("position, expected", [
-    ("bottom-center", (1000 + 300, 200 + 600 - 80 - ri.FOLLOW_MARGIN)),
+    ("bottom-center", (1300, 600)),
     ("center", (1300, 200 + 260)),
     ("top-left", (1000 + ri.FOLLOW_SIDE, 200 + ri.FOLLOW_TOP)),
     ("top-right", (1000 + 800 - 200 - ri.FOLLOW_SIDE, 200 + ri.FOLLOW_TOP)),
-    ("bottom-left", (1000 + ri.FOLLOW_SIDE, 200 + 600 - 80 - ri.FOLLOW_MARGIN)),
+    ("bottom-left", (1020, 600)),
     ("right-center", (1000 + 800 - 200 - ri.FOLLOW_SIDE, 460)),
     ("something-unknown", (1300, 460)),
 ])
