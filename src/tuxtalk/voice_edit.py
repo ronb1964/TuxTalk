@@ -524,14 +524,15 @@ def _put_cursor_back(line, where, message=None):
         return
     if not keys:
         return
-    if not text.endswith(tail):
-        # KWrite took the dictation's spaces off the line's end when it
-        # saved: "select that" counting them would select a character off.
-        rs.state.last_inserted_text = last.rstrip()
+    # KWrite takes spaces off a line's end when it saves: "select that"
+    # counting the dictation's would select a character off, so it's
+    # remembered with the spaces the line still ends with.
+    remembered = last if text.endswith(tail) else last.rstrip() + text[len(text.rstrip()):]
     # Esc a moment before stops all four (checked right before the first).
     with keyboard_output.until_cancelled(message):
-        if (not keyboard_output.output_backend().press_keys(keys, claim=_only_into(*where))
-                and not keyboard_output.esc_cancelled()):
+        if keyboard_output.output_backend().press_keys(keys, claim=_only_into(*where)):
+            rs.state.last_inserted_text = remembered
+        elif not keyboard_output.esc_cancelled():
             logger.warning("Voice edit: couldn't put the cursor back after KDE's editor moved it")
 
 

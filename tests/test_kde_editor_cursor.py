@@ -157,15 +157,54 @@ def test_a_line_is_right_to_left_as_qt_decides_it(text, rtl):
     assert voice_edit._right_to_left(text) is rtl
 
 
-def test_after_a_save_select_that_selects_the_dictation_not_a_space_before_it(kwrite):
-    """KWrite took the space after the dictation off when it saved; still
+def selected_by(keys, line):
+    """The text *keys* select, from the end of *line*: Left moves the cursor
+    and lets go of any selection, Shift+Left selects back from where it was."""
+    cursor = anchor = len(line)
+    for mods, key in keys:
+        assert key == "LEFT"
+        cursor -= 1
+        if not mods:
+            anchor = cursor
+    return line[cursor:anchor]
+
+
+@pytest.mark.parametrize("dictated, line", [
+    ("Hello. ", "Prefix. Hello."), ("Hello.  ", "Prefix. Hello. "),
+    ("Hello.\t", "Prefix. Hello. "), ("Hello. ", "Prefix. Hello. ")],
+    ids=["the space taken off", "one of two left", "a tab now a space", "not saved"])
+def test_after_a_save_select_that_selects_the_dictation(kwrite, monkeypatch, dictated, line):
+    """KWrite takes the spaces after a dictation off when it saves; still
     counted, "select that" selected the space before it and left the period."""
     from tuxtalk import voice_navigation as nav
-    kwrite["board"].selected = PARAGRAPH.rstrip() + "\n"
+    monkeypatch.setattr(rs.state, "last_inserted_text", dictated)
+    kwrite["board"].selected = line + "\n"
     assert copy_in(KWRITE) is None
-    assert rs.state.last_inserted_text == PARAGRAPH.rstrip()
     keys = nav.chords(nav.parse("select that"), rs.state.last_inserted_text)
-    assert keys and ((), "LEFT") not in keys      # no step over a space that's gone
+    assert selected_by(keys, line) == "Hello."
+
+
+@pytest.mark.parametrize("fails_how", ["Esc", "the keys couldn't go"])
+def test_when_the_cursor_isnt_put_back_the_dictation_is_remembered_as_it_was(
+        kwrite, monkeypatch, fails_how):
+    """The spaces are let go of only once the cursor is back at the line's end."""
+    monkeypatch.setattr(rs.state, "last_inserted_text", "Hello. ")
+    kwrite["board"].selected = "Prefix. Hello.\n"
+    message = rs.Message()
+    if fails_how == "Esc":
+        from tuxtalk import focused_window, output_backends
+        monkeypatch.setattr(keyboard_output, "output_backend",
+                            lambda: output_backends.VirtualKeyboardOutputBackend())
+
+        def esc_during_the_check(window, now=None):
+            message.cancelled = True
+            return lambda: None
+        monkeypatch.setattr(focused_window, "claim_into", esc_during_the_check)
+    else:
+        monkeypatch.setattr(keyboard_output, "output_backend", lambda: type(
+            "Broken", (), {"press_keys": lambda self, chords, claim=None: False})())
+    assert copy_in(KWRITE, message) is None
+    assert rs.state.last_inserted_text == "Hello. "
 
 
 def test_a_dictation_in_another_window_is_no_guide(kwrite, monkeypatch):
