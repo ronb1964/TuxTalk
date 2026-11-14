@@ -15,7 +15,7 @@ from gi.repository import Gio, GLib
 from . import indicator_styles
 from .indicator_styles import RadialGain
 from .logger import setup_logger
-from .recording_indicator import (BASE_HEIGHT, BASE_WIDTH, FOLLOW_MARGIN, RecordingIndicator,
+from .recording_indicator import (BASE_HEIGHT, BASE_WIDTH, RecordingIndicator,
                                   _scale_for_size, fixed_position, follow_position)
 from .ui_style import desktop_accent_rgb
 from .window_geometry import active_window_rect, main_monitor_rect, monitor_rect_at
@@ -219,13 +219,7 @@ class ShellIndicator:
         window = active_window_rect() if self.follow_window else None
         if window is not None:
             monitor = monitor_rect_at(window.x + window.w // 2, window.y + window.h // 2)
-            left, top = follow_position(window, width, height, monitor, self.position)
-            if self.position.startswith("bottom"):
-                # Match Shell's 20% bottom gap when anchoring live text.
-                top = max(monitor.y, min(round(window.y + window.h - height -
-                                               max(FOLLOW_MARGIN, window.h * 0.2)),
-                                         monitor.y + monitor.h - height))
-            return left, top
+            return follow_position(window, width, height, monitor, self.position)
         return fixed_position(self.position, width, height, main_monitor_rect(),
                               self.offset_x, self.offset_y)
 
