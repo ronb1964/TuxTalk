@@ -217,7 +217,18 @@ def correct_across_pause(text: str, message):
     if not _erase_typed(prev):
         return said, ""
     logger.info("AI cleanup fixed a self-correction across a pause")
-    return fixed, prev
+    return _started_like(prev, fixed), prev
+
+
+def _started_like(prev: str, fixed: str) -> str:
+    """*fixed*, typed in place of *prev*, starting the way *prev* did: its
+    leading space (one fitted in front, sentence_fit) and its small first
+    letter where it carried a sentence on."""
+    body = fixed.lstrip()
+    if prev.lstrip()[:1].islower() and body[:1].isupper() \
+            and safe_to_lowercase_first_word(body, live.words):
+        body = body[0].lower() + body[1:]
+    return prev[:len(prev) - len(prev.lstrip())] + body
 
 
 def _type_boundary(message, pending: dict, tail: str, injection_mode: str) -> None:

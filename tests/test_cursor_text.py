@@ -181,6 +181,12 @@ def test_the_text_after_the_cursor_is_read_near_the_end_of_the_field(bus):
     assert around() == ("the big ", "dog.")
 
 
+def test_a_password_field_inside_a_frame_is_never_read(bus):
+    bus.app("gedit", "hunter2", caret=7, role=PASSWORD, framed=True)
+    assert around() is None
+    assert "GetText" not in bus.text_calls
+
+
 def test_a_password_field_is_never_read(bus):
     bus.app("gedit", "hunter2", caret=7, role=PASSWORD)
     assert around() is None

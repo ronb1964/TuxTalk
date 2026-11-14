@@ -89,3 +89,8 @@ def test_a_dictation_ending_in_a_line_break_starts_the_next_line_clean():
 
 def test_a_dictation_starting_with_a_line_break_gets_no_space_before_it():
     assert fit("\nHello. ", "the end", "", True) == "\nHello. "
+
+
+@pytest.mark.parametrize("following", ["I went", "NASA said"])
+def test_a_capital_that_isnt_a_sentence_start_doesnt_keep_the_period(following):
+    assert fit("After lunch. ", "Yesterday ", following, True) == "after lunch "

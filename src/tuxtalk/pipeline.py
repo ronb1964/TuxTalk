@@ -248,9 +248,6 @@ def _fit_to_cursor(words: _Words, around: tuple[str, str] | None, job: _Job) -> 
     """*words* fitted into the sentence at the cursor (sentence_fit), *around*
     it; as they are when the app didn't say. No small first letter in a
     language that capitalises its nouns."""
-    if around is not None and words.taken_back:
-        # A correction backspaced the phrase before: what's there now counts.
-        around = focused_window.text_around_cursor()
     if around is None:
         return words
     from . import recommend

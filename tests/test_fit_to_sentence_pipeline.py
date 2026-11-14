@@ -106,16 +106,16 @@ def test_a_type_at_pause_phrase_after_one_it_typed_isnt_read_again(desktop, monk
     assert desktop["reads"] == 0
 
 
-def test_after_a_correction_erased_the_phrase_before_the_text_is_read_again(desktop):
-    """ "no wait, four" backspaced "Meet at three ": what's before the
-    cursor now is the start of the field, not the phrase taken back."""
-    desktop["around"] = ("", "")
-    words = pipeline._Words(text="Meet at four. ", raw="", said="", press="",
-                            space_left_off="", taken_back="Meet at three ", held_mark=None,
-                            held_back="", cut_off="")
-    job = types.SimpleNamespace(language="en")
-    fitted = pipeline._fit_to_cursor(words, ("t three ", ""), job)
-    assert fitted.text == "Meet at four. " and desktop["reads"] == 1
+def test_a_correction_takes_the_fitted_start_of_the_phrase_it_replaces(monkeypatch):
+    """" meet at three" was fitted into "the big|"; "no wait, four" erases
+    it, space and all, so the fixed phrase starts the way it did."""
+    from tuxtalk import ai_cleanup, type_at_pause
+    monkeypatch.setattr(rs.state, "last_inserted_text", " meet at three. ")
+    monkeypatch.setattr(ai_cleanup, "fix_self_corrections", lambda text, engine: "Meet at four.")
+    monkeypatch.setattr(type_at_pause, "_erase_typed", lambda text: True)
+    message = types.SimpleNamespace(held_cue="", cancelled=False)
+    fixed, taken_back = type_at_pause.correct_across_pause("no wait, four.", message)
+    assert (fixed, taken_back) == (" meet at four.", " meet at three. ")
 
 
 def test_german_by_the_usual_language_keeps_its_capital(desktop, monkeypatch):
