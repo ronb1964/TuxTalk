@@ -3,6 +3,13 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [Unreleased]
+
+- When the recording indicator follows the window you're dictating into, it
+  sits higher in a tall window: a fifth of the window's height above its
+  bottom (at least 40 px, as before), so it no longer covers a chat's message
+  box or a status bar. Contributed by Bernát Gábor (#36).
+
 ## [0.23.0] - 2026-11-12
 
 - Dictating into Claude Desktop pastes the text in one go, as in every other
