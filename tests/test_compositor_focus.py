@@ -276,6 +276,39 @@ def test_i3_on_x11_uses_its_own_socket_first(tmp_path, monkeypatch):
     done.join(1)
 
 
+def test_an_x11_window_tells_its_process(monkeypatch):
+    """The password check tells by it which app on the accessibility bus
+    has the focus, where the names differ (issue #40). A real window on
+    the tests' own X server, whose _NET_WM_PID GTK sets."""
+    import os
+    import gi
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("GdkX11", "3.0")
+    from gi.repository import GdkX11, Gtk
+    display = os.environ.get("DISPLAY")
+    if not display or not isinstance(Gtk.Window().get_display(), GdkX11.X11Display):
+        pytest.skip("needs the X server xvfb-run gives the tests")
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+    monkeypatch.setenv("DISPLAY", display)
+    window = Gtk.Window()
+    window.realize()
+    try:
+        assert cf.window_pid(window.get_window().get_xid()) == os.getpid()
+    finally:
+        window.destroy()
+
+
+def test_other_compositors_tell_no_process(monkeypatch):
+    """i3's and Sway's ids aren't X11 windows, even in an X11 session."""
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setenv("I3SOCK", "/nonexistent")
+    monkeypatch.setattr(cf, "_x11_pid", lambda window: pytest.fail("asked X11"))
+    assert cf.window_pid(94120458032640) is None
+
+
 def test_an_x_server_problem_means_unknown(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("XDG_SESSION_TYPE", "x11")

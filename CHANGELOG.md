@@ -9,6 +9,13 @@ before 0.15.0, so older entries use that name.
   sits higher in a tall window: a fifth of the window's height above its
   bottom (at least 40 px, as before), so it no longer covers a chat's message
   box or a status bar. Contributed by Bernát Gábor (#36).
+- On X11 desktops (Cinnamon, Xfce, MATE and others), a browser in the
+  background with its login box still selected no longer stops dictation
+  into gnome-terminal, LibreOffice and other apps with "TuxTalk doesn't type
+  into password fields". TuxTalk now tells which app has the focus by its
+  process, not only its name, which those apps go by differently. A
+  password field in the window you're in is still never typed into, and
+  the log now says what refused a dictation (issue #40).
 
 ## [0.23.0] - 2026-11-12
 
