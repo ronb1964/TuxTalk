@@ -45,6 +45,9 @@ def swiss_spelling_offered(config, env=None):
 
 A11Y_SWITCH_LABEL = ("Turn on the desktop's accessibility, so dictation fits the text "
                      "around the cursor in more apps")
+A11Y_DESKTOPS_NOTE = ("It's on in your desktop's own settings, or for a screen reader, "
+                      "so it's turned off there, not here.")
+A11Y_FAILED_TITLE = "The desktop's accessibility didn't change"
 
 
 class AdvancedTab(Tab):
@@ -183,8 +186,9 @@ class AdvancedTab(Tab):
         space_check.connect("toggled", lambda x: self.update_config("auto_space", x.get_active()))
         space_check.set_tooltip_text(
             "Add a space after each dictation, so the next one doesn't run into it.\n"
-            "Text you type yourself before dictating needs its own space: TuxTalk\n"
-            "can't see what's already in most apps' text boxes.\n"
+            "Where an app tells TuxTalk the text around the cursor, a space goes in\n"
+            "front of a dictation too when one is missing; elsewhere, text you type\n"
+            "yourself before dictating needs its own space.\n"
             "Turn off if you want to control spacing yourself.")
         fine.attach(space_check, 0, frow, 2, 1)
         frow += 1
@@ -285,35 +289,46 @@ class AdvancedTab(Tab):
     def _fine_accessibility(self, fine, frow):
         """The desktop's accessibility switch (a11y_switch), changed at once,
         outside Apply; returns the next row. Not shown without an
-        accessibility bus, and not TuxTalk's to turn off when the desktop or
-        a screen reader turned it on."""
+        accessibility bus. When the desktop or a screen reader turned it on,
+        it isn't TuxTalk's to turn off, and a label says so: a box that
+        can't be changed can't take the focus, so its tooltip can't be read."""
         on = a11y_switch.is_on()
         if on is None:
             return frow
         fine.attach(subheading("Accessibility"), 0, frow, 2, 1)
         check = Gtk.CheckButton(label=A11Y_SWITCH_LABEL)
         check.set_active(on)
+        check.set_tooltip_text(
+            "With it on, KDE apps and Firefox tell TuxTalk the text around the cursor, so a "
+            "dictation\ninto the middle of a sentence doesn't start with a capital. Chrome, "
+            "Brave and apps like\nClaude Desktop need to be closed and opened again first. "
+            "Apps use a little more memory.")
+        fine.attach(check, 0, frow + 1, 2, 1)
         if on and not a11y_switch.turned_on_by_tuxtalk():
             check.set_sensitive(False)
-            check.set_tooltip_text("It's on in your desktop's own settings, or for a screen "
-                                   "reader, so it's turned off there, not here.")
-        else:
-            check.set_tooltip_text(
-                "With it on, KDE apps and Firefox tell TuxTalk the text around the cursor, so "
-                "a dictation\ninto the middle of a sentence doesn't start with a capital. "
-                "Chrome, Brave and apps like\nClaude Desktop need to be closed and opened "
-                "again first. Apps use a little more memory.")
+            note = Gtk.Label(label=A11Y_DESKTOPS_NOTE, xalign=0, wrap=True)
+            note.get_style_context().add_class("dim-label")
+            fine.attach(note, 0, frow + 2, 2, 1)
+            return frow + 3
         check.connect("toggled", self._on_a11y_switch_toggled)
-        fine.attach(check, 0, frow + 1, 2, 1)
         return frow + 2
 
     def _on_a11y_switch_toggled(self, check):
-        """Turn the switch on, saying which apps need a restart, or off."""
-        if not check.get_active():
-            a11y_switch.decline()
-        elif a11y_switch.allow():
+        """Turn the switch on, saying which apps need a restart, or off; when
+        it won't change, the box goes back and that's said."""
+        turning_on = check.get_active()
+        if turning_on and a11y_switch.allow():
             show_message(self.win.window, Gtk.MessageType.INFO, startup_notices.A11Y_ON_TITLE,
                          startup_notices.A11Y_ON_BODY)
+            return
+        if not turning_on and a11y_switch.decline():
+            return
+        check.handler_block_by_func(self._on_a11y_switch_toggled)
+        check.set_active(not turning_on)
+        check.handler_unblock_by_func(self._on_a11y_switch_toggled)
+        show_message(self.win.window, Gtk.MessageType.WARNING, A11Y_FAILED_TITLE,
+                     "TuxTalk's log says why. You can change it in your desktop's own "
+                     "accessibility settings.")
 
     def _fine_privacy(self, fine, frow):
         """Logging what's dictated, and clearing the log."""

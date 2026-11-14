@@ -48,12 +48,26 @@ def test_unticking_it_turns_off_what_tuxtalk_turned_on(switch, prefs_window):
     assert switch.on is False and a11y_switch.answer() == "not_now"
 
 
-def test_the_desktops_own_switch_is_shown_on_and_cant_be_turned_off_here(switch, prefs_window):
-    """On for a screen reader, or by the user's own desktop setting."""
+def test_the_desktops_own_switch_is_shown_on_and_why_it_cant_be_turned_off_here(
+        switch, prefs_window):
+    """On for a screen reader, or by the user's own desktop setting. The
+    reason is in a label, which a screen reader reaches, not only a tooltip
+    on a box it can't focus."""
     switch.on = True
     box = check(prefs_window)
     assert box.get_active() and not box.get_sensitive()
-    assert "desktop" in box.get_tooltip_text()
+    find(box.get_toplevel(), Gtk.Label, prefs_advanced.A11Y_DESKTOPS_NOTE)
+
+
+def test_a_switch_that_wont_turn_on_unticks_and_says_so(switch, prefs_window, monkeypatch):
+    shown = []
+    monkeypatch.setattr(prefs_advanced, "show_message",
+                        lambda parent, kind, title, *a, **k: shown.append(title))
+    monkeypatch.setattr(a11y_switch, "_set", lambda on: False)
+    box = check(prefs_window)
+    box.set_active(True)
+    assert not box.get_active()
+    assert shown == [prefs_advanced.A11Y_FAILED_TITLE]
 
 
 def test_with_no_accessibility_bus_there_is_nothing_to_switch(switch, prefs_window):

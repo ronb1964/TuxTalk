@@ -60,3 +60,32 @@ def test_a_line_break_after_the_cursor_ends_nothing_early():
 ])
 def test_which_languages_capitalise_their_nouns(language, spoken, system, nouns):
     assert capitalised_nouns(language, spoken, system) is nouns
+
+
+def test_said_punctuation_joins_the_word_before_it():
+    assert fit(", ", "Hello", "", True) == ", "
+
+
+@pytest.mark.parametrize("before", ["(see the note.)", 'He said "Stop."', "end.”"])
+def test_a_closing_bracket_or_quote_after_a_full_stop_still_ends_the_sentence(before):
+    assert fit("Next one. ", before, "", True) == " Next one. "
+
+
+def test_no_space_goes_after_an_opening_straight_quote():
+    assert fit("Very. ", 'he said "', "", True) == "very. "
+
+
+def test_qt_s_paragraph_separator_counts_as_a_line_break():
+    assert fit("Thanks a lot. ", "Hi John, ", "", True) == "Thanks a lot. "
+
+
+def test_a_sentence_put_in_front_of_another_keeps_its_period():
+    assert fit("I am back. ", "Hi. ", "How are", True) == "I am back. "
+
+
+def test_a_dictation_ending_in_a_line_break_starts_the_next_line_clean():
+    assert fit("Very.\n", "the big", "dog", True) == " very.\n"
+
+
+def test_a_dictation_starting_with_a_line_break_gets_no_space_before_it():
+    assert fit("\nHello. ", "the end", "", True) == "\nHello. "

@@ -32,14 +32,15 @@ def test_turn_on_turns_it_on_and_says_which_apps_need_a_restart(switch, message_
     assert question.title == startup_notices.A11Y_QUESTION_TITLE
     assert "stays on until you turn it off in Preferences" in question.text
     assert question.buttons == ["Not Now", "Turn On"]
-    assert question.default == Gtk.ResponseType.OK
+    # Enter alone mustn't say yes: TuxTalk's own auto-send presses it.
+    assert question.default == Gtk.ResponseType.CANCEL
     assert switch.on is True and a11y_switch.answer() == "on"
     assert after.title == startup_notices.A11Y_ON_TITLE
     assert "closed and opened again" in after.text
 
 
 @pytest.mark.parametrize("response", [Gtk.ResponseType.CANCEL, Gtk.ResponseType.DELETE_EVENT],
-                         ids=["Not Now", "Escape"])
+                         ids=["Not Now", "window closed"])
 def test_not_now_leaves_it_off_and_says_nothing_more(switch, message_boxes, response):
     message_boxes.answer = response
     startup_notices.offer_a11y_switch()

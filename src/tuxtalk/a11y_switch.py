@@ -38,10 +38,15 @@ def _call(method: str, args: GLib.Variant | None) -> tuple:
 
 def is_on() -> bool | None:
     """Whether the switch is on; None when there's no accessibility bus."""
+    return _status("IsEnabled")
+
+
+def _status(name: str) -> bool | None:
+    """org.a11y.Status's *name*; None when there's no accessibility bus."""
     try:
-        return bool(_call("Get", GLib.Variant("(ss)", ("org.a11y.Status", "IsEnabled")))[0])
+        return bool(_call("Get", GLib.Variant("(ss)", ("org.a11y.Status", name)))[0])
     except GLib.Error as e:
-        logger.info(f"Could not read the desktop's accessibility switch: {e.message}")
+        logger.info(f"Could not read the desktop's accessibility {name}: {e.message}")
         return None
 
 
@@ -88,21 +93,42 @@ def answer() -> str:
 
 def allow() -> bool:
     """The user said yes: the switch on, and remembered, with whether
-    TuxTalk turned it on. Whether it's on now."""
+    TuxTalk turned it on. Whether it's on now. A yes that can't be saved
+    leaves the switch as it was: nothing would remember it was TuxTalk's."""
     was_on = is_on()
     if was_on is None:
         return False
     ours = not was_on and _set(True)
-    _save({"answer": "on", "ours": ours or _load()["ours"]})
+    try:
+        _save({"answer": "on", "ours": ours or _load()["ours"]})
+    except OSError as e:
+        logger.warning(f"Could not save {state_path()}, so accessibility stays as it was: {e}")
+        if ours:
+            _set(False)
+        return False
     return was_on or ours
 
 
-def decline() -> None:
+def decline() -> bool:
     """The user said no, or turned it off in Preferences: remembered, and
-    the switch off again if TuxTalk turned it on."""
+    the switch off again if TuxTalk turned it on, unless a screen reader
+    is running now. False when it was TuxTalk's to turn off and didn't go."""
     state = _load()
-    ours = state["ours"] and not _set(False)
-    _save({"answer": "not_now", "ours": ours})
+    still_ours = state["ours"] and not _turn_off()
+    try:
+        _save({"answer": "not_now", "ours": still_ours})
+    except OSError as e:
+        logger.warning(f"Could not save {state_path()}; the question may come again: {e}")
+    return not still_ours
+
+
+def _turn_off() -> bool:
+    """The switch off, unless a screen reader started since TuxTalk turned
+    it on: it's that reader's now. Whether it's no longer TuxTalk's."""
+    if _status("ScreenReaderEnabled"):
+        logger.info("A screen reader is running: the desktop's accessibility stays on")
+        return True
+    return _set(False)
 
 
 def turned_on_by_tuxtalk() -> bool:
@@ -113,7 +139,7 @@ def turned_on_by_tuxtalk() -> bool:
 def give_back() -> bool:
     """Uninstalling: the switch off again if TuxTalk turned it on. False
     when it was TuxTalk's and wouldn't go off."""
-    return not turned_on_by_tuxtalk() or _set(False)
+    return not turned_on_by_tuxtalk() or _turn_off()
 
 
 def keep_on() -> None:

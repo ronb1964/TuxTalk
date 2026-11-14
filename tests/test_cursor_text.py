@@ -9,6 +9,7 @@ from gi.repository import Gio, GLib
 from tuxtalk import atspi_helper
 
 ACTIVE, FOCUSED, SHOWING = 1 << 1, 1 << 12, 1 << 25
+FILLER, PASSWORD, TEXT = 39, 40, 61       # AT-SPI roles
 
 
 class TextBus:
@@ -17,24 +18,27 @@ class TextBus:
 
     def __init__(self, clock):
         self.clock, self.nodes, self.pids, self.apps = clock, {}, {}, []
+        self.text_calls = []
 
     def app(self, name, text="", caret=0, selection=None, active=True, is_text=True,
-            hang=False, pid=None, framed=False):
+            hang=False, pid=None, framed=False, role=TEXT):
         """An app *name* whose focused widget holds *text* with its cursor at
         *caret*, or *selection* (start, end) selected. *is_text* False: the
         focused widget has no Text interface. *hang*: its text never comes.
         *framed*: the widget sits in a frame without text that says it has
-        the focus too, ahead of it (KDE's editor, KTextEditor)."""
+        the focus too, ahead of it (KDE's editor, KTextEditor). *role*: the
+        widget's AT-SPI role."""
         own = f":{name}"
         if pid is not None:
             self.pids[own] = pid
         self.nodes[(own, "/w")] = dict(states=SHOWING | FOCUSED, text=text, caret=caret,
                                        selection=selection, is_text=is_text, hang=hang,
-                                       children=[])
+                                       children=[], role=role)
         top = (own, "/w")
         if framed:
             self.nodes[(own, "/frame")] = dict(states=SHOWING | FOCUSED, is_text=False,
-                                               hang=False, children=[(own, "/w")])
+                                               hang=False, children=[(own, "/w")],
+                                               role=FILLER)
             top = (own, "/frame")
         self.nodes[(own, "/win")] = dict(states=SHOWING | (ACTIVE if active else 0),
                                          children=[top])
@@ -53,7 +57,9 @@ class TextBus:
         if method == "Get":
             if args.unpack()[1] == "Name":
                 return GLib.Variant("(v)", (GLib.Variant("s", node["name"]),))
-            return self._text(node, "CaretOffset", args, timeout_ms)
+            return self._text(node, args.unpack()[1], args, timeout_ms)
+        if method == "GetRole":
+            return GLib.Variant("(u)", (node.get("role", FILLER),))
         if method == "GetChildren":
             return GLib.Variant("(a(so))", (node["children"],))
         if method == "GetState":
@@ -80,15 +86,20 @@ class TextBus:
         if not node["is_text"]:
             raise Gio.DBusError.new_for_dbus_error(
                 "org.freedesktop.DBus.Error.UnknownInterface", "No such interface")
+        self.text_calls.append(method)
         if method == "CaretOffset":
             return GLib.Variant("(v)", (GLib.Variant("i", node["caret"]),))
+        if method == "CharacterCount":
+            return GLib.Variant("(v)", (GLib.Variant("i", len(node["text"])),))
         if method == "GetNSelections":
             return GLib.Variant("(i)", (1 if node["selection"] else 0,))
         if method == "GetSelection":
             return GLib.Variant("(ii)", node["selection"])
         if method == "GetText":
+            # As Firefox does: nothing at all for a range past the end.
             start, end = args.unpack()
-            return GLib.Variant("(s)", (node["text"][start:end],))
+            text = node["text"][start:end] if end <= len(node["text"]) else ""
+            return GLib.Variant("(s)", (text,))
         raise AssertionError(f"unexpected text call {method}")
 
 
@@ -101,7 +112,9 @@ def bus(monkeypatch):
     return fake
 
 
-def around(focus=None):
+def around(focus=("gedit", None)):
+    """What's read, with the desktop saying *focus* (class, process) has
+    the focus; None: it can't say."""
     return atspi_helper.text_around_cursor(8, focused_app=lambda: focus)
 
 
@@ -113,7 +126,7 @@ def test_the_text_on_either_side_of_the_cursor_is_read(bus):
 def test_the_text_inside_a_focused_frame_is_read(bus):
     """KDE's editor says its frame has the focus, ahead of the text in it."""
     bus.app("kwrite", "the big dog", caret=7, framed=True)
-    assert around() == ("the big", " dog")
+    assert around(focus=("org.kde.kwrite", None)) == ("the big", " dog")
 
 
 def test_with_text_selected_the_text_outside_the_selection_counts(bus):
@@ -133,7 +146,9 @@ def test_a_widget_that_isnt_text_says_nothing(bus):
 
 def test_an_app_that_doesnt_answer_in_time_says_nothing(bus):
     bus.app("gedit", "the big dog", caret=7, hang=True)
+    started = atspi_helper.time.monotonic()
     assert around() is None
+    assert atspi_helper.time.monotonic() - started <= atspi_helper.CONTEXT_BUDGET_S
 
 
 def test_no_accessibility_bus_says_nothing(monkeypatch):
@@ -158,4 +173,32 @@ def test_the_app_with_the_focus_is_read_when_two_say_they_are_active(bus):
 def test_two_active_apps_and_no_way_to_tell_which_has_the_focus_says_nothing(bus):
     bus.app("Brave", "other text", caret=5)
     bus.app("kwrite", "the big dog", caret=7)
+    assert around(focus=None) is None
+
+
+def test_the_text_after_the_cursor_is_read_near_the_end_of_the_field(bus):
+    bus.app("gedit", "the big dog.", caret=8)
+    assert around() == ("the big ", "dog.")
+
+
+def test_a_password_field_is_never_read(bus):
+    bus.app("gedit", "hunter2", caret=7, role=PASSWORD)
+    assert around() is None
+    assert "GetText" not in bus.text_calls
+
+
+def test_no_cursor_says_nothing(bus):
+    bus.app("gedit", "the big dog", caret=-1)
+    assert around() is None
+
+
+def test_a_web_editor_s_paragraph_placeholders_say_nothing(bus):
+    """Firefox and Chromium give a rich text box's paragraphs as U+FFFC."""
+    bus.app("gedit", "\ufffc\ufffc", caret=1)
+    assert around() is None
+
+
+def test_one_active_app_isnt_read_when_the_desktop_cant_say_it_has_the_focus(bus):
+    """It may be a browser left in the background (issue #40)."""
+    bus.app("Brave", "draft text", caret=5)
     assert around(focus=None) is None

@@ -1,6 +1,8 @@
 """A whole dictation, transcribed and typed, fitted into the sentence at
 the cursor where the app says what's there (pipeline._read_cursor and
 _fit_to_cursor), and typed as always where it doesn't."""
+import types
+
 import numpy as np
 import pytest
 
@@ -41,16 +43,16 @@ def desktop(monkeypatch):
     monkeypatch.setattr(live, "usage_stats", False, raising=False)
     monkeypatch.setattr(live, "words", [], raising=False)
     monkeypatch.setattr(live, "auto_languages", (), raising=False)
-    monkeypatch.setattr("locale.getlocale", lambda *a: ("en_US", "UTF-8"))
+    monkeypatch.setattr("tuxtalk.recommend.effective_language", lambda cfg: "en")
     return seen
 
 
-def dictate(monkeypatch, said, language=None):
+def dictate(monkeypatch, said, language=None, chunk_role=None):
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: said)
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
                                    smart_quotes=False, notify_on=False, language=language,
-                                   message=rs.state.current.message)
+                                   chunk_role=chunk_role, message=rs.state.current.message)
 
 
 def test_a_word_said_into_the_middle_of_a_sentence_joins_it(desktop, monkeypatch):
@@ -66,7 +68,7 @@ def test_where_the_app_doesnt_say_it_is_typed_as_always(desktop, monkeypatch):
 
 def test_a_terminal_is_never_asked(desktop, monkeypatch):
     desktop["class"] = "org.gnome.Terminal"
-    monkeypatch.setattr(live, "adapt_to_app", True, raising=False)
+    monkeypatch.setattr(live, "adapt_to_app", False, raising=False)
     desktop["around"] = ("the big ", " dog")
     dictate(monkeypatch, "Very.")
     assert desktop["reads"] == 0
@@ -91,3 +93,33 @@ def test_the_last_dictation_still_decides_where_the_app_doesnt_say(desktop, monk
     rs.state.continue_mid_sentence = True
     dictate(monkeypatch, "Next one.")
     assert desktop["typed"] == ["next one. "]
+
+
+def test_a_type_at_pause_phrase_after_one_it_typed_isnt_read_again(desktop, monkeypatch):
+    """The keys just typed may not have reached the app yet; carrying on
+    from its own phrase is known exactly (continue_mid_sentence)."""
+    rs.state.current.message.has_words = True
+    desktop["around"] = ("the big ", "")
+    monkeypatch.setattr(pipeline.type_at_pause, "resolve_boundary", lambda *a, **k: None,
+                        raising=False)
+    dictate(monkeypatch, "Very.", chunk_role="middle")
+    assert desktop["reads"] == 0
+
+
+def test_after_a_correction_erased_the_phrase_before_the_text_is_read_again(desktop):
+    """ "no wait, four" backspaced "Meet at three ": what's before the
+    cursor now is the start of the field, not the phrase taken back."""
+    desktop["around"] = ("", "")
+    words = pipeline._Words(text="Meet at four. ", raw="", said="", press="",
+                            space_left_off="", taken_back="Meet at three ", held_mark=None,
+                            held_back="", cut_off="")
+    job = types.SimpleNamespace(language="en")
+    fitted = pipeline._fit_to_cursor(words, ("t three ", ""), job)
+    assert fitted.text == "Meet at four. " and desktop["reads"] == 1
+
+
+def test_german_by_the_usual_language_keeps_its_capital(desktop, monkeypatch):
+    monkeypatch.setattr("tuxtalk.recommend.effective_language", lambda cfg: "de")
+    desktop["around"] = ("der große", "")
+    dictate(monkeypatch, "Hund.")
+    assert desktop["typed"] == [" Hund. "]

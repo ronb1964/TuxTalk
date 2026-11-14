@@ -351,7 +351,11 @@ def show_welcome_and_install():
         model_ready=model_ready,
     )
     _offer_kde_notification_help()
-    from tuxtalk import startup_notices
-    startup_notices.offer_a11y_switch()
+    try:
+        from tuxtalk import startup_notices
+        startup_notices.offer_a11y_switch()
+    except Exception as e:
+        # Setup is done all the same; the tray asks again at its next start.
+        logger.warning(f"Could not offer the accessibility switch: {e}")
     logger.info("First-run setup completed")
     return result

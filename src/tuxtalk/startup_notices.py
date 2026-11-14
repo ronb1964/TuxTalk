@@ -58,7 +58,8 @@ def handle_old_talktype_flatpak(stop=None, notify=None):
 
 def show_after_start():
     """"Update Complete!" if this start follows an update, then the rename
-    notice, never on top of it. False, for its GLib timer."""
+    notice, never on top of it, then the accessibility switch kept on or
+    asked about (offer_a11y_switch_at_start). False, for its GLib timer."""
     try:
         _show_update_complete_once()
     except Exception as e:
@@ -87,14 +88,16 @@ def offer_a11y_switch_at_start():
 def offer_a11y_switch(parent=None):
     """Ask once whether TuxTalk may turn on the desktop's accessibility
     switch, unless it's on already (a screen reader, the user's own) or
-    there's none to turn on. After a yes, say which apps need a restart."""
+    there's none to turn on. After a yes, say which apps need a restart.
+    Enter alone says Not Now: TuxTalk's own auto-send presses Enter, and the
+    question can come up while the user dictates."""
     from . import a11y_switch
     if a11y_switch.answer() or a11y_switch.is_on() is not False:
         return
     answer = show_message(parent, Gtk.MessageType.QUESTION, A11Y_QUESTION_TITLE,
                           A11Y_QUESTION_BODY, [("Not Now", Gtk.ResponseType.CANCEL),
                                                ("Turn On", Gtk.ResponseType.OK)],
-                          keep_above=True, default=Gtk.ResponseType.OK)
+                          keep_above=True, default=Gtk.ResponseType.CANCEL)
     if answer != Gtk.ResponseType.OK:
         a11y_switch.decline()
     elif a11y_switch.allow():

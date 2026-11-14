@@ -5,6 +5,7 @@ and no closing period or doubled space when text follows on the line.
 The text around the cursor comes from the app (atspi_helper), a few
 characters each side; when the app doesn't say, nothing here runs and the
 dictation is typed as it always was."""
+from . import config
 from .normalize import safe_to_lowercase_first_word
 
 # How many characters on each side of the cursor are asked for: enough to
@@ -12,8 +13,16 @@ from .normalize import safe_to_lowercase_first_word
 WINDOW = 8
 
 _SENTENCE_ENDS = ".!?"
-# After one of these, a dictation goes in without a space in front.
-_OPENERS = "([{\"'“‘"
+# What a dictation can start with that joins the text before it as it is.
+_PUNCTUATION = ".,;:!?"
+# A line break as apps report it: Qt's rich text boxes give U+2029.
+_LINE_BREAKS = "\n\r\u2028\u2029"
+# After one of these, a dictation goes in without a space in front; a
+# straight quote only when it opens (_opens).
+_OPENERS = "([{\u201c\u2018"
+_STRAIGHT_QUOTES = "\"'"
+# Closing marks that can follow a sentence's end: (see the note.)
+_CLOSERS = ")]}\u201d\u2019\"'"
 _BLANKS = " \t"
 # Languages that write every noun with a capital, so a capital at the start
 # of a dictation says nothing about where the sentence begins.
@@ -27,50 +36,63 @@ def fit(text: str, before: str, after: str, lowercase_ok: bool, words=()) -> str
     capitalise nouns. *words*: Your Words, which keep their capitals."""
     if not text:
         return text
-    return _fit_end(_fit_start(text, before, lowercase_ok, words), after)
+    return _fit_end(_fit_start(text, before, lowercase_ok, words), after, lowercase_ok)
 
 
 def _fit_start(text, before, lowercase_ok, words):
     """The start of *text* after *before*: carried on in lowercase in the
-    middle of a sentence, with a space in front where one is missing."""
+    middle of a sentence, with a space in front where one is missing.
+    Punctuation said on its own and a line break go in as they are."""
     visible = before.rstrip(_BLANKS)
-    if not visible or visible.endswith("\n"):
-        return text     # the start of a line: a new sentence, as always
-    if not visible.endswith(tuple(_SENTENCE_ENDS)) and lowercase_ok and text[0].isupper() \
-            and safe_to_lowercase_first_word(text, words):
+    if text[0] in _PUNCTUATION + _LINE_BREAKS + _BLANKS or not visible \
+            or visible[-1] in _LINE_BREAKS:
+        return text     # joins as it is, or a new line: a new sentence, as always
+    if not visible.rstrip(_CLOSERS).endswith(tuple(_SENTENCE_ENDS)) and lowercase_ok \
+            and text[0].isupper() and safe_to_lowercase_first_word(text, words):
         text = text[0].lower() + text[1:]
-    if before[-1] in _BLANKS or before[-1] in _OPENERS:
+    if before[-1] in _BLANKS or _opens(before):
         return text
     return " " + text
 
 
-def _fit_end(text, after):
-    """The end of *text* before *after*: no closing period and no space of
-    its own to double when text follows on the same line."""
+def _opens(before):
+    """Whether *before* ends on an opening bracket or quote: a straight
+    quote opens after a space, another opener or nothing ('he said "')."""
+    last = before[-1]
+    if last in _OPENERS:
+        return True
+    return last in _STRAIGHT_QUOTES and (len(before) == 1 or before[-2] in _BLANKS + _OPENERS)
+
+
+def _fit_end(text, after, lowercase_ok):
+    """The end of *text* before *after*: no space of its own to double, and
+    no closing period when the sentence goes on after it on the same line.
+    A dictation ending in a line break ends as it is."""
+    if text.rstrip(_BLANKS)[-1:] in tuple(_LINE_BREAKS):
+        return text.rstrip(_BLANKS)
     if after and after[0] in _BLANKS:
         text = text.rstrip(_BLANKS)
     following = after.lstrip(_BLANKS)
-    if not following or following.startswith("\n"):
+    if not following or following[0] in _LINE_BREAKS:
         return text
     text = text.rstrip(_BLANKS)
-    if text.endswith(".") and not text.endswith(".."):
+    # A capital after it starts another sentence, unless the language
+    # gives every noun one.
+    if text.endswith(".") and not text.endswith("..") \
+            and not (lowercase_ok and following[0].isupper()):
         text = text[:-1]
     if after[0] not in _BLANKS and following[0].isalnum():
         text += " "
     return text
 
 
-def _code(language: str) -> str:
-    """The two- or three-letter language code of *language* ("de_CH" -> "de")."""
-    return language.replace("-", "_").split("_")[0].lower()
-
-
-def capitalised_nouns(language, auto_languages, system_language: str) -> bool:
+def capitalised_nouns(language, auto_languages, usual_language: str) -> bool:
     """Whether a dictation may be in a language that capitalises its nouns:
     *language*, the dictation's own when set; else any of *auto_languages*
-    (those auto-detect picks from); else the system's language."""
+    (those auto-detect picks from); else *usual_language*, the one first run
+    picked or the desktop's (recommend.effective_language)."""
     if language:
-        return _code(language) in _NOUN_CAPITALS
+        return config.locale_language(language) in _NOUN_CAPITALS
     if auto_languages:
-        return any(_code(code) in _NOUN_CAPITALS for code in auto_languages)
-    return bool(system_language) and _code(system_language) in _NOUN_CAPITALS
+        return any(config.locale_language(code) in _NOUN_CAPITALS for code in auto_languages)
+    return config.locale_language(usual_language) in _NOUN_CAPITALS

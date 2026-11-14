@@ -184,14 +184,13 @@ def text_around_cursor(chars: int, budget: float = CONTEXT_BUDGET_S,
 def _focused_widget(bus, focused_app, deadline):
     """The focused widget of the app with the focus, or None. An app left
     in the background can still call a window of its own active (issue
-    #40), so with more than one, or one the desktop says isn't focused, only
-    the app the desktop names counts."""
-    windows = [(app, window) for app, window in _active_windows(bus, deadline)
-               if app not in _SHELLS]
+    #40), so only the app the desktop names counts, and nothing when it
+    can't name one in time."""
     focus = _in_time(focused_app, deadline)
-    if focus is not None:
-        windows = [(app, window) for app, window in windows
-                   if _is_focused(bus, app, window, focus, deadline)]
+    if focus is None:
+        return None
+    windows = [(app, window) for app, window in _active_windows(bus, deadline)
+               if app not in _SHELLS and _is_focused(bus, app, window, focus, deadline)]
     return _focused_text(bus, windows[0][1], deadline) if len(windows) == 1 else None
 
 
@@ -204,12 +203,17 @@ def _focused_text(bus, window, deadline):
     while focused is not None and _TEXT not in _call(bus, focused, _ACCESSIBLE,
                                                      "GetInterfaces", None, deadline)[0]:
         focused = _walk_for_focus(bus, focused, deadline)
+    # The focus may have moved into a password field since its check.
+    if focused is not None and _call(bus, focused, _ACCESSIBLE, "GetRole", None,
+                                     deadline)[0] == _ROLE_PASSWORD_TEXT:
+        return None
     return focused
 
 
 def _around(bus, widget, chars, deadline):
     """*widget*'s text, up to *chars* characters each side of its cursor or
-    of its first selection."""
+    of its first selection; None where it isn't plain text: a web editor's
+    paragraphs come as U+FFFC, one each (Firefox, Chromium)."""
     if _call(bus, widget, _TEXT, "GetNSelections", None, deadline)[0]:
         start, end = sorted(_call(bus, widget, _TEXT, "GetSelection",
                                   GLib.Variant("(i)", (0,)), deadline))
@@ -220,9 +224,12 @@ def _around(bus, widget, chars, deadline):
         return None
     before = _call(bus, widget, _TEXT, "GetText",
                    GLib.Variant("(ii)", (max(0, start - chars), start)), deadline)[0]
+    # Asked only up to the end: Firefox answers nothing for a range past it.
+    count = _call(bus, widget, "org.freedesktop.DBus.Properties", "Get",
+                  GLib.Variant("(ss)", (_TEXT, "CharacterCount")), deadline)[0]
     after = _call(bus, widget, _TEXT, "GetText",
-                  GLib.Variant("(ii)", (end, end + chars)), deadline)[0]
-    return before, after
+                  GLib.Variant("(ii)", (end, min(end + chars, count))), deadline)[0]
+    return None if "\ufffc" in before + after else (before, after)
 
 
 def _counts_at_once(bus, app, window, focused, deadline) -> bool:

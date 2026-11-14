@@ -338,7 +338,8 @@ sentence, a space where one is missing, and no period when more text follows.
     if it was on when they started, so close and open them once.
   • TuxTalk asks once before it turns accessibility on, and it stays on until you
     turn it off: <b>Preferences → Advanced → Show fine-tuning → Accessibility</b>.
-  • Anywhere else, and in terminals, it types as before, with a capital and a period.
+  • Anywhere else it types as before, with a capital and a period; a terminal keeps
+    its plain text.
   • In German, where nouns have capitals, the first word keeps its capital.
 
 ### Numbers

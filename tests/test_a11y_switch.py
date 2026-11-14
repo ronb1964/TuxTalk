@@ -14,13 +14,14 @@ def desktop(monkeypatch, tmp_path):
     """The switch as the desktop holds it; None: no accessibility bus. What
     TuxTalk remembers goes in a file of its own under *tmp_path*."""
     monkeypatch.setattr(a11y_switch, "state_path", lambda: str(tmp_path / "a11y-switch.json"))
-    state = types.SimpleNamespace(on=False, sets=[])
+    state = types.SimpleNamespace(on=False, sets=[], screen_reader=False)
 
     def call(method, args):
         if state.on is None:
             raise GLib.Error("The name org.a11y.Bus was not provided by any .service files")
         if method == "Get":
-            return (state.on,)
+            return (state.screen_reader if args.unpack()[1] == "ScreenReaderEnabled"
+                    else state.on,)
         state.on = args.unpack()[2]
         state.sets.append(state.on)
         return ()
@@ -87,3 +88,28 @@ def test_no_accessibility_bus_is_not_known_and_nothing_breaks(desktop):
     remembered("on", ours=True)
     a11y_switch.keep_on()
     a11y_switch.decline()
+
+
+def test_a_screen_reader_started_since_keeps_it_on(desktop):
+    """TuxTalk turned it on, then a screen reader started: off would cut it out."""
+    a11y_switch.allow()
+    desktop.screen_reader = True
+    a11y_switch.decline()
+    assert desktop.on is True
+    assert a11y_switch.give_back() is True and desktop.on is True
+
+
+def test_a_yes_that_cant_be_saved_leaves_the_switch_as_it_was(desktop, monkeypatch):
+    """Nothing would remember TuxTalk turned it on, so nothing could turn it off."""
+    def full_disk(state):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(a11y_switch, "_save", full_disk)
+    assert a11y_switch.allow() is False
+    assert desktop.on is False
+
+
+def test_turning_it_off_says_whether_it_went_off(desktop, monkeypatch):
+    a11y_switch.allow()
+    monkeypatch.setattr(a11y_switch, "_set", lambda on: False)
+    assert a11y_switch.decline() is False
+    assert a11y_switch._load()["ours"] is True

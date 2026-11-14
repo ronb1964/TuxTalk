@@ -3,7 +3,6 @@ window. Transcribe, drop what isn't speech, run what was said as a command
 ("undo that", "press enter", "edit that") or shape it into text, type it,
 then press the key said after it or send it automatically. Type at pause
 runs each phrase through here too (type_at_pause.py)."""
-import locale
 import re
 import time
 from typing import NamedTuple
@@ -177,7 +176,7 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         key = _key_to_press(raw, said, job)
         if _nothing_to_type(raw, said, in_password, job):
             return
-        around = _read_cursor(in_password)
+        around = _read_cursor(job)
         words = _shape_text(raw, said, key, job)
         if words is None:
             return
@@ -227,14 +226,17 @@ def _cancelled(job: _Job) -> bool:
     return job.message.cancelled
 
 
-def _read_cursor(in_password: bool) -> tuple[str, str] | None:
+def _read_cursor(job: _Job) -> tuple[str, str] | None:
     """The text on either side of the cursor, for _fit_to_cursor; None in a
-    password field, a terminal (its "text" is the prompt and what scrolled
-    by) or an app that doesn't say. Read before the words are shaped: when
-    the app says, the screen decides whether a sentence carries on, not the
-    last dictation (continue_mid_sentence), which the user may have typed
-    after since."""
-    if in_password or app_kind(focused_window.window_class()) == "terminal":
+    terminal (its "text" is the prompt and what scrolled by), for a Type at
+    pause phrase after one this recording typed (those keys may not have
+    reached the app yet, and continue_mid_sentence knows that text exactly),
+    or in an app that doesn't say. A password field was refused before
+    this. Read before the words are shaped: when the app says, the screen
+    decides whether a sentence carries on, not the last dictation
+    (continue_mid_sentence), which the user may have typed after since."""
+    if (job.chunk_role is not None and job.message.has_words) \
+            or app_kind(focused_window.window_class()) == "terminal":
         return None
     around = focused_window.text_around_cursor()
     if around is not None:
@@ -246,10 +248,15 @@ def _fit_to_cursor(words: _Words, around: tuple[str, str] | None, job: _Job) -> 
     """*words* fitted into the sentence at the cursor (sentence_fit), *around*
     it; as they are when the app didn't say. No small first letter in a
     language that capitalises its nouns."""
+    if around is not None and words.taken_back:
+        # A correction backspaced the phrase before: what's there now counts.
+        around = focused_window.text_around_cursor()
     if around is None:
         return words
+    from . import recommend
+    from .config import load_config
     lowercase_ok = not sentence_fit.capitalised_nouns(
-        job.language, live.auto_languages, locale.getlocale()[0] or "")
+        job.language, live.auto_languages, recommend.effective_language(load_config()))
     return words._replace(text=sentence_fit.fit(words.text, *around, lowercase_ok, live.words))
 
 
