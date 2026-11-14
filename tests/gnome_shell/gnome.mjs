@@ -36,7 +36,8 @@ export const shell = {
     activeWorkspace: 0,     // the index of the current one
     workspaceWindows: [],   // the windows on the current workspace
     uiGroup: [],            // actors added above the windows
-    ownedNames: new Map(),  // id -> bus name owned now
+    monitorGeometries: [{x: 0, y: 0, width: 1920, height: 1080}],
+    primaryMonitor: 0,
 };
 
 for (const level of ['error', 'warn']) {
@@ -169,15 +170,6 @@ export const Cairo = {
 };
 
 export const Gio = {
-    BusNameOwnerFlags: {NONE: 0},
-    bus_own_name_on_connection(_connection, name) {
-        shell.ownedNames.set(++lastId, name);
-        return lastId;
-    },
-    bus_unown_name(id) {
-        if (!shell.ownedNames.delete(id))
-            throw new Error(`No bus name owned with id ${id}`);
-    },
     DBusProxyFlags: {DO_NOT_AUTO_START: 1, DO_NOT_LOAD_PROPERTIES: 2},
     BusNameWatcherFlags: {NONE: 0},
     DBusError: {UNKNOWN_METHOD: 'UnknownMethod'},
@@ -502,12 +494,16 @@ class Display extends Signals {
         return shell.monitors;
     }
 
-    get_monitor_geometry() {
-        return {x: 0, y: 0, width: 1920, height: 1080};
+    get_monitor_geometry(index) {
+        return shell.monitorGeometries[index];
     }
 
     get_current_monitor() {
         return 0;
+    }
+
+    get_primary_monitor() {
+        return shell.primaryMonitor;
     }
 }
 

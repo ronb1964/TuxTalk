@@ -614,6 +614,21 @@ def test_shell_indicator_follows_the_focused_window():
     assert shown == [True, [200, 180], [860, 880], [310, 320]]
 
 
+def test_shell_indicator_fixed_position_uses_the_primary_monitor():
+    position, _logs = run("""
+        await t.enable();
+        t.shell.monitorGeometries.push({x: 1920, y: 0, width: 1920, height: 1080});
+        const window = new t.Window('Firefox', 1);
+        window.get_monitor = () => 1;
+        t.focus(window);
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
+        indicator.Show({position: t.variant('bottom-center')});
+        t.report(t.shell.uiGroup[0].position);
+    """)
+    assert position == [860, 880]
+
+
 def test_shell_indicator_hides_and_stops_updates():
     shown, _logs = run("""
         await t.enable();

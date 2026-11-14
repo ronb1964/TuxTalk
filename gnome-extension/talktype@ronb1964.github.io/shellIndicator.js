@@ -6,7 +6,8 @@
  * app place a window. Mutter scales that window from XWayland's resolution,
  * which blurs it on a fractionally scaled monitor. Drawn here it renders at
  * the monitor's own scale, and the Shell knows the focused window, so it
- * appears on the screen being dictated into and follows the focus there.
+ * follows the focused window when requested. Fixed positions use the primary
+ * monitor, matching the X11 indicator and live text.
  * The dictation service drives it over D-Bus (shell_indicator.py); the
  * drawing mirrors recording_indicator.py and indicator_styles.py.
  */
@@ -287,7 +288,8 @@ export class ShellIndicator {
         const [width, height] = this._area.get_size();
         const display = global.display;
         const win = display.focus_window;
-        const monitor = display.get_monitor_geometry(win ? win.get_monitor() : display.get_current_monitor());
+        const monitor = display.get_monitor_geometry(follow && win
+            ? win.get_monitor() : display.get_primary_monitor());
         const [x, y] = follow && win
             ? followPosition(win.get_frame_rect(), width, height, monitor, position)
             : fixedPosition(position, width, height, monitor, offsetX, offsetY);
