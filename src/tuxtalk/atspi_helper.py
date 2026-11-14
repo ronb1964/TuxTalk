@@ -48,12 +48,16 @@ _REGISTRY = "org.a11y.atspi.Registry"
 _ACCESSIBLE = "org.a11y.atspi.Accessible"
 _COLLECTION = "org.a11y.atspi.Collection"
 _TEXT = "org.a11y.atspi.Text"
-# U+FFFC, which Firefox and Chromium give for each paragraph of a web
-# editor in place of its text; written as a code: no window shows it.
+# U+FFFC, which Firefox gives for each paragraph or list of a web editor in
+# place of its text; written as a code: no window shows it.
 _PLACEHOLDER = chr(0xFFFC)
-# How far into a web editor's paragraphs (a list in a paragraph...) the
-# cursor is looked for.
-_MAX_DEPTH = 3
+# How far into a web editor's blocks (a paragraph in a list item in a
+# list...) the cursor is looked for.
+_MAX_DEPTH = 4
+# AtspiRole numbers of a web editor's blocks of text, and of those that
+# hold others (atspi-constants.h).
+_BLOCKS = {73, 83, 85, 105}         # paragraph, heading, section, block quote
+_CONTAINERS = {31, 32, 85, 105}     # list, list item, section, block quote
 
 # AtspiStateType and AtspiRole numbers (at-spi2-core's atspi-constants.h).
 _STATE_ACTIVE = 1
@@ -221,24 +225,33 @@ def _focused_text(bus, window, deadline):
 def _around(bus, widget, chars, deadline, depth=0):
     """*widget*'s text, up to *chars* characters each side of its cursor or
     of its first selection. A web page's rich text box (Gmail and the like,
-    in Firefox) gives each paragraph as one U+FFFC, an object of its
-    own whose own text the cursor is in: that one is read instead (_holder).
-    None where no plain text around the cursor can be found."""
+    in Firefox) gives each paragraph or list as one U+FFFC, an object of
+    its own: where the cursor is in one, that one is read (_holder). Past
+    one beside the cursor counts as another line, which leaves that side
+    of the dictation as it would be anyway. None where no plain text
+    around the cursor can be found."""
     if _call(bus, widget, _TEXT, "GetNSelections", None, deadline)[0]:
         start, end = sorted(_call(bus, widget, _TEXT, "GetSelection",
                                   GLib.Variant("(i)", (0,)), deadline))
     else:
         start = end = _property(bus, widget, "CaretOffset", deadline)
-    before = after = ""
-    if start >= 0:
-        before = _call(bus, widget, _TEXT, "GetText",
-                       GLib.Variant("(ii)", (max(0, start - chars), start)), deadline)[0]
-        # Asked only up to the end: Firefox answers nothing for a range past it.
-        count = _property(bus, widget, "CharacterCount", deadline)
-        after = _call(bus, widget, _TEXT, "GetText",
-                      GLib.Variant("(ii)", (end, min(end + chars, count))), deadline)[0]
-    if start >= 0 and _PLACEHOLDER not in before + after:
-        return before, after
+    if start < 0:
+        return _inside(bus, widget, chars, deadline, depth)
+    # Asked only up to the end: Firefox answers nothing for a range past it.
+    low = max(0, start - chars)
+    text = _call(bus, widget, _TEXT, "GetText", GLib.Variant("(ii)", (
+        low, min(end + chars, _property(bus, widget, "CharacterCount", deadline)))), deadline)[0]
+    chosen = text[start - low:end - low]
+    if _PLACEHOLDER in chosen:
+        # Selected: one whole paragraph, whose own selection says more, or
+        # more than one, whose two ends can't both be read.
+        return _inside(bus, widget, chars, deadline, depth) if chosen == _PLACEHOLDER else None
+    return (text[:start - low].replace(_PLACEHOLDER, "\n"),
+            text[end - low:].replace(_PLACEHOLDER, "\n"))
+
+
+def _inside(bus, widget, chars, deadline, depth):
+    """_around for the paragraph inside *widget* the cursor is in, if any."""
     inner = _holder(bus, widget, deadline) if depth < _MAX_DEPTH else None
     return None if inner is None else _around(bus, inner, chars, deadline, depth + 1)
 
@@ -249,16 +262,29 @@ def _property(bus, widget, name, deadline):
                  GLib.Variant("(ss)", (_TEXT, name)), deadline)[0]
 
 
-def _holder(bus, widget, deadline):
-    """The child of *widget* with text that has the cursor, or None: in a
-    web editor only the paragraph the cursor is in gives an offset for it,
-    the others -1 (the box itself -1 in Firefox, the paragraph's U+FFFC in
-    Chromium)."""
+def _holder(bus, widget, deadline, depth=0):
+    """The paragraph (or heading...) inside *widget* the cursor is in, or
+    None. Firefox gives the cursor's offset only to the object whose own
+    text holds it, -1 elsewhere, lists and their items included, so those
+    are looked into. Only a web editor's own kinds of block count: never a
+    password field."""
     for child in _children(bus, widget, deadline):
-        if _TEXT in _call(bus, child, _ACCESSIBLE, "GetInterfaces", None, deadline)[0] \
-                and _property(bus, child, "CaretOffset", deadline) >= 0:
+        role = _call(bus, child, _ACCESSIBLE, "GetRole", None, deadline)[0]
+        if role in _BLOCKS and _caret_of(bus, child, deadline) >= 0:
             return child
+        if role in _CONTAINERS and depth < _MAX_DEPTH:
+            found = _holder(bus, child, deadline, depth + 1)
+            if found is not None:
+                return found
     return None
+
+
+def _caret_of(bus, widget, deadline) -> int:
+    """*widget*'s cursor offset; -1 where it has none or no text at all."""
+    try:
+        return _property(bus, widget, "CaretOffset", deadline)
+    except GLib.Error:
+        return -1   # a list without text of its own
 
 
 def _counts_at_once(bus, app, window, focused, deadline) -> bool:
@@ -467,13 +493,16 @@ def _active_windows(bus, deadline):
             name = _call(bus, app, "org.freedesktop.DBus.Properties", "Get",
                          GLib.Variant("(ss)", (_ACCESSIBLE, "Name")), deadline)[0]
             windows = _children(bus, app, deadline)
-        except GLib.Error:
-            continue    # an app that quit or hangs; the next one may be it
+        except GLib.Error as e:
+            # An app that quit or hangs; the next one may be it.
+            logger.debug(f"Accessibility bus: an app didn't answer: {e.message}")
+            continue
         for window in windows:
             try:
                 if _states(bus, window, deadline) & 1 << _STATE_ACTIVE:
                     yield name, window
-            except GLib.Error:
+            except GLib.Error as e:
+                logger.debug(f"Accessibility bus: {name}'s window didn't answer: {e.message}")
                 continue
 
 

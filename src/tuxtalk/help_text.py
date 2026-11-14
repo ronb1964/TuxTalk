@@ -332,8 +332,8 @@ forgot one. Help's Commands tab has them all.
 Click where the words should go, hold <b>{hold}</b>, say them, let go. TuxTalk looks at
 the text on either side of the cursor and fits them in: no capital in the middle of a
 sentence, a space where one is missing, and no period when more text follows.
-  • It works in apps that tell TuxTalk that text, like GNOME and KDE apps,
-    LibreOffice and Firefox (Gmail and other web pages there too). KDE apps and
+  • It works in apps that tell TuxTalk that text, like GNOME and KDE apps and
+    Firefox (Gmail and other web pages there too). KDE apps and
     Firefox need the desktop's accessibility on; an app that was already open when
     it was turned on may need closing and opening once.
   • TuxTalk asks once before it turns accessibility on, and it stays on until you
@@ -918,16 +918,15 @@ report; then it has what you said in a password box too, though nothing was
 typed there.
 
 ### Password fields
-TuxTalk doesn't type into a password box. Hold <b>{hold}</b> and talk there, let go: you
+TuxTalk doesn't type into a password box it can recognise. Hold <b>{hold}</b> and talk
+there, let go: you
 hear the low beep, "TuxTalk doesn't type into password fields" shows over the window,
 and nothing is typed or kept in Recent Dictations. Type passwords on the keyboard.
 Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in or move on.
   • It usually knows a password box in GTK apps (most GNOME, Cinnamon and
     Xfce apps).
-  • In KDE apps and Firefox only while accessibility is on (a screen reader turns it
-    on, or TuxTalk with your OK).
-  • In Chrome, Brave and apps built on them (Discord, Slack, VS Code) only if
-    accessibility was already on when they started.
+  • In KDE apps and Firefox while accessibility is on (a screen reader turns it on,
+    or TuxTalk with your OK).
   • The desktop's own prompt, when an app asks for your admin password, counts too.
     A terminal asking for one (sudo) doesn't tell it: there, don't dictate.
 

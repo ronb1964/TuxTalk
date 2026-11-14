@@ -33,8 +33,8 @@ A11Y_QUESTION_BODY = (
 A11Y_ON_TITLE = "Turned on"
 A11Y_ON_BODY = (
     "Dictation now fits the sentence in apps that share the text around the cursor, like "
-    "KDE and GNOME apps, LibreOffice and Firefox. An app that was already open may need to "
-    "be closed and opened once. Anywhere else, dictation types as before.")
+    "KDE and GNOME apps and Firefox. An app that was already open may need to be closed "
+    "and opened once. Anywhere else, dictation types as before.")
 
 
 def handle_old_talktype_flatpak(stop=None, notify=None):
@@ -89,7 +89,8 @@ def offer_a11y_switch_at_start():
 def offer_a11y_switch(parent=None):
     """Ask once whether TuxTalk may turn on the desktop's accessibility
     switch, unless it's on already (a screen reader, the user's own) or
-    there's none to turn on. After a yes, say which apps need a restart.
+    there's none to turn on. After a yes, say where it works and that an
+    app already open may need a restart.
     Enter alone says Not Now: TuxTalk's own auto-send presses Enter, and the
     question can come up while the user dictates."""
     from . import a11y_switch

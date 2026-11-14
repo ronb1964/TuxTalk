@@ -1,5 +1,6 @@
 """The one question before TuxTalk turns on the desktop's accessibility
-switch, and the message after a yes saying which apps need a restart
+switch, and the message after a yes saying an app already open may need
+a restart
 (startup_notices.offer_a11y_switch)."""
 import types
 
@@ -26,7 +27,7 @@ def switch(monkeypatch, tmp_path):
     return state
 
 
-def test_turn_on_turns_it_on_and_says_which_apps_need_a_restart(switch, message_boxes):
+def test_turn_on_turns_it_on_and_says_an_open_app_may_need_a_restart(switch, message_boxes):
     message_boxes.answer = Gtk.ResponseType.OK
     startup_notices.offer_a11y_switch()
     question, after = message_boxes.shown

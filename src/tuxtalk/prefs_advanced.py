@@ -300,7 +300,7 @@ class AdvancedTab(Tab):
         check = Gtk.CheckButton(label=A11Y_SWITCH_LABEL)
         check.set_active(on)
         check.set_tooltip_text(
-            "With it on, apps like KDE apps and Firefox tell TuxTalk the text around the "
+            "With it on, more apps, like KDE's and Firefox, tell TuxTalk the text around the "
             "cursor, so a\ndictation into the middle of a sentence doesn't start with a "
             "capital. Apps use a little\nmore memory.")
         fine.attach(check, 0, frow + 1, 2, 1)
@@ -314,7 +314,7 @@ class AdvancedTab(Tab):
         return frow + 3
 
     def _on_a11y_switch_toggled(self, check):
-        """Turn the switch on, saying which apps need a restart, or off; when
+        """Turn the switch on, saying an app already open may need a restart, or off; when
         that doesn't go as asked, the box shows the switch as it is now, and
         that's said."""
         turning_on = check.get_active()

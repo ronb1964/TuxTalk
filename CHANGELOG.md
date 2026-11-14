@@ -16,8 +16,8 @@ before 0.15.0, so older entries use that name.
   Accessibility), and then says that an app already open may need to be
   closed and opened once. Web pages' rich text boxes in Firefox (Gmail and
   the like) work too. Where an app doesn't say, and in terminals, a
-  dictation is typed as before. In German, the
-  first word keeps its capital. Uninstalling turns accessibility off again
+  dictation is typed as before. In German, the first word keeps its
+  capital. Uninstalling turns accessibility off again
   only if TuxTalk turned it on. With it on, TuxTalk also recognises
   password boxes in KDE apps and Firefox.
 - When the recording indicator follows the window you're dictating into, it

@@ -9,7 +9,8 @@ from gi.repository import Gio, GLib
 from tuxtalk import atspi_helper
 
 ACTIVE, FOCUSED, SHOWING = 1 << 1, 1 << 12, 1 << 25
-FILLER, PASSWORD, TEXT, PARAGRAPH, SECTION = 39, 40, 61, 73, 85     # AT-SPI roles
+# AT-SPI roles (atspi-constants.h)
+FILLER, LIST, LIST_ITEM, PASSWORD, TEXT, PARAGRAPH, SECTION = 20, 31, 32, 40, 61, 73, 85
 
 
 class TextBus:
@@ -74,22 +75,24 @@ class TextBus:
             return GLib.Variant("(as)", (["org.a11y.atspi.Accessible"] + text,))
         raise AssertionError(f"unexpected call {method}")
 
-    def web_editor(self, name, paragraphs, box_caret=-1):
-        """A web page's rich text box as Firefox gives it (*box_caret* -1,
-        or Chromium's offset of the paragraph's placeholder): its own text
-        a U+FFFC per paragraph, each paragraph an object with its own text,
-        (text, caret) in *paragraphs*, the caret -1 where it isn't."""
-        own = f":{name}"
-        children = []
-        for i, (text, caret) in enumerate(paragraphs):
-            ref = (own, f"/p{i}")
-            self.nodes[ref] = dict(states=SHOWING, text=text, caret=caret, selection=None,
-                                   is_text=True, hang=False, children=[], role=PARAGRAPH)
-            children.append(ref)
-        self.nodes[(own, "/w")] = dict(states=SHOWING | FOCUSED, text="\ufffc" * len(paragraphs),
-                                       caret=box_caret, selection=None, is_text=True,
-                                       hang=False, children=children, role=SECTION)
-        self.nodes[(own, "/win")] = dict(states=SHOWING | ACTIVE, children=[(own, "/w")])
+    def web_editor(self, name, box):
+        """A web page's rich text box as Firefox gives it, built from *box*:
+        a dict with "role", "text" (a paragraph or list is one U+FFFC in its
+        parent's text), "caret" (-1 where the cursor isn't: Firefox gives an
+        offset only to the object whose own text holds it), "selection",
+        "is_text" and "children", each a dict the same way."""
+        own, count = f":{name}", [0]
+
+        def build(spec, focused=False):
+            count[0] += 1
+            ref = (own, f"/n{count[0]}")
+            self.nodes[ref] = dict(
+                states=SHOWING | (FOCUSED if focused else 0), text=spec.get("text", ""),
+                caret=spec.get("caret", -1), selection=spec.get("selection"),
+                is_text=spec.get("is_text", True), hang=False, role=spec.get("role", SECTION),
+                children=[build(child) for child in spec.get("children", [])])
+            return ref
+        self.nodes[(own, "/win")] = dict(states=SHOWING | ACTIVE, children=[build(box, True)])
         self.nodes[(own, "/root")] = dict(name=name, children=[(own, "/win")])
         self.apps.append((own, "/root"))
 
@@ -217,16 +220,60 @@ def test_no_cursor_says_nothing(bus):
     assert around() is None
 
 
-@pytest.mark.parametrize("box_caret", [-1, 0], ids=["Firefox", "Chromium"])
-def test_a_web_editor_s_paragraph_with_the_cursor_is_read(bus, box_caret):
-    """Claude Desktop, Gmail, Discord: the box gives its paragraphs as
-    U+FFFC, and the one with the cursor has the text around it."""
-    bus.web_editor("Firefox", [("the big dog runs", 7), ("Second line here", -1)], box_caret)
+def paragraph(text, caret=-1, **more):
+    return dict(role=PARAGRAPH, text=text, caret=caret, **more)
+
+
+def test_the_paragraph_of_a_web_editor_with_the_cursor_in_it_is_read(bus):
+    """Gmail and the like in Firefox: the box gives its paragraphs as
+    U+FFFC, and only the one with the cursor in it says where it is."""
+    bus.web_editor("Firefox", dict(text="\ufffc\ufffc", children=[
+        paragraph("First one here"), paragraph("the big dog runs", 7)]))
     assert around(focus=("firefox", None)) == ("the big", " dog run")
 
 
+def test_a_list_in_a_web_editor_is_looked_into(bus):
+    bus.web_editor("Firefox", dict(text="\ufffc\ufffc", children=[
+        paragraph("Intro"),
+        dict(role=LIST, is_text=False, children=[
+            dict(role=LIST_ITEM, text="\ufffc", children=[paragraph("buy more milk", 8)])])]))
+    assert around(focus=("firefox", None)) == ("buy more", " milk")
+
+
+def test_a_password_field_inside_a_web_editor_is_never_read(bus):
+    bus.web_editor("Firefox", dict(text="\ufffc", children=[
+        dict(role=PASSWORD, text="hunter2", caret=3)]))
+    assert around(focus=("firefox", None)) is None
+    assert "GetText" not in bus.text_calls
+
+
+def test_text_in_the_box_itself_beside_a_paragraph_counts_up_to_it(bus):
+    """Gmail writes a message's first line straight into the box and the
+    next as a paragraph: past the paragraph counts as another line."""
+    bus.web_editor("Firefox", dict(text="Hello there\ufffc", caret=5,
+                                   children=[paragraph("Second line")]))
+    assert around(focus=("firefox", None)) == ("Hello", " there\n")
+
+
+def test_a_selection_inside_one_paragraph_is_read_there(bus):
+    """The box selects the paragraph's U+FFFC; the paragraph says what's
+    selected inside it."""
+    bus.web_editor("Firefox", dict(text="\ufffc", selection=(0, 1), children=[
+        paragraph("the big red dog", 11, selection=(8, 11))]))
+    assert around(focus=("firefox", None)) == ("the big ", " dog")
+
+
+def test_a_selection_across_paragraphs_says_nothing(bus):
+    """Its two ends are in two paragraphs, and what's beside them can't
+    both be read."""
+    bus.web_editor("Firefox", dict(text="\ufffc\ufffc", selection=(0, 2), children=[
+        paragraph("the big dog", 11, selection=(4, 11)), paragraph("red fox runs", -1)]))
+    assert around(focus=("firefox", None)) is None
+
+
 def test_a_web_editor_whose_paragraphs_dont_say_where_the_cursor_is_says_nothing(bus):
-    bus.web_editor("Firefox", [("the big dog runs", -1), ("Second line here", -1)])
+    bus.web_editor("Firefox", dict(text="\ufffc\ufffc", children=[
+        paragraph("the big dog runs"), paragraph("Second line here")]))
     assert around(focus=("firefox", None)) is None
 
 
