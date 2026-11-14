@@ -261,21 +261,29 @@ class _CosmicWindows(threading.Thread):
         elif obj in self.app_ids and opcode == _EXT_HANDLE_APP_ID:
             self.app_ids[obj] = _wl_read_string(body)[0]
         elif obj in self.app_ids and opcode == _EXT_HANDLE_CLOSED:
-            window = next(w for w, h in self.windows.items() if h == obj)
-            self.wl.request(window, _COSMIC_HANDLE_DESTROY)
-            self.wl.request(obj, _EXT_HANDLE_DESTROY)
-            del self.windows[window], self.app_ids[obj]
-            if self.active == obj:
-                self.active = None
+            self._closed(obj)
         elif obj in self.windows and opcode == _COSMIC_HANDLE_STATE:
-            length = struct.unpack_from("<I", body)[0]
-            states = struct.unpack_from(f"={length // 4}I", body, 4)   # native byte order
-            if _COSMIC_STATE_ACTIVATED in states:
-                self.active = self.windows[obj]
-            elif self.active == self.windows[obj]:
-                self.active = None
+            self._state_changed(obj, body)
         elif obj == self.info and opcode == _COSMIC_INFO_DONE:
             self.ready.set()
+
+    def _closed(self, handle):
+        """Forget the window *handle* that closed, and let go of its objects."""
+        window = next(w for w, h in self.windows.items() if h == handle)
+        self.wl.request(window, _COSMIC_HANDLE_DESTROY)
+        self.wl.request(handle, _EXT_HANDLE_DESTROY)
+        del self.windows[window], self.app_ids[handle]
+        if self.active == handle:
+            self.active = None
+
+    def _state_changed(self, window, body):
+        """Note whether *window* is now the active one, from its new states."""
+        length = struct.unpack_from("<I", body)[0]
+        states = struct.unpack_from(f"={length // 4}I", body, 4)   # native byte order
+        if _COSMIC_STATE_ACTIVATED in states:
+            self.active = self.windows[window]
+        elif self.active == self.windows[window]:
+            self.active = None
 
 
 _cosmic = None
