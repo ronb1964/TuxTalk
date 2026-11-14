@@ -1,6 +1,8 @@
 """What the tray says once at start-up, about what happened before it: an
 old TalkType Flatpak it stopped, the update that just went in, and the
-rename from TalkType. Never during dictation: only from the tray's start."""
+rename from TalkType; and the one question before TuxTalk turns on the
+desktop's accessibility switch (a11y_switch), asked here or at the end of
+first-run setup. Never during dictation: only from the tray's start."""
 import os
 
 import gi
@@ -18,6 +20,20 @@ OLD_FLATPAK_NOTICE_BODY = (
     "It was running next to TuxTalk, its new name, so everything you said "
     "would be typed twice. You can uninstall it from your software center, or "
     "with: flatpak uninstall io.github.ronb1964.TalkType")
+
+
+A11Y_QUESTION_TITLE = "Let dictation fit into your sentences?"
+A11Y_QUESTION_BODY = (
+    "TuxTalk can match capitals and spaces to the text around your cursor, so dictating "
+    "into the middle of a sentence doesn't start with a capital. To see that text in most "
+    "apps, it needs your desktop's accessibility switch on, the one screen readers use. "
+    "It stays on until you turn it off in Preferences. Apps use a little more memory with "
+    "it on.")
+A11Y_ON_TITLE = "Turned on"
+A11Y_ON_BODY = (
+    "Most apps, like KDE and GNOME apps and Firefox, work with it right away. Chrome, "
+    "Brave and apps like Claude Desktop, Discord and VS Code need to be closed and opened "
+    "again first.")
 
 
 def handle_old_talktype_flatpak(stop=None, notify=None):
@@ -51,7 +67,38 @@ def show_after_start():
         _show_rename_notice_once()
     except Exception as e:
         logger.warning(f"Could not show the rename notice: {e}")
+    try:
+        offer_a11y_switch_at_start()
+    except Exception as e:
+        logger.warning(f"Could not offer the accessibility switch: {e}")
     return False
+
+
+def offer_a11y_switch_at_start():
+    """At the tray's start: the switch on again after a yes (a11y_switch.keep_on),
+    or the question, unless first-run setup is still to come, which asks at
+    its end."""
+    from . import a11y_switch, first_run_marker
+    a11y_switch.keep_on()
+    if not first_run_marker.is_first_run():
+        offer_a11y_switch()
+
+
+def offer_a11y_switch(parent=None):
+    """Ask once whether TuxTalk may turn on the desktop's accessibility
+    switch, unless it's on already (a screen reader, the user's own) or
+    there's none to turn on. After a yes, say which apps need a restart."""
+    from . import a11y_switch
+    if a11y_switch.answer() or a11y_switch.is_on() is not False:
+        return
+    answer = show_message(parent, Gtk.MessageType.QUESTION, A11Y_QUESTION_TITLE,
+                          A11Y_QUESTION_BODY, [("Not Now", Gtk.ResponseType.CANCEL),
+                                               ("Turn On", Gtk.ResponseType.OK)],
+                          keep_above=True, default=Gtk.ResponseType.OK)
+    if answer != Gtk.ResponseType.OK:
+        a11y_switch.decline()
+    elif a11y_switch.allow():
+        show_message(parent, Gtk.MessageType.INFO, A11Y_ON_TITLE, A11Y_ON_BODY, keep_above=True)
 
 
 def _show_update_complete_once():

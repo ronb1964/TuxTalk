@@ -351,5 +351,7 @@ def show_welcome_and_install():
         model_ready=model_ready,
     )
     _offer_kde_notification_help()
+    from tuxtalk import startup_notices
+    startup_notices.offer_a11y_switch()
     logger.info("First-run setup completed")
     return result
