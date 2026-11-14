@@ -393,7 +393,8 @@ class FakeA11yBus:
         """An app with one window holding a text box and the focused widget,
         of *focus_role*. *collection* False is an app without the Collection
         interface (Qt 5), so it is walked; "slow" times out on it. *hang*: it
-        never answers at all. *pid*: its process, as the bus daemon tells it."""
+        never answers at all. *pid*: its process, as the bus daemon tells it;
+        "hang": the daemon takes too long to say."""
         def ref(path):
             return (f":{name}", path)
         if pid is not None:
@@ -413,6 +414,9 @@ class FakeA11yBus:
         if method == "GetConnectionUnixProcessID":
             self.calls.append((name, path, method))
             asked = args.unpack()[0]
+            if self.pids.get(asked) == "hang":
+                self.clock.sleep(timeout_ms / 1000)
+                raise GLib.Error("Timeout was reached")
             if asked not in self.pids:
                 raise GLib.Error(f"Could not get PID of name '{asked}'")
             return GLib.Variant("(u)", (self.pids[asked],))
@@ -662,19 +666,49 @@ def test_an_app_named_like_the_classs_first_word_cant_clear_a_password_field(bus
     assert atspi_helper.focused_is_password(focused_app=focus_on("code-oss")) is True
 
 
-@pytest.mark.parametrize("bus_name, wm_class", [
-    ("gnome-terminal-server", "Gnome-terminal"),
-    ("soffice", "libreoffice-writer"),
+@pytest.mark.parametrize("bus_name, wm_class, focused_pid", [
+    ("gnome-terminal-server", "Gnome-terminal", None),     # X11, by name
+    ("gnome-terminal-server", "org.gnome.Terminal", None),  # Wayland
+    ("soffice", "libreoffice-writer", None),
+    ("java", "jetbrains-idea", 4003),       # no known pair: X11's process tells
 ])
 def test_a_background_browsers_password_field_doesnt_refuse_an_app_named_otherwise(
-        bus, bus_name, wm_class):
+        bus, bus_name, wm_class, focused_pid):
     """Chromium behind gnome-terminal and LibreOffice on Cinnamon still said
     its window was active, with its login box focused, and their names on
     the bus aren't their window classes: every dictation into them was
-    refused (issue #40). The window's own process said no."""
+    refused (issue #40). The focused window's own app said no."""
     bus.app("Chromium", PASSWORD, pid=3643)
     bus.app(bus_name, TEXT, pid=4003)
-    assert atspi_helper.focused_is_password(focused_app=focus_on(wm_class, 4003)) is False
+    focused = focus_on(wm_class, focused_pid)
+    assert atspi_helper.focused_is_password(focused_app=focused) is False
+
+
+@pytest.mark.parametrize("budget", [atspi_helper.BUDGET_S, atspi_helper.RECHECK_BUDGET_S])
+def test_the_focused_processs_no_counts_when_later_apps_use_up_the_time(bus, budget):
+    """Its process was asked only after every app had answered, by when
+    hung apps had used up the time: the browser's field counted again."""
+    bus.app("Chromium", PASSWORD, pid=3643)
+    bus.app("java", TEXT, pid=4003)
+    for n in range(5):
+        bus.app(f"frozen{n}", TEXT, hang=True)
+    focused = focus_on("jetbrains-idea", 4003)
+    assert atspi_helper.focused_is_password(budget, focused) is False
+
+
+@pytest.mark.parametrize("app_pid, focused_pid", [
+    (4003, 9999),       # another process: not the focused app
+    (None, 4003),       # the bus can't tell (an app gone meanwhile)
+    (4003, None),       # the desktop can't (Wayland, a window over the network)
+    ("hang", 4003),     # the bus daemon too slow to tell
+])
+def test_without_the_same_process_the_names_decide(bus, app_pid, focused_pid):
+    """An app that isn't the focused window's process, or can't be told to
+    be, can't clear another app's password field."""
+    bus.app("Chromium", PASSWORD, pid=3643)
+    bus.app("java", TEXT, pid=app_pid)
+    focused = focus_on("jetbrains-idea", focused_pid)
+    assert atspi_helper.focused_is_password(focused_app=focused) is True
 
 
 @pytest.mark.parametrize("focused, said", [
@@ -711,16 +745,6 @@ def test_the_focused_processs_own_password_field_counts_whatever_its_name(bus):
     bus.app("soffice", PASSWORD, pid=4070)
     assert atspi_helper.focused_is_password(
         focused_app=focus_on("libreoffice-writer", 4070)) is True
-
-
-@pytest.mark.parametrize("told", ["not by the bus", "not by the desktop"])
-def test_without_both_processes_the_names_decide_as_before(bus, told):
-    """A process the bus or the desktop doesn't tell (a window without
-    _NET_WM_PID, a Wayland desktop) can't clear a password field."""
-    bus.app("Chromium", PASSWORD, pid=3643)
-    bus.app("gnome-terminal-server", TEXT, pid=None if told == "not by the bus" else 4003)
-    focused = focus_on("Gnome-terminal", 4003 if told == "not by the bus" else None)
-    assert atspi_helper.focused_is_password(focused_app=focused) is True
 
 
 def test_brave_on_the_bus_is_the_brave_browser_window(bus):
@@ -767,6 +791,18 @@ def test_gnome_shells_own_password_prompt_counts(bus):
     bus.app("gedit", TEXT)
     bus.app("gnome-shell", PASSWORD)
     assert atspi_helper.focused_is_password() is True
+
+
+def test_the_shells_own_prompt_is_logged_without_asking_for_the_focused_app(bus, caplog):
+    """It counts wherever the focus is; a look just for the log line would
+    wait on the tray for nothing."""
+    looks = []
+    bus.app("gedit", TEXT)
+    bus.app("gnome-shell", PASSWORD)
+    with caplog.at_level(logging.INFO, logger="tuxtalk.atspi_helper"):
+        assert atspi_helper.focused_is_password(focused_app=lambda: looks.append(1)) is True
+    assert "gnome-shell's own password prompt has the focus" in caplog.text
+    assert looks == []
 
 
 def test_gnome_shell_beside_an_app_is_not_several_apps(bus, caplog):

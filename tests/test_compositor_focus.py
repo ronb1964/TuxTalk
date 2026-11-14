@@ -276,10 +276,10 @@ def test_i3_on_x11_uses_its_own_socket_first(tmp_path, monkeypatch):
     done.join(1)
 
 
-def test_an_x11_window_tells_its_process(monkeypatch):
-    """The password check tells by it which app on the accessibility bus
-    has the focus, where the names differ (issue #40). A real window on
-    the tests' own X server, whose _NET_WM_PID GTK sets."""
+@pytest.fixture
+def own_x11_window(monkeypatch):
+    """A real window of this process on the tests' own X server (the one
+    xvfb-run gives them), in an X11 session; its X11 id."""
     import os
     import gi
     gi.require_version("Gtk", "3.0")
@@ -293,10 +293,29 @@ def test_an_x11_window_tells_its_process(monkeypatch):
     monkeypatch.setenv("DISPLAY", display)
     window = Gtk.Window()
     window.realize()
-    try:
-        assert cf.window_pid(window.get_window().get_xid()) == os.getpid()
-    finally:
-        window.destroy()
+    yield window.get_window().get_xid()
+    window.destroy()
+
+
+def test_an_x11_windows_process_is_the_x_servers_answer_not_its_own(own_x11_window):
+    """The password check tells by it which app on the accessibility bus
+    has the focus, where the names differ (issue #40). _NET_WM_PID is
+    whatever the app wrote, in a Flatpak the sandbox's own number, which
+    could be another app's: the X server knows the real owner."""
+    import os
+    import shutil
+    import subprocess
+    if shutil.which("xprop") is None:
+        pytest.skip("needs xprop to give the window a wrong _NET_WM_PID")
+    subprocess.run(["xprop", "-id", str(own_x11_window), "-f", "_NET_WM_PID", "32c",
+                    "-set", "_NET_WM_PID", str(os.getpid() + 1)], check=True)
+    assert cf.window_pid(own_x11_window) == os.getpid()
+
+
+def test_without_x_resource_the_process_isnt_known(own_x11_window, monkeypatch):
+    from tuxtalk import xcb_ctypes
+    monkeypatch.setattr(xcb_ctypes, "_res_lib", lambda: None)
+    assert cf.window_pid(own_x11_window) is None
 
 
 def test_other_compositors_tell_no_process(monkeypatch):

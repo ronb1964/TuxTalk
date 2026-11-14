@@ -120,6 +120,7 @@ def _password_focus(bus, focused_app, deadline) -> bool:
     later app answers in a shape nobody expected."""
     focused = functools.lru_cache(maxsize=1)(lambda: _in_time(focused_app, deadline))
     apps, shells, suspects, said_no = [], [], [], []
+    cleared = False     # the focused app's own window said no
     try:
         for app, window in _active_windows(bus, deadline):
             apps.append(app)
@@ -129,17 +130,22 @@ def _password_focus(bus, focused_app, deadline) -> bool:
             answer = _has_password_focus(bus, window, deadline)
             if answer is False:
                 said_no.append((app, window))
-            elif answer and (focused() is None or _is_focused(bus, app, window, focused(),
-                                                               deadline)):
-                return _found(app, focused())
+            elif answer and _counts_at_once(bus, app, window, focused, deadline):
+                _say_found(app, focused())
+                return True
             elif answer:
                 suspects.append(app)
-        if _still_counts(bus, suspects, said_no, focused, deadline):
-            return _found(suspects[0], focused())
-        return any(_has_password_focus(bus, window, deadline) and _found(app, focused())
-                   for app, window in shells)
+            if suspects and said_no:
+                # Placed now, while there's time to ask for a process: one
+                # left for later would go unasked when the time runs out.
+                cleared = cleared or _focused_said_no(bus, said_no, focused(), deadline)
+                said_no.clear()
+        if suspects and not cleared:
+            _say_found(suspects[0], focused())
+            return True
+        return _shell_prompt(bus, shells, deadline)
     except Exception:
-        if not _still_counts(bus, suspects, said_no, focused, deadline):
+        if not suspects or cleared:
             raise
         logger.info("Password field check cut short after it found a password field")
         return True
@@ -147,22 +153,35 @@ def _password_focus(bus, focused_app, deadline) -> bool:
         _log_several_active(apps)
 
 
-def _still_counts(bus, suspects, said_no, focused, deadline) -> bool:
-    """Whether a password field in an app the desktop doesn't say has the
-    focus (*suspects*) counts: unless the focused app is one whose window
-    said no (*said_no*, its apps and windows). *focused*() is known by then:
-    an unknown one made the first password field count at once."""
-    return bool(suspects) and not any(_is_focused(bus, app, window, focused(), deadline)
-                                      for app, window in said_no)
+def _counts_at_once(bus, app, window, focused, deadline) -> bool:
+    """Whether a password field in *app*'s active *window* counts at once:
+    *app* has the focus by *focused*(), or which app has it can't be told."""
+    return focused() is None or _is_focused(bus, app, window, focused(), deadline)
 
 
-def _is_focused(bus, app, window, focused, deadline) -> bool:
+def _focused_said_no(bus, said_no, focus, deadline) -> bool:
+    """Whether the app with the focus by *focus* is one whose window said
+    no password field (*said_no*, its apps and windows)."""
+    return any(_is_focused(bus, app, window, focus, deadline) for app, window in said_no)
+
+
+def _shell_prompt(bus, shells, deadline) -> bool:
+    """Whether a desktop shell's own password prompt has the focus: it
+    counts wherever the focus is, so the focused app isn't asked."""
+    for app, window in shells:
+        if _has_password_focus(bus, window, deadline):
+            logger.info(f"Password field check: {app}'s own password prompt has the focus")
+            return True
+    return False
+
+
+def _is_focused(bus, app, window, focus, deadline) -> bool:
     """Whether *app*, whose active *window* this is, is the one with the
-    focus by *focused* (class, process): the same process where the desktop
+    focus by *focus* (class, process): the same process where the desktop
     and the bus both tell it, else the same name (_names_the_app). The
-    names alone missed apps on the bus by another name, gnome-terminal-server
-    and soffice, whose own no then didn't clear a background browser's."""
-    wm_class, pid = focused
+    names alone missed apps on the bus by another name, whose own no then
+    didn't clear a background browser's password field."""
+    wm_class, pid = focus
     return ((pid is not None and _process_of(bus, window[0], deadline) == pid)
             or _names_the_app(app, wm_class))
 
@@ -180,14 +199,14 @@ def _process_of(bus, name, deadline):
         return None
 
 
-def _found(app, focused) -> bool:
+def _say_found(app, focus):
     """Say which app's password field refuses the dictation, and which app
-    the desktop says has the focus, so a refusal that's wrong can be told
-    apart from a waiting password prompt (focused_window); True."""
-    where = (f"while {focused[0]} has the focus" if focused
+    the desktop says has the focus (*focus*, None when it can't), so a
+    wrong refusal can be told apart from a waiting password prompt
+    (focused_window)."""
+    where = (f"while {focus[0]} has the focus" if focus
              else "while which app has the focus can't be told")
     logger.info(f"Password field check: a password field has the focus in {app} {where}")
-    return True
 
 
 # The look at the focused app (_in_time) runs on a daemon thread of its
@@ -235,10 +254,19 @@ def _look(focused_app, answer, done):
 
 # Apps whose name on the accessibility bus is in neither their window class
 # nor its last part: the class and the name, as _plain has them. Brave
-# names itself "Brave" there, and its windows "brave-browser". Only known
+# names itself "Brave" there, and its windows "brave-browser"; GNOME
+# Terminal "gnome-terminal-server" (its windows "Gnome-terminal" on X11,
+# "org.gnome.Terminal" on Wayland); LibreOffice "soffice". Only known
 # pairs: a name like a class's first word ("Code", "code-oss") may be
 # another app, whose stale password field would then refuse the dictation.
-_BUS_NAMES = {"bravebrowser": "brave"}
+# On X11 the process tells them apart without a pair (_is_focused).
+_BUS_NAMES = {
+    "bravebrowser": "brave",
+    "gnometerminal": "gnometerminalserver",
+    "orggnometerminal": "gnometerminalserver",
+    **{f"libreoffice{part}": "soffice"
+       for part in ("writer", "calc", "impress", "draw", "math", "base", "startcenter")},
+}
 
 
 def _plain(text: str) -> str:

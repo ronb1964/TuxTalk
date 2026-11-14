@@ -1,5 +1,5 @@
 """libxcb, the X server's own client library, through ctypes: the few
-calls compositor_focus (which window has focus on X11), x11_hotkeys (the
+calls compositor_focus (which window has focus on X11, and its process), x11_hotkeys (the
 hotkeys held back on X11) and x11_activate (bringing a window forward)
 make. It's on every X11 system (Xlib itself is built on it), so this needs
 no new dependency. XCB rather than Xlib: Xlib
@@ -206,10 +206,12 @@ def _randr_lib():
     return _randr
 
 
-def _has_randr(randr, conn) -> bool:
-    """Whether the X server has RandR. Asked first: libxcb shuts the whole
-    connection down when a request names an extension the server lacks."""
-    extension = ctypes.addressof(ctypes.c_char.in_dll(randr, "xcb_randr_id"))
+def _has_extension(ext_lib, conn, id_name) -> bool:
+    """Whether the X server has the extension *ext_lib* (libxcb-randr,
+    libxcb-res) is for, by its *id_name* symbol. Asked first: libxcb shuts
+    the whole connection down when a request names an extension the server
+    lacks."""
+    extension = ctypes.addressof(ctypes.c_char.in_dll(ext_lib, id_name))
     reply = xcb_lib().xcb_get_extension_data(conn, extension)
     return bool(reply and ctypes.c_uint8.from_address(reply + 8).value)   # .present
 
@@ -218,7 +220,7 @@ def randr_monitors(conn, root):
     """(x, y, width, height) of each active monitor, as RandR 1.5 lists
     them; [] when libxcb-randr or the extension isn't there."""
     randr = _randr_lib()
-    if randr is None or not _has_randr(randr, conn):
+    if randr is None or not _has_extension(randr, conn, "xcb_randr_id"):
         return []
     error = ctypes.c_void_p()
     reply = randr.xcb_randr_get_monitors_reply(
@@ -235,5 +237,79 @@ def randr_monitors(conn, root):
             found.append((info.x, info.y, info.width, info.height))
             randr.xcb_randr_monitor_info_next(ctypes.byref(monitors))
         return found
+    finally:
+        free(reply)
+
+
+# --- X-Resource: which process owns a window --------------------------------------
+
+_LOCAL_CLIENT_PID = 2       # XCB_RES_CLIENT_ID_MASK_LOCAL_CLIENT_PID
+
+
+class _ClientIdSpec(ctypes.Structure):
+    _fields_ = [("client", ctypes.c_uint32), ("mask", ctypes.c_uint32)]
+
+
+class _ClientIdValue(ctypes.Structure):
+    """xcb_res_client_id_value_t; its values follow it, *length* bytes."""
+    _fields_ = [("spec", _ClientIdSpec), ("length", ctypes.c_uint32)]
+
+
+class _ClientIdIterator(ctypes.Structure):
+    _fields_ = [("data", ctypes.POINTER(_ClientIdValue)), ("rem", ctypes.c_int),
+                ("index", ctypes.c_int)]
+
+
+_res = None
+
+
+def _res_lib():
+    """libxcb-res with the client id calls' signatures, loaded once; None
+    when it isn't installed."""
+    global _res
+    if _res is None:
+        try:
+            lib = ctypes.CDLL("libxcb-res.so.0")
+        except OSError:
+            return None
+        P = ctypes.c_void_p
+        lib.xcb_res_query_client_ids.restype = Cookie
+        lib.xcb_res_query_client_ids.argtypes = [P, ctypes.c_uint32,
+                                                 ctypes.POINTER(_ClientIdSpec)]
+        lib.xcb_res_query_client_ids_reply.restype = P
+        lib.xcb_res_query_client_ids_reply.argtypes = [P, Cookie, ctypes.POINTER(P)]
+        lib.xcb_res_query_client_ids_ids_iterator.restype = _ClientIdIterator
+        lib.xcb_res_query_client_ids_ids_iterator.argtypes = [P]
+        lib.xcb_res_client_id_value_value.restype = ctypes.POINTER(ctypes.c_uint32)
+        lib.xcb_res_client_id_value_value.argtypes = [ctypes.POINTER(_ClientIdValue)]
+        lib.xcb_res_client_id_value_next.argtypes = [ctypes.POINTER(_ClientIdIterator)]
+        _res = lib
+    return _res
+
+
+def window_owner_pid(conn, window):
+    """The process of the client that made X11 *window*, as the X server
+    knows it from the client's socket (X-Resource 1.2). Not _NET_WM_PID,
+    which any app sets as it likes and an app in a Flatpak counts in its
+    sandbox's own numbers. None when libxcb-res or the extension isn't
+    there, or the server can't tell (a client over the network)."""
+    res = _res_lib()
+    if res is None or not _has_extension(res, conn, "xcb_res_id"):
+        return None
+    spec = _ClientIdSpec(window, _LOCAL_CLIENT_PID)
+    error = ctypes.c_void_p()
+    reply = res.xcb_res_query_client_ids_reply(
+        conn, res.xcb_res_query_client_ids(conn, 1, ctypes.byref(spec)), ctypes.byref(error))
+    if error.value:
+        free(error)
+    if not reply:
+        return None
+    try:
+        ids = res.xcb_res_query_client_ids_ids_iterator(reply)
+        while ids.rem:
+            if ids.data.contents.spec.mask & _LOCAL_CLIENT_PID and ids.data.contents.length >= 4:
+                return res.xcb_res_client_id_value_value(ids.data)[0]
+            res.xcb_res_client_id_value_next(ctypes.byref(ids))
+        return None
     finally:
         free(reply)

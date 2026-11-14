@@ -21,8 +21,8 @@ socket, so the dictation service asks them when nobody has reported it
               "activated" (below).
   X11         XFCE, MATE, Cinnamon, LXQt, Openbox and the rest: the window
               manager names the focused window in the root window's
-              _NET_ACTIVE_WINDOW (EWMH), WM_CLASS gives its class and
-              _NET_WM_PID its process (window_pid). Only in
+              _NET_ACTIVE_WINDOW (EWMH), WM_CLASS gives its class and the
+              X server its process (window_pid). Only in
               an X11 session: under Wayland the service has a DISPLAY too
               (XWayland, for the recording indicator), but XWayland only knows
               the X11 apps and could name a window that doesn't have focus.
@@ -31,8 +31,10 @@ socket, so the dictation service asks them when nobody has reported it
 
 The socket questions themselves are in compositor_ipc.
 
-It's a hint for picking the paste shortcut, so anything going wrong means
-"don't know" (None), quickly, and never an error.
+It's a hint for picking the paste shortcut, and for which app's answer
+counts in the password check (atspi_helper), so anything going wrong means
+"don't know" (None), quickly, and never an error: there, not knowing never
+clears a password field.
 """
 import contextlib
 import ctypes
@@ -45,7 +47,7 @@ from . import desktop_detect
 from .compositor_ipc import I3_GET_TREE, TIMEOUT, hyprland_request, i3_request, niri_request
 from .logger import FailureNotes, setup_logger
 from .single_instance import session_runtime_dir
-from .xcb_ctypes import get_property, intern_atom, x11_root, xcb_lib
+from .xcb_ctypes import get_property, intern_atom, window_owner_pid, x11_root, xcb_lib
 
 logger = setup_logger(__name__)
 _failures = FailureNotes()      # asked before every typed chunk: each failure logged once
@@ -350,15 +352,10 @@ def _from_x11():
 
 
 def _x11_pid(window):
-    """The process behind X11 *window*: its _NET_WM_PID, which the app's
-    toolkit sets; None when it doesn't."""
+    """The process that owns X11 *window*, as the X server knows it
+    (xcb_ctypes.window_owner_pid); None when it can't tell."""
     with _x11_display() as display:
-        if display is None:
-            return None
-        lib, conn, _root = display
-        atom = intern_atom(lib, conn, b"_NET_WM_PID")
-        raw = get_property(lib, conn, window, atom) if atom else None
-        return struct.unpack("=I", raw[:4])[0] if raw and len(raw) >= 4 else None
+        return None if display is None else window_owner_pid(display[1], window)
 
 
 def _source(env):
@@ -392,7 +389,8 @@ def _ask_focused_window(env):
 
 def window_pid(window):
     """The process behind *window*, an id from focused_window(), where the
-    compositor tells it: X11's windows say theirs; None anywhere else. The
+    compositor tells it: the X server knows its windows' owners; None
+    anywhere else. The
     password check tells by it which app on the accessibility bus has the
     focus, where their names differ (atspi_helper)."""
     if _source(os.environ) != "x11":
@@ -448,12 +446,14 @@ def focused_rect():
     coordinates) on Sway, i3 or Hyprland, or None. A failure is logged once,
     as focused_window's is."""
     env = os.environ
-    path = env.get("SWAYSOCK") or env.get("I3SOCK")
+    source = _source(env)
     try:
-        if env.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        if source == "hyprland":
             rect = _rect_from_hyprland(env["HYPRLAND_INSTANCE_SIGNATURE"])
+        elif source == "i3":
+            rect = _rect_from_i3(env.get("SWAYSOCK") or env.get("I3SOCK"))
         else:
-            rect = _rect_from_i3(path) if path else None
+            rect = None
     except Exception as e:      # an odd answer mustn't stop the window that asked
         if _failures.failed("frame", e):
             logger.info(f"Could not ask the compositor where the focused window is: {e}")
