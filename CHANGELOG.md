@@ -5,6 +5,20 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- A dictation fits into the sentence you're in. Click into the middle of a
+  sentence and dictate, and TuxTalk looks at the text on either side of
+  the cursor: no capital in the middle of a sentence, a space in front
+  where one is missing, and no closing period or doubled space when more
+  text follows. It works in apps that tell the desktop's accessibility
+  system that text: GTK apps always, and KDE apps and Firefox once
+  accessibility is on. TuxTalk asks once before turning it on (it stays on
+  until you turn it off in Preferences → Advanced → Fine-tuning →
+  Accessibility) and then says that Chrome, Brave and apps like Claude
+  Desktop need to be closed and opened again first. Where an app doesn't
+  say, and in terminals, a dictation is typed as before. In German, the
+  first word keeps its capital. Uninstalling turns accessibility off again
+  only if TuxTalk turned it on. With it on, TuxTalk also recognises
+  password boxes in KDE apps and Firefox.
 - When the recording indicator follows the window you're dictating into, it
   sits higher in a tall window: a fifth of the window's height above its
   bottom (at least 40 px, as before), so it no longer covers a chat's message

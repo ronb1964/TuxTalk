@@ -70,6 +70,8 @@ Plus a fix for Transcribe a File, where a damaged list of earlier transcripts co
 
 **Commands and addresses come out right.** Say "comma", "new paragraph" or "question mark" and you get the punctuation. Say an email or a web address the way you'd say it out loud and it's written the way it should be.
 
+**It fits into the sentence you're in.** Click into the middle of a sentence and dictate, and it carries the sentence on: no capital, a space where one's missing, and no period stuck in front of the next word. It works in apps that tell TuxTalk the text around the cursor, and TuxTalk asks once before turning on your desktop's accessibility so that KDE apps and Firefox do too.
+
 <table>
 <tr>
 <td width="50%"><img src="screenshots/welcome-recommended.png" alt="First run: the recommended setup for this computer"></td>
@@ -399,6 +401,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
 - **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com.
 - **Numbers as digits, if you want them.** 25 instead of twenty-five, and 7:30 and 15th too. Works in English and seven other languages.
+- **Fits the sentence at the cursor.** Dictating into the middle of a sentence carries it on, with no capital and the right spaces, where the app says what's around the cursor: GTK apps always, KDE apps and Firefox once you let TuxTalk turn on the desktop's accessibility.
 - **Plain text in terminals.** No capital at the start and no period at the end when you dictate a command.
 - **Voice editing (Labs).** Select text, hold Shift+F8 and say how to change it. Tone and rewrites go to the AI, while caps, lists, commas and removing a word are done exactly in code. Bold, italics and underline work in LibreOffice and other word processors.
 - **Select and move by voice (Labs).** Say "select the last sentence" or "go to the end" on its own and TuxTalk does it instead of typing it.

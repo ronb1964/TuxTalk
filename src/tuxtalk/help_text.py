@@ -328,6 +328,19 @@ Say <b>period</b>, <b>comma</b>, <b>question mark</b>, <b>new line</b>, <b>new p
 and so on. TuxTalk adds the capitals, and a period at the end if the speech model
 forgot one. Help's Commands tab has them all.
 
+### Into the middle of a sentence
+Click where the words should go, hold <b>{hold}</b>, say them, let go. TuxTalk looks at
+the text on either side of the cursor and fits them in: no capital in the middle of a
+sentence, a space where one is missing, and no period when more text follows.
+  • It works where the app tells TuxTalk that text: GTK apps (most GNOME, Cinnamon
+    and Xfce apps) always; KDE apps and Firefox once the desktop's accessibility is
+    on; Chrome, Brave and apps built on them (Claude Desktop, Discord, VS Code) only
+    if it was on when they started, so close and open them once.
+  • TuxTalk asks once before it turns accessibility on, and it stays on until you
+    turn it off: <b>Preferences → Advanced → Show fine-tuning → Accessibility</b>.
+  • Anywhere else, and in terminals, it types as before, with a capital and a period.
+  • In German, where nouns have capitals, the first word keeps its capital.
+
 ### Numbers
 <b>Preferences → Advanced → Numbers</b>: as the speech model writes them, as digits
 ("twenty-five chickens" → 25 chickens), or digits from 10 up ("three cats",
@@ -910,7 +923,8 @@ and nothing is typed or kept in Recent Dictations. Type passwords on the keyboar
 Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in or move on.
   • It usually knows a password box in GTK apps (most GNOME, Cinnamon and
     Xfce apps).
-  • In KDE apps and Firefox only while accessibility is on (a screen reader turns it on).
+  • In KDE apps and Firefox only while accessibility is on (a screen reader turns it
+    on, or TuxTalk with your OK).
   • In Chrome, Brave and apps built on them (Discord, Slack, VS Code) only if
     accessibility was already on when they started.
   • The desktop's own prompt, when an app asks for your admin password, counts too.
