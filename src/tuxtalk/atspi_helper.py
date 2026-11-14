@@ -192,7 +192,19 @@ def _focused_widget(bus, focused_app, deadline):
     if focus is not None:
         windows = [(app, window) for app, window in windows
                    if _is_focused(bus, app, window, focus, deadline)]
-    return _focused_in(bus, windows[0][1], deadline) if len(windows) == 1 else None
+    return _focused_text(bus, windows[0][1], deadline) if len(windows) == 1 else None
+
+
+def _focused_text(bus, window, deadline):
+    """The focused widget with text in *window*, or None. A frame around it
+    can say it has the focus too, ahead of it in the tree (KDE's editor,
+    KTextEditor, whose outer view is focused along with the text inside),
+    so a focused widget without text is looked into for one with it."""
+    focused = _focused_in(bus, window, deadline)
+    while focused is not None and _TEXT not in _call(bus, focused, _ACCESSIBLE,
+                                                     "GetInterfaces", None, deadline)[0]:
+        focused = _walk_for_focus(bus, focused, deadline)
+    return focused
 
 
 def _around(bus, widget, chars, deadline):

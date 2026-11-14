@@ -19,17 +19,25 @@ class TextBus:
         self.clock, self.nodes, self.pids, self.apps = clock, {}, {}, []
 
     def app(self, name, text="", caret=0, selection=None, active=True, is_text=True,
-            hang=False, pid=None):
+            hang=False, pid=None, framed=False):
         """An app *name* whose focused widget holds *text* with its cursor at
         *caret*, or *selection* (start, end) selected. *is_text* False: the
-        focused widget has no Text interface. *hang*: its text never comes."""
+        focused widget has no Text interface. *hang*: its text never comes.
+        *framed*: the widget sits in a frame without text that says it has
+        the focus too, ahead of it (KDE's editor, KTextEditor)."""
         own = f":{name}"
         if pid is not None:
             self.pids[own] = pid
         self.nodes[(own, "/w")] = dict(states=SHOWING | FOCUSED, text=text, caret=caret,
-                                       selection=selection, is_text=is_text, hang=hang)
+                                       selection=selection, is_text=is_text, hang=hang,
+                                       children=[])
+        top = (own, "/w")
+        if framed:
+            self.nodes[(own, "/frame")] = dict(states=SHOWING | FOCUSED, is_text=False,
+                                               hang=False, children=[(own, "/w")])
+            top = (own, "/frame")
         self.nodes[(own, "/win")] = dict(states=SHOWING | (ACTIVE if active else 0),
-                                         children=[(own, "/w")])
+                                         children=[top])
         self.nodes[(own, "/root")] = dict(name=name, children=[(own, "/win")])
         self.apps.append((own, "/root"))
 
@@ -51,9 +59,19 @@ class TextBus:
         if method == "GetState":
             return GLib.Variant("(au)", ([node["states"] & 0xFFFFFFFF, node["states"] >> 32],))
         if method == "GetMatches":
-            found = [c for c in node["children"] if self.nodes[c]["states"] & FOCUSED]
-            return GLib.Variant("(a(so))", (found,))
+            # Every focused descendant in tree order, as many as the rule asks.
+            count = args.unpack()[2]
+            found = [c for c in self._tree(node) if self.nodes[c]["states"] & FOCUSED]
+            return GLib.Variant("(a(so))", (found[:count] if count else found,))
+        if method == "GetInterfaces":
+            text = ["org.a11y.atspi.Text"] if node.get("is_text") else []
+            return GLib.Variant("(as)", (["org.a11y.atspi.Accessible"] + text,))
         raise AssertionError(f"unexpected call {method}")
+
+    def _tree(self, node):
+        for child in node.get("children", []):
+            yield child
+            yield from self._tree(self.nodes[child])
 
     def _text(self, node, method, args, timeout_ms):
         if node["hang"]:
@@ -89,6 +107,12 @@ def around(focus=None):
 
 def test_the_text_on_either_side_of_the_cursor_is_read(bus):
     bus.app("gedit", "the big dog", caret=7)
+    assert around() == ("the big", " dog")
+
+
+def test_the_text_inside_a_focused_frame_is_read(bus):
+    """KDE's editor says its frame has the focus, ahead of the text in it."""
+    bus.app("kwrite", "the big dog", caret=7, framed=True)
     assert around() == ("the big", " dog")
 
 
