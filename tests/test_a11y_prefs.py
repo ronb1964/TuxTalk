@@ -111,3 +111,27 @@ def test_a_screen_reader_that_took_the_switch_over_shows_it_on(switch, prefs_win
     assert shown == [prefs_advanced.A11Y_SCREEN_READER_TITLE]
     note = find(box.get_toplevel(), Gtk.Label, prefs_advanced.A11Y_DESKTOPS_NOTE)
     assert note.get_visible()
+
+
+def test_a_no_that_went_off_but_couldnt_be_saved_or_undone_shows_it_off(
+        switch, prefs_window, monkeypatch):
+    """The box shows the switch as it is, not as it was before the click."""
+    monkeypatch.setattr(prefs_advanced, "show_message", lambda *a, **k: None)
+    a11y_switch.allow()
+    box = check(prefs_window)
+    monkeypatch.setattr(a11y_switch, "_saved", lambda state: False)
+    real_set = a11y_switch._set
+    monkeypatch.setattr(a11y_switch, "_set", lambda on: real_set(on) if not on else False)
+    box.set_active(False)
+    assert switch.on is False and not box.get_active()
+
+
+def test_a_handover_shows_even_when_the_switch_cant_be_read_after(switch, prefs_window,
+                                                                  monkeypatch):
+    monkeypatch.setattr(prefs_advanced, "show_message", lambda *a, **k: None)
+    a11y_switch.allow()
+    box = check(prefs_window)
+    switch.screen_reader = True
+    monkeypatch.setattr(a11y_switch, "is_on", lambda: None)
+    box.set_active(False)
+    assert box.get_active() and not box.get_sensitive()

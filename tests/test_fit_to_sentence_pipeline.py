@@ -118,6 +118,16 @@ def test_a_correction_takes_the_fitted_start_of_the_phrase_it_replaces(monkeypat
     assert (fixed, taken_back) == (" meet at four.", " meet at three. ")
 
 
+def test_a_corrected_german_noun_keeps_its_capital(monkeypatch):
+    from tuxtalk import ai_cleanup, type_at_pause
+    monkeypatch.setattr(rs.state, "last_inserted_text", " drei Katzen ")
+    monkeypatch.setattr(ai_cleanup, "fix_self_corrections", lambda text, engine: "Hunde")
+    monkeypatch.setattr(type_at_pause, "_erase_typed", lambda text: True)
+    message = types.SimpleNamespace(held_cue="", cancelled=False)
+    fixed, _ = type_at_pause.correct_across_pause("nein, Hunde", message, lowercase_ok=False)
+    assert fixed == " Hunde"
+
+
 def test_german_by_the_usual_language_keeps_its_capital(desktop, monkeypatch):
     monkeypatch.setattr("tuxtalk.recommend.effective_language", lambda cfg: "de")
     desktop["around"] = ("der große", "")

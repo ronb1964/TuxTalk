@@ -5,6 +5,8 @@ and no closing period or doubled space when text follows on the line.
 The text around the cursor comes from the app (atspi_helper), a few
 characters each side; when the app doesn't say, nothing here runs and the
 dictation is typed as it always was."""
+import re
+
 from . import config
 from .normalize import safe_to_lowercase_first_word
 
@@ -24,6 +26,8 @@ _STRAIGHT_QUOTES = "\"'"
 # Closing marks that can follow a sentence's end: (see the note.)
 _CLOSERS = ")]}\u201d\u2019\"'"
 _BLANKS = " \t"
+# A sentence or a line ending inside a dictation, before its last sentence.
+_SENTENCE_BREAK = re.compile(r"[.!?][)\]}\u201d\u2019\"']*\s+\S|[\n\r\u2028\u2029]\s*\S")
 # Languages that write every noun with a capital, so a capital at the start
 # of a dictation says nothing about where the sentence begins.
 _NOUN_CAPITALS = {"de", "lb"}
@@ -37,10 +41,10 @@ def fit(text: str, before: str, after: str, lowercase_ok: bool, words=()) -> str
     if not text:
         return text
     visible = before.rstrip(_BLANKS)
-    starts_sentence = not visible or visible[-1] in _LINE_BREAKS \
-        or visible.rstrip(_CLOSERS).endswith(tuple(_SENTENCE_ENDS))
-    return _fit_end(_fit_start(text, before, lowercase_ok, words), after, starts_sentence,
-                    words)
+    own_sentence = not visible or visible[-1] in _LINE_BREAKS \
+        or visible.rstrip(_CLOSERS).endswith(tuple(_SENTENCE_ENDS)) \
+        or _SENTENCE_BREAK.search(text.rstrip()) is not None
+    return _fit_end(_fit_start(text, before, lowercase_ok, words), after, own_sentence)
 
 
 def _fit_start(text, before, lowercase_ok, words):
@@ -68,13 +72,14 @@ def _opens(before):
     return last in _STRAIGHT_QUOTES and (len(before) == 1 or before[-2] in _BLANKS + _OPENERS)
 
 
-def _fit_end(text, after, starts_sentence, words):
+def _fit_end(text, after, own_sentence):
     """The end of *text* before *after*: no space of its own to double, and
-    no closing period when the sentence goes on after it on the same line;
-    a whole sentence put in front of another (*starts_sentence*, and a
-    capital after it that only a sentence start has: not "I", an acronym or
-    one of Your *words*) keeps it. A dictation ending in a line break ends
-    as it is."""
+    no closing period when the sentence goes on after it on the same line.
+    A sentence of its own (*own_sentence*: it starts one, or holds a break
+    before its last) put before a capital keeps it: whether "I" or a name
+    there starts a sentence can't be told, and a period too many is easier
+    to see than two sentences run together. A dictation ending in a line
+    break ends as it is."""
     if text.rstrip(_BLANKS)[-1:] in tuple(_LINE_BREAKS):
         return text.rstrip(_BLANKS)
     if after and after[0] in _BLANKS:
@@ -84,8 +89,7 @@ def _fit_end(text, after, starts_sentence, words):
         return text
     text = text.rstrip(_BLANKS)
     if text.endswith(".") and not text.endswith("..") \
-            and not (starts_sentence and following[0].isupper()
-                     and safe_to_lowercase_first_word(following, words)):
+            and not (own_sentence and following[0].isupper()):
         text = text[:-1]
     if after[0] not in _BLANKS and following[0].isalnum():
         text += " "

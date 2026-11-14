@@ -188,7 +188,7 @@ def _erase_typed(text: str) -> bool:
     return bool(deleted)
 
 
-def correct_across_pause(text: str, message):
+def correct_across_pause(text: str, message, lowercase_ok: bool = True):
     """(text to type, text taken back) for a phrase of *message*'s recording
     that corrects the one before the pause.
 
@@ -196,7 +196,8 @@ def correct_across_pause(text: str, message):
     it fixes the correction, the earlier phrase is backspaced and the fixed
     whole is typed in its place ("Meet at four."); otherwise the phrase is
     typed as said, a cue held back from the phrase before included, and
-    nothing is taken back."""
+    nothing is taken back. *lowercase_ok*: the dictation's language doesn't
+    give every noun a capital (_started_like)."""
     from . import ai_cleanup
     prev = rs.state.last_inserted_text
     cue, message.held_cue = message.held_cue, ""
@@ -217,15 +218,15 @@ def correct_across_pause(text: str, message):
     if not _erase_typed(prev):
         return said, ""
     logger.info("AI cleanup fixed a self-correction across a pause")
-    return _started_like(prev, fixed), prev
+    return _started_like(prev, fixed, lowercase_ok), prev
 
 
-def _started_like(prev: str, fixed: str) -> str:
+def _started_like(prev: str, fixed: str, lowercase_ok: bool) -> str:
     """*fixed*, typed in place of *prev*, starting the way *prev* did: its
     leading space (one fitted in front, sentence_fit) and its small first
-    letter where it carried a sentence on."""
+    letter where it carried a sentence on, *lowercase_ok*."""
     body = fixed.lstrip()
-    if prev.lstrip()[:1].islower() and body[:1].isupper() \
+    if lowercase_ok and prev.lstrip()[:1].islower() and body[:1].isupper() \
             and safe_to_lowercase_first_word(body, live.words):
         body = body[0].lower() + body[1:]
     return prev[:len(prev) - len(prev.lstrip())] + body

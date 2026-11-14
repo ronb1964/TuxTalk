@@ -103,7 +103,10 @@ def test_a_word_put_inside_a_sentence_keeps_no_period_before_a_capital(before, s
     assert fit(said, before, following, True) == typed
 
 
-@pytest.mark.parametrize("following", ["I went home", "NASA said"])
-def test_a_lead_in_before_i_or_an_acronym_keeps_no_period(following):
-    """Their capital is no sign a sentence starts there."""
-    assert fit("Yesterday. ", "", following, True) == "Yesterday "
+def test_a_sentence_put_before_one_starting_with_i_keeps_its_period():
+    assert fit("I am back. ", "Hi. ", "I went home", True) == "I am back. "
+
+
+def test_two_sentences_put_inside_one_keep_the_period_before_the_next():
+    assert fit("After lunch. We left. ", "Yesterday ", "Today we", True) == \
+        "after lunch. We left. "

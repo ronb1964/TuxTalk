@@ -250,11 +250,17 @@ def _fit_to_cursor(words: _Words, around: tuple[str, str] | None, job: _Job) -> 
     language that capitalises its nouns."""
     if around is None:
         return words
+    return words._replace(text=sentence_fit.fit(words.text, *around, _lowercase_ok(job),
+                                                live.words))
+
+
+def _lowercase_ok(job: _Job) -> bool:
+    """Whether a capital at the start of this dictation may be made small:
+    not in a language that gives every noun one (sentence_fit)."""
     from . import recommend
     from .config import load_config
-    lowercase_ok = not sentence_fit.capitalised_nouns(
+    return not sentence_fit.capitalised_nouns(
         job.language, live.auto_languages, recommend.effective_language(load_config()))
-    return words._replace(text=sentence_fit.fit(words.text, *around, lowercase_ok, live.words))
 
 
 def _still_wanted(words, job: _Job) -> bool:
@@ -494,7 +500,7 @@ def _correction_or_held_cue(text: str, job: _Job):
         job.message.held_cue = text.strip()
         logger.info("Chunk is only a correction cue; waiting for the next phrase")
         return None
-    return type_at_pause.correct_across_pause(text, job.message)
+    return type_at_pause.correct_across_pause(text, job.message, _lowercase_ok(job))
 
 
 def _deliver(words: _Words, audio_f32, job: _Job) -> None:

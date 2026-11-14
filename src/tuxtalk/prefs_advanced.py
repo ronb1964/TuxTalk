@@ -322,15 +322,18 @@ class AdvancedTab(Tab):
             show_message(self.win.window, Gtk.MessageType.INFO, startup_notices.A11Y_ON_TITLE,
                          startup_notices.A11Y_ON_BODY)
             return
-        if not turning_on and a11y_switch.decline():
-            if a11y_switch.is_on():
-                # Handed over to a screen reader that started since.
-                self._show_switch_held(check)
-                show_message(self.win.window, Gtk.MessageType.INFO, A11Y_SCREEN_READER_TITLE,
-                             "So the desktop's accessibility stays on. Turn it off in your "
-                             "desktop's own settings if you need to.")
+        outcome = None if turning_on else a11y_switch.decline()
+        if outcome == "handed over":
+            self._show_switch_held(check)
+            show_message(self.win.window, Gtk.MessageType.INFO, A11Y_SCREEN_READER_TITLE,
+                         "So the desktop's accessibility stays on. Turn it off in your "
+                         "desktop's own settings if you need to.")
             return
-        self._put_back(check, not turning_on)
+        if outcome:
+            return
+        # Not as asked: the box shows the switch as it is now.
+        now = a11y_switch.is_on()
+        self._put_back(check, not turning_on if now is None else now)
         show_message(self.win.window, Gtk.MessageType.WARNING, A11Y_FAILED_TITLE,
                      "TuxTalk's log says why. You can change it in your desktop's own "
                      "accessibility settings.")
