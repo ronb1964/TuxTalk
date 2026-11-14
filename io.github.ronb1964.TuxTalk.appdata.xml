@@ -101,7 +101,7 @@
         <ul>
           <li>On Fedora 45, which no longer comes with OpenSSL 3, the speech model, updates and other downloads work again</li>
           <li>A microphone that stops answering no longer freezes dictation</li>
-          <li>A browser in the background with its login box selected no longer stops dictation into terminals and LibreOffice</li>
+          <li>A browser in the background with its login box selected no longer stops dictation into GNOME Terminal and LibreOffice</li>
           <li>The recording indicator sits higher in a tall window it follows</li>
         </ul>
       </description>

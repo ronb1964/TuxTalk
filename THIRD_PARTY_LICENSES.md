@@ -86,7 +86,8 @@ it.
 These are copied unmodified from Ubuntu 22.04: the tray icon libraries
 (libayatana-appindicator3, libayatana-indicator3, libayatana-ido3,
 libdbusmenu), GObject Introspection and its typelibs, libffi, PortAudio, the
-JACK client library, Berkeley DB 5.3 and libpython. Mostly LGPL, MIT or
+JACK client library, Berkeley DB 5.3, libpython, and OpenSSL 3 (Apache-2.0,
+used only when the computer has no OpenSSL 3 of its own). Mostly LGPL, MIT or
 similar; each package's own copyright file is included.
 
 The exact package versions are listed in

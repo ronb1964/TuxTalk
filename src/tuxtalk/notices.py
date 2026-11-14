@@ -61,9 +61,9 @@ def warn_mic_restart(requested: bool):
     """A microphone stream is stuck in the audio system and no other will
     open until the service restarts: the tray was asked to (*requested*), or
     couldn't be, and the user must. Always said, once per stuck stream."""
-    notify_module.notify(MIC_RESTART_TITLE,
-                         "Restarting the dictation service." if requested else
-                         "Quit TuxTalk and start it again.")
+    body = ("Restarting the dictation service. Try again in a moment." if requested
+            else "Quit TuxTalk and start it again.")
+    notify_module.notify(MIC_RESTART_TITLE, body)
 
 
 def warn_no_keyboard(why: str):
