@@ -48,6 +48,7 @@ A11Y_SWITCH_LABEL = ("Turn on the desktop's accessibility, so dictation fits the
 A11Y_DESKTOPS_NOTE = ("It's on in your desktop's own settings, or for a screen reader, "
                       "so it's turned off there, not here.")
 A11Y_FAILED_TITLE = "The desktop's accessibility didn't change"
+A11Y_SCREEN_READER_TITLE = "A screen reader is using it"
 
 
 class AdvancedTab(Tab):
@@ -322,13 +323,28 @@ class AdvancedTab(Tab):
                          startup_notices.A11Y_ON_BODY)
             return
         if not turning_on and a11y_switch.decline():
+            if a11y_switch.is_on():
+                # Handed over to a screen reader that started since.
+                self._show_switch_held(check)
+                show_message(self.win.window, Gtk.MessageType.INFO, A11Y_SCREEN_READER_TITLE,
+                             "So the desktop's accessibility stays on. Turn it off in your "
+                             "desktop's own settings if you need to.")
             return
-        check.handler_block_by_func(self._on_a11y_switch_toggled)
-        check.set_active(not turning_on)
-        check.handler_unblock_by_func(self._on_a11y_switch_toggled)
+        self._put_back(check, not turning_on)
         show_message(self.win.window, Gtk.MessageType.WARNING, A11Y_FAILED_TITLE,
                      "TuxTalk's log says why. You can change it in your desktop's own "
                      "accessibility settings.")
+
+    def _put_back(self, check, active):
+        """*check* ticked or not as *active*, without turning the switch."""
+        check.handler_block_by_func(self._on_a11y_switch_toggled)
+        check.set_active(active)
+        check.handler_unblock_by_func(self._on_a11y_switch_toggled)
+
+    def _show_switch_held(self, check):
+        """*check* shown on and not TuxTalk's to change."""
+        self._put_back(check, True)
+        check.set_sensitive(False)
 
     def _fine_privacy(self, fine, frow):
         """Logging what's dictated, and clearing the log."""

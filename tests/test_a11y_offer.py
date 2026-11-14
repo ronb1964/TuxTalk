@@ -14,8 +14,9 @@ def switch(monkeypatch, tmp_path):
     """The desktop's switch (on: None for no accessibility bus) and the
     file TuxTalk remembers the answer in, both stand-ins."""
     monkeypatch.setattr(a11y_switch, "state_path", lambda: str(tmp_path / "a11y-switch.json"))
-    state = types.SimpleNamespace(on=False)
-    monkeypatch.setattr(a11y_switch, "is_on", lambda: state.on)
+    state = types.SimpleNamespace(on=False, screen_reader=False)
+    monkeypatch.setattr(a11y_switch, "_status",
+                        lambda name: state.on if name == "IsEnabled" else state.screen_reader)
 
     def set_on(on):
         state.on = on

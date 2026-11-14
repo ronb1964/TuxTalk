@@ -15,8 +15,9 @@ LABEL = prefs_advanced.A11Y_SWITCH_LABEL
 @pytest.fixture
 def switch(monkeypatch, tmp_path):
     monkeypatch.setattr(a11y_switch, "state_path", lambda: str(tmp_path / "a11y-switch.json"))
-    state = types.SimpleNamespace(on=False)
-    monkeypatch.setattr(a11y_switch, "is_on", lambda: state.on)
+    state = types.SimpleNamespace(on=False, screen_reader=False)
+    monkeypatch.setattr(a11y_switch, "_status",
+                        lambda name: state.on if name == "IsEnabled" else state.screen_reader)
 
     def set_on(on):
         state.on = on
@@ -92,3 +93,19 @@ def test_a_switch_that_wont_turn_off_is_said(switch, monkeypatch):
     a11y_switch.allow()
     monkeypatch.setattr(a11y_switch, "_set", lambda on: False)
     assert a11y_switch.give_back() is False
+
+
+def test_a_screen_reader_that_took_the_switch_over_shows_it_on(switch, prefs_window,
+                                                               monkeypatch):
+    """Unticked while a screen reader runs: the switch stays on for it, and
+    the box says so rather than looking off."""
+    shown = []
+    monkeypatch.setattr(prefs_advanced, "show_message",
+                        lambda parent, kind, title, *a, **k: shown.append(title))
+    a11y_switch.allow()
+    box = check(prefs_window)
+    switch.screen_reader = True
+    box.set_active(False)
+    assert switch.on is True
+    assert box.get_active() and not box.get_sensitive()
+    assert shown == [prefs_advanced.A11Y_SCREEN_READER_TITLE]

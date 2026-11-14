@@ -113,3 +113,29 @@ def test_turning_it_off_says_whether_it_went_off(desktop, monkeypatch):
     monkeypatch.setattr(a11y_switch, "_set", lambda on: False)
     assert a11y_switch.decline() is False
     assert a11y_switch._load()["ours"] is True
+
+
+def test_not_knowing_whether_a_screen_reader_runs_keeps_it_on(desktop, monkeypatch):
+    a11y_switch.allow()
+    real = a11y_switch._status
+    monkeypatch.setattr(a11y_switch, "_status",
+                        lambda name: None if name == "ScreenReaderEnabled" else real(name))
+    assert a11y_switch.decline() is False
+    assert desktop.on is True and a11y_switch._load()["ours"] is True
+
+
+def test_a_no_that_cant_be_saved_turns_it_back_on(desktop, monkeypatch):
+    """Else the yes still saved would turn it on again at the next start."""
+    a11y_switch.allow()
+
+    def full_disk(state):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(a11y_switch, "_save", full_disk)
+    assert a11y_switch.decline() is False
+    assert desktop.on is True
+
+
+def test_a_switch_that_wont_turn_on_isnt_remembered_as_tuxtalks(desktop, monkeypatch):
+    monkeypatch.setattr(a11y_switch, "_set", lambda on: False)
+    assert a11y_switch.allow() is False
+    assert a11y_switch._load()["ours"] is False

@@ -86,6 +86,16 @@ def _save(state: dict) -> None:
     config.write_text_atomic(state_path(), json.dumps(state), keep_backup=False)
 
 
+def _saved(state: dict) -> bool:
+    """*state* saved: whether that worked."""
+    try:
+        _save(state)
+        return True
+    except OSError as e:
+        logger.warning(f"Could not save {state_path()}: {e}")
+        return False
+
+
 def answer() -> str:
     """"" not asked yet, "on" the user said yes, "not_now" they said no."""
     return _load()["answer"]
@@ -93,42 +103,43 @@ def answer() -> str:
 
 def allow() -> bool:
     """The user said yes: the switch on, and remembered, with whether
-    TuxTalk turned it on. Whether it's on now. A yes that can't be saved
-    leaves the switch as it was: nothing would remember it was TuxTalk's."""
+    TuxTalk turned it on. Whether it's on now. Remembered before the switch
+    is touched: a yes that can't be saved changes nothing, as nothing would
+    remember to turn it off again."""
     was_on = is_on()
-    if was_on is None:
+    if was_on is None or not _saved({"answer": "on", "ours": not was_on or _load()["ours"]}):
         return False
-    ours = not was_on and _set(True)
-    try:
-        _save({"answer": "on", "ours": ours or _load()["ours"]})
-    except OSError as e:
-        logger.warning(f"Could not save {state_path()}, so accessibility stays as it was: {e}")
-        if ours:
-            _set(False)
-        return False
-    return was_on or ours
+    if was_on or _set(True):
+        return True
+    _saved({"answer": "on", "ours": False})
+    return False
 
 
 def decline() -> bool:
     """The user said no, or turned it off in Preferences: remembered, and
-    the switch off again if TuxTalk turned it on, unless a screen reader
-    is running now. False when it was TuxTalk's to turn off and didn't go."""
-    state = _load()
-    still_ours = state["ours"] and not _turn_off()
-    try:
-        _save({"answer": "not_now", "ours": still_ours})
-    except OSError as e:
-        logger.warning(f"Could not save {state_path()}; the question may come again: {e}")
-    return not still_ours
+    the switch off again if TuxTalk turned it on (_turn_off). False when it
+    stays TuxTalk's and on, or the no couldn't be saved: then the switch is
+    put back as it was, or the yes still saved would turn it on at start."""
+    outcome = _turn_off() if _load()["ours"] else "not ours"
+    if not _saved({"answer": "not_now", "ours": outcome is None}):
+        if outcome == "off":
+            _set(True)
+        return False
+    return outcome is not None
 
 
-def _turn_off() -> bool:
-    """The switch off, unless a screen reader started since TuxTalk turned
-    it on: it's that reader's now. Whether it's no longer TuxTalk's."""
-    if _status("ScreenReaderEnabled"):
+def _turn_off() -> str | None:
+    """The switch off: "off"; or "handed over" when a screen reader runs
+    now, whose switch it is from then on; None when it stays on and
+    TuxTalk's (it wouldn't go off, or whether a reader runs can't be told)."""
+    reader = _status("ScreenReaderEnabled")
+    if reader:
         logger.info("A screen reader is running: the desktop's accessibility stays on")
-        return True
-    return _set(False)
+        return "handed over"
+    if reader is None:
+        logger.info("Can't tell whether a screen reader is running: accessibility stays on")
+        return None
+    return "off" if _set(False) else None
 
 
 def turned_on_by_tuxtalk() -> bool:
@@ -139,7 +150,7 @@ def turned_on_by_tuxtalk() -> bool:
 def give_back() -> bool:
     """Uninstalling: the switch off again if TuxTalk turned it on. False
     when it was TuxTalk's and wouldn't go off."""
-    return not turned_on_by_tuxtalk() or _turn_off()
+    return not turned_on_by_tuxtalk() or _turn_off() is not None
 
 
 def keep_on() -> None:

@@ -2,7 +2,8 @@
 old TalkType Flatpak it stopped, the update that just went in, and the
 rename from TalkType; and the one question before TuxTalk turns on the
 desktop's accessibility switch (a11y_switch), asked here or at the end of
-first-run setup. Never during dictation: only from the tray's start."""
+first-run setup. Only from the tray's start, though a dictation may be
+going on then (offer_a11y_switch says how that's handled)."""
 import os
 
 import gi

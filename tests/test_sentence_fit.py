@@ -52,6 +52,8 @@ def test_a_line_break_after_the_cursor_ends_nothing_early():
 @pytest.mark.parametrize("language, spoken, system, nouns", [
     ("de", (), "en_US", True),
     ("lb", (), "en_US", True),
+    ("de-CH", (), "en_US", True),
+    (None, ("lb-LU",), "en_US", True),
     (None, ("en", "de"), "en_US", True),
     (None, (), "de_CH", True),
     ("en", ("de",), "de_DE", False),
@@ -91,6 +93,11 @@ def test_a_dictation_starting_with_a_line_break_gets_no_space_before_it():
     assert fit("\nHello. ", "the end", "", True) == "\nHello. "
 
 
-@pytest.mark.parametrize("following", ["I went", "NASA said"])
-def test_a_capital_that_isnt_a_sentence_start_doesnt_keep_the_period(following):
-    assert fit("After lunch. ", "Yesterday ", following, True) == "after lunch "
+@pytest.mark.parametrize("before, said, following, typed", [
+    ("Yesterday ", "After lunch. ", "I went", "after lunch "),
+    ("Yesterday ", "After lunch. ", "NASA said", "after lunch "),
+    ("I live in ", "Beautiful. ", "New York", "beautiful "),
+], ids=["before I", "before an acronym", "before a name"])
+def test_a_word_put_inside_a_sentence_keeps_no_period_before_a_capital(before, said, following,
+                                                                       typed):
+    assert fit(said, before, following, True) == typed

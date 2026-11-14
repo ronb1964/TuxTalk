@@ -36,7 +36,10 @@ def fit(text: str, before: str, after: str, lowercase_ok: bool, words=()) -> str
     capitalise nouns. *words*: Your Words, which keep their capitals."""
     if not text:
         return text
-    return _fit_end(_fit_start(text, before, lowercase_ok, words), after, lowercase_ok, words)
+    visible = before.rstrip(_BLANKS)
+    starts_sentence = not visible or visible[-1] in _LINE_BREAKS \
+        or visible.rstrip(_CLOSERS).endswith(tuple(_SENTENCE_ENDS))
+    return _fit_end(_fit_start(text, before, lowercase_ok, words), after, starts_sentence)
 
 
 def _fit_start(text, before, lowercase_ok, words):
@@ -64,10 +67,12 @@ def _opens(before):
     return last in _STRAIGHT_QUOTES and (len(before) == 1 or before[-2] in _BLANKS + _OPENERS)
 
 
-def _fit_end(text, after, lowercase_ok, words):
+def _fit_end(text, after, starts_sentence):
     """The end of *text* before *after*: no space of its own to double, and
-    no closing period when the sentence goes on after it on the same line.
-    A dictation ending in a line break ends as it is."""
+    no closing period when the sentence goes on after it on the same line;
+    a whole sentence put in front of another (*starts_sentence*, and a
+    capital after it) keeps it. A dictation ending in a line break ends as
+    it is."""
     if text.rstrip(_BLANKS)[-1:] in tuple(_LINE_BREAKS):
         return text.rstrip(_BLANKS)
     if after and after[0] in _BLANKS:
@@ -76,12 +81,8 @@ def _fit_end(text, after, lowercase_ok, words):
     if not following or following[0] in _LINE_BREAKS:
         return text
     text = text.rstrip(_BLANKS)
-    # A capital after it that only a sentence start would have (not "I",
-    # an acronym or one of Your Words) begins another sentence, unless the
-    # language gives every noun one.
-    if text.endswith(".") and not text.endswith("..") and not (
-            lowercase_ok and following[0].isupper()
-            and safe_to_lowercase_first_word(following, words)):
+    if text.endswith(".") and not text.endswith("..") \
+            and not (starts_sentence and following[0].isupper()):
         text = text[:-1]
     if after[0] not in _BLANKS and following[0].isalnum():
         text += " "
