@@ -18,6 +18,15 @@ before 0.15.0, so older entries use that name.
   matches any app by its process too, as the X server reports it. A
   password field TuxTalk finds in the window you're in still gets nothing,
   and the log now says what refused a dictation (issue #40).
+- A microphone that stops answering no longer freezes TuxTalk. A USB
+  microphone that stopped sending sound could keep a press waiting for
+  minutes, with every key queued behind it; now TuxTalk gives up after 3
+  seconds and says "Microphone isn't answering", so you can unplug it and
+  plug it back in. When the sound system stays stuck on a microphone (one
+  that didn't start, or didn't stop at the end of a recording), the next
+  press restarts the dictation service instead of hanging, or, with no tray
+  running, tells you to restart TuxTalk. Help → When Something's Wrong says
+  what to do. Contributed by Bernát Gábor (#38, #39).
 
 ## [0.23.0] - 2026-11-12
 

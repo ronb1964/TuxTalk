@@ -169,11 +169,20 @@ def test_failed_recording_start_releases_the_keyboard(monkeypatch, quiet_recordi
     assert not any(d.is_grabbed for d in devices), "keyboard left grabbed after mic failure"
 
 
-def test_a_microphone_stuck_starting_restarts_the_service_instead_of_freezing(
+def test_a_microphone_stuck_in_the_audio_system_restarts_the_service_instead_of_freezing(
         monkeypatch, quiet_recording):
-    opened, asked, notices = [], [], []
-    monkeypatch.setattr(mic_stream, "starting_stuck", lambda: True)
+    """A stream given up on, its start or its close, may hold the audio
+    system up: no other is opened, nothing else is started for the press
+    (the model with Power Saving, asking the desktop for its default
+    microphone with the keyboard grabbed), and the tray is asked once to
+    restart the service."""
+    opened, asked, notices, meanwhile = [], [], [], []
+    monkeypatch.setattr(mic_stream, "stuck", lambda: True)
     monkeypatch.setattr(recording.sd, "InputStream", lambda *a, **k: opened.append(k))
+    monkeypatch.setattr(recording.engine, "model", None)
+    monkeypatch.setattr(recording.engine, "wake", lambda **k: meanwhile.append("wake"))
+    monkeypatch.setattr(recording, "follow_system_default",
+                        lambda idx: meanwhile.append("default") or idx)
     monkeypatch.setattr(tray_link, "restart_service", lambda: asked.append("restart") or False)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notices.append((title, body)))
     devices = [keyboard()]
@@ -182,20 +191,22 @@ def test_a_microphone_stuck_starting_restarts_the_service_instead_of_freezing(
     started = recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=0)
 
     assert started is None
-    assert opened == []
+    assert opened == [] and meanwhile == []
     assert asked == ["restart"]
-    assert notices == [("Audio system stopped answering", "Restart TuxTalk manually.")]
+    assert notices == [("Audio system stopped answering", "Quit TuxTalk and start it again.")]
     assert not devices[0].is_grabbed
     assert rs.state.is_recording is False
 
     recording.start_recording(False, False, 0)
     assert asked == ["restart"]
-    assert notices == [("Audio system stopped answering", "Restart TuxTalk manually.")]
+    assert notices == [("Audio system stopped answering", "Quit TuxTalk and start it again.")]
 
 
 def test_a_microphone_sending_no_sound_says_so_instead_of_freezing(monkeypatch,
                                                                 quiet_recording):
-    opened, seen = [], []
+    """The stream left to its start is closed by it, if it ever returns:
+    closed here too, it would be freed under the start."""
+    opened, seen, closed = [], [], []
 
     class SilentStream:
         def __init__(self, **kwargs):
@@ -206,6 +217,7 @@ def test_a_microphone_sending_no_sound_says_so_instead_of_freezing(monkeypatch,
 
     monkeypatch.setattr(recording.sd, "InputStream", SilentStream)
     monkeypatch.setattr(mic_stream, "start", never_answers)
+    monkeypatch.setattr(mic_stream, "close", lambda stream: closed.append(stream) or True)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: seen.append(title))
     devices = [keyboard()]
     keyboard_grab.grab_all_devices(devices)
@@ -213,7 +225,7 @@ def test_a_microphone_sending_no_sound_says_so_instead_of_freezing(monkeypatch,
     started = recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=0)
 
     assert started is None
-    assert len(opened) == 1
+    assert len(opened) == 1 and closed == []
     assert seen == ["Microphone isn't answering"]
     assert not devices[0].is_grabbed
     assert rs.state.is_recording is False
@@ -236,8 +248,60 @@ def test_a_silent_microphone_on_retry_reports_the_timeout(monkeypatch, quiet_rec
 
     assert recording.start_recording(False, True, 0) is None
     assert len(attempts) == 2
-    assert notices == [("Microphone isn't answering", "It sends no sound. Unplug it and plug it back in.")]
+    assert notices == [("Microphone isn't answering",
+                        "It sends no sound. If it's plugged in, unplug it and plug it "
+                        "back in.")]
     assert rs.state.is_recording is False
+
+
+def test_a_failed_start_does_not_retry_while_its_close_is_stuck(monkeypatch, quiet_recording):
+    attempts, asked, notices = [], [], []
+    stuck = [False]
+
+    class Stream:
+        def __init__(self, **kwargs):
+            attempts.append(kwargs)
+
+        def start(self):
+            raise OSError("microphone unavailable")
+
+    def close(_stream):
+        stuck[0] = True
+        return False
+
+    monkeypatch.setattr(recording.sd, "InputStream", Stream)
+    monkeypatch.setattr(mic_stream, "close", close)
+    monkeypatch.setattr(mic_stream, "stuck", lambda: stuck[0])
+    monkeypatch.setattr(recording, "pick_input_device", lambda _mic: 0)
+    monkeypatch.setattr(tray_link, "restart_service", lambda: asked.append("restart") or True)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notices.append((title, body)))
+
+    assert recording.start_recording(False, False, 0) is None
+    assert len(attempts) == 1
+    assert asked == ["restart"]
+    assert notices == [("Audio system stopped answering", "Restarting the dictation service.")]
+    assert rs.state.is_recording is False
+
+
+def test_a_microphone_stuck_again_after_it_cleared_asks_for_a_restart_again(
+        monkeypatch, quiet_recording):
+    """Without a tray the first request fails; once the stuck stream closes
+    by itself and the next one sticks, the user is told again."""
+    asked, stuck = [], [True]
+    monkeypatch.setattr(mic_stream, "stuck", lambda: stuck[0])
+    monkeypatch.setattr(recording.sd, "InputStream",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("busy")))
+    monkeypatch.setattr(recording, "pick_input_device", lambda _mic: 0)
+    monkeypatch.setattr(tray_link, "restart_service", lambda: asked.append("restart") or False)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: None)
+
+    recording.start_recording(False, False, 0)
+    stuck[0] = False
+    recording.start_recording(False, False, 0)
+    stuck[0] = True
+    recording.start_recording(False, False, 0)
+
+    assert asked == ["restart", "restart"]
 
 
 def test_failed_recording_start_clears_the_recording_flag(monkeypatch, quiet_recording):

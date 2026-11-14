@@ -141,6 +141,12 @@ class TuxTalkDBusService(dbus.service.Object):
         if hasattr(self.app, method_name):
             GLib.idle_add(getattr(self.app, method_name), *args)
 
+    def _can(self, method_name):
+        """Whether a call to *method_name* would be dispatched: this process's
+        app has it (the service standing in for a missing tray has few) and
+        isn't quitting."""
+        return hasattr(self.app, method_name) and not getattr(self.app, "quitting", False)
+
     def _dispatch_from_command_line(self, method_name):
         """_dispatch for a call tuxtalk --open or --uninstall makes too
         (control.OPEN_METHODS). Refused while quitting with QUITTING_ERROR:
@@ -258,11 +264,15 @@ class TuxTalkDBusService(dbus.service.Object):
 
     @dbus.service.method(DBUS_INTERFACE)
     def RestartService(self):
-        """Restart the dictation service, as the user asked: with Dictation
-        off it turns it on."""
-        if not hasattr(self.app, 'restart_service') or getattr(self.app, 'quitting', False):
+        """Restart the dictation service, as the user asked, or the service
+        itself with a microphone stuck in the audio system: with Dictation
+        off it turns it on. Refused with an error where nothing would restart
+        it (the service standing in for a missing tray, a tray quitting), so
+        the service can tell the user to restart TuxTalk instead."""
+        if not self._can('restart_service'):
             raise dbus.exceptions.DBusException(
-                "The tray cannot restart the service", name=f"{DBUS_INTERFACE}.Error.CannotRestart")
+                "The tray cannot restart the service",
+                name=f"{DBUS_INTERFACE}.Error.CannotRestart")
         self._dispatch('restart_service')
 
     @dbus.service.method(DBUS_INTERFACE)
@@ -373,7 +383,7 @@ class TuxTalkDBusService(dbus.service.Object):
         """Show TuxTalk's menu as a window (menu_window.py). Called when
         TuxTalk is opened again while it runs. False when this process has no
         menu window (the dictation service standing in for a missing tray)."""
-        if not hasattr(self.app, 'show_menu') or getattr(self.app, "quitting", False):
+        if not self._can('show_menu'):
             return False
         self._dispatch('show_menu')
         return True

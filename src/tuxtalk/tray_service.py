@@ -151,7 +151,8 @@ class ServiceLifecycle:
 
     def restart_service(self, _=None):
         """Restart Service, as the user asked for it (the tray menu, the menu
-        window, the GNOME extension): with Dictation off it starts it."""
+        window, the GNOME extension) or the service did, its microphone stuck
+        in the audio system: with Dictation off it starts it."""
         self._restart(starts_dictation=True)
 
     def restart_if_on(self, _=None):

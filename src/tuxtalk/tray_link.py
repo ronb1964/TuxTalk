@@ -1,6 +1,7 @@
 """The dictation service's side of its D-Bus link to the tray: telling it
 when recording starts and stops and when a hotkey is pressed, and asking it
-to show the voice commands. The tray re-sends these to the GNOME extension.
+to show the voice commands or to restart the service (a microphone stuck in
+the audio system). The tray re-sends these to the GNOME extension.
 Every call has a short time limit: a busy or missing tray must never hold
 up a dictation."""
 from . import focused_window
@@ -10,8 +11,9 @@ logger = setup_logger(__name__)
 
 
 def call(method: str, *args, what: str, signature: str | None = None) -> bool:
-    """Call the tray's D-Bus *method* with *args*. A failure, dbus itself
-    missing included, is logged as "Could not {what}" and never raised.
+    """Call the tray's D-Bus *method* with *args*: whether it answered. A
+    failure, dbus itself missing included, is logged as "Could not {what}"
+    and never raised.
 
     Every call has the short time limit focused_window.TRAY_TIMEOUT_S: some
     are made with every keyboard exclusively grabbed. Arguments that aren't
@@ -49,6 +51,8 @@ def notify_hotkey_pressed(key_name: str):
 
 
 def restart_service():
+    """Ask the tray to restart the dictation service: whether it took the
+    request (a service running without a tray has none to ask)."""
     return call("RestartService", what="ask the tray to restart the service")
 
 

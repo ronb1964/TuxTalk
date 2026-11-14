@@ -304,9 +304,14 @@ def _heard(rec, which: str, detector, indata) -> bool:
 
 def open_input_stream(rec, device_idx) -> None:
     """Open and start recording *rec*'s microphone stream. Raises if the
-    device is unusable."""
-    # Use the device's native sample rate (may differ from 16kHz on ALSA hw: devices)
+    device is unusable, and mic_stream.NotAnswering if it sends nothing or an
+    earlier stream is stuck (mic_stream.StillStuck)."""
     global spectrum_processor
+    # Checked before anything asks PortAudio: opening a stream while one
+    # given up on is stuck may wait on it for ever.
+    if mic_stream.stuck():
+        raise mic_stream.StillStuck("a stream given up on hasn't closed")
+    # Use the device's native sample rate (may differ from 16kHz on ALSA hw: devices)
     rec.samplerate = mic_stream.input_samplerate(device_idx, engine.SAMPLE_RATE)
     # The bars' bands are worked out for one rate; built before the stream
     # starts, so its callback never sees one half made.
@@ -320,29 +325,86 @@ def open_input_stream(rec, device_idx) -> None:
     mic_stream.start(rec.stream)
 
 
+# Whether the tray was asked to restart the service for the stream stuck
+# now: once is enough, and a press after a failed request (no tray) would
+# only repeat its notice. Cleared by a press that finds nothing stuck.
 _restart_requested = False
 
 
+def _not_answering(rec, beeps_on: bool, still_stuck: bool) -> None:
+    """Give up on recording *rec*: its microphone sent nothing in time, or a
+    stream given up on earlier is *still_stuck*. Said whatever the
+    notifications setting, since the press otherwise seems ignored. The
+    first time, unplugging the microphone may free it; while a stream stays
+    stuck, only restarting the service does, and the tray is asked to, once."""
+    # A stream that just timed out belongs to its start, which closes it if
+    # it ever returns: closing it here too would wait on it, or free it under
+    # the start.
+    rec.stream = None
+    _give_up_starting(rec, beeps_on, say_unavailable=False)
+    if still_stuck:
+        _restart_for_stuck_microphone()
+    else:
+        notices.warn_mic_not_answering()
+
+
 def _restart_for_stuck_microphone() -> None:
+    """Ask the tray to restart the service, once per stuck stream, and say
+    so, or that the user must restart TuxTalk where there's no tray to ask."""
     global _restart_requested
     if _restart_requested:
         return
     _restart_requested = True
-    logger.error("A microphone stream is stuck starting; asking the tray to restart the service")
+    logger.error("A microphone stream is stuck in the audio system; "
+                 "asking the tray to restart the service")
     notices.warn_mic_restart(tray_link.restart_service())
 
 
-def _give_up_starting(rec, beeps_on: bool, notify_on: bool, title: str, body: str) -> None:
+def _give_up_starting(rec, beeps_on: bool, say_unavailable: bool) -> None:
+    """Undo starting recording *rec* when no microphone would open, saying
+    "Microphone unavailable" with *say_unavailable*."""
     rs.state.is_recording = False
     # Counted already (recording_begins), so a send set up meanwhile was held
     # for it: this one ended, cancelled, and that's said.
     rec.message.cancelled = True
     stop_stream_safely(rec)
+    # Grabbed for this press: left grabbed, nothing could be typed anywhere.
     keyboard_grab.release_all()
     beeps.beep(beeps_on, *CANCEL_BEEP)
-    if notify_on:
-        notify_module.notify(title, body)
+    if say_unavailable:
+        notify_module.notify("Microphone unavailable", "Check that no other app is using it.")
     _leave_held_send_unsent(rec)
+
+
+def _open_on_second_try(rec, beeps_on: bool, notify_on: bool, input_device_idx) -> bool:
+    """Open recording *rec*'s microphone again after device
+    *input_device_idx* failed: whether it opened. If not, the recording is
+    given up on.
+
+    The mic is stored as a device number, resolved at startup. PortAudio's
+    device list is fixed when it starts, so a mic chosen by name maps to the
+    same entry again (a second try still helps one busy for a moment); on
+    System Default the desktop may name another default now, on another
+    listed device. So it's resolved again first."""
+    # A close that times out here leaves the stream stuck, and the second
+    # try's open_input_stream says so instead of hanging on it.
+    stop_stream_safely(rec)
+    try:
+        fresh_idx = pick_input_device(load_config().mic)
+        open_input_stream(rec, fresh_idx)
+    except mic_stream.NotAnswering as e:
+        _not_answering(rec, beeps_on, isinstance(e, mic_stream.StillStuck))
+        return False
+    except Exception as e:
+        # Genuinely unavailable: unplugged, or held exclusively by another
+        # app. Undone and said (with notifications on).
+        logger.error(f"Could not start recording: {e}", exc_info=True)
+        _give_up_starting(rec, beeps_on, say_unavailable=notify_on)
+        return False
+    logger.info(f"Microphone re-resolved to device {fresh_idx}")
+    if fresh_idx != input_device_idx:
+        notices.warn_mic_switched(input_device_idx, fresh_idx)
+    return True
 
 
 def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
@@ -369,9 +431,10 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
         held_send=held or held_send, press_t0=time.time())
     # Set before the stream starts — _sd_callback drops frames unless it's set.
     rs.state.is_recording = True
-    if mic_stream.starting_stuck():
-        _give_up_starting(rec, beeps_on, False, "", "")
-        _restart_for_stuck_microphone()
+    if mic_stream.stuck():
+        # No microphone opens until it closes: no waking the model, and no
+        # asking the desktop for its default with the keyboard grabbed.
+        _not_answering(rec, beeps_on, still_stuck=True)
         return None
     _restart_requested = False
     if engine.model is None:
@@ -381,40 +444,13 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     input_device_idx = follow_system_default(input_device_idx)
     try:
         open_input_stream(rec, input_device_idx)
-    except mic_stream.NotAnswering:
-        # Left to its start, the stream holds PortAudio's lock: a second try
-        # would wait on it, and the next press restarts the service instead.
-        rec.stream = None
-        _give_up_starting(rec, beeps_on, False, "Microphone isn't answering",
-                          "It sends no sound. Unplug it and plug it back in.")
-        notices.warn_mic_not_answering()
+    except mic_stream.NotAnswering as e:
+        # No second try: it would wait on the stream that's stuck.
+        _not_answering(rec, beeps_on, isinstance(e, mic_stream.StillStuck))
         return None
     except Exception as first_error:
-        # The mic is stored as a device number, resolved at startup. PortAudio's
-        # device list is fixed when it starts, so a mic chosen by name maps to
-        # the same entry again (a second try still helps one busy for a
-        # moment); on System Default the desktop may name another default now,
-        # on another listed device. Resolve again and try once more.
         logger.warning(f"Microphone {input_device_idx} failed ({first_error}); re-resolving")
-        stop_stream_safely(rec)
-        try:
-            fresh_idx = pick_input_device(load_config().mic)
-            open_input_stream(rec, fresh_idx)
-            logger.info(f"Microphone re-resolved to device {fresh_idx}")
-            if fresh_idx != input_device_idx:
-                notices.warn_mic_switched(input_device_idx, fresh_idx)
-        except mic_stream.NotAnswering:
-            rec.stream = None
-            _give_up_starting(rec, beeps_on, False, "Microphone isn't answering",
-                              "It sends no sound. Unplug it and plug it back in.")
-            notices.warn_mic_not_answering()
-            return None
-        except Exception as e:
-            # Genuinely unavailable: unplugged, or held exclusively by another
-            # app.
-            logger.error(f"Could not start recording: {e}", exc_info=True)
-            _give_up_starting(rec, beeps_on, notify_on, "Microphone unavailable",
-                              "Check that no other app is using it.")
+        if not _open_on_second_try(rec, beeps_on, notify_on, input_device_idx):
             return None
 
     type_at_pause.arm_chunker(rec)

@@ -816,6 +816,14 @@ The microphone sent nothing but silence: it's muted, turned all the way down, or
 it's the wrong one. Check its mute switch, then <b>Preferences → Audio →
 Microphone</b> and the test beside it.
 
+### "Microphone isn't answering"
+The microphone sent no sound at all for a few seconds, so TuxTalk stopped
+waiting for it. Unplug it and plug it back in, or pick another in
+<b>Preferences → Audio → Microphone</b>. If the sound system stays stuck on it
+("Audio system stopped answering"), the next press restarts TuxTalk's dictation
+service, as <b>Restart Service</b> in the TuxTalk menu does; when it can't, the
+message says to quit TuxTalk and start it again.
+
 ### Nothing gets typed
   • Click into a text box first, and give the app a moment to take the focus.
   • <b>Preferences → Advanced → System check</b> opens by itself when typing needs
