@@ -305,14 +305,14 @@ class AdvancedTab(Tab):
             "Brave and apps like\nClaude Desktop need to be closed and opened again first. "
             "Apps use a little more memory.")
         fine.attach(check, 0, frow + 1, 2, 1)
-        if on and not a11y_switch.turned_on_by_tuxtalk():
-            check.set_sensitive(False)
-            note = Gtk.Label(label=A11Y_DESKTOPS_NOTE, xalign=0, wrap=True)
-            note.get_style_context().add_class("dim-label")
-            fine.attach(note, 0, frow + 2, 2, 1)
-            return frow + 3
+        self._a11y_note = Gtk.Label(label=A11Y_DESKTOPS_NOTE, xalign=0, wrap=True)
+        self._a11y_note.get_style_context().add_class("dim-label")
+        self._a11y_note.set_no_show_all(True)
+        fine.attach(self._a11y_note, 0, frow + 2, 2, 1)
         check.connect("toggled", self._on_a11y_switch_toggled)
-        return frow + 2
+        if on and not a11y_switch.turned_on_by_tuxtalk():
+            self._show_switch_held(check)
+        return frow + 3
 
     def _on_a11y_switch_toggled(self, check):
         """Turn the switch on, saying which apps need a restart, or off; when
@@ -342,9 +342,10 @@ class AdvancedTab(Tab):
         check.handler_unblock_by_func(self._on_a11y_switch_toggled)
 
     def _show_switch_held(self, check):
-        """*check* shown on and not TuxTalk's to change."""
+        """*check* shown on and not TuxTalk's to change, and why."""
         self._put_back(check, True)
         check.set_sensitive(False)
+        self._a11y_note.show()
 
     def _fine_privacy(self, fine, frow):
         """Logging what's dictated, and clearing the log."""

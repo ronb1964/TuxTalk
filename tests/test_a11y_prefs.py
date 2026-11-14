@@ -109,3 +109,5 @@ def test_a_screen_reader_that_took_the_switch_over_shows_it_on(switch, prefs_win
     assert switch.on is True
     assert box.get_active() and not box.get_sensitive()
     assert shown == [prefs_advanced.A11Y_SCREEN_READER_TITLE]
+    note = find(box.get_toplevel(), Gtk.Label, prefs_advanced.A11Y_DESKTOPS_NOTE)
+    assert note.get_visible()

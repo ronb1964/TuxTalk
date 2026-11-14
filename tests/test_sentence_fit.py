@@ -101,3 +101,9 @@ def test_a_dictation_starting_with_a_line_break_gets_no_space_before_it():
 def test_a_word_put_inside_a_sentence_keeps_no_period_before_a_capital(before, said, following,
                                                                        typed):
     assert fit(said, before, following, True) == typed
+
+
+@pytest.mark.parametrize("following", ["I went home", "NASA said"])
+def test_a_lead_in_before_i_or_an_acronym_keeps_no_period(following):
+    """Their capital is no sign a sentence starts there."""
+    assert fit("Yesterday. ", "", following, True) == "Yesterday "
