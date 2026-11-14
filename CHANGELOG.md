@@ -3,7 +3,7 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [0.23.1] - 2026-11-15
+## [0.23.1] - 2026-11-14
 
 - Downloads work on Fedora 45. Fedora 45 moved to OpenSSL 4, and the Python
   inside TuxTalk's AppImage, .deb and .rpm needs OpenSSL 3, so on Fedora 45

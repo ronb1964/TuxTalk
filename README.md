@@ -46,6 +46,8 @@ Claude, Anthropic's AI, writes the code. I test it and use it every day, and I h
 
 ## New in 0.23
 
+**0.23.1: downloads on Fedora 45.** Fedora 45 doesn't come with OpenSSL 3 any more and TuxTalk needed it, so on Fedora 45 every download failed, the speech model included. TuxTalk carries its own copy now and only uses it when your computer doesn't have one. This one also has Bernát Gábor's fix for a microphone that stops answering, which used to freeze dictation, and a fix for dictating into a terminal or LibreOffice with a browser's login box open in the background ([#40](https://github.com/ronb1964/TuxTalk/issues/40)).
+
 **See the words while you talk.** This is the one the poll in [Discussions](https://github.com/ronb1964/TuxTalk/discussions/24) asked about. In Preferences, Advanced, TuxTalk Labs, pick "Show the words in a box" under While you talk. While you dictate, a box by the recording indicator shows what you've said so far and grows with it, so on a long paragraph you can read back what it heard before you let go. What gets typed is still the final read when you let go, nothing gets typed and then fixed. It needs the speech model on a graphics card. On the processor it's too slow, and TuxTalk tells you so instead of just doing nothing.
 
 Type at pause is the other choice in that same spot, so it's one or the other now. I had both on the first time I tried it and it was a mess.
