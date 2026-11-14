@@ -49,6 +49,9 @@ _TEXT = "org.a11y.atspi.Text"
 # U+FFFC, which Firefox and Chromium give for each paragraph of a web
 # editor in place of its text; written as a code: no window shows it.
 _PLACEHOLDER = chr(0xFFFC)
+# How far into a web editor's paragraphs (a list in a paragraph...) the
+# cursor is looked for.
+_MAX_DEPTH = 3
 
 # AtspiStateType and AtspiRole numbers (at-spi2-core's atspi-constants.h).
 _STATE_ACTIVE = 1
@@ -213,26 +216,47 @@ def _focused_text(bus, window, deadline):
     return focused
 
 
-def _around(bus, widget, chars, deadline):
+def _around(bus, widget, chars, deadline, depth=0):
     """*widget*'s text, up to *chars* characters each side of its cursor or
-    of its first selection; None where it isn't plain text: a web editor's
-    paragraphs come as U+FFFC, one each (Firefox, Chromium)."""
+    of its first selection. A web page's rich text box (Claude Desktop,
+    Gmail, Discord) gives each paragraph as one U+FFFC, an object of its
+    own whose own text the cursor is in: that one is read instead (_holder).
+    None where no plain text around the cursor can be found."""
     if _call(bus, widget, _TEXT, "GetNSelections", None, deadline)[0]:
         start, end = sorted(_call(bus, widget, _TEXT, "GetSelection",
                                   GLib.Variant("(i)", (0,)), deadline))
     else:
-        start = end = _call(bus, widget, "org.freedesktop.DBus.Properties", "Get",
-                            GLib.Variant("(ss)", (_TEXT, "CaretOffset")), deadline)[0]
-    if start < 0:
-        return None
-    before = _call(bus, widget, _TEXT, "GetText",
-                   GLib.Variant("(ii)", (max(0, start - chars), start)), deadline)[0]
-    # Asked only up to the end: Firefox answers nothing for a range past it.
-    count = _call(bus, widget, "org.freedesktop.DBus.Properties", "Get",
-                  GLib.Variant("(ss)", (_TEXT, "CharacterCount")), deadline)[0]
-    after = _call(bus, widget, _TEXT, "GetText",
-                  GLib.Variant("(ii)", (end, min(end + chars, count))), deadline)[0]
-    return None if _PLACEHOLDER in before + after else (before, after)
+        start = end = _property(bus, widget, "CaretOffset", deadline)
+    before = after = ""
+    if start >= 0:
+        before = _call(bus, widget, _TEXT, "GetText",
+                       GLib.Variant("(ii)", (max(0, start - chars), start)), deadline)[0]
+        # Asked only up to the end: Firefox answers nothing for a range past it.
+        count = _property(bus, widget, "CharacterCount", deadline)
+        after = _call(bus, widget, _TEXT, "GetText",
+                      GLib.Variant("(ii)", (end, min(end + chars, count))), deadline)[0]
+    if start >= 0 and _PLACEHOLDER not in before + after:
+        return before, after
+    inner = _holder(bus, widget, deadline) if depth < _MAX_DEPTH else None
+    return None if inner is None else _around(bus, inner, chars, deadline, depth + 1)
+
+
+def _property(bus, widget, name, deadline):
+    """The Text interface's property *name* of *widget*."""
+    return _call(bus, widget, "org.freedesktop.DBus.Properties", "Get",
+                 GLib.Variant("(ss)", (_TEXT, name)), deadline)[0]
+
+
+def _holder(bus, widget, deadline):
+    """The child of *widget* with text that has the cursor, or None: in a
+    web editor only the paragraph the cursor is in gives an offset for it,
+    the others -1 (the box itself -1 in Firefox, the paragraph's U+FFFC in
+    Chromium)."""
+    for child in _children(bus, widget, deadline):
+        if _TEXT in _call(bus, child, _ACCESSIBLE, "GetInterfaces", None, deadline)[0] \
+                and _property(bus, child, "CaretOffset", deadline) >= 0:
+            return child
+    return None
 
 
 def _counts_at_once(bus, app, window, focused, deadline) -> bool:

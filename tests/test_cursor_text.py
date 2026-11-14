@@ -9,7 +9,7 @@ from gi.repository import Gio, GLib
 from tuxtalk import atspi_helper
 
 ACTIVE, FOCUSED, SHOWING = 1 << 1, 1 << 12, 1 << 25
-FILLER, PASSWORD, TEXT = 39, 40, 61       # AT-SPI roles
+FILLER, PASSWORD, TEXT, PARAGRAPH, SECTION = 39, 40, 61, 73, 85     # AT-SPI roles
 
 
 class TextBus:
@@ -73,6 +73,25 @@ class TextBus:
             text = ["org.a11y.atspi.Text"] if node.get("is_text") else []
             return GLib.Variant("(as)", (["org.a11y.atspi.Accessible"] + text,))
         raise AssertionError(f"unexpected call {method}")
+
+    def web_editor(self, name, paragraphs, box_caret=-1):
+        """A web page's rich text box as Firefox gives it (*box_caret* -1,
+        or Chromium's offset of the paragraph's placeholder): its own text
+        a U+FFFC per paragraph, each paragraph an object with its own text,
+        (text, caret) in *paragraphs*, the caret -1 where it isn't."""
+        own = f":{name}"
+        children = []
+        for i, (text, caret) in enumerate(paragraphs):
+            ref = (own, f"/p{i}")
+            self.nodes[ref] = dict(states=SHOWING, text=text, caret=caret, selection=None,
+                                   is_text=True, hang=False, children=[], role=PARAGRAPH)
+            children.append(ref)
+        self.nodes[(own, "/w")] = dict(states=SHOWING | FOCUSED, text="\ufffc" * len(paragraphs),
+                                       caret=box_caret, selection=None, is_text=True,
+                                       hang=False, children=children, role=SECTION)
+        self.nodes[(own, "/win")] = dict(states=SHOWING | ACTIVE, children=[(own, "/w")])
+        self.nodes[(own, "/root")] = dict(name=name, children=[(own, "/win")])
+        self.apps.append((own, "/root"))
 
     def _tree(self, node):
         for child in node.get("children", []):
@@ -198,10 +217,17 @@ def test_no_cursor_says_nothing(bus):
     assert around() is None
 
 
-def test_a_web_editor_s_paragraph_placeholders_say_nothing(bus):
-    """Firefox and Chromium give a rich text box's paragraphs as U+FFFC."""
-    bus.app("gedit", "\ufffc\ufffc", caret=1)
-    assert around() is None
+@pytest.mark.parametrize("box_caret", [-1, 0], ids=["Firefox", "Chromium"])
+def test_a_web_editor_s_paragraph_with_the_cursor_is_read(bus, box_caret):
+    """Claude Desktop, Gmail, Discord: the box gives its paragraphs as
+    U+FFFC, and the one with the cursor has the text around it."""
+    bus.web_editor("Firefox", [("the big dog runs", 7), ("Second line here", -1)], box_caret)
+    assert around(focus=("firefox", None)) == ("the big", " dog run")
+
+
+def test_a_web_editor_whose_paragraphs_dont_say_where_the_cursor_is_says_nothing(bus):
+    bus.web_editor("Firefox", [("the big dog runs", -1), ("Second line here", -1)])
+    assert around(focus=("firefox", None)) is None
 
 
 def test_one_active_app_isnt_read_when_the_desktop_cant_say_it_has_the_focus(bus):
