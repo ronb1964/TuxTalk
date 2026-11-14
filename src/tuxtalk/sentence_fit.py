@@ -28,6 +28,7 @@ _CLOSERS = ")]}\u201d\u2019\"'"
 _BLANKS = " \t"
 # A mark with more after it inside a dictation, and the word it follows.
 _MARK_THEN_MORE = re.compile(r"([\w.'\u2019-]*)([.!?])[)\]}\u201d\u2019\"']*\s+\S")
+_DOTTED_LETTERS = re.compile(r"(?:[^\W\d_]\.)*[^\W\d_]")
 _LINE_THEN_MORE = re.compile(r"[\n\r\u2028\u2029]\s*\S")
 # Languages that write every noun with a capital, so a capital at the start
 # of a dictation says nothing about where the sentence begins.
@@ -75,9 +76,10 @@ def _breaks_inside(text):
 
 
 def _abbreviation(word):
-    """Whether *word*, before a period, is an abbreviation: one with a
-    period inside ("U.S"), an initial, or a known one (chunk_text)."""
-    return "." in word or (len(word) == 1 and word.isalpha()) \
+    """Whether *word*, before a period, is an abbreviation: single letters
+    with periods between ("U.S", "e.g"), an initial, or a known one
+    (chunk_text). A number ("3.14") or an address ("github.com") isn't."""
+    return _DOTTED_LETTERS.fullmatch(word) is not None \
         or word.casefold() in chunk_text.ABBREVIATIONS
 
 

@@ -119,3 +119,8 @@ def test_two_sentences_put_inside_one_keep_the_period_before_the_next():
 ], ids=["U.S.", "Dr.", "an initial"])
 def test_an_abbreviation_s_period_is_no_sentence_break(said, typed):
     assert fit(said, "I live in ", "New York", True) == typed
+
+
+@pytest.mark.parametrize("said", ["It cost 3.14. We left. ", "See github.com. We left. "])
+def test_a_number_or_an_address_before_a_sentence_end_is_still_a_break(said):
+    assert fit(said, "Yesterday ", "Today we", True).endswith("We left. ")
