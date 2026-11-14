@@ -3,8 +3,15 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [Unreleased]
+## [0.23.1] - 2026-11-15
 
+- Downloads work on Fedora 45. Fedora 45 moved to OpenSSL 4, and the Python
+  inside TuxTalk's AppImage, .deb and .rpm needs OpenSSL 3, so on Fedora 45
+  every download failed: the speech model, the graphics engine and updates
+  alike, with "unknown url type: https" in the log. TuxTalk now carries its
+  own OpenSSL 3 and uses it when the computer has none, with the computer's
+  own list of trusted certificates. Where OpenSSL 3 is installed nothing
+  changes. Reported by Richard England while trying TuxTalk on Kinoite.
 - When the recording indicator follows the window you're dictating into, it
   sits higher in a tall window: a fifth of the window's height above its
   bottom (at least 40 px, as before), so it no longer covers a chat's message
