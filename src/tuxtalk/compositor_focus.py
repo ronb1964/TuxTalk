@@ -21,7 +21,8 @@ socket, so the dictation service asks them when nobody has reported it
               "activated" (below).
   X11         XFCE, MATE, Cinnamon, LXQt, Openbox and the rest: the window
               manager names the focused window in the root window's
-              _NET_ACTIVE_WINDOW (EWMH), and WM_CLASS gives its class. Only in
+              _NET_ACTIVE_WINDOW (EWMH), WM_CLASS gives its class and the
+              X server its process (window_pid). Only in
               an X11 session: under Wayland the service has a DISPLAY too
               (XWayland, for the recording indicator), but XWayland only knows
               the X11 apps and could name a window that doesn't have focus.
@@ -30,9 +31,12 @@ socket, so the dictation service asks them when nobody has reported it
 
 The socket questions themselves are in compositor_ipc.
 
-It's a hint for picking the paste shortcut, so anything going wrong means
-"don't know" (None), quickly, and never an error.
+It's a hint for picking the paste shortcut, and for which app's answer
+counts in the password check (atspi_helper), so anything going wrong means
+"don't know" (None), quickly, and never an error: there, not knowing never
+clears a password field.
 """
+import contextlib
 import ctypes
 import os
 import socket
@@ -43,7 +47,7 @@ from . import desktop_detect
 from .compositor_ipc import I3_GET_TREE, TIMEOUT, hyprland_request, i3_request, niri_request
 from .logger import FailureNotes, setup_logger
 from .single_instance import session_runtime_dir
-from .xcb_ctypes import get_property, intern_atom, x11_root, xcb_lib
+from .xcb_ctypes import get_property, intern_atom, window_owner_pid, x11_root, xcb_lib
 
 logger = setup_logger(__name__)
 _failures = FailureNotes()      # asked before every typed chunk: each failure logged once
@@ -310,18 +314,29 @@ def parse_wm_class(raw):
     return parts[-1] if parts else None
 
 
-def _from_x11():
-    """(class, window) of the window named in _NET_ACTIVE_WINDOW, through
-    XCB; None for what isn't known."""
+@contextlib.contextmanager
+def _x11_display():
+    """(XCB library, connection, root window) of $DISPLAY, or None when it
+    can't be reached; disconnected afterwards."""
     lib = xcb_lib()
     screen_number = ctypes.c_int(0)
     conn = lib.xcb_connect(None, ctypes.byref(screen_number))   # $DISPLAY
     try:
-        if not conn or lib.xcb_connection_has_error(conn):
+        root = (x11_root(lib, conn, screen_number.value)
+                if conn and not lib.xcb_connection_has_error(conn) else None)
+        yield (lib, conn, root) if root else None
+    finally:
+        if conn:
+            lib.xcb_disconnect(conn)
+
+
+def _from_x11():
+    """(class, window) of the window named in _NET_ACTIVE_WINDOW, through
+    XCB; None for what isn't known."""
+    with _x11_display() as display:
+        if display is None:
             return None, None
-        root = x11_root(lib, conn, screen_number.value)
-        if not root:
-            return None, None
+        lib, conn, root = display
         active_atom = intern_atom(lib, conn, b"_NET_ACTIVE_WINDOW")
         if not active_atom:
             return None, None       # no EWMH window manager running
@@ -334,26 +349,58 @@ def _from_x11():
             return None, None       # nothing has focus (the desktop itself)
         wm_class = get_property(lib, conn, window, XCB_ATOM_WM_CLASS)
         return (parse_wm_class(wm_class) if wm_class else None), window
-    finally:
-        if conn:
-            lib.xcb_disconnect(conn)
+
+
+def _x11_pid(window):
+    """The process that owns X11 *window*, as the X server knows it
+    (xcb_ctypes.window_owner_pid); None when it can't tell."""
+    with _x11_display() as display:
+        return None if display is None else window_owner_pid(display[1], window)
+
+
+def _source(env):
+    """Which compositor answers focused_window() in this session: "hyprland",
+    "niri", "i3" (Sway too), "cosmic" or "x11"; None when none can."""
+    if env.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        return "hyprland"
+    if env.get("NIRI_SOCKET"):
+        return "niri"
+    if env.get("SWAYSOCK") or env.get("I3SOCK"):
+        return "i3"
+    if desktop_detect.get_desktop_environment() == "cosmic":
+        return "cosmic"
+    return "x11" if desktop_detect.is_x11_session(env) else None
 
 
 def _ask_focused_window(env):
     """focused_window()'s answer from this desktop's compositor; raises
     what talking to it raised."""
-    if env.get("HYPRLAND_INSTANCE_SIGNATURE"):
+    source = _source(env)
+    if source == "hyprland":
         return _from_hyprland(env["HYPRLAND_INSTANCE_SIGNATURE"])
-    if env.get("NIRI_SOCKET"):
+    if source == "niri":
         return _from_niri(env["NIRI_SOCKET"])
-    path = env.get("SWAYSOCK") or env.get("I3SOCK")
-    if path:
-        return _from_i3(path)
-    if desktop_detect.get_desktop_environment() == "cosmic":
+    if source == "i3":
+        return _from_i3(env.get("SWAYSOCK") or env.get("I3SOCK"))
+    if source == "cosmic":
         return _from_cosmic(_wayland_socket(env)), None
-    if desktop_detect.is_x11_session(env):
-        return _from_x11()
-    return None, None
+    return _from_x11() if source == "x11" else (None, None)
+
+
+def window_pid(window):
+    """The process behind *window*, an id from focused_window(), where the
+    compositor tells it: the X server knows its windows' owners; None
+    anywhere else. The password check tells by it which app on the
+    accessibility bus has the focus, where their names differ
+    (atspi_helper)."""
+    if _source(os.environ) != "x11":
+        return None
+    try:
+        return _x11_pid(window)
+    except Exception as e:      # a hint like the class: unknown, never an error
+        if _failures.failed("pid", e):
+            logger.info(f"Could not ask X11 which process a window is: {e}")
+        return None
 
 
 def focused_window():
@@ -399,12 +446,14 @@ def focused_rect():
     coordinates) on Sway, i3 or Hyprland, or None. A failure is logged once,
     as focused_window's is."""
     env = os.environ
-    path = env.get("SWAYSOCK") or env.get("I3SOCK")
+    source = _source(env)
     try:
-        if env.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        if source == "hyprland":
             rect = _rect_from_hyprland(env["HYPRLAND_INSTANCE_SIGNATURE"])
+        elif source == "i3":
+            rect = _rect_from_i3(env.get("SWAYSOCK") or env.get("I3SOCK"))
         else:
-            rect = _rect_from_i3(path) if path else None
+            rect = None
     except Exception as e:      # an odd answer mustn't stop the window that asked
         if _failures.failed("frame", e):
             logger.info(f"Could not ask the compositor where the focused window is: {e}")

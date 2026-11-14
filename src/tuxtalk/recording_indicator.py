@@ -59,10 +59,11 @@ def positioning_available():
     return bool(os.environ.get("DISPLAY"))
 
 
-# Following the window dictated into: how far inside that window the
-# indicator sits. More room at the top, to clear the title
-# bar (part of the frame), and at the bottom, to clear a status bar.
-FOLLOW_MARGIN = 40      # above the bottom edge
+# The top gap clears the title bar. The 20% bottom gap clears a message box
+# or status bar and keeps the indicator off the screen's lower edge. Short
+# windows still need at least 40 px.
+FOLLOW_MARGIN = 40
+FOLLOW_BOTTOM_SHARE = 0.2
 FOLLOW_TOP = 50         # below the top edge
 FOLLOW_SIDE = 20        # in from the left and right edges
 
@@ -82,7 +83,7 @@ def follow_position(window, width, height, monitor, position="bottom-center"):
     if position.startswith("top"):
         y = window.y + FOLLOW_TOP
     elif position.startswith("bottom"):
-        y = window.y + window.h - height - FOLLOW_MARGIN
+        y = window.y + window.h - height - max(FOLLOW_MARGIN, int(window.h * FOLLOW_BOTTOM_SHARE))
     else:
         y = window.y + (window.h - height) // 2
     x = max(monitor.x, min(x, monitor.x + monitor.w - width))

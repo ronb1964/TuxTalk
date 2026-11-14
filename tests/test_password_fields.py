@@ -314,6 +314,18 @@ def test_the_desktops_own_password_prompt_gets_nothing(desktop, monkeypatch, des
     assert (desktop["typed"] == []) is refused
 
 
+def test_the_log_says_a_waiting_prompt_refused_the_dictation(monkeypatch, caplog):
+    """A dictation refused on Cinnamon said only "the cursor is in a
+    password field", which the accessibility bus and a waiting prompt both
+    lead to (issue #40)."""
+    from tuxtalk import desktop_detect
+    monkeypatch.setattr(desktop_detect, "get_desktop_environment", lambda: "cinnamon")
+    monkeypatch.setattr(focused_window, "_polkit_prompt_waiting", lambda: True)
+    with caplog.at_level(logging.INFO, logger="tuxtalk.focused_window"):
+        assert focused_window._password_prompt_has_focus() is True
+    assert "password prompt is waiting" in caplog.text
+
+
 def test_with_no_prompt_waiting_the_focused_window_isnt_asked(desktop, monkeypatch):
     """The check runs before every typed line; asking the tray which window
     has the focus each time would slow typing down for nothing."""
@@ -368,7 +380,7 @@ class FakeA11yBus:
     widgets, each a (bus name, path) pair like the real ones."""
 
     def __init__(self, clock=None):
-        self.nodes, self.calls = {}, []
+        self.nodes, self.calls, self.pids = {}, [], {}
         self.apps = self._add(("registry", "root"))["children"]
         self.clock = clock or time
 
@@ -377,13 +389,16 @@ class FakeA11yBus:
                                     hang=False), **node)
         return self.nodes[ref]
 
-    def app(self, name, focus_role, active=True, collection=True, hang=False):
+    def app(self, name, focus_role, active=True, collection=True, hang=False, pid=None):
         """An app with one window holding a text box and the focused widget,
         of *focus_role*. *collection* False is an app without the Collection
         interface (Qt 5), so it is walked; "slow" times out on it. *hang*: it
-        never answers at all."""
+        never answers at all. *pid*: its process, as the bus daemon tells it;
+        "hang": the daemon takes too long to say."""
         def ref(path):
             return (f":{name}", path)
+        if pid is not None:
+            self.pids[f":{name}"] = pid
         common = dict(collection=collection, hang=hang)
         self._add(ref("/2"), role=focus_role, states=SHOWING | FOCUSED, **common)
         self._add(ref("/3"), role=TEXT, states=SHOWING, **common)
@@ -396,6 +411,15 @@ class FakeA11yBus:
                   cancellable):
         if (name, path) == (atspi_helper._REGISTRY, atspi_helper._ROOT):
             name, path = "registry", "root"
+        if method == "GetConnectionUnixProcessID":
+            self.calls.append((name, path, method))
+            asked = args.unpack()[0]
+            if self.pids.get(asked) == "hang":
+                self.clock.sleep(timeout_ms / 1000)
+                raise GLib.Error("Timeout was reached")
+            if asked not in self.pids:
+                raise GLib.Error(f"Could not get PID of name '{asked}'")
+            return GLib.Variant("(u)", (self.pids[asked],))
         node = self.nodes[(name, path)]
         self.calls.append((name, path, method))
         if node["hang"]:
@@ -420,6 +444,13 @@ class FakeA11yBus:
             found = [c for c in node["children"] if self.nodes[c]["states"] & FOCUSED]
             return GLib.Variant("(a(so))", (found,))
         raise AssertionError(f"unexpected call {method}")
+
+
+def focus_on(wm_class, pid=None):
+    """A focused_app for focused_is_password: the desktop says the window
+    of class *wm_class* has the focus, its process *pid* (None: not told).
+    No class: the desktop can't say."""
+    return lambda: None if wm_class is None else (wm_class, pid)
 
 
 @pytest.fixture
@@ -506,7 +537,7 @@ def test_a_dictations_check_before_each_line_gives_up_sooner(bus, monkeypatch):
     dictation took 10 s more."""
     for n in range(5):
         bus.app(f"frozen{n}", PASSWORD, hang=True)
-    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(focused_window, "focused_app", focus_on("org.kde.kwrite"))
     started = time.monotonic()
     keyboard_output.refuse_password_field()          # no answer in time: typing as usual
     took = time.monotonic() - started
@@ -519,13 +550,13 @@ def test_a_password_field_left_in_a_background_app_doesnt_refuse_the_dictation(b
     login box focused: every dictation into KWrite was refused."""
     bus.app("Firefox", PASSWORD)
     bus.app("kwrite", TEXT)
-    assert atspi_helper.focused_is_password(focused_class=lambda: "org.kde.kwrite") is False
+    assert atspi_helper.focused_is_password(focused_app=focus_on("org.kde.kwrite")) is False
 
 
 def test_the_focused_apps_own_password_field_still_counts(bus):
     bus.app("kwrite", TEXT)
     bus.app("Firefox", PASSWORD)
-    assert atspi_helper.focused_is_password(focused_class=lambda: "firefox") is True
+    assert atspi_helper.focused_is_password(focused_app=focus_on("firefox")) is True
 
 
 @pytest.mark.parametrize("focused", [
@@ -535,7 +566,7 @@ def test_the_focused_apps_own_password_field_still_counts(bus):
 def test_a_password_field_counts_where_the_focused_app_cant_be_told_apart(bus, focused):
     bus.app("Brave", PASSWORD)
     bus.app("kwrite", TEXT)
-    assert atspi_helper.focused_is_password(focused_class=lambda: focused) is True
+    assert atspi_helper.focused_is_password(focused_app=focus_on(focused)) is True
 
 
 @pytest.mark.parametrize("budget", [atspi_helper.BUDGET_S, atspi_helper.RECHECK_BUDGET_S])
@@ -546,7 +577,7 @@ def test_a_password_field_found_still_counts_when_later_apps_use_up_the_time(bus
     bus.app("Chromium", PASSWORD)
     for n in range(5):
         bus.app(f"frozen{n}", TEXT, hang=True)
-    assert atspi_helper.focused_is_password(budget, lambda: "org.kde.kwrite") is True
+    assert atspi_helper.focused_is_password(budget, focus_on("org.kde.kwrite")) is True
 
 
 def test_the_focused_apps_no_still_clears_a_background_one_when_the_time_runs_out(bus):
@@ -554,14 +585,14 @@ def test_the_focused_apps_no_still_clears_a_background_one_when_the_time_runs_ou
     bus.app("kwrite", TEXT)
     for n in range(5):
         bus.app(f"frozen{n}", TEXT, hang=True)
-    assert atspi_helper.focused_is_password(focused_class=lambda: "org.kde.kwrite") is False
+    assert atspi_helper.focused_is_password(focused_app=focus_on("org.kde.kwrite")) is False
 
 
 def test_a_focused_app_that_doesnt_answer_hasnt_said_no(bus):
     """Only an answer clears another app's password field."""
     bus.app("Firefox", PASSWORD)
     bus.app("kwrite", TEXT, collection="slow")
-    assert atspi_helper.focused_is_password(focused_class=lambda: "org.kde.kwrite") is True
+    assert atspi_helper.focused_is_password(focused_app=focus_on("org.kde.kwrite")) is True
 
 
 def test_a_slow_tray_doesnt_hold_up_the_check_before_each_line(bus):
@@ -572,7 +603,7 @@ def test_a_slow_tray_doesnt_hold_up_the_check_before_each_line(bus):
 
     def slow_tray():
         answered.wait(1.5)
-        return "org.kde.kwrite"
+        return "org.kde.kwrite", None
     bus.app("Firefox", PASSWORD)
     started = time.monotonic()
     try:
@@ -616,7 +647,7 @@ def test_a_password_field_counts_when_asking_for_the_focused_app_fails(bus):
     def broken():
         raise RuntimeError("an odd answer from the desktop")
     bus.app("Firefox", PASSWORD)
-    assert atspi_helper.focused_is_password(focused_class=broken) is True
+    assert atspi_helper.focused_is_password(focused_app=broken) is True
 
 
 @pytest.mark.parametrize("background_first", [True, False])
@@ -626,25 +657,106 @@ def test_code_behind_code_oss_doesnt_refuse_the_dictation(bus, background_first)
     apps = [("Code", PASSWORD), ("Code OSS", TEXT)]
     for name, role in apps if background_first else apps[::-1]:
         bus.app(name, role)
-    assert atspi_helper.focused_is_password(focused_class=lambda: "code-oss") is False
+    assert atspi_helper.focused_is_password(focused_app=focus_on("code-oss")) is False
 
 
 def test_an_app_named_like_the_classs_first_word_cant_clear_a_password_field(bus):
     bus.app("Firefox", PASSWORD)
     bus.app("Code", TEXT)
-    assert atspi_helper.focused_is_password(focused_class=lambda: "code-oss") is True
+    assert atspi_helper.focused_is_password(focused_app=focus_on("code-oss")) is True
+
+
+@pytest.mark.parametrize("bus_name, wm_class, focused_pid", [
+    ("gnome-terminal-server", "Gnome-terminal", None),     # X11, by name
+    ("gnome-terminal-server", "org.gnome.Terminal", None),  # Wayland
+    ("soffice", "libreoffice-writer", None),
+    ("java", "jetbrains-idea", 4003),       # no known pair: X11's process tells
+])
+def test_a_background_browsers_password_field_doesnt_refuse_an_app_named_otherwise(
+        bus, bus_name, wm_class, focused_pid):
+    """Chromium behind gnome-terminal and LibreOffice on Cinnamon still said
+    its window was active, with its login box focused, and their names on
+    the bus aren't their window classes: every dictation into them was
+    refused (issue #40). The focused window's own app said no."""
+    bus.app("Chromium", PASSWORD, pid=3643)
+    bus.app(bus_name, TEXT, pid=4003)
+    focused = focus_on(wm_class, focused_pid)
+    assert atspi_helper.focused_is_password(focused_app=focused) is False
+
+
+@pytest.mark.parametrize("budget", [atspi_helper.BUDGET_S, atspi_helper.RECHECK_BUDGET_S])
+def test_the_focused_processs_no_counts_when_later_apps_use_up_the_time(bus, budget):
+    """Its process was asked only after every app had answered, by when
+    hung apps had used up the time: the browser's field counted again."""
+    bus.app("Chromium", PASSWORD, pid=3643)
+    bus.app("java", TEXT, pid=4003)
+    for n in range(5):
+        bus.app(f"frozen{n}", TEXT, hang=True)
+    focused = focus_on("jetbrains-idea", 4003)
+    assert atspi_helper.focused_is_password(budget, focused) is False
+
+
+@pytest.mark.parametrize("app_pid, focused_pid", [
+    (4003, 9999),       # another process: not the focused app
+    (None, 4003),       # the bus can't tell (an app gone meanwhile)
+    (4003, None),       # the desktop can't (Wayland, a window over the network)
+    ("hang", 4003),     # the bus daemon too slow to tell
+])
+def test_without_the_same_process_the_names_decide(bus, app_pid, focused_pid):
+    """An app that isn't the focused window's process, or can't be told to
+    be, can't clear another app's password field."""
+    bus.app("Chromium", PASSWORD, pid=3643)
+    bus.app("java", TEXT, pid=app_pid)
+    focused = focus_on("jetbrains-idea", focused_pid)
+    assert atspi_helper.focused_is_password(focused_app=focused) is True
+
+
+@pytest.mark.parametrize("focused, said", [
+    (("Xed", 2673), "while Xed has the focus"),
+    (None, "while which app has the focus can't be told"),
+])
+def test_the_log_says_which_apps_password_field_refused_the_dictation(bus, caplog, focused,
+                                                                     said):
+    bus.app("Chromium", PASSWORD, pid=3643)
+    with caplog.at_level(logging.INFO, logger="tuxtalk.atspi_helper"):
+        assert atspi_helper.focused_is_password(focused_app=lambda: focused) is True
+    assert f"a password field has the focus in Chromium {said}" in caplog.text
+
+
+@pytest.mark.parametrize("look, expected", [
+    (("Gnome-terminal", ("compositor", 0x5600006)), ("Gnome-terminal", 4003)),  # X11
+    (("org.kde.kwrite", ("tray", "{8c1d}")), ("org.kde.kwrite", None)),  # KWin's id
+    ((None, ("own", None)), None),             # one of TuxTalk's own: not known
+])
+def test_the_focused_app_is_told_with_its_process_where_the_compositor_says(
+        monkeypatch, look, expected):
+    from tuxtalk import compositor_focus
+    monkeypatch.setattr(focused_window, "look", lambda: look)
+    monkeypatch.setattr(compositor_focus, "window_pid",
+                        lambda window: 4003 if window == 0x5600006 else pytest.fail(window))
+    assert focused_window.focused_app() == expected
+
+
+def test_the_focused_processs_own_password_field_counts_whatever_its_name(bus):
+    """LibreOffice's password dialog, behind a window of xed that still
+    says it's active: "soffice" on the bus isn't the class
+    libreoffice-writer, but it is the focused window's process."""
+    bus.app("xed", TEXT, pid=2673)
+    bus.app("soffice", PASSWORD, pid=4070)
+    assert atspi_helper.focused_is_password(
+        focused_app=focus_on("libreoffice-writer", 4070)) is True
 
 
 def test_brave_on_the_bus_is_the_brave_browser_window(bus):
     bus.app("Brave", TEXT)
     bus.app("Firefox", PASSWORD)
-    assert atspi_helper.focused_is_password(focused_class=lambda: "brave-browser") is False
+    assert atspi_helper.focused_is_password(focused_app=focus_on("brave-browser")) is False
 
 
 def test_the_shells_own_password_prompt_counts_over_any_app(bus):
     bus.app("gedit", TEXT)
     bus.app("gnome-shell", PASSWORD)
-    assert atspi_helper.focused_is_password(focused_class=lambda: "org.gnome.gedit") is True
+    assert atspi_helper.focused_is_password(focused_app=focus_on("org.gnome.gedit")) is True
 
 
 def test_the_focused_window_is_asked_only_once_a_password_field_is_found(bus):
@@ -652,7 +764,7 @@ def test_the_focused_window_is_asked_only_once_a_password_field_is_found(bus):
     looks = []
     bus.app("gedit", TEXT)
     bus.app("kwrite", TEXT)
-    assert atspi_helper.focused_is_password(focused_class=lambda: looks.append(1)) is False
+    assert atspi_helper.focused_is_password(focused_app=lambda: looks.append(1)) is False
     assert looks == []
 
 
@@ -679,6 +791,18 @@ def test_gnome_shells_own_password_prompt_counts(bus):
     bus.app("gedit", TEXT)
     bus.app("gnome-shell", PASSWORD)
     assert atspi_helper.focused_is_password() is True
+
+
+def test_the_shells_own_prompt_is_logged_without_asking_for_the_focused_app(bus, caplog):
+    """It counts wherever the focus is; a look just for the log line would
+    wait on the tray for nothing."""
+    looks = []
+    bus.app("gedit", TEXT)
+    bus.app("gnome-shell", PASSWORD)
+    with caplog.at_level(logging.INFO, logger="tuxtalk.atspi_helper"):
+        assert atspi_helper.focused_is_password(focused_app=lambda: looks.append(1)) is True
+    assert "gnome-shell's own password prompt has the focus" in caplog.text
+    assert looks == []
 
 
 def test_gnome_shell_beside_an_app_is_not_several_apps(bus, caplog):

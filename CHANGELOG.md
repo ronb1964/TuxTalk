@@ -3,6 +3,22 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [Unreleased]
+
+- When the recording indicator follows the window you're dictating into, it
+  sits higher in a tall window: a fifth of the window's height above its
+  bottom (at least 40 px, as before), so it no longer covers a chat's message
+  box or a status bar. Contributed by Bernát Gábor (#36).
+- A browser in the background with its login box still selected no longer
+  stops dictation into gnome-terminal, LibreOffice and other apps with
+  "TuxTalk doesn't type into password fields". Those apps go by a different
+  name to the accessibility system than their windows do, so TuxTalk
+  couldn't tell they were the app you were in. It now knows them by name
+  everywhere, and on X11 desktops (Cinnamon, Xfce, MATE and others) it
+  matches any app by its process too, as the X server reports it. A
+  password field TuxTalk finds in the window you're in still gets nothing,
+  and the log now says what refused a dictation (issue #40).
+
 ## [0.23.0] - 2026-11-12
 
 - Dictating into Claude Desktop pastes the text in one go, as in every other

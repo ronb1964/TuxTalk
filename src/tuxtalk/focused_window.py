@@ -111,6 +111,19 @@ def window_class():
     return look()[0]
 
 
+def focused_app():
+    """(class, process) of the focused window, for the password check
+    (atspi_helper); the process None where the compositor doesn't tell it
+    (compositor_focus.window_pid), and None in all when the class isn't
+    known."""
+    from . import compositor_focus
+    wm_class, window = look()
+    if wm_class is None:
+        return None
+    pid = compositor_focus.window_pid(window[1]) if window and window[0] == "compositor" else None
+    return wm_class, pid
+
+
 def same_window(before, after) -> bool | None:
     """Whether two looks at the focused window (look() or destination())
     are of one window: True when the desktop's id says so, False when they
@@ -191,7 +204,7 @@ def is_password(budget: float | None = None) -> bool:
     told, or the desktop's own password prompt. *budget* is how long the bus
     may take, atspi_helper.BUDGET_S unless given."""
     from . import atspi_helper
-    return (atspi_helper.focused_is_password(budget or atspi_helper.BUDGET_S, window_class)
+    return (atspi_helper.focused_is_password(budget or atspi_helper.BUDGET_S, focused_app)
             or _password_prompt_has_focus())
 
 
@@ -208,9 +221,15 @@ def _password_prompt_has_focus() -> bool:
         return False
     from .desktop_detect import get_desktop_environment
     if waiting and get_desktop_environment() in ("cinnamon", "cosmic"):
+        # Said, so a refusal's log tells it from the accessibility bus's.
+        logger.info("Password field check: a password prompt is waiting "
+                    "(polkit-agent-helper-1 runs), drawn over the app")
         return True
     focused = window_class()
-    return focused is not None and any(word in focused.lower() for word in ("polkit", "policykit"))
+    if focused is None or not any(word in focused.lower() for word in ("polkit", "policykit")):
+        return False
+    logger.info(f"Password field check: the password prompt {focused} has the focus")
+    return True
 
 
 _PROC = "/proc"
