@@ -35,6 +35,9 @@ export const shell = {
     workspaces: 2,          // how many there are
     activeWorkspace: 0,     // the index of the current one
     workspaceWindows: [],   // the windows on the current workspace
+    uiGroup: [],            // actors added above the windows
+    monitorGeometries: [{x: 0, y: 0, width: 1920, height: 1080}],
+    primaryMonitor: 0,
 };
 
 for (const level of ['error', 'warn']) {
@@ -70,6 +73,11 @@ class Signals {
 export const GLib = {
     PRIORITY_DEFAULT: 0,
     SOURCE_REMOVE: false,
+    SOURCE_CONTINUE: true,
+    get_monotonic_time: () => Math.round(performance.now() * 1000),
+    source_remove(id) {
+        GLib.Source.remove(id);
+    },
     timeout_add(_priority, _ms, callback) {
         shell.timeouts.push({id: ++lastId, callback});
         return lastId;
@@ -93,7 +101,38 @@ class Actor extends Signals {
     }
 }
 
+class DrawingArea extends Actor {
+    set_size(width, height) {
+        this.size = [width, height];
+    }
+
+    get_size() {
+        return this.size;
+    }
+
+    set_position(x, y) {
+        this.position = [x, y];
+    }
+
+    show() {
+        this.visible = true;
+    }
+
+    hide() {
+        this.visible = false;
+    }
+
+    queue_repaint() {
+        this.repaints = (this.repaints ?? 0) + 1;
+    }
+
+    destroy() {
+        shell.uiGroup = shell.uiGroup.filter(actor => actor !== this);
+    }
+}
+
 export const St = {
+    DrawingArea,
     Icon: Actor,
     ClipboardType: {CLIPBOARD: 0},
     Clipboard: {
@@ -120,6 +159,14 @@ export const Shell = {
             lookup_app: id => (shell.apps.has(id) ? {get_windows: () => shell.apps.get(id)} : null),
         }),
     },
+};
+
+// cairo, GJS's built-in module: only its constants; nothing draws in these tests.
+export const Cairo = {
+    FontSlant: {NORMAL: 0},
+    FontWeight: {BOLD: 1},
+    Operator: {CLEAR: 0, OVER: 2},
+    RadialGradient: class {},
 };
 
 export const Gio = {
@@ -204,6 +251,10 @@ export const overview = {
     toggle() {
         shell.overviewToggles++;
     },
+};
+
+export const layoutManager = {
+    uiGroup: {add_child: actor => shell.uiGroup.push(actor)},
 };
 
 export const panel = {
@@ -350,6 +401,7 @@ export class Window extends Signals {
         this.type = Meta.WindowType.NORMAL;
         this.minimized = false;
         this.managed = true;    // false once the window is closed: GNOME Shell drops it
+        this.frame = {x: 10, y: 20, width: 800, height: 600};
     }
 
     get_compositor_private() {
@@ -369,7 +421,7 @@ export class Window extends Signals {
     }
 
     get_frame_rect() {
-        return {x: 10, y: 20, width: 800, height: 600};
+        return this.frame;
     }
 
     get_monitor() {
@@ -442,8 +494,16 @@ class Display extends Signals {
         return shell.monitors;
     }
 
-    get_monitor_geometry() {
-        return {x: 0, y: 0, width: 1920, height: 1080};
+    get_monitor_geometry(index) {
+        return shell.monitorGeometries[index];
+    }
+
+    get_current_monitor() {
+        return 0;
+    }
+
+    get_primary_monitor() {
+        return shell.primaryMonitor;
     }
 }
 

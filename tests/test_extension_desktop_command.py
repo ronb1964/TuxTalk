@@ -9,7 +9,8 @@ from gnome_extension_js import run
 
 ENABLED = """
 const {extension} = await t.enable();
-const served = t.shell.exported.at(-1);
+const served = t.shell.exported.find(item =>
+    item.path === '/io/github/ronb1964/TuxTalk/Extension');
 const ask = (action, number = 0) => served.object.DesktopCommand(action, number);
 """
 
@@ -258,7 +259,9 @@ def test_turning_the_extension_off_forgets_what_show_desktop_hid():
         ask('show desktop');
         extension.disable();
         await t.enable();
-        const again = t.shell.exported.at(-1).object.DesktopCommand('show desktop', 0);
+        const again = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TuxTalk/Extension')
+            .object.DesktopCommand('show desktop', 0);
         t.report([again, t.shell.unminimized]);
     """)
     assert answer == ["done", []]

@@ -1122,7 +1122,7 @@ def service_main(monkeypatch):
     monkeypatch.setattr(audio_duck, "restore_left_over", lambda: None)
     monkeypatch.setattr(desktop_zoom, "restore_left_over", step("puts back a zoom left on"))
     monkeypatch.setattr(tuxtalk.dbus_service, "TuxTalkDBusService", Bus)
-    monkeypatch.setattr(app, "RecordingIndicator", Indicator)
+    monkeypatch.setattr(app, "create_recording_indicator", Indicator)
     monkeypatch.setattr(gtk_loop, "start", step("starts the GTK loop"))
     monkeypatch.setattr(gtk_loop, "call", on_gtk_thread)
     monkeypatch.setattr(engine, "build_or_exit", step("loads the speech model", "model"))
