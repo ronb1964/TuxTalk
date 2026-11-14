@@ -15,8 +15,8 @@ from gi.repository import Gio, GLib
 from . import indicator_styles
 from .indicator_styles import RadialGain
 from .logger import setup_logger
-from .recording_indicator import (BASE_HEIGHT, BASE_WIDTH, FOLLOW_MARGIN, RecordingIndicator, _scale_for_size,
-                                  fixed_position, follow_position)
+from .recording_indicator import (BASE_HEIGHT, BASE_WIDTH, FOLLOW_MARGIN, RecordingIndicator,
+                                  _scale_for_size, fixed_position, follow_position)
 from .ui_style import desktop_accent_rgb
 from .window_geometry import active_window_rect, main_monitor_rect, monitor_rect_at
 
@@ -271,6 +271,7 @@ class ShellIndicator:
                 GLib.idle_add(self._activate_fallback)
 
     def _activate_fallback(self):
+        """Keep the indicator visible if Shell removes the extension mid-recording."""
         if not self._visible or self._fallback is not None:
             return False
         fallback = None
