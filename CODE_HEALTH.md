@@ -8,7 +8,7 @@ swallowed errors, docstrings, dated comments, long lines) is enforced by
 
 Last full sweep: 2026-10-23 (Claude and Codex on every file, then a verifier
 per area: about 860 confirmed findings, 12 high, 117 medium, 731 low). The
-next is due 2026-11-22.
+next was due 2026-11-22; Ron decided (2026-11-14) it waits for Bernát Gábor's answer to his question on #39 about how the code reads, so the sweep can take it in.
 
 ## 0.18 (done)
 
