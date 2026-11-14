@@ -48,15 +48,16 @@ _REGISTRY = "org.a11y.atspi.Registry"
 _ACCESSIBLE = "org.a11y.atspi.Accessible"
 _COLLECTION = "org.a11y.atspi.Collection"
 _TEXT = "org.a11y.atspi.Text"
-# U+FFFC, which Firefox gives for each paragraph or list of a web editor in
-# place of its text; written as a code: no window shows it.
+# U+FFFC, which Firefox gives in a web editor's text for each paragraph or
+# list, and for each link, image or emoji, in place of its own text;
+# written as a code: no window shows it.
 _PLACEHOLDER = chr(0xFFFC)
 # How far into a web editor's blocks (a paragraph in a list item in a
 # list...) the cursor is looked for.
 _MAX_DEPTH = 4
 # AtspiRole numbers of a web editor's blocks of text, and of those that
 # hold others (atspi-constants.h).
-_BLOCKS = {73, 83, 85, 105}         # paragraph, heading, section, block quote
+_BLOCKS = {32, 73, 83, 85, 105}     # list item, paragraph, heading, section, block quote
 _CONTAINERS = {31, 32, 85, 105}     # list, list item, section, block quote
 
 # AtspiStateType and AtspiRole numbers (at-spi2-core's atspi-constants.h).
@@ -283,8 +284,10 @@ def _caret_of(bus, widget, deadline) -> int:
     """*widget*'s cursor offset; -1 where it has none or no text at all."""
     try:
         return _property(bus, widget, "CaretOffset", deadline)
-    except GLib.Error:
-        return -1   # a list without text of its own
+    except GLib.Error as e:
+        # A list without text of its own, or a block that didn't answer.
+        logger.debug(f"Accessibility bus: no cursor offset for a block: {e.message}")
+        return -1
 
 
 def _counts_at_once(bus, app, window, focused, deadline) -> bool:

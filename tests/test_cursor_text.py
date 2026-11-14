@@ -240,6 +240,14 @@ def test_a_list_in_a_web_editor_is_looked_into(bus):
     assert around(focus=("firefox", None)) == ("buy more", " milk")
 
 
+def test_a_list_item_holding_its_own_text_is_read(bus):
+    """<ul><li>buy more milk</li></ul>: most editors' bullets."""
+    bus.web_editor("Firefox", dict(text="\ufffc", children=[
+        dict(role=LIST, is_text=False, children=[
+            dict(role=LIST_ITEM, text="buy more milk", caret=8)])]))
+    assert around(focus=("firefox", None)) == ("buy more", " milk")
+
+
 def test_a_password_field_inside_a_web_editor_is_never_read(bus):
     bus.web_editor("Firefox", dict(text="\ufffc", children=[
         dict(role=PASSWORD, text="hunter2", caret=3)]))
