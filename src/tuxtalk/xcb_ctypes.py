@@ -1,6 +1,6 @@
 """libxcb, the X server's own client library, through ctypes: the few
-calls compositor_focus (which window has focus on X11, and its process), x11_hotkeys (the
-hotkeys held back on X11) and x11_activate (bringing a window forward)
+calls compositor_focus (which window has focus on X11, and its process),
+x11_hotkeys (the hotkeys held back on X11) and x11_activate (bringing a window forward)
 make. It's on every X11 system (Xlib itself is built on it), so this needs
 no new dependency. XCB rather than Xlib: Xlib
 reports an error through a process-wide handler whose default exits the
@@ -260,17 +260,19 @@ class _ClientIdIterator(ctypes.Structure):
                 ("index", ctypes.c_int)]
 
 
-_res = None
+_res = None     # False once it's known not to be installed
 
 
 def _res_lib():
     """libxcb-res with the client id calls' signatures, loaded once; None
-    when it isn't installed."""
+    when it isn't installed, which is looked for once too: the password
+    check asks for it whenever it finds a password field."""
     global _res
     if _res is None:
         try:
             lib = ctypes.CDLL("libxcb-res.so.0")
         except OSError:
+            _res = False
             return None
         P = ctypes.c_void_p
         lib.xcb_res_query_client_ids.restype = Cookie
@@ -283,8 +285,9 @@ def _res_lib():
         lib.xcb_res_client_id_value_value.restype = ctypes.POINTER(ctypes.c_uint32)
         lib.xcb_res_client_id_value_value.argtypes = [ctypes.POINTER(_ClientIdValue)]
         lib.xcb_res_client_id_value_next.argtypes = [ctypes.POINTER(_ClientIdIterator)]
+        lib.xcb_res_client_id_value_next.restype = None
         _res = lib
-    return _res
+    return _res or None
 
 
 def window_owner_pid(conn, window):

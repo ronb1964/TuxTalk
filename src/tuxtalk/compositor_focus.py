@@ -390,9 +390,9 @@ def _ask_focused_window(env):
 def window_pid(window):
     """The process behind *window*, an id from focused_window(), where the
     compositor tells it: the X server knows its windows' owners; None
-    anywhere else. The
-    password check tells by it which app on the accessibility bus has the
-    focus, where their names differ (atspi_helper)."""
+    anywhere else. The password check tells by it which app on the
+    accessibility bus has the focus, where their names differ
+    (atspi_helper)."""
     if _source(os.environ) != "x11":
         return None
     try:
