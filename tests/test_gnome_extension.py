@@ -617,6 +617,7 @@ def test_shell_indicator_follows_the_focused_window():
 def test_shell_indicator_fixed_position_uses_the_primary_monitor():
     position, _logs = run("""
         await t.enable();
+        t.shell.monitors = 2;
         t.shell.monitorGeometries.push({x: 1920, y: 0, width: 1920, height: 1080});
         const window = new t.Window('Firefox', 1);
         window.get_monitor = () => 1;
