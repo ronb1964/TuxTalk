@@ -24,6 +24,8 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 CALL_TIMEOUT_MS = 1000
+# Beside config.toml (uninstall.CONFIG_NAMES).
+FILE_NAME = "a11y-switch.json"
 
 
 def _call(method: str, args: GLib.Variant | None) -> tuple:
@@ -58,7 +60,7 @@ def _set(on: bool) -> bool:
 
 def state_path() -> str:
     """Where TuxTalk remembers the user's answer, beside config.toml."""
-    return os.path.join(os.path.dirname(config.CONFIG_PATH), "a11y-switch.json")
+    return os.path.join(os.path.dirname(config.CONFIG_PATH), FILE_NAME)
 
 
 def _load() -> dict:
@@ -101,6 +103,17 @@ def decline() -> None:
     state = _load()
     ours = state["ours"] and not _set(False)
     _save({"answer": "not_now", "ours": ours})
+
+
+def turned_on_by_tuxtalk() -> bool:
+    """Whether TuxTalk turned the switch on, so it may turn it off again."""
+    return _load()["ours"]
+
+
+def give_back() -> bool:
+    """Uninstalling: the switch off again if TuxTalk turned it on. False
+    when it was TuxTalk's and wouldn't go off."""
+    return not turned_on_by_tuxtalk() or _set(False)
 
 
 def keep_on() -> None:

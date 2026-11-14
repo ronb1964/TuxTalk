@@ -566,6 +566,21 @@ def test_an_extension_that_stays_is_named(home, monkeypatch):
     assert uninstall.undo_desktop_changes(_find(home)) == []
 
 
+def test_the_accessibility_switch_tuxtalk_turned_on_goes_back_off(home, monkeypatch):
+    """Turned on with the user's yes (a11y_switch); off again on the way out,
+    and named when it won't go."""
+    monkeypatch.setattr(uninstall.gnome_keybindings, "restore_left_over", lambda: True)
+    monkeypatch.setattr(uninstall.kwin_hotkeys, "forget_our_components", lambda: True)
+    monkeypatch.setattr(uninstall.desktop_detect, "is_gnome", lambda: False)
+    monkeypatch.setattr(uninstall.cosmic_hotkeys, "release", lambda: True)
+    given_back = [True]
+    monkeypatch.setattr(uninstall.a11y_switch, "give_back", lambda: given_back[0])
+    assert uninstall.undo_desktop_changes(_find(home)) == []
+    given_back[0] = False
+    assert uninstall.undo_desktop_changes(_find(home)) == [
+        "the desktop's accessibility switch, which TuxTalk turned on"]
+
+
 def test_a_desktop_change_that_wont_undo_is_named_and_its_backup_kept(home, monkeypatch):
     """A cleared GNOME Alt+F7/Alt+F8 that won't come back keeps its backup,
     so it can be put back later; KDE shortcut entries that stay are named."""

@@ -7,6 +7,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
+from . import a11y_switch, startup_notices
 from .prefs_system_check import SystemCheck
 from .prefs_tab import LABS_INDENT, Tab, dropdown, fold, subheading, tip_label
 from .prefs_type_at_pause import TypeAtPause
@@ -40,6 +41,10 @@ def swiss_spelling_offered(config, env=None):
         languages.add(config.get("language", ""))
     languages.update(language_limit.parse(config.get("auto_languages", "")))
     return "de" in languages
+
+
+A11Y_SWITCH_LABEL = ("Turn on the desktop's accessibility, so dictation fits the text "
+                     "around the cursor in more apps")
 
 
 class AdvancedTab(Tab):
@@ -146,11 +151,12 @@ class AdvancedTab(Tab):
         # Each of these already does the sensible thing; they're here for the
         # day something looks off.
         fine_fold = fold(grid, row, "Show fine-tuning", "Hide fine-tuning")
-        fine_fold.set_summary("formatting, inserting text, privacy")
+        fine_fold.set_summary("formatting, inserting text, accessibility, privacy")
         fine = fine_fold.content
         row += 1
         frow = self._fine_formatting(fine, 0)
         frow = self._fine_inserting(fine, frow)
+        frow = self._fine_accessibility(fine, frow)
         self._fine_privacy(fine, frow)
         return row
 
@@ -275,6 +281,39 @@ class AdvancedTab(Tab):
             fine.attach(restore_check, 0, frow, 2, 1)
             frow += 1
         return frow
+
+    def _fine_accessibility(self, fine, frow):
+        """The desktop's accessibility switch (a11y_switch), changed at once,
+        outside Apply; returns the next row. Not shown without an
+        accessibility bus, and not TuxTalk's to turn off when the desktop or
+        a screen reader turned it on."""
+        on = a11y_switch.is_on()
+        if on is None:
+            return frow
+        fine.attach(subheading("Accessibility"), 0, frow, 2, 1)
+        check = Gtk.CheckButton(label=A11Y_SWITCH_LABEL)
+        check.set_active(on)
+        if on and not a11y_switch.turned_on_by_tuxtalk():
+            check.set_sensitive(False)
+            check.set_tooltip_text("It's on in your desktop's own settings, or for a screen "
+                                   "reader, so it's turned off there, not here.")
+        else:
+            check.set_tooltip_text(
+                "With it on, KDE apps and Firefox tell TuxTalk the text around the cursor, so "
+                "a dictation\ninto the middle of a sentence doesn't start with a capital. "
+                "Chrome, Brave and apps like\nClaude Desktop need to be closed and opened "
+                "again first. Apps use a little more memory.")
+        check.connect("toggled", self._on_a11y_switch_toggled)
+        fine.attach(check, 0, frow + 1, 2, 1)
+        return frow + 2
+
+    def _on_a11y_switch_toggled(self, check):
+        """Turn the switch on, saying which apps need a restart, or off."""
+        if not check.get_active():
+            a11y_switch.decline()
+        elif a11y_switch.allow():
+            show_message(self.win.window, Gtk.MessageType.INFO, startup_notices.A11Y_ON_TITLE,
+                         startup_notices.A11Y_ON_BODY)
 
     def _fine_privacy(self, fine, frow):
         """Logging what's dictated, and clearing the log."""

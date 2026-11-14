@@ -41,7 +41,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from . import (ai_download, config, cosmic_hotkeys, custom_words,  # noqa: E402
+from . import (a11y_switch, ai_download, config, cosmic_hotkeys, custom_words,  # noqa: E402
                desktop_detect, extension_helper, gnome_extensions, gnome_keybindings,
                installation, kwin_hotkeys, menu_cache, model_helper, parakeet_engine,
                rename_migration, secure_input, service_launcher, settings_backup,
@@ -69,7 +69,8 @@ ENGINE_FOLDERS = ("whisper-vulkan", "ai-engine", "parakeet-ultra", "cuda")
 # What TuxTalk keeps in its settings folder (tests/test_uninstall.py again).
 CONFIG_NAMES = ("config.toml", "custom_commands.toml", custom_words.FILE_NAME, "backups",
                 "kde-hotkeys.json", "explained.json", ".launchers-renamed",
-                rename_migration.NOTICE_FILE, LOG_FILE_NAME, "talktype.log")
+                rename_migration.NOTICE_FILE, LOG_FILE_NAME, "talktype.log",
+                a11y_switch.FILE_NAME)
 # Of those names, the ones TuxTalk makes as folders; it writes the rest as
 # files. A folder of the user's named config.toml isn't TuxTalk's. Each of
 # its own folders goes whole, downloads and all; one that is a link (an
@@ -97,7 +98,8 @@ def _saved(*names):
 # kept custom_words.txt as it was (vocabulary.adopt_fixes); the log rolls
 # over to .old.
 _CONFIG_COPIES = _copies(
-    *_saved("config.toml", "custom_commands.toml", custom_words.FILE_NAME),
+    *_saved("config.toml", "custom_commands.toml", custom_words.FILE_NAME,
+            a11y_switch.FILE_NAME),
     *(re.escape(name) + r"\.bak"
       for name in ("config.toml", "custom_commands.toml", custom_words.FILE_NAME)),
     r"config\.toml\.corrupt-\d{8}-\d{6}",
@@ -635,8 +637,9 @@ def _stop_processes(plan):
 def undo_desktop_changes(plan):
     """Put the desktop back as it was: Alt+F7/Alt+F8 on GNOME if the hotkey
     test was cut short, the GNOME extension, KDE's and COSMIC's shortcut
-    entries. Runs after stop_tuxtalk() and before the files go (the
-    keybindings' backup is one of them). Returns what's still there, in words."""
+    entries, the accessibility switch if TuxTalk turned it on. Runs after
+    stop_tuxtalk() and before the files go (the keybindings' backup is one
+    of them). Returns what's still there, in words."""
     left = []
     if not gnome_keybindings.restore_left_over():
         # Its backup stays (remove_files leaves plan.kept), so a reinstall
@@ -655,6 +658,8 @@ def undo_desktop_changes(plan):
         left.append("TuxTalk's entries in KDE's Shortcuts settings")
     if not cosmic_hotkeys.release():
         left.append("TuxTalk's entries in COSMIC's custom shortcuts")
+    if not a11y_switch.give_back():
+        left.append("the desktop's accessibility switch, which TuxTalk turned on")
     return left
 
 
