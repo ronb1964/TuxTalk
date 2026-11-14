@@ -116,7 +116,9 @@ def test_a_screen_reader_that_took_the_switch_over_shows_it_on(switch, prefs_win
 def test_a_no_that_went_off_but_couldnt_be_saved_or_undone_shows_it_off(
         switch, prefs_window, monkeypatch):
     """The box shows the switch as it is, not as it was before the click."""
-    monkeypatch.setattr(prefs_advanced, "show_message", lambda *a, **k: None)
+    shown = []
+    monkeypatch.setattr(prefs_advanced, "show_message",
+                        lambda parent, kind, title, *a, **k: shown.append(title))
     a11y_switch.allow()
     box = check(prefs_window)
     monkeypatch.setattr(a11y_switch, "_saved", lambda state: False)
@@ -124,6 +126,7 @@ def test_a_no_that_went_off_but_couldnt_be_saved_or_undone_shows_it_off(
     monkeypatch.setattr(a11y_switch, "_set", lambda on: real_set(on) if not on else False)
     box.set_active(False)
     assert switch.on is False and not box.get_active()
+    assert shown == ["The accessibility change couldn't be completed"]
 
 
 def test_a_handover_shows_even_when_the_switch_cant_be_read_after(switch, prefs_window,

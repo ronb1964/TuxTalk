@@ -203,7 +203,7 @@ def correct_across_pause(text: str, message, lowercase_ok: bool = True):
     cue, message.held_cue = message.held_cue, ""
     if cue and cue[-1] not in ".?!,;:":
         cue += ","
-    if (cue.endswith(",") and text[:1].isupper()
+    if (lowercase_ok and cue.endswith(",") and text[:1].isupper()
             and safe_to_lowercase_first_word(text, live.words)):
         text = text[0].lower() + text[1:]      # "No wait, four", not "Four"
     said = f"{cue} {text}" if cue else text

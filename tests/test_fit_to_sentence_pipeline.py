@@ -133,3 +133,14 @@ def test_german_by_the_usual_language_keeps_its_capital(desktop, monkeypatch):
     desktop["around"] = ("der große", "")
     dictate(monkeypatch, "Hund.")
     assert desktop["typed"] == [" Hund. "]
+
+
+def test_a_held_german_cue_doesnt_make_the_noun_after_it_small(monkeypatch):
+    """"nein," held from the phrase before, then "Hunde": with the AI
+    changing nothing, the noun keeps its capital."""
+    from tuxtalk import ai_cleanup, type_at_pause
+    monkeypatch.setattr(rs.state, "last_inserted_text", " drei Katzen ")
+    monkeypatch.setattr(ai_cleanup, "fix_self_corrections", lambda text, engine: text)
+    message = types.SimpleNamespace(held_cue="nein", cancelled=False)
+    said, taken_back = type_at_pause.correct_across_pause("Hunde", message, lowercase_ok=False)
+    assert (said, taken_back) == ("nein, Hunde", "")

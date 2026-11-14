@@ -110,3 +110,12 @@ def test_a_sentence_put_before_one_starting_with_i_keeps_its_period():
 def test_two_sentences_put_inside_one_keep_the_period_before_the_next():
     assert fit("After lunch. We left. ", "Yesterday ", "Today we", True) == \
         "after lunch. We left. "
+
+
+@pytest.mark.parametrize("said, typed", [
+    ("The U.S. near. ", "the U.S. near "),
+    ("Near Dr. Hill. ", "near Dr. Hill "),
+    ("Near J. Smith. ", "near J. Smith "),
+], ids=["U.S.", "Dr.", "an initial"])
+def test_an_abbreviation_s_period_is_no_sentence_break(said, typed):
+    assert fit(said, "I live in ", "New York", True) == typed

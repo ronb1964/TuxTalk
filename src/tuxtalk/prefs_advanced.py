@@ -47,7 +47,7 @@ A11Y_SWITCH_LABEL = ("Turn on the desktop's accessibility, so dictation fits the
                      "around the cursor in more apps")
 A11Y_DESKTOPS_NOTE = ("It's on in your desktop's own settings, or for a screen reader, "
                       "so it's turned off there, not here.")
-A11Y_FAILED_TITLE = "The desktop's accessibility didn't change"
+A11Y_FAILED_TITLE = "The accessibility change couldn't be completed"
 A11Y_SCREEN_READER_TITLE = "A screen reader is using it"
 
 
@@ -316,7 +316,8 @@ class AdvancedTab(Tab):
 
     def _on_a11y_switch_toggled(self, check):
         """Turn the switch on, saying which apps need a restart, or off; when
-        it won't change, the box goes back and that's said."""
+        that doesn't go as asked, the box shows the switch as it is now, and
+        that's said."""
         turning_on = check.get_active()
         if turning_on and a11y_switch.allow():
             show_message(self.win.window, Gtk.MessageType.INFO, startup_notices.A11Y_ON_TITLE,

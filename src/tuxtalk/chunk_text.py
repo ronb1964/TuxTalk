@@ -104,7 +104,7 @@ def hold_back_boundary(text: str, raw: str):
 
 
 # Words whose period is the abbreviation's own: "etc?" would lose it.
-_ABBREVIATIONS = frozenset({"dr", "mr", "mrs", "ms", "jr", "sr", "st", "etc", "vs",
+ABBREVIATIONS = frozenset({"dr", "mr", "mrs", "ms", "jr", "sr", "st", "etc", "vs",
                             "usw", "bzw"})
 
 # The last word of a text ending in a period: a number with a decimal point
@@ -120,7 +120,7 @@ def engine_period(text: str, raw: str) -> bool:
     nothing or a period: "is that it period" ends on the word the period
     was dictated with."""
     m = _ENDS_IN_PERIOD.search(text.rstrip())
-    if m is None or m.group(1).casefold() in _ABBREVIATIONS:
+    if m is None or m.group(1).casefold() in ABBREVIATIONS:
         return False
     tail = re.search(r"\w(\W*)$", raw)
     return (tail is not None and tail.group(1).strip() in ("", ".")

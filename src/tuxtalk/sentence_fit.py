@@ -7,7 +7,7 @@ characters each side; when the app doesn't say, nothing here runs and the
 dictation is typed as it always was."""
 import re
 
-from . import config
+from . import chunk_text, config
 from .normalize import safe_to_lowercase_first_word
 
 # How many characters on each side of the cursor are asked for: enough to
@@ -26,8 +26,9 @@ _STRAIGHT_QUOTES = "\"'"
 # Closing marks that can follow a sentence's end: (see the note.)
 _CLOSERS = ")]}\u201d\u2019\"'"
 _BLANKS = " \t"
-# A sentence or a line ending inside a dictation, before its last sentence.
-_SENTENCE_BREAK = re.compile(r"[.!?][)\]}\u201d\u2019\"']*\s+\S|[\n\r\u2028\u2029]\s*\S")
+# A mark with more after it inside a dictation, and the word it follows.
+_MARK_THEN_MORE = re.compile(r"([\w.'\u2019-]*)([.!?])[)\]}\u201d\u2019\"']*\s+\S")
+_LINE_THEN_MORE = re.compile(r"[\n\r\u2028\u2029]\s*\S")
 # Languages that write every noun with a capital, so a capital at the start
 # of a dictation says nothing about where the sentence begins.
 _NOUN_CAPITALS = {"de", "lb"}
@@ -43,7 +44,7 @@ def fit(text: str, before: str, after: str, lowercase_ok: bool, words=()) -> str
     visible = before.rstrip(_BLANKS)
     own_sentence = not visible or visible[-1] in _LINE_BREAKS \
         or visible.rstrip(_CLOSERS).endswith(tuple(_SENTENCE_ENDS)) \
-        or _SENTENCE_BREAK.search(text.rstrip()) is not None
+        or _breaks_inside(text.rstrip())
     return _fit_end(_fit_start(text, before, lowercase_ok, words), after, own_sentence)
 
 
@@ -61,6 +62,23 @@ def _fit_start(text, before, lowercase_ok, words):
     if before[-1] in _BLANKS or _opens(before):
         return text
     return " " + text
+
+
+def _breaks_inside(text):
+    """Whether *text* ends a sentence or a line before its last sentence
+    ("After lunch. We left."); an abbreviation's period ("U.S.", "Dr.", an
+    initial) ends none."""
+    if _LINE_THEN_MORE.search(text):
+        return True
+    return any(mark != "." or not _abbreviation(word)
+               for word, mark in _MARK_THEN_MORE.findall(text))
+
+
+def _abbreviation(word):
+    """Whether *word*, before a period, is an abbreviation: one with a
+    period inside ("U.S"), an initial, or a known one (chunk_text)."""
+    return "." in word or (len(word) == 1 and word.isalpha()) \
+        or word.casefold() in chunk_text.ABBREVIATIONS
 
 
 def _opens(before):

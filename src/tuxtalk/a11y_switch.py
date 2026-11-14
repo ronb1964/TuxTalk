@@ -119,8 +119,9 @@ def decline() -> str | None:
     """The user said no, or turned it off in Preferences: remembered, and
     the switch off again if TuxTalk turned it on (_turn_off). "off",
     "handed over" or "not ours"; None when it stays TuxTalk's and on, or
-    the no couldn't be saved: then the switch is put back as it was, or the
-    yes still saved would turn it on at start."""
+    the no couldn't be saved: then the switch is turned back on if it went
+    off (which may fail too), or the yes still saved would turn it on at
+    the next start."""
     outcome = _turn_off() if _load()["ours"] else "not ours"
     if not _saved({"answer": "not_now", "ours": outcome is None}):
         if outcome == "off":
