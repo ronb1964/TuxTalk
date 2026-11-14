@@ -17,12 +17,11 @@ import Gio from 'gi://Gio';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-const BUS_NAME = 'io.github.ronb1964.TalkType.Indicator';
-const OBJECT_PATH = '/io/github/ronb1964/TalkType/Indicator';
+const OBJECT_PATH = '/io/github/ronb1964/TuxTalk/Indicator';
 
 const IndicatorIface = `
 <node>
-  <interface name="io.github.ronb1964.TalkType.Indicator">
+  <interface name="io.github.ronb1964.TuxTalk.Indicator">
     <method name="Show">
       <arg type="a{sv}" direction="in" name="settings"/>
     </method>
@@ -46,6 +45,8 @@ const FOLLOW_MARGIN = 40;
 const FOLLOW_BOTTOM_SHARE = 0.2;
 const FOLLOW_TOP = 50;
 const FOLLOW_SIDE = 20;
+const UPDATE_TIMEOUT_US = 3_000_000;
+const MAX_VALUES = 256;
 
 const CYAN = [0.30, 0.70, 1.0];
 const BACKING_CORE = 0.50;
@@ -162,6 +163,9 @@ export class ShellIndicator {
         this._startTime = 0;
         this._tickId = 0;
         this._focusId = 0;
+        this._window = null;
+        this._windowPositionId = 0;
+        this._windowSizeId = 0;
 
         this._area = new St.DrawingArea({reactive: false, visible: false});
         this._area.connect('repaint', area => this._repaint(area));
@@ -170,31 +174,44 @@ export class ShellIndicator {
 
         this._dbus = Gio.DBusExportedObject.wrapJSObject(IndicatorIface, this);
         this._dbus.export(Gio.DBus.session, OBJECT_PATH);
-        this._nameId = Gio.bus_own_name_on_connection(Gio.DBus.session, BUS_NAME,
-            Gio.BusNameOwnerFlags.NONE, null, null);
     }
 
     Show(settings) {
         const value = key => settings[key]?.deep_unpack();
+        const rgb = value('rgb') ?? CYAN;
+        const scale = value('scale') ?? 1.0;
+        const position = value('position') ?? 'center';
+        const style = value('style') ?? 'orb';
+        const follow = value('follow') ?? false;
+        const offsetX = value('offset_x') ?? 0;
+        const offsetY = value('offset_y') ?? 0;
+        if (!Array.isArray(rgb) || rgb.length !== 3 || rgb.some(v => !Number.isFinite(v) || v < 0 || v > 1) ||
+            !Number.isFinite(scale) || scale < 0.5 || scale > 2 ||
+            typeof position !== 'string' || position.length > 32 ||
+            !['orb', 'waveform', 'bars', 'radial'].includes(style) || typeof follow !== 'boolean' ||
+            !Number.isInteger(offsetX) || Math.abs(offsetX) > 10000 ||
+            !Number.isInteger(offsetY) || Math.abs(offsetY) > 10000)
+            throw new Error('Invalid indicator settings');
         this._settings = {
-            style: value('style') ?? 'orb',
-            rgb: value('rgb') ?? CYAN,
-            scale: value('scale') ?? 1.0,
-            position: (value('position') ?? 'center').toLowerCase(),
-            follow: value('follow') ?? false,
-            offsetX: value('offset_x') ?? 0,
-            offsetY: value('offset_y') ?? 0,
+            style,
+            rgb,
+            scale,
+            position: position.toLowerCase(),
+            follow,
+            offsetX,
+            offsetY,
         };
         this._palette = orbPalette(this._settings.rgb);
         this._recording = false;
         this._level = 0;
         this._values = [];
         this._startTime = GLib.get_monotonic_time();
+        this._lastUpdate = this._startTime;
         this._area.set_size(BASE_WIDTH * this._settings.scale, BASE_HEIGHT * this._settings.scale);
-        this._place();
+        this._focusChanged();
         this._area.show();
         if (!this._focusId)
-            this._focusId = global.display.connect('notify::focus-window', () => this._place());
+            this._focusId = global.display.connect('notify::focus-window', () => this._focusChanged());
         if (!this._tickId)
             this._tickId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => this._tick());
     }
@@ -205,8 +222,20 @@ export class ShellIndicator {
     }
 
     Update(level, values) {
+        if (!this._settings)
+            return;
+        if (!Number.isFinite(level) || level < 0 || level > 1 || !Array.isArray(values) ||
+            values.length > MAX_VALUES || values.some(v => !Number.isFinite(v) || v < -1 || v > 1))
+            throw new Error('Invalid indicator audio');
         this._level = level;
         this._values = values;
+        this._lastUpdate = GLib.get_monotonic_time();
+        if (!this._tickId) {
+            this._focusChanged();
+            this._area.show();
+            this._focusId = global.display.connect('notify::focus-window', () => this._focusChanged());
+            this._tickId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => this._tick());
+        }
     }
 
     Hide() {
@@ -214,11 +243,11 @@ export class ShellIndicator {
         this._stop();
         this._recording = false;
         this._values = [];
+        this._settings = null;
     }
 
     destroy() {
         this._stop();
-        Gio.bus_unown_name(this._nameId);
         this._dbus.unexport();
         this._area.destroy();
     }
@@ -232,6 +261,25 @@ export class ShellIndicator {
             global.display.disconnect(this._focusId);
             this._focusId = 0;
         }
+        this._disconnectWindow();
+    }
+
+    _disconnectWindow() {
+        if (this._window) {
+            this._window.disconnect(this._windowPositionId);
+            this._window.disconnect(this._windowSizeId);
+            this._window = null;
+        }
+    }
+
+    _focusChanged() {
+        this._disconnectWindow();
+        if (this._settings.follow && global.display.focus_window) {
+            this._window = global.display.focus_window;
+            this._windowPositionId = this._window.connect('position-changed', () => this._place());
+            this._windowSizeId = this._window.connect('size-changed', () => this._place());
+        }
+        this._place();
     }
 
     _place() {
@@ -247,6 +295,11 @@ export class ShellIndicator {
     }
 
     _tick() {
+        if (GLib.get_monotonic_time() - this._lastUpdate > UPDATE_TIMEOUT_US) {
+            this._area.hide();
+            this._stop();
+            return GLib.SOURCE_REMOVE;
+        }
         if (!this._recording) {
             this._pulse = (this._pulse + 0.05) % (2 * Math.PI);
             this._particlePulse = (this._particlePulse + 0.03) % (2 * Math.PI);

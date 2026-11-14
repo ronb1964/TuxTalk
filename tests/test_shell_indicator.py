@@ -2,14 +2,16 @@ import numpy as np
 import pytest
 
 gi = pytest.importorskip("gi")
-from gi.repository import Gio, GLib  # noqa: E402
+from gi.repository import Gio, GLib, Gtk  # noqa: E402
 
 from tuxtalk import shell_indicator as si  # noqa: E402
+from tuxtalk import live_text_window  # noqa: E402
 from tuxtalk.recording_indicator import RecordingIndicator  # noqa: E402
+from tuxtalk.window_geometry import Rect  # noqa: E402
 
 INTERFACE_XML = f"""
 <node>
-  <interface name="{si.BUS_NAME}">
+  <interface name="{si.INTERFACE}">
     <method name="Show"><arg type="a{{sv}}" direction="in" name="settings"/></method>
     <method name="SetRecording"><arg type="b" direction="in" name="recording"/></method>
     <method name="Update">
@@ -44,7 +46,14 @@ def bus():
 @pytest.fixture
 def shell(bus):
     """Calls the extension's indicator received, as (method, arguments)."""
-    calls = []
+    class Calls(list):
+        disconnected = False
+
+        def disconnect(self):
+            bus.unregister_object(registration)
+            self.disconnected = True
+
+    calls = Calls()
 
     def on_call(_bus, _sender, _path, _iface, method, params, invocation):
         calls.append((method, params.unpack()))
@@ -60,7 +69,8 @@ def shell(bus):
     # Let a test's queued hide run, so its updates stop before the next test.
     _wait_for(lambda: False, seconds=0.1)
     Gio.bus_unown_name(owner)
-    bus.unregister_object(registration)
+    if not calls.disconnected:
+        calls.disconnect()
     _wait_for(lambda: not si.available())
 
 
@@ -100,10 +110,27 @@ def test_recording_starts_after_the_show(shell):
 
 
 def test_the_shell_gets_the_audio_level_while_showing(shell):
-    ind = si.ShellIndicator()
+    ind = si.ShellIndicator(sensitivity=2.0)
     ind.show_at_position()
-    ind.set_audio_level(0.5)
+    ind.set_audio_level(0.25)
     assert _wait_for(lambda: ("Update", (0.5, [])) in shell)
+    ind.hide_indicator()
+
+
+def test_the_bars_follow_animation_response(shell):
+    ind = si.ShellIndicator(style="bars", sensitivity=2.0)
+    ind.show_at_position()
+    ind.set_spectrum([0.2, 0.8])
+    assert _wait_for(lambda: ("Update", (0.0, [0.4, 1.0])) in shell)
+    ind.hide_indicator()
+
+
+def test_live_text_anchors_by_the_shell_indicator(bus, monkeypatch):
+    monkeypatch.setattr(si, "active_window_rect", lambda: Rect(100, 200, 800, 600))
+    monkeypatch.setattr(si, "monitor_rect_at", lambda horizontal, vertical: Rect(0, 0, 1920, 1080))
+    ind = si.ShellIndicator(position="bottom-center", follow_window=True)
+    ind.show_at_position()
+    assert live_text_window.LiveTextWindow(lambda: ind)._anchor() == (400, 500, 200, 180)
     ind.hide_indicator()
 
 
@@ -113,9 +140,22 @@ def test_no_updates_after_hiding(shell):
     assert _wait_for(lambda: "Update" in _methods(shell))
     ind.hide_indicator()
     assert _wait_for(lambda: "Hide" in _methods(shell))
-    count = len(shell)
+    count = _methods(shell).count("Update")
     _wait_for(lambda: False, seconds=0.2)
-    assert len(shell) == count
+    assert _methods(shell).count("Update") == count
+
+
+def test_extension_disabling_mid_recording_shows_the_x11_indicator(shell):
+    existing = set(Gtk.Window.list_toplevels())
+    ind = si.ShellIndicator()
+    ind.show_at_position()
+    ind.start_recording()
+    assert _wait_for(lambda: "Update" in _methods(shell))
+    shell.disconnect()
+    assert _wait_for(lambda: any(isinstance(window, RecordingIndicator) and
+                                 window not in existing and window.get_visible()
+                                 for window in Gtk.Window.list_toplevels()))
+    ind.hide_indicator()
 
 
 def test_the_radial_style_sends_its_ring(shell):

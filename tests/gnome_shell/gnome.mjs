@@ -409,6 +409,7 @@ export class Window extends Signals {
         this.type = Meta.WindowType.NORMAL;
         this.minimized = false;
         this.managed = true;    // false once the window is closed: GNOME Shell drops it
+        this.frame = {x: 10, y: 20, width: 800, height: 600};
     }
 
     get_compositor_private() {
@@ -428,7 +429,7 @@ export class Window extends Signals {
     }
 
     get_frame_rect() {
-        return {x: 10, y: 20, width: 800, height: 600};
+        return this.frame;
     }
 
     get_monitor() {

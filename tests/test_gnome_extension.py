@@ -586,23 +586,24 @@ def test_args_are_read_in_any_attribute_order_and_default_to_in():
 
 
 def test_turning_the_extension_off_takes_its_indicator_off_the_bus():
-    """A disabled extension still holding the indicator's name would make the
-    service send it frames that nothing draws, instead of using the X11 window."""
+    """A disabled extension must remove the indicator object from Shell's bus."""
     held, _logs = run("""
         const {extension} = await t.enable();
-        const held = [[...t.shell.ownedNames.values()], t.shell.uiGroup.length];
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator');
+        const held = [indicator.path, t.shell.uiGroup.length];
         extension.disable();
-        held.push([...t.shell.ownedNames.values()], t.shell.uiGroup.length);
+        held.push(indicator.path, t.shell.uiGroup.length);
         t.report(held);
     """)
-    assert held == [["io.github.ronb1964.TalkType.Indicator"], 1, [], 0]
+    assert held == ["/io/github/ronb1964/TuxTalk/Indicator", 1, None, 0]
 
 
 def test_shell_indicator_follows_the_focused_window():
     shown, _logs = run("""
         await t.enable();
         const indicator = t.shell.exported.find(item =>
-            item.path === '/io/github/ronb1964/TalkType/Indicator').object;
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
         const area = t.shell.uiGroup[0];
         indicator.Show({position: t.variant('bottom-center'), follow: t.variant(true)});
         const fixed = area.position;
@@ -616,7 +617,7 @@ def test_shell_indicator_hides_and_stops_updates():
     shown, _logs = run("""
         await t.enable();
         const indicator = t.shell.exported.find(item =>
-            item.path === '/io/github/ronb1964/TalkType/Indicator').object;
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
         const area = t.shell.uiGroup[0];
         indicator.Show({});
         indicator.SetRecording(true);
@@ -627,3 +628,63 @@ def test_shell_indicator_hides_and_stops_updates():
         t.report([before, area.visible, indicator._values, t.shell.timeouts.length]);
     """)
     assert shown == [[True, 0.5, [0.25, 0.75], 1], False, [], 0]
+
+
+def test_shell_indicator_tracks_window_moves_and_resizes():
+    positions, _logs = run("""
+        await t.enable();
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
+        const area = t.shell.uiGroup[0];
+        const window = new t.Window('Firefox', 1);
+        t.focus(window);
+        indicator.Show({position: t.variant('bottom-center'), follow: t.variant(true)});
+        const positions = [area.position];
+        window.frame.x += 100;
+        window.emit('position-changed');
+        positions.push(area.position);
+        window.frame.height += 100;
+        window.emit('size-changed');
+        positions.push(area.position);
+        t.report(positions);
+    """)
+    assert positions == [[310, 320], [410, 320], [410, 400]]
+
+
+def test_shell_indicator_rejects_unbounded_dbus_values():
+    result, _logs = run("""
+        await t.enable();
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
+        const area = t.shell.uiGroup[0];
+        const rejected = [];
+        for (const settings of [{scale: t.variant(1e100)},
+                {rgb: t.variant([1, 2, 3])}, {position: t.variant(123)}]) {
+            try { indicator.Show(settings); } catch { rejected.push(true); }
+        }
+        indicator.Show({});
+        for (const values of [new Array(257).fill(0), [NaN]]) {
+            try { indicator.Update(0.5, values); } catch { rejected.push(true); }
+        }
+        t.report([rejected, area.visible, indicator._values]);
+    """)
+    assert result == [[True] * 5, True, []]
+
+
+def test_shell_indicator_hides_after_updates_stop():
+    result, _logs = run("""
+        await t.enable();
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
+        const area = t.shell.uiGroup[0];
+        let now = 0;
+        t.GLib.get_monotonic_time = () => now;
+        indicator.Show({});
+        indicator.Update(0.5, []);
+        now = 3_000_001;
+        const tick = t.shell.timeouts[0].callback();
+        const hidden = [tick, area.visible, t.shell.timeouts.length];
+        indicator.Update(0.25, []);
+        t.report([hidden, area.visible, t.shell.timeouts.length]);
+    """)
+    assert result == [[False, False, 0], True, 1]
