@@ -300,10 +300,9 @@ class AdvancedTab(Tab):
         check = Gtk.CheckButton(label=A11Y_SWITCH_LABEL)
         check.set_active(on)
         check.set_tooltip_text(
-            "With it on, KDE apps and Firefox tell TuxTalk the text around the cursor, so a "
-            "dictation\ninto the middle of a sentence doesn't start with a capital. Chrome, "
-            "Brave and apps like\nClaude Desktop need to be closed and opened again first. "
-            "Apps use a little more memory.")
+            "With it on, apps like KDE apps and Firefox tell TuxTalk the text around the "
+            "cursor, so a\ndictation into the middle of a sentence doesn't start with a "
+            "capital. Apps use a little\nmore memory.")
         fine.attach(check, 0, frow + 1, 2, 1)
         self._a11y_note = Gtk.Label(label=A11Y_DESKTOPS_NOTE, xalign=0, wrap=True)
         self._a11y_note.get_style_context().add_class("dim-label")

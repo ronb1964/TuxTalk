@@ -13,9 +13,10 @@ before 0.15.0, so older entries use that name.
   system that text: GTK apps always, and KDE apps and Firefox once
   accessibility is on. TuxTalk asks once before turning it on (it stays on
   until you turn it off in Preferences → Advanced → Fine-tuning →
-  Accessibility) and then says that Chrome, Brave and apps like Claude
-  Desktop need to be closed and opened again first. Where an app doesn't
-  say, and in terminals, a dictation is typed as before. In German, the
+  Accessibility), and then says that an app already open may need to be
+  closed and opened once. Web pages' rich text boxes in Firefox (Gmail and
+  the like) work too. Where an app doesn't say, and in terminals, a
+  dictation is typed as before. In German, the
   first word keeps its capital. Uninstalling turns accessibility off again
   only if TuxTalk turned it on. With it on, TuxTalk also recognises
   password boxes in KDE apps and Firefox.

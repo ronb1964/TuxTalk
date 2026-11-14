@@ -12,10 +12,12 @@ Which apps answer, as tried in the test VMs: GTK 3 and GTK 4 apps, unless their
 accessibility is switched off (GTK_A11Y=none, NO_AT_BRIDGE=1). Qt (KDE
 apps) and Firefox only while accessibility is switched on, by a screen reader
 or the desktop's accessibility setting. Chromium-based browsers and Electron
-apps (Brave, Discord, VS Code) only if it was on when they started
-(ACCESSIBILITY_ENABLED=1 or the desktop setting); turned on later, they need
-a restart. An app that doesn't answer, a slow bus or none at all counts as
-"not a password field", so typing goes ahead as it always did.
+apps (Chrome, Brave, Claude Desktop) showed no windows at all on Plasma 6,
+in the KDE VM and on a real desktop, even started with the setting on (and
+with ACCESSIBILITY_ENABLED=1 in the VM): there they get neither the password
+check nor the text around the cursor. An app that doesn't answer, a slow
+bus or none at all counts as "not a password field", so typing goes ahead
+as it always did.
 """
 
 import functools
@@ -218,8 +220,8 @@ def _focused_text(bus, window, deadline):
 
 def _around(bus, widget, chars, deadline, depth=0):
     """*widget*'s text, up to *chars* characters each side of its cursor or
-    of its first selection. A web page's rich text box (Claude Desktop,
-    Gmail, Discord) gives each paragraph as one U+FFFC, an object of its
+    of its first selection. A web page's rich text box (Gmail and the like,
+    in Firefox) gives each paragraph as one U+FFFC, an object of its
     own whose own text the cursor is in: that one is read instead (_holder).
     None where no plain text around the cursor can be found."""
     if _call(bus, widget, _TEXT, "GetNSelections", None, deadline)[0]:

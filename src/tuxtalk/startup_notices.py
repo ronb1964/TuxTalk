@@ -32,9 +32,9 @@ A11Y_QUESTION_BODY = (
     "it on.")
 A11Y_ON_TITLE = "Turned on"
 A11Y_ON_BODY = (
-    "Most apps, like KDE and GNOME apps and Firefox, work with it right away. Chrome, "
-    "Brave and apps like Claude Desktop, Discord and VS Code need to be closed and opened "
-    "again first.")
+    "Dictation now fits the sentence in apps that share the text around the cursor, like "
+    "KDE and GNOME apps, LibreOffice and Firefox. An app that was already open may need to "
+    "be closed and opened once. Anywhere else, dictation types as before.")
 
 
 def handle_old_talktype_flatpak(stop=None, notify=None):

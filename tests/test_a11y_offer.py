@@ -37,7 +37,7 @@ def test_turn_on_turns_it_on_and_says_which_apps_need_a_restart(switch, message_
     assert question.default == Gtk.ResponseType.CANCEL
     assert switch.on is True and a11y_switch.answer() == "on"
     assert after.title == startup_notices.A11Y_ON_TITLE
-    assert "closed and opened again" in after.text
+    assert "closed and opened once" in after.text
 
 
 @pytest.mark.parametrize("response", [Gtk.ResponseType.CANCEL, Gtk.ResponseType.DELETE_EVENT],
