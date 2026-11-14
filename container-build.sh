@@ -391,14 +391,15 @@ chmod -R a+rX AppDir/usr/src/tuxtalk
 _SYS_SSL=/usr/lib/x86_64-linux-gnu
 mkdir -p /tmp/hidden-openssl
 mv "$_SYS_SSL"/libssl.so.3 "$_SYS_SSL"/libcrypto.so.3 /tmp/hidden-openssl/
+_SSL_STATUS=0
 _SSL_CHECK=$(PYTHONHOME=AppDir/usr LD_LIBRARY_PATH=AppDir/usr/lib \
     PYTHONPATH="AppDir/usr/src:AppDir/usr/lib/python${PYTHON_VERSION}/site-packages" \
     AppDir/usr/bin/python3 -c "import tuxtalk, ssl
 trusted = ssl.create_default_context().cert_store_stats()['x509_ca']
-print(tuxtalk.USING_BUNDLED_OPENSSL, trusted > 0, ssl.OPENSSL_VERSION)" 2>&1) || true
+print(tuxtalk.USING_BUNDLED_OPENSSL, trusted > 0, ssl.OPENSSL_VERSION)" 2>&1) || _SSL_STATUS=$?
 mv /tmp/hidden-openssl/* "$_SYS_SSL"/
-case "$_SSL_CHECK" in
-    "True True OpenSSL 3."*) echo "   ✅ OpenSSL 3 fallback bundled ($_SSL_CHECK)" ;;
+case "$_SSL_STATUS:$_SSL_CHECK" in
+    "0:True True OpenSSL 3."*) echo "   ✅ OpenSSL 3 fallback bundled ($_SSL_CHECK)" ;;
     *) echo "❌ ERROR: Python can't use the bundled OpenSSL 3: $_SSL_CHECK"; exit 1 ;;
 esac
 

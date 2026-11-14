@@ -50,7 +50,7 @@ def test_a_system_without_openssl_3_gets_the_bundled_copy(tmp_path):
     assert loaded == [str(lib_dir / "libcrypto.so.3"), str(lib_dir / "libssl.so.3")]
 
 
-def test_the_bundled_copy_trusts_the_systems_certificates(tmp_path, monkeypatch):
+def test_the_bundled_copy_is_pointed_at_the_systems_certificate_list(tmp_path, monkeypatch):
     ca = _system_list(tmp_path)
     _use(_bundle(tmp_path), (str(tmp_path / "missing.crt"), ca), ssl_loads=False)
 
