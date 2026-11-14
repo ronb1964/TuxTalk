@@ -1,7 +1,7 @@
-"""Opening a microphone at a rate it records at, and closing its stream
-without hanging on an audio system that stopped answering, or quitting
-while one is stuck. Shared by the dictation service, Preferences'
-microphone tests and the beeps.
+"""Opening a microphone at a rate it records at, and starting and closing
+its stream without hanging on a microphone or audio system that stopped
+answering, or quitting while one is stuck. Shared by the dictation service,
+Preferences' microphone tests and the beeps.
 """
 import atexit
 import threading
@@ -17,13 +17,21 @@ logger = setup_logger(__name__)
 # muted) made PortAudio's stop() wait forever: in the service the indicator
 # stayed up and no hotkey worked again until it was restarted.
 STOP_TIMEOUT_S = 2.0
+# How long starting a stream may take. A USB microphone that stopped sending
+# audio kept PortAudio's start() waiting ten minutes for its first block, with
+# every hotkey queued behind it.
+START_TIMEOUT_S = 3.0
 # How long a stream being closed as TuxTalk quits may take to close.
 EXIT_WAIT_S = 0.5
-# Streams being stopped and closed, with those whose stop() never returned,
-# which stay: nothing closes them again from another thread (a few kilobytes
-# each). _closed is notified as each one is closed.
+# Streams being stopped and closed, with those whose stop() or start() never
+# returned, which stay: nothing closes them again from another thread (a few
+# kilobytes each). _closed is notified as each one is closed.
 _closing = set()
 _closed = threading.Condition()
+# Of those, the ones given up on, a start or a stop that outlasted its time
+# limit: they may still hold the audio system up, and opening another stream
+# would wait on them, maybe for ever. Each leaves once it's closed.
+_stuck = set()
 # PortAudio's error for stopping a stream that was opened and never started
 # (its start failed): there was nothing to stop.
 _NEVER_STARTED = sd._lib.paStreamIsStopped
@@ -49,15 +57,63 @@ def input_samplerate(device, preferred):
     return own
 
 
+class NotAnswering(Exception):
+    """No stream can be had from the microphone now: its stream didn't start
+    within START_TIMEOUT_S, or (StillStuck) an earlier one is stuck."""
+
+
+class StillStuck(NotAnswering):
+    """A stream given up on earlier still hasn't closed (stuck()), so no
+    other may be opened: only a new process frees PortAudio."""
+
+
+def start(stream):
+    """Start *stream* on a thread of its own, for at most START_TIMEOUT_S.
+
+    Raises what start() raised, or NotAnswering once the time is up. The
+    stream is then left to its start, which may still hold the audio system
+    up, so it counts as stuck(); should the start ever return, the stream is
+    closed and stops counting."""
+    errors = []
+    outcome = {"done": False, "gave_up": False}
+
+    def run():
+        try:
+            stream.start()
+        except Exception as e:
+            logger.info(f"The microphone stream didn't start: {e}")
+            errors.append(e)
+        with _closed:
+            outcome["done"] = True
+            late = outcome["gave_up"]
+        if late:
+            _stop_and_close(stream)
+
+    starter = threading.Thread(target=run, daemon=True, name="tt-mic-start")
+    starter.start()
+    starter.join(START_TIMEOUT_S)
+    with _closed:
+        if not outcome["done"]:
+            outcome["gave_up"] = True
+            _closing.add(stream)
+            _stuck.add(stream)
+    if outcome["gave_up"]:
+        logger.error(f"The microphone stream didn't start within {START_TIMEOUT_S:g}s "
+                     "(the microphone sends no audio); giving up on it")
+        raise NotAnswering(f"no audio within {START_TIMEOUT_S:g}s")
+    if errors:
+        raise errors[0]
+
+
 def close(stream, wait=True):
     """Stop and close *stream* on a thread of its own; close() runs even
     when stop() fails (an unplugged microphone), so the device is free to
     be opened again.
 
     With *wait*, for at most STOP_TIMEOUT_S: False if it hadn't stopped by
-    then. Without, it returns at once (a window's thread) with an Event set
-    once the stream is closed or given up on, and a stream that never stops
-    is logged all the same."""
+    then, and it counts as stuck() until it closes. Without, it returns at
+    once (a window's thread) with an Event set once the stream is closed or
+    given up on, and a stream that never stops is logged all the same."""
     with _closed:
         _closing.add(stream)
     if not wait:
@@ -75,6 +131,9 @@ def close(stream, wait=True):
     closer.start()
     closer.join(STOP_TIMEOUT_S)
     if closer.is_alive():
+        with _closed:
+            if stream in _closing:      # unless it closed since the join
+                _stuck.add(stream)
         logger.error(f"The microphone stream didn't stop within {STOP_TIMEOUT_S:g}s "
                      "(the audio system stopped answering); carrying on without it")
         return False
@@ -96,7 +155,15 @@ def _stop_and_close(stream):
             logger.warning(f"Could not close the microphone stream: {e}")
         with _closed:
             _closing.discard(stream)
+            _stuck.discard(stream)
             _closed.notify_all()
+
+
+def stuck():
+    """Whether a stream given up on, its start or its stop, still hasn't
+    closed, so opening another would hang until it does."""
+    with _closed:
+        return bool(_stuck)
 
 
 def leave_portaudio_running():

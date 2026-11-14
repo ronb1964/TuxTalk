@@ -13,7 +13,7 @@ from evdev import ecodes
 from conftest import CHAT_WINDOW as FIRST, HELD_TITLE
 from stand_ins import held_timers
 from tuxtalk import (delivery, dictation_worker, focused_window, hotkeys, keyboard_grab,
-                     modifier_hotkeys, recording, send_countdown)
+                     mic_stream, modifier_hotkeys, recording, send_countdown, tray_link)
 from tuxtalk import recording_state as rs
 
 F8, F9, ESC = ecodes.KEY_F8, ecodes.KEY_F9, ecodes.KEY_ESC
@@ -25,7 +25,8 @@ CFG = types.SimpleNamespace(beeps=False, notify=False, smart_quotes=False, langu
 def mic(monkeypatch):
     """The microphone and what a recording's start and end touch, faked.
     mic.fails(meanwhile) makes it fail to open; *meanwhile* runs once, while
-    it's first tried."""
+    it's first tried. mic.not_answering(error) makes it raise *error*, a
+    mic_stream.NotAnswering."""
     monkeypatch.setattr(rs.state, "is_recording", False)
     for name in ("pick_input_device", "stop_stream_safely", "pause_media_players",
                  "resume_media_players"):
@@ -45,7 +46,12 @@ def mic(monkeypatch):
                 pending.pop()()
             raise OSError("Device unavailable")
         monkeypatch.setattr(recording, "open_input_stream", no_microphone)
-    return types.SimpleNamespace(fails=fails)
+
+    def not_answering(error):
+        def stalls(rec, idx):
+            raise error
+        monkeypatch.setattr(recording, "open_input_stream", stalls)
+    return types.SimpleNamespace(fails=fails, not_answering=not_answering)
 
 
 class Keyboards:
@@ -161,6 +167,28 @@ def test_a_countdown_held_by_a_press_whose_microphone_fails_gets_its_space_at_th
     mic.fails()
     key(F8, 1)
     assert notices == [send_countdown.HELD_NOTICE] and typed == []
+    key(F8, 0)
+    assert typed == [(" ", FIRST[1])] and keyboard.events == []
+
+
+@pytest.mark.parametrize("error, said", [
+    (mic_stream.NotAnswering("no audio within 3s"), "Microphone isn't answering"),
+    (mic_stream.StillStuck("a stream given up on hasn't closed"),
+     "Audio system stopped answering"),
+], ids=["sends no sound", "stuck in the audio system"])
+def test_a_countdown_held_by_a_stalled_microphone_stays_unsent(
+        chat, keyboard, mic, monkeypatch, notifications, error, said):
+    focus, heard, typed, notices = chat
+    counting_down(monkeypatch)
+    mic.not_answering(error)
+    monkeypatch.setattr(tray_link, "restart_service", lambda: False)
+    monkeypatch.setattr(recording, "_restart_requested", False)
+
+    key(F8, 1)
+    assert rs.state.is_recording is False
+    assert notices == [send_countdown.HELD_NOTICE]
+    assert sorted(notifications()) == sorted([HELD_TITLE, said])
+    assert typed == []
     key(F8, 0)
     assert typed == [(" ", FIRST[1])] and keyboard.events == []
 

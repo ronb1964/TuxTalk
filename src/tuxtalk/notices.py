@@ -1,11 +1,12 @@
 """What the dictation service tells the user when something went wrong:
-nothing heard from the microphone, a microphone that wouldn't open, no
-keyboard reaching it at start, a dictation that didn't reach the window,
-a refused password field, a voice edit that didn't happen, an app not
-opened by voice. Most of the wording lives in delivery_notices.py and
-edit_notices.py (the keyboard's in uinput_helper.py and hotkeys.py, an
-app's in open_app.py, the microphone's here); this decides how it's said
-(a notification, a label over the window, the cancel beep)."""
+nothing heard from the microphone, a microphone that wouldn't open or
+start, an audio system stuck on one, no keyboard reaching it at start, a
+dictation that didn't reach the window, a refused password field, a voice
+edit that didn't happen, an app not opened by voice. Most of the wording
+lives in delivery_notices.py and edit_notices.py (the keyboard's in
+uinput_helper.py and hotkeys.py, an app's in open_app.py, the
+microphone's here); this decides how it's said (a notification, a label
+over the window, the cancel beep)."""
 import os
 
 import sounddevice as sd
@@ -35,6 +36,10 @@ SILENT_MIC_NOTICE = ("TuxTalk heard only silence. If you spoke, check that the m
 
 NO_KEYBOARD_TITLE = "TuxTalk can't read your keyboard"
 
+MIC_NOT_ANSWERING_TITLE = "Microphone isn't answering"
+
+MIC_RESTART_TITLE = "Audio system stopped answering"
+
 
 def warn_silent_mic():
     """The microphone sent nothing at all (silence.is_dead_mic). Always
@@ -42,6 +47,23 @@ def warn_silent_mic():
     looks like TuxTalk ignoring you."""
     logger.warning("The microphone sent only silence (muted, unplugged or the wrong one?)")
     notify_module.notify(SILENT_MIC_TITLE, SILENT_MIC_NOTICE)
+
+
+def warn_mic_not_answering():
+    """The microphone's stream didn't start in time (mic_stream.start): it
+    sends no sound. Always said: otherwise the press seems ignored."""
+    notify_module.notify(MIC_NOT_ANSWERING_TITLE,
+                         "It sends no sound. If it's plugged in, unplug it and plug "
+                         "it back in.")
+
+
+def warn_mic_restart(requested: bool):
+    """A microphone stream is stuck in the audio system and no other will
+    open until the service restarts: the tray was asked to (*requested*), or
+    couldn't be, and the user must. Always said, once per stuck stream."""
+    notify_module.notify(MIC_RESTART_TITLE,
+                         "Restarting the dictation service." if requested else
+                         "Quit TuxTalk and start it again.")
 
 
 def warn_no_keyboard(why: str):

@@ -1,6 +1,7 @@
 """The dictation service's side of its D-Bus link to the tray: telling it
 when recording starts and stops and when a hotkey is pressed, and asking it
-to show the voice commands. The tray re-sends these to the GNOME extension.
+to show the voice commands or to restart the service (a microphone stuck in
+the audio system). The tray re-sends these to the GNOME extension.
 Every call has a short time limit: a busy or missing tray must never hold
 up a dictation."""
 from . import focused_window
@@ -9,9 +10,10 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 
-def call(method: str, *args, what: str, signature: str | None = None) -> None:
-    """Call the tray's D-Bus *method* with *args*. A failure, dbus itself
-    missing included, is logged as "Could not {what}" and never raised.
+def call(method: str, *args, what: str, signature: str | None = None) -> bool:
+    """Call the tray's D-Bus *method* with *args*: whether it answered. A
+    failure, dbus itself missing included, is logged as "Could not {what}"
+    and never raised.
 
     Every call has the short time limit focused_window.TRAY_TIMEOUT_S: some
     are made with every keyboard exclusively grabbed. Arguments that aren't
@@ -30,8 +32,10 @@ def call(method: str, *args, what: str, signature: str | None = None) -> None:
         from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
         dbus.SessionBus().call_blocking(DBUS_NAME, DBUS_PATH, DBUS_INTERFACE, method,
                                         signature, args, timeout=focused_window.TRAY_TIMEOUT_S)
+        return True
     except Exception as e:
         logger.info(f"Could not {what}: {e}")
+        return False
 
 
 def notify_recording_state(is_recording: bool):
@@ -44,6 +48,12 @@ def notify_hotkey_pressed(key_name: str):
     """Tell the tray which dictation key was pressed during the hotkey test;
     its D-Bus service emits the HotkeyPressed signal Preferences listens for."""
     call("NotifyHotkeyPressed", key_name, what="notify tray of hotkey press")
+
+
+def restart_service():
+    """Ask the tray to restart the dictation service: whether it took the
+    request (a service running without a tray has none to ask)."""
+    return call("RestartService", what="ask the tray to restart the service")
 
 
 def show_voice_commands():
