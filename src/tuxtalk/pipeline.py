@@ -3,6 +3,7 @@ window. Transcribe, drop what isn't speech, run what was said as a command
 ("undo that", "press enter", "edit that") or shape it into text, type it,
 then press the key said after it or send it automatically. Type at pause
 runs each phrase through here too (type_at_pause.py)."""
+import locale
 import re
 import time
 from typing import NamedTuple
@@ -23,6 +24,7 @@ from . import (
     recording,
     resampling,
     send_countdown,
+    sentence_fit,
     silence,
     type_at_pause,
     voice_actions,
@@ -175,6 +177,7 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         key = _key_to_press(raw, said, job)
         if _nothing_to_type(raw, said, in_password, job):
             return
+        around = _read_cursor(in_password)
         words = _shape_text(raw, said, key, job)
         if words is None:
             return
@@ -182,6 +185,7 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         words = _end_of_sentence(words, audio_f32, job)
         if not _still_wanted(words, job):
             return
+        words = _fit_to_cursor(words, around, job)
         _tell_done(words.text, job)
         if words.text:
             _deliver(words, audio_f32, job)
@@ -221,6 +225,32 @@ def _cancelled(job: _Job) -> bool:
     if job.message.cancelled:
         logger.info("Not typed: the recording was cancelled")
     return job.message.cancelled
+
+
+def _read_cursor(in_password: bool) -> tuple[str, str] | None:
+    """The text on either side of the cursor, for _fit_to_cursor; None in a
+    password field, a terminal (its "text" is the prompt and what scrolled
+    by) or an app that doesn't say. Read before the words are shaped: when
+    the app says, the screen decides whether a sentence carries on, not the
+    last dictation (continue_mid_sentence), which the user may have typed
+    after since."""
+    if in_password or app_kind(focused_window.window_class()) == "terminal":
+        return None
+    around = focused_window.text_around_cursor()
+    if around is not None:
+        rs.state.continue_mid_sentence = False
+    return around
+
+
+def _fit_to_cursor(words: _Words, around: tuple[str, str] | None, job: _Job) -> _Words:
+    """*words* fitted into the sentence at the cursor (sentence_fit), *around*
+    it; as they are when the app didn't say. No small first letter in a
+    language that capitalises its nouns."""
+    if around is None:
+        return words
+    lowercase_ok = not sentence_fit.capitalised_nouns(
+        job.language, live.auto_languages, locale.getlocale()[0] or "")
+    return words._replace(text=sentence_fit.fit(words.text, *around, lowercase_ok, live.words))
 
 
 def _still_wanted(words, job: _Job) -> bool:
