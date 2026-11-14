@@ -1,5 +1,7 @@
 """Whether the cursor is in a password field, asked of the accessibility bus
-(AT-SPI), so a dictation is never typed into one.
+(AT-SPI), so a dictation is never typed into one; and the few characters on
+either side of the cursor, so a dictation can fit the sentence it goes into
+(sentence_fit).
 
 Plain D-Bus calls on a connection of TuxTalk's own (Gio), not libatspi: the
 AppImage doesn't ship libatspi's typelib, and libatspi shares one bus
@@ -35,11 +37,15 @@ BUDGET_S = 0.25
 # an earlier answer: the focus is what may have moved.
 RECHECK_BUDGET_S = 0.05
 CALL_TIMEOUT_MS = 100
+# The read of the text around the cursor, right before typing: a little
+# longer than a line's recheck, as it walks to the focused widget first.
+CONTEXT_BUDGET_S = 0.1
 
 _ROOT = "/org/a11y/atspi/accessible/root"
 _REGISTRY = "org.a11y.atspi.Registry"
 _ACCESSIBLE = "org.a11y.atspi.Accessible"
 _COLLECTION = "org.a11y.atspi.Collection"
+_TEXT = "org.a11y.atspi.Text"
 
 # AtspiStateType and AtspiRole numbers (at-spi2-core's atspi-constants.h).
 _STATE_ACTIVE = 1
@@ -151,6 +157,60 @@ def _password_focus(bus, focused_app, deadline) -> bool:
         return True
     finally:
         _log_several_active(apps)
+
+
+def text_around_cursor(chars: int, budget: float = CONTEXT_BUDGET_S,
+                       focused_app=lambda: None) -> tuple[str, str] | None:
+    """(before, after): up to *chars* characters on either side of the
+    cursor in the focused text widget, or of its selection, which typing
+    replaces. None when that can't be told in *budget* seconds: no answer,
+    a widget that isn't text, or no telling which app has the focus
+    (*focused_app*, as for focused_is_password). Never logged: it's
+    whatever the user wrote."""
+    deadline = time.monotonic() + budget
+    try:
+        bus = _a11y_bus(deadline)
+        widget = None if bus is None else _focused_widget(bus, focused_app, deadline)
+        return None if widget is None else _around(bus, widget, chars, deadline)
+    except (_OutOfTime, GLib.Error) as e:
+        logger.debug(f"Text around the cursor: no answer ({type(e).__name__})")
+        return None
+    except Exception as e:
+        # An answer in a shape nobody expected: typed as it always was.
+        logger.info(f"Text around the cursor: couldn't be read ({type(e).__name__})")
+        return None
+
+
+def _focused_widget(bus, focused_app, deadline):
+    """The focused widget of the app with the focus, or None. An app left
+    in the background can still call a window of its own active (issue
+    #40), so with more than one, or one the desktop says isn't focused, only
+    the app the desktop names counts."""
+    windows = [(app, window) for app, window in _active_windows(bus, deadline)
+               if app not in _SHELLS]
+    focus = _in_time(focused_app, deadline)
+    if focus is not None:
+        windows = [(app, window) for app, window in windows
+                   if _is_focused(bus, app, window, focus, deadline)]
+    return _focused_in(bus, windows[0][1], deadline) if len(windows) == 1 else None
+
+
+def _around(bus, widget, chars, deadline):
+    """*widget*'s text, up to *chars* characters each side of its cursor or
+    of its first selection."""
+    if _call(bus, widget, _TEXT, "GetNSelections", None, deadline)[0]:
+        start, end = sorted(_call(bus, widget, _TEXT, "GetSelection",
+                                  GLib.Variant("(i)", (0,)), deadline))
+    else:
+        start = end = _call(bus, widget, "org.freedesktop.DBus.Properties", "Get",
+                            GLib.Variant("(ss)", (_TEXT, "CaretOffset")), deadline)[0]
+    if start < 0:
+        return None
+    before = _call(bus, widget, _TEXT, "GetText",
+                   GLib.Variant("(ii)", (max(0, start - chars), start)), deadline)[0]
+    after = _call(bus, widget, _TEXT, "GetText",
+                  GLib.Variant("(ii)", (end, end + chars)), deadline)[0]
+    return before, after
 
 
 def _counts_at_once(bus, app, window, focused, deadline) -> bool:
