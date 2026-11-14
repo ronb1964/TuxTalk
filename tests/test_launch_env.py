@@ -68,6 +68,13 @@ def test_cuda_hidden_by_tuxtalk_only():
     assert clean({"CUDA_VISIBLE_DEVICES": "1"})["CUDA_VISIBLE_DEVICES"] == "1"
 
 
+def test_certificate_list_set_by_tuxtalk_only():
+    env = clean({"SSL_CERT_FILE": "/etc/ssl/cert.pem", "TUXTALK_SET_SSL_CERT_FILE": "1"})
+    assert "SSL_CERT_FILE" not in env
+    assert "TUXTALK_SET_SSL_CERT_FILE" not in env
+    assert clean({"SSL_CERT_FILE": "/mine.pem"})["SSL_CERT_FILE"] == "/mine.pem"
+
+
 def test_tuxtalks_own_variables_go():
     env = clean({"HF_HUB_DISABLE_XET": "1", "DEV_MODE": "1", "TUXTALK_LOG_DIR": "/x",
                  "HOME": "/home/u"})

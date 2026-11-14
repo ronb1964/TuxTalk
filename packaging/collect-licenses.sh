@@ -43,7 +43,7 @@ cp "$PROJECT/src/tuxtalk/models/LICENSE" "$LIC/silero-vad/LICENSE"
 # The system file each bundled file came from. Libraries and typelibs are
 # found by name, so a library added to the build later is covered too.
 SYSTEM_FILES=()
-for f in "$APPDIR"/usr/lib/*.so* "$APPDIR"/usr/lib/portaudio/*.so*; do
+for f in "$APPDIR"/usr/lib/*.so* "$APPDIR"/usr/lib/portaudio/*.so* "$APPDIR"/usr/lib/openssl3/*.so*; do
     SYSTEM_FILES+=("/usr/lib/x86_64-linux-gnu/$(basename "$f")")
 done
 for f in "$APPDIR"/usr/lib/girepository-1.0/*.typelib; do
