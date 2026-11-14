@@ -10,7 +10,8 @@ before 0.15.0, so older entries use that name.
   every download failed: the speech model, the graphics engine and updates
   alike, with "unknown url type: https" in the log. TuxTalk now carries its
   own OpenSSL 3 and uses it when the computer has none, with the computer's
-  own list of trusted certificates. Where OpenSSL 3 is installed nothing
+  own list of trusted certificates, and the local AI's engine, which needs
+  OpenSSL 3 too, gets it as well. Where OpenSSL 3 is installed nothing
   changes. Reported by a Fedora Magazine editor trying TuxTalk on Kinoite.
 - When the recording indicator follows the window you're dictating into, it
   sits higher in a tall window: a fifth of the window's height above its
