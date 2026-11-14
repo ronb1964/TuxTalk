@@ -491,10 +491,11 @@ def test_an_import_of_a_module_without_a_stand_in_fails(tmp_path):
     """A wrong path, and GNOME Shell doesn't load the extension at all: it
     fails here too, as any module the stand-ins don't have does."""
     from gnome_extension_js import STAND_INS
-    source = (STAND_INS.parent.parent / "gnome-extension" / "talktype@ronb1964.github.io"
-              / "extension.js").read_text()
+    extension = STAND_INS.parent.parent / "gnome-extension" / "talktype@ronb1964.github.io"
+    source = (extension / "extension.js").read_text()
     broken = tmp_path / "extension.js"
     broken.write_text(source.replace("ui/panelMenu.js", "ui/panelMenus.js"))
+    (tmp_path / "shellIndicator.js").write_bytes((extension / "shellIndicator.js").read_bytes())
     loaded, _logs = run(f"""
         try {{
             await t.enable({json.dumps(broken.as_uri())});
