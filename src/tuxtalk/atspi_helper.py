@@ -46,6 +46,9 @@ _REGISTRY = "org.a11y.atspi.Registry"
 _ACCESSIBLE = "org.a11y.atspi.Accessible"
 _COLLECTION = "org.a11y.atspi.Collection"
 _TEXT = "org.a11y.atspi.Text"
+# U+FFFC, which Firefox and Chromium give for each paragraph of a web
+# editor in place of its text; written as a code: no window shows it.
+_PLACEHOLDER = chr(0xFFFC)
 
 # AtspiStateType and AtspiRole numbers (at-spi2-core's atspi-constants.h).
 _STATE_ACTIVE = 1
@@ -229,7 +232,7 @@ def _around(bus, widget, chars, deadline):
                   GLib.Variant("(ss)", (_TEXT, "CharacterCount")), deadline)[0]
     after = _call(bus, widget, _TEXT, "GetText",
                   GLib.Variant("(ii)", (end, min(end + chars, count))), deadline)[0]
-    return None if "\ufffc" in before + after else (before, after)
+    return None if _PLACEHOLDER in before + after else (before, after)
 
 
 def _counts_at_once(bus, app, window, focused, deadline) -> bool:
