@@ -5,8 +5,6 @@ ships only OpenSSL 4, the ssl module didn't load and every download failed
 with "unknown url type: https".
 """
 
-import ctypes
-
 import pytest
 
 import tuxtalk
@@ -39,7 +37,7 @@ def _use(lib_dir, ca_bundles, ssl_loads):
     loaded = []
     used = tuxtalk._use_bundled_openssl(
         str(lib_dir), ca_bundles, ssl_loads=lambda: ssl_loads,
-        load=lambda path, mode: loaded.append((path, mode)))
+        load=loaded.append)
     return used, loaded
 
 
@@ -49,8 +47,7 @@ def test_a_system_without_openssl_3_gets_the_bundled_copy(tmp_path):
 
     assert used
     # libssl needs libcrypto, so libcrypto is loaded first.
-    assert loaded == [(str(lib_dir / "libcrypto.so.3"), ctypes.RTLD_GLOBAL),
-                      (str(lib_dir / "libssl.so.3"), ctypes.RTLD_GLOBAL)]
+    assert loaded == [str(lib_dir / "libcrypto.so.3"), str(lib_dir / "libssl.so.3")]
 
 
 def test_the_bundled_copy_trusts_the_systems_certificates(tmp_path, monkeypatch):

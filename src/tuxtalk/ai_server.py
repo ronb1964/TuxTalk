@@ -34,6 +34,17 @@ def kill_orphaned_engines() -> int:
                                        "AI engine")
 
 
+def _engine_libraries(binary):
+    """The library path for the AI engine: its own folder, and TuxTalk's
+    OpenSSL 3 when the system has none, since llama.cpp's build links
+    libssl.so.3 (Fedora 45 has only OpenSSL 4)."""
+    from . import BUNDLED_OPENSSL_DIR, USING_BUNDLED_OPENSSL
+    folders = [os.path.dirname(binary)]
+    if USING_BUNDLED_OPENSSL:
+        folders.append(os.path.normpath(BUNDLED_OPENSSL_DIR))
+    return ":".join(folders)
+
+
 class AIServer:
     """A llama-server process and the requests sent to it.
 
@@ -83,7 +94,7 @@ class AIServer:
                 [binary, "-m", ai_download.model_path(), "--host", "127.0.0.1",
                  "--port", str(self._port),
                  "-c", "4096", "-np", "1", "--jinja", "-ngl", "99", "--no-webui"],
-                {**os.environ, "LD_LIBRARY_PATH": os.path.dirname(binary),
+                {**os.environ, "LD_LIBRARY_PATH": _engine_libraries(binary),
                  "LLAMA_API_KEY": self._key})
             proc = self._proc = self._launcher.popen(command, stdout=subprocess.DEVNULL,
                                                      stderr=subprocess.PIPE, env=env)
