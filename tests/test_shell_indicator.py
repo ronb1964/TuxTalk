@@ -53,6 +53,11 @@ def shell(bus):
             bus.unregister_object(registration)
             self.disconnected = True
 
+        def reconnect(self):
+            nonlocal registration
+            registration = bus.register_object(si.OBJECT_PATH, info, on_call, None, None)
+            self.disconnected = False
+
     calls = Calls()
 
     def on_call(_bus, _sender, _path, _iface, method, params, invocation):
@@ -155,6 +160,37 @@ def test_extension_disabling_mid_recording_shows_the_x11_indicator(shell):
     assert _wait_for(lambda: any(isinstance(window, RecordingIndicator) and
                                  window not in existing and window.get_visible()
                                  for window in Gtk.Window.list_toplevels()))
+    ind.hide_indicator()
+
+
+def test_the_shell_indicator_returns_after_the_extension_is_enabled(shell):
+    existing = set(Gtk.Window.list_toplevels())
+    ind = si.ShellIndicator()
+    ind.show_at_position()
+    assert _wait_for(lambda: "Update" in _methods(shell))
+    shell.disconnect()
+    assert _wait_for(lambda: any(isinstance(window, RecordingIndicator) and
+                                 window not in existing and window.get_visible()
+                                 for window in Gtk.Window.list_toplevels()))
+    ind.hide_indicator()
+    shell.reconnect()
+    ind.show_at_position()
+    assert _wait_for(lambda: _methods(shell).count("Show") == 2)
+    ind.hide_indicator()
+
+
+def test_style_changes_wait_until_the_next_show(shell):
+    ind = si.ShellIndicator(style="bars")
+    ind.show_at_position()
+    assert _wait_for(lambda: "Show" in _methods(shell))
+    ind.apply_settings("center", "medium", 0, 0, style="radial")
+    ind.set_spectrum([0.3, 0.7])
+    assert _wait_for(lambda: ("Update", (0.0, [0.3, 0.7])) in shell)
+    ind.hide_indicator()
+    assert _wait_for(lambda: "Hide" in _methods(shell))
+    ind.show_at_position()
+    assert _wait_for(lambda: _methods(shell).count("Show") == 2)
+    assert [args[0]["style"] for method, args in shell if method == "Show"] == ["bars", "radial"]
     ind.hide_indicator()
 
 

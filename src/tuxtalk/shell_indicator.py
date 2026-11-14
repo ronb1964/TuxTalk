@@ -89,13 +89,16 @@ class ShellIndicator:
         self.follow_window = follow_window
         self._fallback = None
         self._visible = False
+        self._show_ready = False
         self._recording = False
+        self._recording_sent = False
         self.apply_settings(position, size, offset_x, offset_y)
         self._update_id = None
         self._level = 0.0
         self._wave_history = []
         self._spectrum = []
         self._radial_gain = RadialGain()
+        self._shown_style = style
 
     def apply_settings(self, position, size, offset_x, offset_y,
                        style=None, color_mode=None, custom_color=None,
@@ -133,6 +136,11 @@ class ShellIndicator:
         """Send the settings and start the updates; on the GTK thread."""
         if not self._visible or self._fallback is not None:
             return False
+        present = available()
+        if not self._visible or self._fallback is not None:
+            return False
+        if not present:
+            return self._activate_fallback()
         accent = desktop_accent_rgb() if self.color_mode == "system" else None
         rgb = indicator_styles.resolve_color(self.color_mode, self.custom_color, accent)
         settings = {
@@ -145,8 +153,13 @@ class ShellIndicator:
             "offset_y": GLib.Variant("i", int(self.offset_y)),
         }
         self._call("Show", GLib.Variant("(a{sv})", (settings,)))
+        self._shown_style = self.style
+        self._show_ready = True
+        self._recording_sent = False
         if self._update_id is None:
             self._update_id = GLib.timeout_add(UPDATE_MS, self._send_update)
+        if self._recording:
+            self._do_start()
         return False
 
     def start_recording(self):
@@ -158,17 +171,22 @@ class ShellIndicator:
         GLib.idle_add(self._do_start)
 
     def _do_start(self):
-        if not self._visible or self._fallback is not None:
+        if (not self._visible or self._fallback is not None or
+                not self._show_ready or self._recording_sent):
             return False
+        self._recording_sent = True
         self._call("SetRecording", GLib.Variant("(b)", (True,)))
         return False
 
     def hide_indicator(self):
         """Hide the indicator and forget this dictation's sound."""
         self._visible = False
+        self._show_ready = False
         self._recording = False
+        self._recording_sent = False
         if self._fallback is not None:
             self._fallback.hide_indicator()
+            self._fallback = None
         GLib.idle_add(self._do_hide)
 
     def _do_hide(self):
@@ -179,7 +197,7 @@ class ShellIndicator:
         self._level = 0.0
         self._wave_history = []
         self._spectrum = []
-        if self.style == "radial" and (line := self._radial_gain.summary()):
+        if self._shown_style == "radial" and (line := self._radial_gain.summary()):
             logger.info(line)
         return False
 
@@ -192,7 +210,7 @@ class ShellIndicator:
     def set_waveform(self, samples):
         """Append the latest audio block to the rolling window the waveform
         and radial styles draw from."""
-        if self.style == "radial":
+        if self._shown_style == "radial":
             self._radial_gain.update(samples, time.monotonic())
         self._wave_history.extend(samples)
         excess = len(self._wave_history) - WAVE_HISTORY
@@ -233,12 +251,12 @@ class ShellIndicator:
         """The active style's shape, in the form shellIndicator.js draws it."""
         # A copy: the audio thread extends and trims the live list meanwhile.
         samples = list(self._wave_history)
-        if self.style == "waveform":
+        if self._shown_style == "waveform":
             return waveform_points(samples, BASE_WIDTH * self.scale * 0.60, self.sensitivity)
-        if self.style == "radial":
+        if self._shown_style == "radial":
             return indicator_styles.radial_offsets(samples, self.sensitivity,
                                                    gain=self._radial_gain)
-        if self.style == "bars":
+        if self._shown_style == "bars":
             return [min(1.0, value * self.sensitivity) for value in self._spectrum]
         return []
 
@@ -246,7 +264,8 @@ class ShellIndicator:
         if self._fallback is not None:
             self._update_id = None
             return False
-        level = min(1.0, self._level * self.sensitivity) if self.style == "orb" else self._level
+        level = (min(1.0, self._level * self.sensitivity)
+                 if self._shown_style == "orb" else self._level)
         self._call("Update", GLib.Variant("(dad)", (level, self._shape())))
         return True
 
