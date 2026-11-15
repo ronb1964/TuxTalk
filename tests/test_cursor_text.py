@@ -289,3 +289,31 @@ def test_one_active_app_isnt_read_when_the_desktop_cant_say_it_has_the_focus(bus
     """It may be a browser left in the background (issue #40)."""
     bus.app("Brave", "draft text", caret=5)
     assert around(focus=None) is None
+
+
+# Whether anything is selected, for a voice edit in KDE's editors: their
+# Ctrl+C with nothing selected copies the line and moves the cursor.
+def selected(focus=("org.kde.kwrite", None)):
+    return atspi_helper.has_selection(focused_app=lambda: focus)
+
+
+def test_kwrite_with_nothing_selected_says_so(bus):
+    bus.app("kwrite", "the big dog", caret=7, framed=True)
+    assert selected() is False
+
+
+def test_kwrite_with_text_selected_says_so(bus):
+    bus.app("kwrite", "the big red dog", selection=(8, 12), framed=True)
+    assert selected() is True
+
+
+def test_an_empty_selection_is_none(bus):
+    bus.app("kwrite", "the big dog", selection=(4, 4), framed=True)
+    assert selected() is False
+
+
+@pytest.mark.parametrize("kind", ["not text", "no answer", "focus unknown"])
+def test_when_it_can_t_be_told_the_answer_is_none(bus, kind):
+    bus.app("kwrite", "the big dog", is_text=kind != "not text", hang=kind == "no answer",
+            framed=True)
+    assert selected(None if kind == "focus unknown" else ("org.kde.kwrite", None)) is None

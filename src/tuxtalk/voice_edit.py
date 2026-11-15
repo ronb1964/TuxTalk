@@ -494,11 +494,17 @@ def _copy_selection(where, beeps_on, message):
 def _copy_in(where, send_copy, message=None):
     """clipboard.copy_selection in *where*, with what KDE's editors (KWrite,
     Kate) do differently: every selection they make is on the primary
-    selection, and a Ctrl+C with nothing selected moves the cursor
-    (_put_cursor_back). Esc on *message* stops the cursor going back."""
+    selection, and a Ctrl+C with nothing selected moves the cursor to the
+    line's start. So they're asked first, on the accessibility bus, and no
+    Ctrl+C goes when nothing is selected; when they can't be asked, the
+    cursor is put back where it can be (_put_cursor_back). Esc on *message*
+    stops the cursor going back."""
     from . import clipboard
     if (where[0] or "").lower() not in KDE_EDITOR_CLASSES_LOWER:
         return clipboard.copy_selection(send_copy)
+    if focused_window.has_selection() is False:
+        logger.info("Voice edit: nothing selected in KDE's editor, so no Ctrl+C")
+        return None, lambda also=(): None
     return clipboard.copy_selection(
         send_copy, selections_on_primary=True,
         on_line_copied=lambda line: _put_cursor_back(line, where, message))

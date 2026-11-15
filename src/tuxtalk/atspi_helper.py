@@ -180,17 +180,42 @@ def text_around_cursor(chars: int, budget: float = CONTEXT_BUDGET_S,
     a widget that isn't text, or no telling which app has the focus
     (*focused_app*, as for focused_is_password). Never logged: it's
     whatever the user wrote."""
+    return _ask_focused_text(
+        "Text around the cursor", budget, focused_app,
+        lambda bus, widget, deadline: _around(bus, widget, chars, deadline))
+
+
+def has_selection(budget: float = CONTEXT_BUDGET_S, focused_app=lambda: None) -> bool | None:
+    """Whether text is selected in the focused text widget of the app with
+    the focus (*focused_app*, as for focused_is_password); None when that
+    can't be told in *budget* seconds. KDE's editors move the cursor on a
+    Ctrl+C with nothing selected, so a voice edit asks here first."""
+    return _ask_focused_text("Selection", budget, focused_app, _selected)
+
+
+def _selected(bus, widget, deadline) -> bool:
+    """Whether *widget* has a selection that holds any text."""
+    if not _call(bus, widget, _TEXT, "GetNSelections", None, deadline)[0]:
+        return False
+    start, end = _call(bus, widget, _TEXT, "GetSelection", GLib.Variant("(i)", (0,)), deadline)
+    return start != end
+
+
+def _ask_focused_text(what, budget, focused_app, read):
+    """*read*(bus, widget, deadline) of the focused text widget of the app
+    with the focus, or None when there's none, or no answer in *budget*
+    seconds; *what* names the question in the log."""
     deadline = time.monotonic() + budget
     try:
         bus = _a11y_bus(deadline)
         widget = None if bus is None else _focused_widget(bus, focused_app, deadline)
-        return None if widget is None else _around(bus, widget, chars, deadline)
+        return None if widget is None else read(bus, widget, deadline)
     except (_OutOfTime, GLib.Error) as e:
-        logger.debug(f"Text around the cursor: no answer ({type(e).__name__})")
+        logger.debug(f"{what}: no answer ({type(e).__name__})")
         return None
     except Exception as e:
-        # An answer in a shape nobody expected: typed as it always was.
-        logger.info(f"Text around the cursor: couldn't be read ({type(e).__name__})")
+        # An answer in a shape nobody expected: things go on as they always did.
+        logger.info(f"{what}: couldn't be read ({type(e).__name__})")
         return None
 
 

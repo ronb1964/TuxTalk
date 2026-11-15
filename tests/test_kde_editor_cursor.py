@@ -6,7 +6,7 @@ paragraph before, and the next dictation landed at the line's start."""
 import pytest
 
 from tuxtalk import clipboard as cb
-from tuxtalk import keyboard_output, voice_edit
+from tuxtalk import focused_window, keyboard_output, voice_edit
 from tuxtalk import recording_state as rs
 
 PARAGRAPH = ("Okay, this is another little dictation. It's going to be a new "
@@ -104,6 +104,9 @@ def kwrite(monkeypatch):
     monkeypatch.setattr(keyboard_output, "send_copy_keystroke", lambda claim=None: board.ctrl_c())
     monkeypatch.setattr(keyboard_output, "not_where_typed", lambda focused, now=None: False)
     monkeypatch.setattr(rs.state, "last_inserted_text", PARAGRAPH)
+    # What the accessibility bus says is selected: None, it can't be told.
+    world["selected"] = None
+    monkeypatch.setattr(focused_window, "has_selection", lambda: world["selected"])
     return world
 
 
@@ -249,3 +252,24 @@ def test_the_check_after_edit_that_leaves_the_cursor_alone(kwrite, monkeypatch):
     monkeypatch.setattr(rs.state, "last_inserted_text", "")
     assert voice_edit._still_selected("some words", KWRITE) is False
     assert kwrite["keys"] == []
+
+
+def test_when_kwrite_says_nothing_is_selected_no_ctrl_c_goes_and_the_cursor_stays(kwrite):
+    """Its Ctrl+C would copy the line and send the cursor to its start,
+    which can be put back only right after a dictation."""
+    kwrite["selected"] = False
+    kwrite["board"].ctrl_c = lambda: pytest.fail("Ctrl+C was pressed")
+    assert copy_in(KWRITE) is None
+    assert kwrite["keys"] == []
+
+
+def test_when_kwrite_says_text_is_selected_it_is_copied(kwrite):
+    kwrite["selected"] = True
+    kwrite["primary"] = "big red"
+    kwrite["board"].selected = "big red"
+    assert copy_in(KWRITE) == "big red"
+
+
+def test_other_apps_are_never_asked(kwrite, monkeypatch):
+    monkeypatch.setattr(focused_window, "has_selection", lambda: pytest.fail("asked"))
+    copy_in(("libreoffice-writer", "0x3"))

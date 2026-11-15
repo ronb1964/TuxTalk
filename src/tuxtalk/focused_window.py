@@ -215,6 +215,13 @@ def text_around_cursor() -> tuple[str, str] | None:
     return atspi_helper.text_around_cursor(sentence_fit.WINDOW, focused_app=focused_app)
 
 
+def has_selection() -> bool | None:
+    """Whether text is selected in the app with the focus
+    (atspi_helper.has_selection), or None when it can't be told."""
+    from . import atspi_helper
+    return atspi_helper.has_selection(focused_app=focused_app)
+
+
 def _password_prompt_has_focus() -> bool:
     """The desktop's own password prompt has the focus. KDE's and LXQt's are
     polkit apps of their own, which only tell the accessibility bus with

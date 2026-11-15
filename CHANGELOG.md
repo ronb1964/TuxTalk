@@ -5,6 +5,15 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- In KWrite and Kate, holding Shift with the dictation key when nothing is
+  selected no longer throws the cursor to the start of the line. To find
+  the selection TuxTalk pressed Ctrl+C, and KDE's editors copy the whole
+  line on a Ctrl+C with nothing selected and move the cursor to its start;
+  TuxTalk could put it back only right after a dictation. Now, with the
+  desktop's accessibility on (TuxTalk asks once), it asks the editor
+  whether anything is selected and presses nothing when it isn't, so "select
+  the last sentence" and the other commands start from where your cursor
+  really is.
 - Help can be searched. Type in the box at the top of Help, press Ctrl+F,
   or just start typing, and the tabs make way for the cards that match, each
   naming the tab it's on (and TuxTalk Labs where it is one), your words in
