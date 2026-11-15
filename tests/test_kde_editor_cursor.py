@@ -1,8 +1,10 @@
 """KWrite and Kate move the cursor to the line's start when Ctrl+C copies the
-whole line with nothing selected (KTextEditor's copy()). Voice editing's
-selection check presses that Ctrl+C, so it puts the cursor back where the
-last dictation left it: "select the last sentence" selected text in the
-paragraph before, and the next dictation landed at the line's start."""
+whole line with nothing selected (KTextEditor's copy()). Voice editing asks
+them first, on the accessibility bus, and presses no Ctrl+C when nothing is
+selected; when they can't be asked, it presses Ctrl+C and puts the cursor
+back where the last dictation left it: "select the last sentence" selected
+text in the paragraph before, and the next dictation landed at the line's
+start."""
 import pytest
 
 from tuxtalk import clipboard as cb
@@ -110,9 +112,9 @@ def kwrite(monkeypatch):
     return world
 
 
-def copy_in(where, message=None):
+def copy_in(where, message=None, ask=True):
     selected, _put_back = voice_edit._copy_in(
-        where, lambda: keyboard_output.send_copy_keystroke(), message)
+        where, lambda: keyboard_output.send_copy_keystroke(), message, ask=ask)
     return selected
 
 
@@ -263,13 +265,48 @@ def test_when_kwrite_says_nothing_is_selected_no_ctrl_c_goes_and_the_cursor_stay
     assert kwrite["keys"] == []
 
 
-def test_when_kwrite_says_text_is_selected_it_is_copied(kwrite):
+def test_a_selected_whole_line_is_the_selection_when_kwrite_says_so(kwrite):
+    """A triple-clicked line, ending with its line break, looks like the
+    line KDE's editor copies with nothing selected; with no primary
+    selection to tell them apart, the cursor keys went over the real one."""
     kwrite["selected"] = True
-    kwrite["primary"] = "big red"
-    kwrite["board"].selected = "big red"
-    assert copy_in(KWRITE) == "big red"
+    kwrite["board"].selected = PARAGRAPH + "\n"
+    assert copy_in(KWRITE) == PARAGRAPH + "\n"
+    assert kwrite["keys"] == []
 
 
 def test_other_apps_are_never_asked(kwrite, monkeypatch):
     monkeypatch.setattr(focused_window, "has_selection", lambda: pytest.fail("asked"))
     copy_in(("libreoffice-writer", "0x3"))
+
+
+def test_after_edit_that_kwrite_isnt_asked(kwrite, monkeypatch):
+    """TuxTalk's own Shift+Lefts reach KWrite through the compositor, the
+    question straight over the bus: it could come first and find nothing."""
+    monkeypatch.setattr(focused_window, "has_selection", lambda: pytest.fail("asked"))
+    kwrite["primary"] = "Hello."
+    kwrite["board"].selected = "Hello."
+    assert copy_in(KWRITE, ask=False) == "Hello."
+
+
+@pytest.mark.parametrize("dictated, line", [
+    ("Hello. ", "Prefix. Hello."), ("Hello.  ", "Prefix. Hello. "),
+    ("Hello.\t", "Prefix. Hello. "), ("Hello. ", "Prefix. Hello. ")],
+    ids=["the space taken off", "one of two left", "a tab now a space", "not saved"])
+def test_with_nothing_selected_after_a_save_select_that_still_selects_the_dictation(
+        kwrite, monkeypatch, dictated, line):
+    from tuxtalk import voice_navigation as nav
+    kwrite["selected"] = False
+    monkeypatch.setattr(rs.state, "last_inserted_text", dictated)
+    monkeypatch.setattr(focused_window, "text_around_cursor", lambda: (line, ""))
+    assert copy_in(KWRITE) is None
+    keys = nav.chords(nav.parse("select that"), rs.state.last_inserted_text)
+    assert selected_by(keys, line) == "Hello."
+
+
+def test_with_the_cursor_away_from_the_dictation_it_is_remembered_as_it_was(kwrite, monkeypatch):
+    kwrite["selected"] = False
+    monkeypatch.setattr(rs.state, "last_inserted_text", "Hello. ")
+    monkeypatch.setattr(focused_window, "text_around_cursor", lambda: ("Other words", " here"))
+    copy_in(KWRITE)
+    assert rs.state.last_inserted_text == "Hello. "

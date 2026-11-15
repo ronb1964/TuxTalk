@@ -307,7 +307,7 @@ def test_kwrite_with_text_selected_says_so(bus):
     assert selected() is True
 
 
-def test_an_empty_selection_is_none(bus):
+def test_an_empty_selection_counts_as_nothing_selected(bus):
     bus.app("kwrite", "the big dog", selection=(4, 4), framed=True)
     assert selected() is False
 

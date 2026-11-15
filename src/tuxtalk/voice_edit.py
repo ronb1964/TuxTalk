@@ -434,7 +434,9 @@ def _change_selection(get_instruction, beeps_on, injection_mode, where, t0, mess
         return _UNCHANGED
     # The selection first, so "select some text first" comes up even when
     # nothing was said.
-    copied = _copy_selection(where, beeps_on, message)
+    # After "edit that" TuxTalk made the selection itself: KDE's editors
+    # aren't asked about it (_copy_in).
+    copied = _copy_selection(where, beeps_on, message, ask=expected is None)
     if copied is None:
         return _UNCHANGED
     selected, put_back = copied
@@ -469,7 +471,7 @@ def _change_selection(get_instruction, beeps_on, injection_mode, where, t0, mess
     return _rewrite_over_selection(result, injection_mode, message, beeps_on, where, went_in)
 
 
-def _copy_selection(where, beeps_on, message):
+def _copy_selection(where, beeps_on, message, ask=True):
     """(the text selected in *where*, or None, and what puts the user's
     clipboard back), copied with Ctrl+C there only: Ctrl+C in a terminal
     switched to during the password check would stop the program running
@@ -481,7 +483,7 @@ def _copy_selection(where, beeps_on, message):
         copy_sent.append(keyboard_output.send_copy_keystroke(_only_into(*where)))
         return copy_sent[-1]
     try:
-        copied = _copy_in(where, send_copy, message)
+        copied = _copy_in(where, send_copy, message, ask)
     except clipboard.ClipboardUnavailable:
         notices.edit_problem("no_clipboard", beeps_on)
         return None
@@ -491,20 +493,28 @@ def _copy_selection(where, beeps_on, message):
     return copied
 
 
-def _copy_in(where, send_copy, message=None):
+def _copy_in(where, send_copy, message=None, ask=True):
     """clipboard.copy_selection in *where*, with what KDE's editors (KWrite,
-    Kate) do differently: every selection they make is on the primary
-    selection, and a Ctrl+C with nothing selected moves the cursor to the
-    line's start. So they're asked first, on the accessibility bus, and no
-    Ctrl+C goes when nothing is selected; when they can't be asked, the
-    cursor is put back where it can be (_put_cursor_back). Esc on *message*
-    stops the cursor going back."""
+    Kate) do differently: a Ctrl+C with nothing selected copies the line and
+    moves the cursor to its start. So they're asked first, on the
+    accessibility bus (unless *ask* is False: TuxTalk's own keys just made
+    the selection, and the question could arrive before them), and no Ctrl+C
+    goes when nothing is selected. When they can't be asked, every selection
+    they make being on the primary selection tells a selection from a copied
+    line, and the cursor is put back where it can be (_put_cursor_back).
+    Esc on *message* stops the cursor going back."""
     from . import clipboard
     if (where[0] or "").lower() not in KDE_EDITOR_CLASSES_LOWER:
         return clipboard.copy_selection(send_copy)
-    if focused_window.has_selection() is False:
+    selected = focused_window.has_selection() if ask else None
+    if selected is False:
         logger.info("Voice edit: nothing selected in KDE's editor, so no Ctrl+C")
+        _remember_as_saved(where)
         return None, lambda also=(): None
+    if selected:
+        # Known to be a selection: a whole line with its line break, which
+        # looks like a copied line, is the user's.
+        return clipboard.copy_selection(send_copy)
     return clipboard.copy_selection(
         send_copy, selections_on_primary=True,
         on_line_copied=lambda line: _put_cursor_back(line, where, message))
@@ -530,16 +540,40 @@ def _put_cursor_back(line, where, message=None):
         return
     if not keys:
         return
-    # KWrite takes spaces off a line's end when it saves: "select that"
-    # counting the dictation's would select a character off, so it's
-    # remembered with the spaces the line still ends with.
-    remembered = last if text.endswith(tail) else last.rstrip() + text[len(text.rstrip()):]
+    remembered = _as_the_line_has_it(last, text)
     # Esc a moment before stops all four (checked right before the first).
     with keyboard_output.until_cancelled(message):
         if keyboard_output.output_backend().press_keys(keys, claim=_only_into(*where)):
             rs.state.last_inserted_text = remembered
         elif not keyboard_output.esc_cancelled():
             logger.warning("Voice edit: couldn't put the cursor back after KDE's editor moved it")
+
+
+def _as_the_line_has_it(last, line_end):
+    """The last dictation, *last*, as a line ending in *line_end* now has
+    it: KWrite takes spaces off a line's end when it saves, and "select
+    that" counting the dictation's would select a character off."""
+    if line_end.endswith(last.split("\n")[-1]):
+        return last
+    return last.rstrip() + line_end[len(line_end.rstrip()):]
+
+
+def _remember_as_saved(where):
+    """With nothing selected in KDE's editor and its cursor at the end of
+    the last dictation there, remember the dictation as the line has it
+    (_as_the_line_has_it), read on the accessibility bus. A cursor anywhere
+    else leaves it as it was."""
+    last = rs.state.last_inserted_text
+    if not last or keyboard_output.not_where_typed(where[0], where):
+        return
+    around = focused_window.text_around_cursor()
+    if around is None:
+        return
+    line_end = around[0].split("\n")[-1]
+    core, shown = last.rstrip(), line_end.rstrip()
+    common = min(len(core), len(shown))
+    if common and core[-common:] == shown[-common:]:
+        rs.state.last_inserted_text = _as_the_line_has_it(last, line_end)
 
 
 def _keys_back_to_dictation_end(text, tail):

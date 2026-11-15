@@ -536,9 +536,10 @@ These work <b>right after you dictate</b>, on what you just said.
     key: Shift+{hold} <i>"select the last sentence"</i>, then
     Shift+{hold} <i>"make it more formal"</i>.
   • In KWrite and Kate, Shift+{hold} with nothing selected needs accessibility on
-    (<b>Preferences → Advanced → Fine-tuning → Accessibility</b>; TuxTalk asks once).
-    With it off, say the commands around the cursor with {hold} alone: Shift+{hold}
-    would first move the cursor to the start of the line.
+    (<b>Preferences → Advanced → Fine-tuning → Accessibility</b>; TuxTalk asks once),
+    and a KWrite or Kate already open then closed and opened once. If the cursor
+    still jumps to the start of the line, say the commands around the cursor with
+    {hold} alone.
   • The commands around the cursor press the usual keys (Home, End, Ctrl+arrows), so
     they do what those keys do in each app.
   • It doesn't work in a terminal, where those keys mean other things.

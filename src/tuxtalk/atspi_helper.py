@@ -1,7 +1,8 @@
 """Whether the cursor is in a password field, asked of the accessibility bus
 (AT-SPI), so a dictation is never typed into one; and the few characters on
 either side of the cursor, so a dictation can fit the sentence it goes into
-(sentence_fit).
+(sentence_fit); and whether anything is selected, which a voice edit in
+KDE's editors asks before its Ctrl+C (voice_edit._copy_in).
 
 Plain D-Bus calls on a connection of TuxTalk's own (Gio), not libatspi: the
 AppImage doesn't ship libatspi's typelib, and libatspi shares one bus
@@ -39,8 +40,9 @@ BUDGET_S = 0.25
 # an earlier answer: the focus is what may have moved.
 RECHECK_BUDGET_S = 0.05
 CALL_TIMEOUT_MS = 100
-# The read of the text around the cursor, right before typing: a little
-# longer than a line's recheck, as it walks to the focused widget first.
+# A read of the focused text widget (the text around the cursor, right
+# before typing; whether anything is selected, before a voice edit): a
+# little longer than a line's recheck, as it walks to the widget first.
 CONTEXT_BUDGET_S = 0.1
 
 _ROOT = "/org/a11y/atspi/accessible/root"
