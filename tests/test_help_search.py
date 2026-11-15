@@ -58,7 +58,7 @@ def test_help_is_searched_with_the_users_own_key(monkeypatch):
     monkeypatch.setattr(config, "load_config", lambda: config.Settings(hotkey="F6"))
     entries = help_search.index(help_text.tabs())
     assert ("Start Here", "", "How to dictate") in _titles(help_search.search(entries, "f6"))
-    assert help_search.search(entries, "hold f8") == []
+    assert help_search.search(entries, "f8") == []
 
 
 def test_a_blank_search_finds_nothing(entries):
@@ -114,6 +114,9 @@ LIKELY = [
     "punctuation", "comma", "period", "new paragraph", "numbers", "undo", "scratch that",
     "snippets", "your words", "music", "flatpak", "gnome", "kde", "log", "privacy", "stats",
     "recent dictations", "transcribe", "file", "ai", "performance", "slow", "indicator",
+    # A few words, as people type them.
+    "remove tuxtalk", "how to uninstall", "change hotkey", "mic not working", "gpu speed",
+    "cpu slow", "start login", "live text labs", "gpus",
 ]
 
 
@@ -140,3 +143,23 @@ def test_hotkey_finds_the_dictation_key_not_every_key(entries):
     found = _titles(help_search.search(entries, "hotkey"))
     assert ("Problems", "", "No key works") in found
     assert len(found) < 10
+
+
+def test_every_word_of_a_search_counts_not_only_the_whole_phrase(entries):
+    found = _titles(help_search.search(entries, "how to uninstall"))
+    assert found[0] == ("Problems", "", "Uninstalling")
+
+
+def test_cards_with_all_the_words_come_before_cards_with_some(entries):
+    found = help_search.search(entries, "microphone answering")
+    assert found[0].title == '"Microphone isn\'t answering"'
+
+
+def test_a_plural_finds_what_the_singular_does(entries):
+    assert help_search.search(entries, "gpus") == help_search.search(entries, "gpu")
+
+
+def test_the_match_is_found_where_a_word_starts_with_other_names_too():
+    assert help_search.first_match("Not again: the processor", "cpu") == (15, 24)
+    assert help_search.first_match("explain the AI", "ai") == (12, 14)
+    assert help_search.first_match("nothing here", "cpu") is None

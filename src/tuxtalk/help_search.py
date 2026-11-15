@@ -82,48 +82,91 @@ def index(sections):
     return tuple(entries)
 
 
-def _wanted(query):
-    """What to look for: *query* itself and its other names, each where a
-    word starts ("ai" is no match in "again")."""
-    query = _words(query)
-    if not query:
-        return ()
-    return tuple(re.compile(r"(?<!\w)" + re.escape(word))
-                 for word in (query, *SYNONYMS.get(query, ())))
+# Words a question is made of that say nothing about what's wanted: "how
+# to uninstall" is a search for "uninstall", "mic not working" for "mic";
+# every card is about TuxTalk.
+_FILLER = frozenset({
+    "a", "an", "and", "are", "can", "do", "does", "for", "how", "i", "in", "is", "it", "me",
+    "my", "not", "of", "on", "the", "to", "what", "when", "where", "why", "with", "work",
+    "working", "tuxtalk"})
 
 
-def _rank(entry, wanted, labs):
-    """0 when *entry*'s heading or feature names a *wanted* word, 1 when
-    its note, text or tab does or it's a Labs card and *labs* was asked
-    for, else None."""
-    if any(word.search(_words(f"{entry.part} {entry.title}")) for word in wanted):
+class _Query(NamedTuple):
+    """A search, ready to match: the whole of it as one phrase, then each
+    word that counts, with whether that word asks for TuxTalk Labs."""
+    phrase: re.Pattern
+    words: tuple
+
+
+def _pattern(*names):
+    """Where any of *names* starts a word ("ai" isn't in "again"), any case,
+    any spacing between a name's words."""
+    return re.compile("|".join(r"(?<!\w)" + r"\s+".join(map(re.escape, name.split()))
+                               for name in dict.fromkeys(names)), re.IGNORECASE)
+
+
+def _names(word):
+    """*word* and its other names; a plural also finds its singular."""
+    stem = word[:-1] if len(word) > 3 and word.endswith("s") else word
+    return (stem, *SYNONYMS.get(word, ()), *SYNONYMS.get(stem, ()))
+
+
+def _query(query):
+    """*query* ready to match, or None for one with no words."""
+    words = _words(query).split()
+    if not words:
+        return None
+    kept = [word for word in words if word not in _FILLER] or words
+    return _Query(_pattern(" ".join(words), *SYNONYMS.get(" ".join(words), ())),
+                  tuple((_pattern(*_names(word)), word in _LABS_WORDS) for word in kept))
+
+
+def _rank(entry, query):
+    """How well *entry* answers *query*, best first: the phrase in its
+    heading (0), every word there (1), the phrase or every word anywhere
+    (2), then fewer words found (3 and on); None when none is. A Labs card
+    answers a word asking for Labs."""
+    heading = f"{entry.part} {entry.title}"
+    rest = f"{entry.note} {entry.text} {entry.tab}"
+    if query.phrase.search(heading):
         return 0
-    if (labs and entry.labs) or any(
-            word.search(_words(f"{entry.note} {entry.text} {entry.tab}")) for word in wanted):
+    if all(word.search(heading) for word, _labs in query.words):
         return 1
-    return None
+    found = sum(bool(word.search(heading) or word.search(rest) or (labs and entry.labs))
+                for word, labs in query.words)
+    if query.phrase.search(rest) or found == len(query.words):
+        return 2
+    return 3 + len(query.words) - found if found else None
 
 
 def search(entries, query):
-    """The *entries* matching *query*, the ones naming it in their heading
-    first, each kind in Help's order. Case and spacing don't count."""
-    wanted = _wanted(query)
-    if not wanted:
+    """The *entries* answering *query*, best first (_rank), each rank in
+    Help's order. Case, spacing and filler words don't count."""
+    query = _query(query)
+    if query is None:
         return []
-    labs = _words(query) in _LABS_WORDS
     ranked = [(rank, n) for n, entry in enumerate(entries)
-              if (rank := _rank(entry, wanted, labs)) is not None]
-    return [entries[n] for _rank_, n in sorted(ranked)]
+              if (rank := _rank(entry, query)) is not None]
+    return [entries[n] for _rank_of_entry, n in sorted(ranked)]
+
+
+def first_match(text, query):
+    """(start, end) of the first place in *text* that *query* matches, the
+    whole phrase before any one word; None when it's nowhere."""
+    query = _query(query)
+    if query is None:
+        return None
+    found = query.phrase.search(text) or min(
+        (hit for word, _labs in query.words if (hit := word.search(text))),
+        key=lambda hit: hit.start(), default=None)
+    return found.span() if found else None
 
 
 def highlight(text, query):
-    """*text* as Pango markup with the first place *query* (or one of its
-    other names) appears in bold."""
-    lowered = text.lower()
-    spots = [(found.start(), found.end() - found.start()) for word in _wanted(query)
-             if (found := word.search(lowered))]
-    if not spots:
+    """*text* as Pango markup with the first place *query* matches in bold."""
+    span = first_match(text, query)
+    if span is None:
         return cards.escape(text)
-    at, length = min(spots)
-    return (cards.escape(text[:at]) + "<b>" + cards.escape(text[at:at + length]) + "</b>"
-            + cards.escape(text[at + length:]))
+    start, end = span
+    return (cards.escape(text[:start]) + "<b>" + cards.escape(text[start:end]) + "</b>"
+            + cards.escape(text[end:]))
