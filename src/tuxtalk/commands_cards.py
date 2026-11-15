@@ -116,7 +116,7 @@ def group_page(group, extra=None):
     return cards.page(children)
 
 
-def all_groups_page(title, intro, outro, found=None):
+def all_groups_page(title, intro, outro, found):
     """Help's Commands tab: its *title*, *intro* (markup), then each group
     under its own title in its colour, then *outro*. *found* as for
     _group_children, so Help's search can go to a card."""

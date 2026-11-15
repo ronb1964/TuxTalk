@@ -55,14 +55,13 @@ def _card(section, look, icon, on_link, part_labels):
     return card, text
 
 
-def page(text, tab, on_link, above=(), found=None):
+def page(text, tab, on_link, found, above=()):
     """The page of Help's tab *tab*, from its *text*: its title, then its
     cards in the tab's colour; *above* are widgets to put first (Problems'
     Report a Problem button); *on_link* handles a link's activate-link.
     *found*, a dict, gets each card's (text, card) by (feature, heading),
     and a feature's opening lines by (feature, feature), so Help's search
     can go to one."""
-    found = {} if found is None else found
     look, icon = TAB_LOOK[tab]
     content = help_outline.parse(text)
     children = [*above, cards.page_title(content.title)]

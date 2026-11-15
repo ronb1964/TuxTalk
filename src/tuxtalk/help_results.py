@@ -6,10 +6,10 @@ the tab at that card (help_dialog).
 """
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gtk
 
-from . import cards, commands_cards, help_pages, help_search  # noqa: E402
-from .help_text import COMMANDS_TITLE  # noqa: E402
+from . import cards, commands_cards, help_pages, help_search
+from .help_text import COMMANDS_TITLE
 
 # How much of a card's text a result shows: enough to tell two "How it
 # works" cards apart, and the place the word is, if it's further in.
@@ -18,7 +18,7 @@ _LEAD_CHARS = 60
 
 
 def count_line(found, query):
-    """"3 results for 'labs'", or that there are none."""
+    """The line over the results: 3 results for 'labs', or none."""
     if not found:
         return f"No results for '{query}'"
     return f"{len(found)} result{'' if len(found) == 1 else 's'} for '{query}'"
@@ -26,9 +26,10 @@ def count_line(found, query):
 
 def snippet(text, query):
     """A line of *text* to show under a result: its start, or from just
-    before the first place *query* appears when that's further in."""
+    before the first place *query* matches (help_search.first_match) when
+    that's further in."""
     text = " ".join(text.split())
-    at = max(text.lower().find(query.strip().lower()), 0)
+    at = (help_search.first_match(text, query) or (0, 0))[0]
     start = 0 if at < _SNIPPET_CHARS - _LEAD_CHARS else text.rfind(" ", 0, at - _LEAD_CHARS) + 1
     end = text.find(" ", start + _SNIPPET_CHARS)
     shown = text[start:] if end < 0 else text[start:end]
@@ -58,24 +59,28 @@ def _result(entry, query, on_pick):
     head, _labels = cards.card_head(_heading(entry), look, icon, entry.note, labs)
     head.pack_end(cards.tag(entry.tab, f"On Help's {entry.tab} tab"), False, False, 0)
     card = cards.card_box(head)
-    text = cards.label(help_search.highlight(snippet(entry.text, query), query), "tt-card-text")
+    line = snippet(entry.text, query)
+    text = cards.label(help_search.highlight(line, query), "tt-card-text")
     text.get_style_context().add_class("tt-card-row")
     card.pack_start(text, False, False, 0)
     button = Gtk.Button()
     button.set_relief(Gtk.ReliefStyle.NONE)
     button.get_style_context().add_class("tt-result")
     button.add(card)
-    button.get_accessible().set_name(f"{_heading(entry)}, on the {entry.tab} tab")
+    labs_said = ", TuxTalk Labs" if entry.labs else ""
+    button.get_accessible().set_name(f"{_heading(entry)}, on the {entry.tab} tab{labs_said}")
+    button.get_accessible().set_description(line)
     button.connect("clicked", lambda _b: on_pick(entry))
     return button
 
 
 def page(found, query, on_pick):
     """The results page for *query*: the count, then a result for each of
-    *found* (help_search.search's entries); *on_pick* gets the one picked."""
+    *found* (help_search.search's entries); *on_pick* gets the one picked.
+    Returns the page and its results' buttons, in order."""
     count = f'<span size="x-large"><b>{cards.escape(count_line(found, query))}</b></span>'
     children = [cards.heading(count, "tt-page-title")]
     if not found:
         children.append(cards.paragraph("Try a shorter word, or another name for it."))
-    children.extend(_result(entry, query, on_pick) for entry in found)
-    return cards.page(children)
+    buttons = [_result(entry, query, on_pick) for entry in found]
+    return cards.page(children + buttons), buttons

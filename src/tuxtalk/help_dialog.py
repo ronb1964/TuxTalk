@@ -14,8 +14,8 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gdk, GLib, Gtk, Pango
 
-from . import commands_cards, help_outline, help_pages, help_results, help_search, help_text
-from . import ui_style
+from . import cards, commands_cards, help_outline, help_pages, help_results, help_search
+from . import help_text, ui_style
 from .help_text import COMMANDS_TITLE, FEEDBACK_URL, PROBLEMS_TITLE, REPORT_LINK
 
 # Help's text flows to the cards' width; a line about this many of the
@@ -62,7 +62,7 @@ def _problems_page(markup, found):
     row.set_margin_bottom(6)
     row.pack_start(report, False, False, 0)
     row.pack_start(note, True, True, 0)
-    return help_pages.page(markup, PROBLEMS_TITLE, _on_link, above=[row], found=found)
+    return help_pages.page(markup, PROBLEMS_TITLE, _on_link, found, above=[row])
 
 
 def _add_sections(notebook, sections, found):
@@ -78,10 +78,9 @@ def _add_sections(notebook, sections, found):
             # intro (a test keeps it so).
             commands = help_outline.parse(markup)
             page = commands_cards.all_groups_page(
-                commands.title, commands.parts[0].intro, help_text.COMMANDS_EXAMPLES,
-                found=cards_here)
+                commands.title, commands.parts[0].intro, help_text.COMMANDS_EXAMPLES, cards_here)
         else:
-            page = help_pages.page(markup, title, _on_link, found=cards_here)
+            page = help_pages.page(markup, title, _on_link, cards_here)
         found.update({(title, *key): widgets for key, widgets in cards_here.items()})
         notebook.append_page(page, Gtk.Label(label=title))
 
@@ -118,18 +117,29 @@ class _Help:
     Help's text as it was last written for this computer."""
 
     def __init__(self, window, sections):
+        """The parts for *window*, written from *sections* (help_text.tabs())."""
         self.window = window
         self.notebook = Gtk.Notebook()
         self.notebook.get_accessible().set_name("Help sections")
         self.box = Gtk.SearchEntry(placeholder_text="Search Help: a feature, a command, any word")
         self.box.get_accessible().set_name("Search Help")
-        self.box.connect("changed", self._on_search)
+        # search-changed waits a moment while typing goes on: a page of
+        # results built at every letter made typing stutter.
+        self.box.connect("search-changed", self.show_search)
         self.box.connect("activate", self._pick_first)
+        # Esc in the box comes through the box, after an input method has
+        # had it (Esc there ends a word being composed, not the search).
+        self.box.connect("stop-search", lambda _box: self._escape())
         self.stack = Gtk.Stack()
         self.stack.add_named(self.notebook, "tabs")
-        self.results, self.matches = None, []
+        self.results, self.buttons, self.matches, self.query = None, [], [], ""
         self.write(sections)
         window.connect("key-press-event", self._on_key)
+        # An accelerator, so Ctrl+F works on a Cyrillic or Greek layout too.
+        keys = Gtk.AccelGroup()
+        keys.connect(Gdk.KEY_f, Gdk.ModifierType.CONTROL_MASK, 0,
+                     lambda *_args: self.box.grab_focus() or True)
+        window.add_accel_group(keys)
 
     def write(self, sections):
         """Write the tabs, and what the search box searches, from *sections*
@@ -144,100 +154,113 @@ class _Help:
         self.notebook.show_all()     # GTK won't show a hidden page
         if shown >= 0:      # -1 when first written; GTK reads -1 as the last tab
             self.notebook.set_current_page(shown)
-        self._on_search(self.box)
+        self.show_search()
 
-    def _on_search(self, _box):
-        """Show the matches for the box's words, or the tabs when it's empty."""
+    def show_search(self, *_args):
+        """Show the matches for the box's words, or the tabs when it's empty;
+        a screen reader hears the count with the box."""
         if self.results is not None:
             self.stack.remove(self.results)
-            self.results = None
-        query = self.box.get_text().strip()
-        if not query:
+            self.results, self.buttons = None, []
+        self.query = self.box.get_text().strip()
+        if not self.query:
+            self.box.get_accessible().set_description("")
             self.stack.set_visible_child_name("tabs")
             return
-        self.matches = help_search.search(self.entries, query)
-        self.results = help_results.page(self.matches, query, self.jump)
+        self.matches = help_search.search(self.entries, self.query)
+        self.results, self.buttons = help_results.page(self.matches, self.query, self.jump)
+        self.box.get_accessible().set_description(
+            help_results.count_line(self.matches, self.query))
         self.results.show_all()
         self.stack.add_named(self.results, "results")
         self.stack.set_visible_child_name("results")
 
     def _pick_first(self, _box):
-        """Enter in the box goes to the first match."""
-        if self.matches and self.box.get_text().strip():
+        """Enter in the box goes to the first match, of what the box holds
+        now: Enter can come before search-changed has."""
+        if self.box.get_text().strip() != self.query:
+            self.show_search()
+        if self.matches and self.query:
             self.jump(self.matches[0])
 
     def jump(self, entry):
         """Open *entry*'s tab at its card, outlined for a moment, with the
-        keyboard (and a screen reader) on it; the box empties."""
+        keyboard (and a screen reader) on it near the top; the box empties."""
         focus, card = self.found[(entry.tab, entry.part, entry.title)]
         self.box.set_text("")
+        self.show_search()
         number = _page_of(self.notebook, entry.tab)
         self.notebook.set_current_page(number)
         style = card.get_style_context()
         style.add_class("tt-found")
         GLib.timeout_add(_FOUND_MS, lambda: style.remove_class("tt-found"))
-        _show_found(self.notebook.get_nth_page(number), focus, card)
+        focus.grab_focus()
+        # Focusing alone scrolls only as far as it must, the card at the bottom.
+        cards.scroll_to(self.notebook.get_nth_page(number), card, _ABOVE_FOUND_PX, _FOUND_MS)
+
+    def clear_search(self):
+        """Back to the tabs, the box empty."""
+        self.box.set_text("")
+        self.show_search()
+
+    def _escape(self):
+        """Esc empties a search, keeping the keyboard in the box; with none,
+        it closes Help."""
+        if self.box.get_text():
+            self.clear_search()
+            self.box.grab_focus()
+        else:
+            self.window.destroy()
+        return True
+
+    def _move(self, down):
+        """Up and Down between the box and the results, one at a time;
+        False when the key isn't for that (no results, focus elsewhere)."""
+        if self.window.get_focus() is self.box:
+            if down and self.buttons:
+                self.buttons[0].grab_focus()
+                return True
+            return False
+        at = next((n for n, button in enumerate(self.buttons) if button.has_focus()), None)
+        if at is None:
+            return False
+        if down:
+            self.buttons[min(at + 1, len(self.buttons) - 1)].grab_focus()
+        else:
+            (self.buttons[at - 1] if at else self.box).grab_focus()
+        return True
 
     def _on_key(self, _window, event):
-        """Esc empties a search first and closes Help after; Ctrl+F, or a
-        letter typed outside the box, goes to the box; Down from the box goes
-        to the first match."""
-        ctrl = event.state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK)
+        """Keys before the widget with the focus has them: Esc outside the
+        box (in it, the box's stop-search), the arrows through the results,
+        and a letter typed outside the box, which goes into it."""
         in_box = self.window.get_focus() is self.box
-        if event.keyval == Gdk.KEY_Escape:
-            if self.box.get_text():
-                self.box.set_text("")
-            else:
-                self.window.destroy()
-            return True
-        if ctrl and event.keyval in (Gdk.KEY_f, Gdk.KEY_F):
-            self.box.grab_focus()
-            return True
-        if in_box and event.keyval == Gdk.KEY_Down and self.results is not None:
-            return self.results.child_focus(Gtk.DirectionType.TAB_FORWARD)
+        if event.keyval == Gdk.KEY_Escape and not in_box:
+            return self._escape()
+        if event.keyval in (Gdk.KEY_Down, Gdk.KEY_Up):
+            return self._move(event.keyval == Gdk.KEY_Down)
+        modified = event.state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK)
         typed = chr(Gdk.keyval_to_unicode(event.keyval))
-        if not ctrl and not in_box and typed.isprintable() and not typed.isspace():
+        if not modified and not in_box and typed.isprintable() and not typed.isspace():
             self.box.grab_focus_without_selecting()     # the key then goes into it
         return False
-
-
-def _show_found(page, focus, card):
-    """Put *card* near the top of *page* (a scrolled page of Help), with
-    the keyboard on *focus*: focusing alone scrolls only as far as it must,
-    leaving the card at the bottom. A tab just opened isn't laid out yet,
-    and its scrolling then stops short: it's put there once it is."""
-    focus.grab_focus()
-    scroll = page.get_vadjustment()
-
-    content = page.get_child().get_child()      # the column, inside the viewport
-
-    def put(*_args):
-        place = card.translate_coordinates(content, 0, 0)
-        if place:
-            scroll.set_value(max(place[1] - _ABOVE_FOUND_PX, 0))
-    put()
-    handler = scroll.connect("changed", put)
-    # Only the first layout: later the person scrolls where they like.
-    GLib.timeout_add(_FOUND_MS, lambda: scroll.disconnect(handler))
 
 
 _open_help = None     # the _Help while Help is open
 
 
-def open_help():
-    """The open Help window's _Help, or None."""
-    return _open_help
-
-
 def _bring_forward(tab):
-    """Bring the open Help forward, on *tab* when one is named, its text up
-    to date with the settings. Returns the window."""
+    """Bring the open Help forward, on *tab* when one is named (a search
+    shown makes way for it), its text up to date with the settings, the
+    keyboard on what's shown. Returns the window."""
     sections = help_text.tabs()
     if sections != _open_help.sections:
         _open_help.write(sections)
-        _open_help.notebook.grab_focus()
     if tab:
+        _open_help.clear_search()
         open_section(_open_help.notebook, tab)
+    showing_tabs = _open_help.stack.get_visible_child_name() == "tabs"
+    (_open_help.notebook if showing_tabs else _open_help.box).grab_focus()
     from .raise_window import raise_window
     raise_window(_open_help.window)
     return _open_help.window

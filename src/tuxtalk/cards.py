@@ -55,9 +55,10 @@ def page_title(title):
     return heading(f'<span size="xx-large"><b>{escape(title)}</b></span>', "tt-page-title")
 
 
-def tag(text, tooltip=""):
-    """A small tag beside a heading: the Labs one, or a search result's tab."""
-    widget = label(escape(text), "tt-labs", wrap=False)
+def tag(text, tooltip="", style="tt-tag"):
+    """A small tag beside a heading: a search result's tab, or (*style*
+    tt-labs) the Labs one."""
+    widget = label(escape(text), style, wrap=False)
     if tooltip:
         widget.set_tooltip_text(tooltip)
     return widget
@@ -65,7 +66,7 @@ def tag(text, tooltip=""):
 
 def labs_tag(tooltip):
     """The small "Labs" tag of a heading; *tooltip* says where it's turned on."""
-    return tag("Labs", tooltip)
+    return tag("Labs", tooltip, "tt-labs")
 
 
 def card_head(title, look, icon, note="", labs=""):
@@ -136,6 +137,23 @@ def page(children):
         widget.connect("key-press-event", ui_style.scroll_with_keys, scrolled)
     scrolled.add(column)
     return scrolled
+
+
+def scroll_to(page, widget, above, settle_ms):
+    """Scroll *page* (from page()) so *widget* sits *above* pixels below its
+    top. A page just shown isn't laid out yet, and its scrolling would stop
+    short: it's scrolled again as it grows, for *settle_ms*; after that the
+    person scrolls where they like."""
+    column = page.get_child().get_child()       # inside the viewport ScrolledWindow adds
+    scroll = page.get_vadjustment()
+
+    def put(*_args):
+        place = widget.translate_coordinates(column, 0, 0)
+        if place:
+            scroll.set_value(max(place[1] - above, 0))
+    put()
+    handler = scroll.connect("changed", put)
+    GLib.timeout_add(settle_ms, lambda: scroll.disconnect(handler))
 
 
 def _focusable(widget):
