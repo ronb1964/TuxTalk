@@ -836,6 +836,42 @@ def test_the_shells_own_prompt_counts_while_another_apps_toolkit_hangs(bus, monk
                                             focused_app=focus_on("org.gnome.Nautilus")) is True
 
 
+def test_the_shells_own_prompt_counts_beside_an_active_app_whose_toolkit_hangs(bus, monkeypatch):
+    """An app in the background can still call a window active; its toolkit
+    isn't asked before each line, so it can't use up the time either."""
+    bus.app("gnome-shell", PASSWORD)
+    bus.app("Slack", TEXT)
+    real = bus.call_sync
+
+    def toolkit_hangs(name, path, interface, method, args, reply_type, flags, timeout_ms, c):
+        if name == ":Slack" and method == "Get" and args.unpack()[1] == "ToolkitName":
+            bus.clock.sleep(timeout_ms / 1000)
+            raise GLib.Error("Timeout was reached")
+        return real(name, path, interface, method, args, reply_type, flags, timeout_ms, c)
+    monkeypatch.setattr(bus, "call_sync", toolkit_hangs)
+    assert atspi_helper.focused_is_password(atspi_helper.RECHECK_BUDGET_S,
+                                            focused_app=focus_on("org.gnome.Nautilus")) is True
+
+
+def test_a_wake_waiting_on_a_hung_look_isnt_joined_by_another(bus):
+    """A look at the focused app can hang (an X server that stopped
+    answering): each recording would leave one more thread waiting."""
+    import threading
+    looks, release = [], threading.Event()
+
+    def hangs():
+        looks.append(1)
+        release.wait(5)
+    first = threading.Thread(target=atspi_helper.wake, args=(hangs,))
+    first.start()
+    while not looks:
+        time.sleep(0.001)
+    atspi_helper.wake(hangs)
+    release.set()
+    first.join()
+    assert looks == [1]
+
+
 def test_a_recording_starts_wake_leaves_the_password_check_its_own_look(bus):
     """The wake runs on a thread of its own; it must not hold the one look
     at the focused app a password check made meanwhile needs."""
@@ -846,12 +882,15 @@ def test_a_recording_starts_wake_leaves_the_password_check_its_own_look(bus):
 
 
 def test_waking_only_the_app_with_the_focus(bus):
-    """Chromium and Electron build their tree of widgets only once asked."""
+    """Chromium and Electron build their tree of widgets only once asked,
+    and the wake learns the app's toolkit, which the checks before each
+    line don't ask themselves."""
     bus.app("Google Chrome", TEXT, active=False, toolkit="Chromium")
     bus.app("Firefox", TEXT, active=False)
     atspi_helper.wake(focus_on("google-chrome"))
     assert [c for c in bus.calls if c[2] == "GetAttributes"] == [
         (":Google Chrome", "/root", "GetAttributes")]
+    assert atspi_helper._toolkits == {":Google Chrome": "Chromium"}
 
 
 def test_a_wake_with_no_accessibility_bus_does_nothing(monkeypatch):

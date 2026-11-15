@@ -96,6 +96,9 @@ _connecting = False
 _toolkits = {}
 _toolkits_lock = threading.Lock()
 _TOOLKITS_KEPT = 256
+# One wake at a time: each recording starts one, on a thread of its own.
+_wake_lock = threading.Lock()
+_waking = False
 _bus_changed = threading.Condition()
 _last_active = ()
 
@@ -355,6 +358,11 @@ def wake(focused_app) -> None:
     first look at their text box would find nothing; asked when a recording
     starts, the tree is ready by the time the words are typed (in about 25
     ms on a small page)."""
+    global _waking
+    with _wake_lock:
+        if _waking:
+            return      # one still waits on a look that hangs (an X server stuck)
+        _waking = True
     deadline = time.monotonic() + WAKE_BUDGET_S
     try:
         bus = _a11y_bus(deadline)
@@ -367,11 +375,15 @@ def wake(focused_app) -> None:
         for name, app in _named_apps(bus, deadline):
             if name not in _SHELLS and _is_focused(bus, name, app, focus, deadline):
                 _call(bus, app, _ACCESSIBLE, "GetAttributes", None, deadline)
+                _toolkit(bus, app[0], deadline)     # known before the checks need it
     except (_OutOfTime, GLib.Error) as e:
         logger.debug(f"Waking the focused app on the accessibility bus: no answer: {e!r}")
     except Exception as e:
         # An answer in a shape nobody expected: a dictation reads as before.
         logger.info(f"Waking the focused app on the accessibility bus failed: {e!r}")
+    finally:
+        with _wake_lock:
+            _waking = False
 
 
 def _around(bus, widget, chars, deadline, depth=0):
@@ -725,8 +737,12 @@ def _focused_in(bus, window, deadline):
     Electron app several can say they have the focus, and the last one
     that can be typed into is it: Claude Desktop's own page says so, ahead
     of the claude.ai page whose box has the cursor. Elsewhere the first:
-    every match would walk a whole web page or a big GTK window."""
-    every = _toolkit(bus, window[0], deadline) == "Chromium"
+    every match would walk a whole web page or a big GTK window. Only a
+    toolkit already known counts (wake learns the focused app's): asking
+    here, before each line, a slow app could use up the time before the
+    shell's own password prompt is asked."""
+    with _toolkits_lock:
+        every = _toolkits.get(window[0]) == "Chromium"
     # Every part of the rule is "match all" (1): at-spi2-atk turns any other
     # match type on an empty part, even "invalid", into "no match".
     rule = GLib.Variant("((aiia{ss}iaiiasib)uib)", (

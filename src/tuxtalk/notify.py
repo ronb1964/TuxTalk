@@ -24,12 +24,14 @@ TIMEOUT_S = 2.0
 
 
 def _send(title: str, body: str) -> None:
+    # Flags NONE: the bus may start a notification service that starts only
+    # when asked (mako, dunst, xfce4-notifyd).
     from gi.repository import Gio, GLib
     Gio.bus_get_sync(Gio.BusType.SESSION, None).call_sync(
         "org.freedesktop.Notifications", "/org/freedesktop/Notifications",
         "org.freedesktop.Notifications", "Notify",
         GLib.Variant("(susssasa{sv}i)", ("TuxTalk", 0, APP_ICON, title, body, [], {}, -1)),
-        None, Gio.DBusCallFlags.NO_AUTO_START, int(TIMEOUT_S * 1000), None)
+        None, Gio.DBusCallFlags.NONE, int(TIMEOUT_S * 1000), None)
 
 
 def notify(title: str, body: str) -> None:

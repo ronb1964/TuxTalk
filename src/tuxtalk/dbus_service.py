@@ -109,8 +109,6 @@ class TuxTalkDBusService(dbus.service.Object):
 
         # Get session bus
         self.bus = dbus.SessionBus()
-        global _exporting_as
-        _exporting_as = self.bus.get_unique_name()
 
         if primary:
             self.bus_name = dbus.service.BusName(
@@ -121,6 +119,8 @@ class TuxTalkDBusService(dbus.service.Object):
 
         # Initialize parent
         super().__init__(self.bus_name, DBUS_PATH)
+        global _exporting_as
+        _exporting_as = self.bus.get_unique_name()
 
         if self.owns_name():
             logger.info(f"D-Bus service started: {DBUS_NAME}")

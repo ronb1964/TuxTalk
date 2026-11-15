@@ -297,6 +297,22 @@ def _kde(monkeypatch, kxkbrc=None, session="wayland"):
     monkeypatch.setattr(kl, "_kreadconfig", kreadconfig)
 
 
+def test_kdes_layouts_are_asked_with_a_time_limit(monkeypatch):
+    """Asked before typing: a hung keyboard daemon must not hold a dictation
+    for D-Bus's 25 seconds."""
+    from tuxtalk import dbus_calls
+    asked = []
+
+    class Bus:
+        def call_blocking(self, service, path, interface, method, signature, args, timeout):
+            asked.append((service, method, timeout))
+            return [("us", ""), ("ch", "fr")] if method == "getLayoutsList" else 1
+    monkeypatch.setattr(dbus_calls, "session", Bus)
+    assert kl._kde_layouts() == ([("us", ""), ("ch", "fr")], 1)
+    assert [m for _s, m, _t in asked] == ["getLayoutsList", "getLayout"]
+    assert all(s == "org.kde.keyboard" and 0 < t <= 5 for s, _m, t in asked)
+
+
 def test_kde_reports_the_active_layout(monkeypatch):
     _kde(monkeypatch)
     assert kl.active_layout() == ("ch", "fr", None)

@@ -37,7 +37,7 @@ def test_a_notice_goes_to_the_desktops_notification_service(monkeypatch):
     class Connection:
         def call_sync(self, name, path, interface, method, args, reply_type, flags,
                       timeout_ms, cancellable):
-            calls.append((name, interface, method, args.unpack(), timeout_ms))
+            calls.append((name, interface, method, args.unpack(), flags, timeout_ms))
 
     monkeypatch.setattr(Gio, "bus_get_sync", lambda kind, cancellable: Connection())
     import importlib
@@ -49,10 +49,12 @@ def test_a_notice_goes_to_the_desktops_notification_service(monkeypatch):
         # The module as it was, so notify.notify is again the function
         # the service calls and _send is held back, whatever runs next.
         vars(notify).update(before)
-    [(name, interface, method, args, timeout_ms)] = calls
+    [(name, interface, method, args, flags, timeout_ms)] = calls
     assert (name, interface, method) == ("org.freedesktop.Notifications",) * 2 + ("Notify",)
     assert args[3:5] == ("TuxTalk", "Heard only silence")
     assert 0 < timeout_ms <= 5000
+    # A notification service that starts only when asked (mako, dunst) is started.
+    assert not flags & Gio.DBusCallFlags.NO_AUTO_START
 
 
 def test_no_notification_service_is_not_an_error(monkeypatch):
