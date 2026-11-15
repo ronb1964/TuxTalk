@@ -94,10 +94,14 @@ def section_card(section, say_width):
     return card
 
 
-def _group_children(group, say_width):
-    """*group*'s cards, under the line naming the Labs tickboxes they need."""
+def _group_children(group, say_width, found=None):
+    """*group*'s cards, under the line naming the Labs tickboxes they need.
+    *found*, a dict, gets each card (focusable, outlined) by (group, title)."""
     sections = [s for s in ref.SECTIONS if s.group == group]
     children = [section_card(s, say_width) for s in sections]
+    if found is not None:
+        for section, card in zip(sections, children, strict=True):
+            found[(group, section.title)] = (card, card.get_child())
     if line := labs_line(sections):
         children.insert(0, cards.paragraph(line))
     return children
@@ -112,13 +116,14 @@ def group_page(group, extra=None):
     return cards.page(children)
 
 
-def all_groups_page(title, intro, outro):
+def all_groups_page(title, intro, outro, found=None):
     """Help's Commands tab: its *title*, *intro* (markup), then each group
-    under its own title in its colour, then *outro*."""
+    under its own title in its colour, then *outro*. *found* as for
+    _group_children, so Help's search can go to a card."""
     say_width = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL)
     children = [cards.page_title(title), cards.paragraph(intro)]
     for group in ref.GROUPS:
         children.append(cards.group_title(group, GROUP_LOOK[group][0])[0])
-        children.extend(_group_children(group, say_width))
+        children.extend(_group_children(group, say_width, found))
     children.append(cards.paragraph(outro))
     return cards.page(children)

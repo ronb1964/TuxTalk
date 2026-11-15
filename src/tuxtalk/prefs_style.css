@@ -368,9 +368,22 @@ window.talktype-prefs, dialog.talktype-prefs {
 /* A card, or the text in it, has the keyboard focus (Tab moves card by
    card). */
 .talktype-prefs .tt-card-focus:focus > .tt-card,
-.talktype-prefs .tt-card.tt-has-focus {
+.talktype-prefs .tt-card.tt-has-focus,
+.talktype-prefs .tt-card.tt-found,
+.talktype-prefs button.tt-result:focus > .tt-card,
+.talktype-prefs button.tt-result:hover > .tt-card {
     border-color: #8ab4f8;
     box-shadow: 0 0 0 1px #8ab4f8;
+}
+
+/* Help's search results are buttons holding a card: the card is all there
+   is to see, outlined (above) under the pointer and the keyboard. The card
+   a result goes to is outlined a moment too (tt-found). */
+.talktype-prefs button.tt-result {
+    padding: 0;
+    border: none;
+    background: none;
+    box-shadow: none;
 }
 
 .talktype-prefs .tt-card-head {

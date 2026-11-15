@@ -55,11 +55,17 @@ def page_title(title):
     return heading(f'<span size="xx-large"><b>{escape(title)}</b></span>', "tt-page-title")
 
 
+def tag(text, tooltip=""):
+    """A small tag beside a heading: the Labs one, or a search result's tab."""
+    widget = label(escape(text), "tt-labs", wrap=False)
+    if tooltip:
+        widget.set_tooltip_text(tooltip)
+    return widget
+
+
 def labs_tag(tooltip):
     """The small "Labs" tag of a heading; *tooltip* says where it's turned on."""
-    tag = label("Labs", "tt-labs", wrap=False)
-    tag.set_tooltip_text(tooltip)
-    return tag
+    return tag("Labs", tooltip)
 
 
 def card_head(title, look, icon, note="", labs=""):

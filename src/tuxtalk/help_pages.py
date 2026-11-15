@@ -37,9 +37,9 @@ def _labelled_by(widget, labels):
 
 
 def _card(section, look, icon, on_link, part_labels):
-    """*section*'s card, its text named by *part_labels* (the feature's
-    title and note, if any) and its heading; outlined while the text has
-    the focus."""
+    """*section*'s card and its text, the text named by *part_labels* (the
+    feature's title and note, if any) and its heading; outlined while the
+    text has the focus."""
     labs = LABS_TOOLTIP if section.labs else ""
     head, head_labels = cards.card_head(section.title, look, icon, section.note, labs)
     card = cards.card_box(head)
@@ -52,13 +52,17 @@ def _card(section, look, icon, on_link, part_labels):
     text.connect("focus-in-event", lambda *_: style.add_class("tt-has-focus"))
     text.connect("focus-out-event", lambda *_: style.remove_class("tt-has-focus"))
     card.pack_start(text, False, False, 0)
-    return card
+    return card, text
 
 
-def page(text, tab, on_link, above=()):
+def page(text, tab, on_link, above=(), found=None):
     """The page of Help's tab *tab*, from its *text*: its title, then its
     cards in the tab's colour; *above* are widgets to put first (Problems'
-    Report a Problem button); *on_link* handles a link's activate-link."""
+    Report a Problem button); *on_link* handles a link's activate-link.
+    *found*, a dict, gets each card's (text, card) by (feature, heading),
+    and a feature's opening lines by (feature, feature), so Help's search
+    can go to one."""
+    found = {} if found is None else found
     look, icon = TAB_LOOK[tab]
     content = help_outline.parse(text)
     children = [*above, cards.page_title(content.title)]
@@ -74,5 +78,9 @@ def page(text, tab, on_link, above=()):
             # It takes the focus: a screen reader names the feature before it.
             _labelled_by(intro, part_labels)
             children.append(intro)
-        children.extend(_card(s, look, icon, on_link, part_labels) for s in part.sections)
+            found[(part.title, part.title)] = (intro, intro)
+        for section in part.sections:
+            card, card_text = _card(section, look, icon, on_link, part_labels)
+            found[(part.title, section.title)] = (card_text, card)
+            children.append(card)
     return cards.page(children)
