@@ -361,6 +361,13 @@ def _around(bus, widget, chars, deadline, depth=0):
     text = _call(bus, widget, _TEXT, "GetText", GLib.Variant("(ii)", (
         low, min(end + chars, _property(bus, widget, "CharacterCount", deadline)))), deadline)[0]
     chosen = text[start - low:end - low]
+    if start == end and text[start - low:start - low + 1] == _PLACEHOLDER:
+        # Chrome gives the box the offset of the paragraph holding the
+        # cursor, where Firefox gives -1. Right before an image, which is
+        # no paragraph, it's read as before.
+        inside = _inside(bus, widget, chars, deadline, depth)
+        if inside is not None:
+            return inside
     if _PLACEHOLDER in chosen:
         # Selected: one whole paragraph, whose own selection says more, or
         # more than one, whose two ends can't both be read.

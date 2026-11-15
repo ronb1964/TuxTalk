@@ -234,6 +234,21 @@ def test_the_paragraph_of_a_web_editor_with_the_cursor_in_it_is_read(bus):
     assert around(focus=("firefox", None)) == ("the big", " dog run")
 
 
+def test_chromes_box_pointing_at_the_paragraph_with_the_cursor_is_read_there(bus):
+    """Chrome gives the box the offset of the paragraph holding the cursor
+    (Claude Desktop's message box), where Firefox gives -1."""
+    bus.web_editor("claude-desktop", {"role": TEXT, "text": "\ufffc\ufffc", "caret": 1,
+                                      "children": [paragraph("First one."),
+                                                   paragraph("the big dog", caret=7)]})
+    assert around(focus=("com.anthropic.Claude", None)) == ("the big", " dog")
+
+
+def test_a_cursor_right_before_an_image_is_read_as_before(bus):
+    bus.web_editor("Firefox", {"role": TEXT, "text": "the big \ufffc", "caret": 8,
+                               "children": [{"role": 27, "is_text": False}]})
+    assert around(focus=("firefox", None)) == ("the big ", "\n")
+
+
 def test_a_list_in_a_web_editor_is_looked_into(bus):
     bus.web_editor("Firefox", dict(text="\ufffc\ufffc", children=[
         paragraph("Intro"),
