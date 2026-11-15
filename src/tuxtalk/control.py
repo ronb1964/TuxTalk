@@ -227,8 +227,8 @@ def ask_running(action, tray_starting=lambda: False, bus=None,
             bus.close()
 
 
-def shortcut_command():
-    """The command Help suggests for a desktop shortcut on this install: the
+def own_command():
+    """The command that runs this install of TuxTalk, as Help names it: the
     AppImage file for a self-managed AppImage, a source install's own
     `tuxtalk` (a venv's is on no PATH) when it is there, else the `tuxtalk`
     launcher (.deb, .rpm and AUR; a package started from another AppImage's
@@ -240,11 +240,14 @@ def shortcut_command():
     install_type = installation.get_install_type()
     appimage = installation.get_running_appimage_path()
     if appimage and install_type == "appimage":
-        return f"{shlex.quote(appimage)} --toggle"
+        return shlex.quote(appimage)
     program = source_install.command() if install_type == "source" else None
-    if program:
-        return f"{shlex.quote(program)} --toggle"
-    return "tuxtalk --toggle"
+    return shlex.quote(program) if program else "tuxtalk"
+
+
+def shortcut_command():
+    """The command Help suggests for a desktop shortcut on this install."""
+    return f"{own_command()} --toggle"
 
 
 def report(status):

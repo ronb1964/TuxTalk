@@ -69,3 +69,36 @@ def test_the_match_is_marked_and_the_text_stays_safe_markup():
     assert help_search.highlight("Ctrl & <Alt>", "&") == "Ctrl <b>&amp;</b> &lt;Alt&gt;"
     assert help_search.highlight("Live Text", "live") == "<b>Live</b> Text"
     assert help_search.highlight("No match", "zzz") == "No match"
+
+
+def _card(entries, tab, title):
+    return next(e for e in entries if e.tab == tab and e.title == title)
+
+
+def test_uninstall_finds_the_uninstalling_card(entries):
+    found = help_search.search(entries, "uninstall")
+    assert found[0].tab == "Problems" and found[0].title == "Uninstalling"
+    assert "Updates & Backup" in found[0].text
+
+
+def test_a_package_is_told_its_uninstall_command(monkeypatch):
+    from tuxtalk import installation
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(installation, "get_install_type", lambda: "rpm")
+    monkeypatch.setattr(installation, "get_running_appimage_path", lambda: None)
+    card = _card(help_search.index(help_text.tabs()), "Problems", "Uninstalling")
+    assert "tuxtalk --uninstall" in card.text
+
+
+def test_the_flatpak_is_told_its_own_uninstall_command(monkeypatch):
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
+    card = _card(help_search.index(help_text.tabs()), "Problems", "Uninstalling")
+    assert "flatpak uninstall --delete-data io.github.ronb1964.TuxTalk" in card.text
+    assert "--uninstall" not in card.text.replace("flatpak uninstall", "")
+
+
+def test_start_here_says_help_can_be_searched(entries):
+    found = help_search.search(entries, "search help")
+    assert ("Start Here", "", "Where things are") in _titles(found)

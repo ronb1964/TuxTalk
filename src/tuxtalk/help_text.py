@@ -97,6 +97,26 @@ def _no_hotkey_tips(is_flatpak, keys_where):
         "  Preferences → General: where a laptop has them, they need no Fn.")
 
 
+def _uninstall_text(is_flatpak):
+    """Problems' Uninstalling card: Preferences' button, what it takes and
+    keeps, and the terminal command for this install when TuxTalk won't open.
+    The Flatpak is removed by Flatpak itself (uninstall.py turns it away)."""
+    if is_flatpak:
+        return ("Flatpak removes the Flatpak: run <tt>flatpak uninstall --delete-data\n"
+                "io.github.ronb1964.TuxTalk</tt> in a terminal, or remove TuxTalk in your\n"
+                "software center.")
+    from .control import own_command
+    command = GLib.markup_escape_text(own_command())
+    return ("<b>Preferences → Updates &amp; Backup → Uninstall TuxTalk…</b> removes TuxTalk and\n"
+            "everything it set up: the program, the hotkey helper and the typing permission,\n"
+            "the speech models and the other downloads, start at login, the menu entry and\n"
+            "the GNOME extension. It asks for your password once. Your settings and Your\n"
+            "Words stay unless you tick the box to delete them too, so installing again\n"
+            "picks up where you left off.\n"
+            f"If TuxTalk won't open, <tt>{command} --uninstall</tt>\n"
+            "in a terminal does the same.")
+
+
 def _ctrl_space_line(keys):
     """Terminals' note on what Left Ctrl+Space costs, empty unless the hold or
     toggle key (the first two of *keys*) is that key."""
@@ -160,6 +180,7 @@ def _values():
             "    <b>Keystroke Typing</b> or <b>Clipboard Paste</b> there.")
 
     no_hotkey_block = _no_hotkey_tips(is_flatpak, keys_where)
+    uninstall_text = _uninstall_text(is_flatpak)
 
     # KDE-on-Flatpak: the per-dictation "remote control" popup.
     kde_notice = ""
@@ -220,7 +241,8 @@ def _values():
             "mouse_tip": _mouse_tip(hold, is_flatpak),
             "shortcut_line": shortcut_line, "typing_para": typing_para,
             "no_hotkey_block": no_hotkey_block, "kde_notice": kde_notice,
-            "update_block": update_block, "log_path": f["log_path"],
+            "update_block": update_block, "uninstall_text": uninstall_text,
+            "log_path": f["log_path"],
             "cfg_dir": f["cfg_dir"], "cache_dir": f["cache_dir"],
             "FEEDBACK_URL": FEEDBACK_URL, "ISSUES_URL": ISSUES_URL, "REPORT_LINK": REPORT_LINK,
             "ENGINE_SIZE_TEXT": ENGINE_SIZE_TEXT, "AI_SIZE_TEXT": AI_SIZE_TEXT,
@@ -275,7 +297,9 @@ down instead (Discord calls, games), do both, or leave them alone.
 • <b>Preferences → General</b>: your keys, and the speech setup. On first run TuxTalk
   recommends a setup for your computer (the speech model, on your graphics card if
   it's faster) for the language you speak. "Change model, device or language" is
-  there if you ever want something else.'''
+  there if you ever want something else.
+• <b>Search Help</b>: type in the box at the top of this window (or press Ctrl+F) to
+  find any card or voice command by its name, TuxTalk Labs features too.'''
 
 CHATTING = '''# Chats and Messages
 
@@ -929,6 +953,9 @@ Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in 
     or TuxTalk with your OK).
   • The desktop's own prompt, when an app asks for your admin password, counts too.
     A terminal asking for one (sudo) doesn't tell it: there, don't dictate.
+
+### Uninstalling
+{uninstall_text}
 
 ### Bug reports and feedback
   • <b>Something not working?</b> <a href="{REPORT_LINK}">Report a problem</a> gathers
