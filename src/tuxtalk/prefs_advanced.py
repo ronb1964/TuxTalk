@@ -190,7 +190,7 @@ class AdvancedTab(Tab):
             "Where an app tells TuxTalk the text around the cursor, a space goes in\n"
             "front of a dictation too when one is missing; elsewhere, text you type\n"
             "yourself before dictating needs its own space.\n"
-            "Turn off if you want to control spacing yourself.")
+            "Turn off if you want to control the space after each dictation yourself.")
         fine.attach(space_check, 0, frow, 2, 1)
         frow += 1
 

@@ -110,7 +110,8 @@ def _uninstall_text(is_flatpak):
     return ("<b>Preferences → Updates &amp; Backup → Uninstall TuxTalk…</b> removes TuxTalk and\n"
             "everything it set up: the program, the hotkey helper and the typing permission,\n"
             "its own downloads (the graphics and AI engines, CUDA), start at login, the menu\n"
-            "entry and the GNOME extension. It asks for your password once. The speech and\n"
+            "entry and the GNOME extension, and turns the desktop's accessibility off again if\n"
+            "TuxTalk turned it on. It may ask for your password once. The speech and\n"
             "AI models sit in a download folder other apps share: they go only if you tick\n"
             "that box too. Your settings and Your Words stay unless you tick theirs, so\n"
             "installing again picks up where you left off.\n"
@@ -358,13 +359,13 @@ Click where the words should go, hold <b>{hold}</b>, say them, let go. TuxTalk l
 the text on either side of the cursor and fits them in: no capital in the middle of a
 sentence, a space where one is missing, and no period when more text follows.
   • It works in apps that tell TuxTalk that text: GTK apps (most GNOME, Cinnamon
-    and Xfce apps) always, and KDE apps, Firefox, Chrome (Gmail and other web pages
-    there too) and apps built on Chrome like Claude Desktop once the desktop's
-    accessibility is on. Chrome and the apps built on it need closing and opening
+    and Xfce apps) always, and KDE apps, Firefox, Chrome, Brave and apps built on
+    Chrome like Claude Desktop once the desktop's accessibility is on, web pages'
+    text boxes like Gmail's included. Chrome and the apps built on it need closing and opening
     once if they were open when it went on; other apps may too. With two or more
     Chrome windows open it may not know which one you're in, and then types as before.
   • TuxTalk asks once before it turns accessibility on, and it stays on until you
-    turn it off: <b>Preferences → Advanced → Show fine-tuning → Accessibility</b>.
+    turn it off: <b>Preferences → Advanced → Fine-tuning → Accessibility</b>.
   • Anywhere else it types as before, with a capital and a period; a terminal keeps
     its plain text.
   • In German, where nouns have capitals, the first word keeps its capital.
@@ -537,11 +538,11 @@ These work <b>right after you dictate</b>, on what you just said.
   • With voice editing on, Shift+{hold} understands these too, so you can do it all on one
     key: Shift+{hold} <i>"select the last sentence"</i>, then
     Shift+{hold} <i>"make it more formal"</i>.
-  • In KWrite and Kate, Shift+{hold} with nothing selected needs accessibility on
-    (<b>Preferences → Advanced → Fine-tuning → Accessibility</b>; TuxTalk asks once),
-    and a KWrite or Kate already open then closed and opened once. If the cursor
-    still jumps to the start of the line, say the commands around the cursor with
-    {hold} alone.
+  • In KWrite and Kate, Shift+{hold} with nothing selected leaves the cursor where it
+    is once accessibility is on (<b>Preferences → Advanced → Fine-tuning →
+    Accessibility</b>; TuxTalk asks once); a KWrite or Kate already open may need
+    closing and opening once. If the cursor still jumps to the start of the line, say
+    the commands around the cursor with {hold} alone.
   • The commands around the cursor press the usual keys (Home, End, Ctrl+arrows), so
     they do what those keys do in each app.
   • It doesn't work in a terminal, where those keys mean other things.
@@ -954,9 +955,10 @@ and nothing is typed or kept in Recent Dictations. Type passwords on the keyboar
 Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in or move on.
   • It usually knows a password box in GTK apps (most GNOME, Cinnamon and
     Xfce apps).
-  • In KDE apps, Firefox, Chrome and apps built on Chrome while accessibility is on
-    (a screen reader turns it on, or TuxTalk with your OK). Chrome and the apps built
-    on it need opening after it went on.
+  • In KDE apps, Firefox, Chrome, Brave and apps built on Chrome while accessibility
+    is on (a screen reader turns it on, or TuxTalk with your OK). Chrome and the apps
+    built on it need opening after it went on, and with two or more of their windows
+    open it may not tell.
   • The desktop's own prompt, when an app asks for your admin password, counts too.
     A terminal asking for one (sudo) doesn't tell it: there, don't dictate.
 

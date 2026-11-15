@@ -573,7 +573,7 @@
 
     <div class="prose" id="uninstall" style="margin-top:64px">
       <h3>Uninstalling</h3>
-      <p>Open Preferences, go to Updates &amp; Backup and click <strong>Uninstall TuxTalk&hellip;</strong> at the bottom. It takes out TuxTalk and everything it set up on your computer: the program, the hotkey helper, the speech models and everything else it downloaded (CUDA libraries included), starting at login, its menu entry and the GNOME extension. It asks for your password once. Your settings and word list stay unless you tick the box to delete them too.</p>
+      <p>Open Preferences, go to Updates &amp; Backup and click <strong>Uninstall TuxTalk&hellip;</strong> at the bottom. It takes out TuxTalk and everything it set up on your computer: the program, the hotkey helper and the typing permission, its own downloads (the graphics and AI engines and the CUDA libraries), starting at login, its menu entry and the GNOME extension, and it turns your desktop's accessibility off again if TuxTalk turned it on. It may ask for your password once. The speech and AI models sit in a download folder other apps can share, so they go only if you tick that box too. Your settings and word list stay unless you tick the box to delete them.</p>
       <p>If TuxTalk won't open, the same thing runs from a terminal. For the AppImage it's <code>~/AppImages/TuxTalk.AppImage --uninstall</code>, and for the .deb, .rpm and AUR:</p>
     </div>
     <div class="cmd" style="max-width:62ch;margin-top:14px"><code>tuxtalk --uninstall</code><button class="copy" type="button">Copy</button></div>

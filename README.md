@@ -72,7 +72,7 @@ Plus a fix for Transcribe a File, where a damaged list of earlier transcripts co
 
 **Commands and addresses come out right.** Say "comma", "new paragraph" or "question mark" and you get the punctuation. Say an email or a web address the way you'd say it out loud and it's written the way it should be.
 
-**It fits into the sentence you're in.** Click into the middle of a sentence and dictate, and it carries the sentence on: no capital, a space where one's missing, and no period stuck in front of the next word. It works in apps that tell TuxTalk the text around the cursor, and TuxTalk asks once before turning on your desktop's accessibility so that KDE apps, Firefox, Chrome and apps built on Chrome (Claude Desktop, for one) do too.
+**It fits into the sentence you're in.** Click into the middle of a sentence and dictate, and it carries the sentence on: no capital, a space where one's missing, and no period stuck in front of the next word. It works in apps that tell TuxTalk the text around the cursor, and TuxTalk asks once before turning on your desktop's accessibility so that KDE apps, Firefox, Chrome and apps built on Chrome (Claude Desktop, for one) do too. It stays on until you turn it off in Preferences, Advanced, Fine-tuning, and Chrome and apps built on it have to be closed and opened once after it goes on.
 
 <table>
 <tr>
@@ -305,7 +305,8 @@ Open Preferences, go to **Updates & Backup** and click **Uninstall TuxTalk…**
 at the bottom. It removes TuxTalk and everything it set up on your computer:
 the program itself, the hotkey helper and the typing permission, its own
 downloads (the graphics and AI engines and the CUDA libraries), start at login, the
-menu entry and the GNOME extension. It asks for your password once. The speech
+menu entry and the GNOME extension, and it turns your desktop's accessibility off
+again if TuxTalk turned it on. It may ask for your password once. The speech
 and AI models sit in a download folder other apps can share, so they go only
 if you tick that box too. Your settings and word list stay unless you tick the
 box to delete them, so installing again picks up where you left off.
@@ -415,6 +416,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Snippets.** Make a phrase type anything you want, like "my email" for your address.
 - **Your Words.** The names and terms you use, spelled your way.
 - **Fix a Word.** Teach it a name or term it keeps getting wrong. Or just say "fix that word" right after a dictation.
+- **Help you can search.** Type in Help, or press Ctrl+F, and every card and voice command that matches shows up with the tab it's on; click one to go there.
 - **Paste Last Dictation.** Ctrl+Alt+P types your last dictation again, for when it landed in the wrong window.
 - **Transcribe a File.** Turns a recording or a video into text or subtitles with the same model you dictate with, and keeps your last 10.
 - **Pauses your music and videos** while you talk, and starts back up only what it paused.

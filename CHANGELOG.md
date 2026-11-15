@@ -34,8 +34,8 @@ before 0.15.0, so older entries use that name.
   really is.
 - Help can be searched. Type in the box at the top of Help, press Ctrl+F,
   or just start typing, and the tabs make way for the cards that match, each
-  naming the tab it's on (and TuxTalk Labs where it is one), your words in
-  bold. Click one, or press Enter for the first, and Help opens that tab
+  naming the tab it's on (and TuxTalk Labs where it is one), where your
+  words first appear in bold. Click one, or press Enter for the first, and Help opens that tab
   with the card near the top, outlined for a moment. It looks through every
   card and every voice command as Help shows them to you, your own keys
   included; every word of a search counts, little words like "how" and
@@ -57,8 +57,8 @@ before 0.15.0, so older entries use that name.
   accessibility is on. TuxTalk asks once before turning it on (it stays on
   until you turn it off in Preferences → Advanced → Fine-tuning →
   Accessibility), and then says that an app already open may need to be
-  closed and opened once. Web pages' rich text boxes in Firefox (Gmail and
-  the like) work too. Where an app doesn't say, and in terminals, a
+  closed and opened once. Web pages' rich text boxes (Gmail and the like)
+  work too, in Firefox and in Chrome. Where an app doesn't say, and in terminals, a
   dictation is typed as before. In German, the first word keeps its
   capital. Uninstalling turns accessibility off again
   only if TuxTalk turned it on. With it on, TuxTalk also recognises

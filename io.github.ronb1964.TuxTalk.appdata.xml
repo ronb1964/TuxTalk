@@ -95,6 +95,19 @@
   </screenshots>
 
   <releases>
+    <release version="0.24.0" date="2026-11-15">
+      <description>
+        <p>Dictation fits the sentence at the cursor, and Help can be searched</p>
+        <ul>
+          <li>Dictating into the middle of a sentence carries it on: no capital, a space where one is missing, and no period before the words that follow. It works in GTK apps, and in KDE apps, Firefox, Chrome and apps built on it once the desktop's accessibility is on, which TuxTalk asks before turning on</li>
+          <li>Help can be searched, and has an Uninstalling card</li>
+          <li>TuxTalk keeps out of password boxes in Chrome, Brave and Claude Desktop too</li>
+          <li>In KWrite and Kate, Shift with the dictation key and nothing selected no longer moves the cursor</li>
+          <li>"press tab" and "press enter" said with a short pause after "press" work</li>
+          <li>Fixed a crash of the dictation service when another program answered it late</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.23.1" date="2026-11-14">
       <description>
         <p>Downloads work on Fedora 45</p>

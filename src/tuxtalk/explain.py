@@ -32,15 +32,15 @@ EXPLANATIONS = {
     "nothing_said": (
         "Select works right after you dictate",
         "“Select that” and “select the last sentence” work on what you "
-        "just said, right after you dictate it. TuxTalk can't see what's in your "
-        "document otherwise.\n\n"
+        "just said, right after you dictate it. TuxTalk only knows what it "
+        "typed itself.\n\n"
         "For other text, say “select the previous 3 words” or “select the "
         "line”, or use the mouse."),
     "undo_other_window": (
         "Delete works right after you dictate",
         "“Delete last word” and “delete last sentence” remove what you "
-        "just said, right after you dictate it. TuxTalk can't see what's in your "
-        "document otherwise, so it didn't delete anything here.\n\n"
+        "just said, right after you dictate it. TuxTalk only knows what it "
+        "typed itself, so it didn't delete anything here.\n\n"
         "To undo something else, press Ctrl+Z in the app."),
     "nav_terminal": (
         "Select and move don't work in a terminal",
