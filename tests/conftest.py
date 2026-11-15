@@ -342,9 +342,12 @@ def _no_real_password_check(monkeypatch, request):
     """Typing first asks the accessibility bus whether the cursor is in a
     password field, and whether a polkit password prompt is waiting. On the
     user's desktop the answers depend on what they have open;
-    test_password_fields fakes them itself."""
+    test_password_fields fakes them itself. A recording's start wakes the
+    focused app on that bus, on a thread that would ask which window has
+    the focus at any moment: never here."""
     from tuxtalk import atspi_helper, focused_window
     monkeypatch.setattr(focused_window, "_polkit_prompt_waiting", lambda: False)
+    monkeypatch.setattr(focused_window, "wake_text_reading", lambda: None)
     if request.module.__name__.rpartition(".")[2] != "test_password_fields":
         monkeypatch.setattr(atspi_helper, "focused_is_password", lambda *a, **k: False)
         # It asks which window has the focus, which tests script answer by answer.

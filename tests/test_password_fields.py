@@ -389,12 +389,15 @@ class FakeA11yBus:
                                     hang=False), **node)
         return self.nodes[ref]
 
-    def app(self, name, focus_role, active=True, collection=True, hang=False, pid=None):
+    def app(self, name, focus_role, active=True, collection=True, hang=False, pid=None,
+            toolkit="GTK", asleep=False):
         """An app with one window holding a text box and the focused widget,
         of *focus_role*. *collection* False is an app without the Collection
         interface (Qt 5), so it is walked; "slow" times out on it. *hang*: it
         never answers at all. *pid*: its process, as the bus daemon tells it;
-        "hang": the daemon takes too long to say."""
+        "hang": the daemon takes too long to say. *toolkit*: as it tells the
+        bus, "Chromium" for Chrome and Electron apps. *asleep*: a Chromium
+        tree not built yet, whose window answers only for its states."""
         def ref(path):
             return (f":{name}", path)
         if pid is not None:
@@ -403,8 +406,8 @@ class FakeA11yBus:
         self._add(ref("/2"), role=focus_role, states=SHOWING | FOCUSED, **common)
         self._add(ref("/3"), role=TEXT, states=SHOWING, **common)
         self._add(ref("/1"), states=SHOWING | (ACTIVE if active else 0),
-                  children=[ref("/3"), ref("/2")], **common)
-        self._add(ref("/root"), name=name, children=[ref("/1")], **common)
+                  children=[ref("/3"), ref("/2")], asleep=asleep, **common)
+        self._add(ref("/root"), name=name, children=[ref("/1")], toolkit=toolkit, **common)
         self.apps.append(ref("/root"))
 
     def call_sync(self, name, path, interface, method, args, reply_type, flags, timeout_ms,
@@ -425,6 +428,9 @@ class FakeA11yBus:
         if node["hang"]:
             self.clock.sleep(timeout_ms / 1000)
             raise GLib.Error("Timeout was reached")
+        if node.get("asleep") and method != "GetState":
+            raise Gio.DBusError.new_for_dbus_error(
+                "org.freedesktop.DBus.Error.UnknownMethod", f"No such method “{method}”")
         if method == "GetChildren":
             return GLib.Variant("(a(so))", (node["children"],))
         if method == "GetState":
@@ -432,7 +438,10 @@ class FakeA11yBus:
         if method == "GetRole":
             return GLib.Variant("(u)", (node["role"],))
         if method == "Get":
-            return GLib.Variant("(v)", (GLib.Variant("s", node["name"]),))
+            asked = args.unpack()
+            value = node["toolkit"] if asked == (atspi_helper._APPLICATION, "ToolkitName") \
+                else node["name"]
+            return GLib.Variant("(v)", (GLib.Variant("s", value),))
         if method == "GetMatches":
             if node["collection"] == "slow":
                 self.clock.sleep(timeout_ms / 1000)
@@ -443,6 +452,10 @@ class FakeA11yBus:
                     "No such interface “org.a11y.atspi.Collection”")
             found = [c for c in node["children"] if self.nodes[c]["states"] & FOCUSED]
             return GLib.Variant("(a(so))", (found,))
+        if method == "GetInterfaces":
+            return GLib.Variant("(as)", (["org.a11y.atspi.Accessible", "org.a11y.atspi.Text"],))
+        if method == "GetAttributes":
+            return GLib.Variant("(a{ss})", ({},))
         raise AssertionError(f"unexpected call {method}")
 
 
@@ -462,6 +475,7 @@ def bus(monkeypatch):
     monkeypatch.setattr(atspi_helper, "time", clock)
     fake = FakeA11yBus(clock)
     monkeypatch.setattr(atspi_helper, "_a11y_bus", lambda deadline: fake)
+    monkeypatch.setattr(atspi_helper, "_toolkits", {})
     return fake
 
 
@@ -751,6 +765,55 @@ def test_brave_on_the_bus_is_the_brave_browser_window(bus):
     bus.app("Brave", TEXT)
     bus.app("Firefox", PASSWORD)
     assert atspi_helper.focused_is_password(focused_app=focus_on("brave-browser")) is False
+
+
+def test_chromes_password_field_counts_with_no_window_marked_active(bus):
+    """Chromium and Electron apps mark a window active only now and then."""
+    bus.app("Google Chrome", PASSWORD, active=False, toolkit="Chromium")
+    assert atspi_helper.focused_is_password(focused_app=focus_on("google-chrome")) is True
+
+
+def test_an_unmarked_app_in_the_background_doesnt_refuse_the_dictation(bus):
+    bus.app("Google Chrome", PASSWORD, active=False, toolkit="Chromium")
+    assert atspi_helper.focused_is_password(focused_app=focus_on("org.kde.kwrite")) is False
+
+
+def test_chromes_own_no_clears_a_password_field_left_in_a_background_app(bus):
+    bus.app("kwrite", PASSWORD)
+    bus.app("Google Chrome", TEXT, active=False, toolkit="Chromium")
+    assert atspi_helper.focused_is_password(focused_app=focus_on("google-chrome")) is False
+
+
+def test_the_shells_own_prompt_counts_while_chromes_tree_is_asleep(bus):
+    bus.app("Google Chrome", TEXT, active=False, toolkit="Chromium", asleep=True)
+    bus.app("gnome-shell", PASSWORD)
+    assert atspi_helper.focused_is_password(focused_app=focus_on("google-chrome")) is True
+
+
+def test_the_focused_window_isnt_asked_for_an_unmarked_app_of_another_toolkit(bus):
+    """Only Chromium and Electron apps leave their windows unmarked, and a
+    look at the focused window for every check would slow every line."""
+    looks = []
+    bus.app("gedit", TEXT)
+    bus.app("Firefox", TEXT, active=False)
+    assert atspi_helper.focused_is_password(focused_app=lambda: looks.append(1)) is False
+    assert looks == []
+
+
+def test_a_recording_start_wakes_only_the_app_with_the_focus(bus):
+    """Chromium and Electron build their tree of widgets only once asked."""
+    bus.app("Google Chrome", TEXT, active=False, toolkit="Chromium")
+    bus.app("Firefox", TEXT, active=False)
+    atspi_helper.wake(focus_on("google-chrome"))
+    assert [c for c in bus.calls if c[2] == "GetAttributes"] == [
+        (":Google Chrome", "/root", "GetAttributes")]
+
+
+def test_a_wake_with_no_accessibility_bus_does_nothing(monkeypatch):
+    monkeypatch.setattr(atspi_helper, "_a11y_bus", lambda deadline: None)
+    asked = []
+    atspi_helper.wake(lambda: asked.append(1))
+    assert asked == []
 
 
 def test_the_shells_own_password_prompt_counts_over_any_app(bus):

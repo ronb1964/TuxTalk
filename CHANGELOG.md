@@ -5,6 +5,14 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- Chrome, Brave and the apps built on Chrome, like Claude Desktop, now
+  share the text around the cursor too, so a dictation fits the sentence
+  there, and TuxTalk keeps out of their password boxes. They have to be
+  opened after the desktop's accessibility went on (they check it only
+  when they start), and when a recording starts TuxTalk asks the app in
+  front for its text boxes, which these apps build only once asked. With
+  two or more windows of one of them open, it can't always tell which one
+  you're in, and then types as before.
 - "press tab" said with a little pause after "press" moves to the next box
   again. Parakeet writes that pause as a comma ("Name, press, tab,
   address"), and TuxTalk then typed the words; "press, enter" at the end

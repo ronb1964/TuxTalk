@@ -236,7 +236,8 @@ class AdvancedTab(Tab):
             "If a paste fails, Auto types the text instead.\n"
             "\n"
             "TuxTalk doesn't type into password fields it can recognise: most GTK apps,\n"
-            "KDE apps and Firefox with accessibility on, and the desktop's own password prompt.\n"
+            "KDE apps, Firefox, Chrome and apps built on it with accessibility on, and the\n"
+            "desktop's own password prompt.\n"
             "\n"
             "Clipboard Paste works in most applications:\n"
             "✓ Text editors, word processors, terminals\n"
@@ -300,9 +301,9 @@ class AdvancedTab(Tab):
         check = Gtk.CheckButton(label=A11Y_SWITCH_LABEL)
         check.set_active(on)
         check.set_tooltip_text(
-            "With it on, more apps, like KDE's and Firefox, tell TuxTalk the text around the "
-            "cursor, so a\ndictation into the middle of a sentence doesn't start with a "
-            "capital. Apps use a little\nmore memory.")
+            "With it on, more apps, like KDE's, Firefox and Chrome, tell TuxTalk the text "
+            "around the cursor,\nso a dictation into the middle of a sentence doesn't start "
+            "with a capital. Apps use a\nlittle more memory.")
         fine.attach(check, 0, frow + 1, 2, 1)
         self._a11y_note = Gtk.Label(label=A11Y_DESKTOPS_NOTE, xalign=0, wrap=True)
         self._a11y_note.get_style_context().add_class("dim-label")

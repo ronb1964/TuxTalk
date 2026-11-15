@@ -357,10 +357,12 @@ forgot one. Help's Commands tab has them all.
 Click where the words should go, hold <b>{hold}</b>, say them, let go. TuxTalk looks at
 the text on either side of the cursor and fits them in: no capital in the middle of a
 sentence, a space where one is missing, and no period when more text follows.
-  • It works in apps that tell TuxTalk that text, like GNOME and KDE apps and
-    Firefox (Gmail and other web pages there too). KDE apps and
-    Firefox need the desktop's accessibility on; an app that was already open when
-    it was turned on may need closing and opening once.
+  • It works in apps that tell TuxTalk that text, like GNOME and KDE apps,
+    Firefox and Chrome (Gmail and other web pages there too), and apps built on
+    Chrome like Claude Desktop. All but the GNOME apps need the desktop's
+    accessibility on; an app that was already open when it was turned on needs
+    closing and opening once. With two or more Chrome windows open it may not
+    know which one you're in, and then types as before.
   • TuxTalk asks once before it turns accessibility on, and it stays on until you
     turn it off: <b>Preferences → Advanced → Show fine-tuning → Accessibility</b>.
   • Anywhere else it types as before, with a capital and a period; a terminal keeps
@@ -952,8 +954,9 @@ and nothing is typed or kept in Recent Dictations. Type passwords on the keyboar
 Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in or move on.
   • It usually knows a password box in GTK apps (most GNOME, Cinnamon and
     Xfce apps).
-  • In KDE apps and Firefox while accessibility is on (a screen reader turns it on,
-    or TuxTalk with your OK).
+  • In KDE apps, Firefox, Chrome and apps built on Chrome while accessibility is on
+    (a screen reader turns it on, or TuxTalk with your OK). Chrome and the apps built
+    on it need opening after it went on.
   • The desktop's own prompt, when an app asks for your admin password, counts too.
     A terminal asking for one (sudo) doesn't tell it: there, don't dictate.
 

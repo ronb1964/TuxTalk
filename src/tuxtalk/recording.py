@@ -19,6 +19,7 @@ from . import (
     chunking,
     dictation_worker,
     engine,
+    focused_window,
     keyboard_grab,
     mic_stream,
     notices,
@@ -454,6 +455,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             return None
 
     type_at_pause.arm_chunker(rec)
+    focused_window.wake_text_reading()
     pause_media_players()
     rec.start_beep = beeps.beep(beeps_on, *START_BEEP)
     if notify_on:

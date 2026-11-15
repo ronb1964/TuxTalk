@@ -31,6 +31,7 @@ only when they were dictated there. wl-copy's brief window, which the tray
 leaves out of its reports, counts as unknown.
 """
 import os
+import threading
 from typing import NamedTuple
 
 from .logger import setup_logger
@@ -213,6 +214,15 @@ def text_around_cursor() -> tuple[str, str] | None:
     focus (atspi_helper.text_around_cursor), or None when it can't be told."""
     from . import atspi_helper, sentence_fit
     return atspi_helper.text_around_cursor(sentence_fit.WINDOW, focused_app=focused_app)
+
+
+def wake_text_reading() -> None:
+    """Start atspi_helper.wake for the app with the focus, on a thread of
+    its own: called when a recording starts, so a Chromium or Electron app
+    has its text box ready for the reads before typing."""
+    from . import atspi_helper
+    threading.Thread(target=atspi_helper.wake, args=(focused_app,), daemon=True,
+                     name="a11y-wake").start()
 
 
 def has_selection() -> bool | None:

@@ -291,6 +291,45 @@ def test_one_active_app_isnt_read_when_the_desktop_cant_say_it_has_the_focus(bus
     assert around(focus=None) is None
 
 
+# Chromium and Electron apps (Chrome, Claude Desktop) mark a window active
+# only now and then on Plasma 6, and each window keeps its own focused box.
+def another_window(bus, name, text, caret):
+    """A second window of the app *name*, with a focused box of its own."""
+    own = f":{name}"
+    bus.nodes[(own, "/w2")] = dict(states=SHOWING | FOCUSED, text=text, caret=caret,
+                                   selection=None, is_text=True, hang=False, children=[],
+                                   role=TEXT)
+    bus.nodes[(own, "/win2")] = dict(states=SHOWING, children=[(own, "/w2")])
+    bus.nodes[(own, "/root")]["children"].append((own, "/win2"))
+
+
+def test_chrome_with_no_window_marked_active_is_read(bus):
+    bus.app("Google Chrome", "the big dog", caret=7, active=False)
+    assert around(focus=("google-chrome", None)) == ("the big", " dog")
+
+
+def test_fedoras_chromium_is_the_chromium_browser_window(bus):
+    bus.app("Chromium", "the big dog", caret=7, active=False)
+    assert around(focus=("chromium-browser", None)) == ("the big", " dog")
+
+
+def test_two_windows_each_with_a_focused_box_say_nothing(bus):
+    """Either may be the one in front."""
+    bus.app("Google Chrome", "the big dog", caret=7, active=False)
+    another_window(bus, "Google Chrome", "other draft", 5)
+    assert around(focus=("google-chrome", None)) is None
+
+
+def test_an_unmarked_app_in_the_background_isnt_read(bus):
+    bus.app("Google Chrome", "secret draft", caret=6, active=False)
+    assert around(focus=("org.kde.konsole", None)) is None
+
+
+def test_an_unmarked_apps_password_field_is_never_read(bus):
+    bus.app("Google Chrome", "swordfish", caret=4, active=False, role=PASSWORD)
+    assert around(focus=("google-chrome", None)) is None
+
+
 # Whether anything is selected, for a voice edit in KDE's editors: their
 # Ctrl+C with nothing selected copies the line and moves the cursor.
 def selected(focus=("org.kde.kwrite", None)):

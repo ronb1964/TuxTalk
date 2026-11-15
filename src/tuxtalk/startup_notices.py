@@ -33,7 +33,8 @@ A11Y_QUESTION_BODY = (
 A11Y_ON_TITLE = "Turned on"
 A11Y_ON_BODY = (
     "Dictation now fits the sentence in apps that share the text around the cursor, like "
-    "KDE and GNOME apps and Firefox. An app that was already open may need to be closed "
+    "KDE and GNOME apps, Firefox, Chrome and Claude Desktop. An app that was already open "
+    "may need to be closed "
     "and opened once. Anywhere else, dictation types as before.")
 
 

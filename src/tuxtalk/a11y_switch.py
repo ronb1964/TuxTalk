@@ -1,8 +1,8 @@
 """The desktop's accessibility switch, the one screen readers turn on
 (org.a11y.Status IsEnabled on the session's org.a11y.Bus): with it on, KDE
-apps and Firefox tell the accessibility bus the text around the cursor, so
-a dictation can fit the sentence it goes into (sentence_fit). Chromium and
-Electron apps showed no windows on it on Plasma 6 (atspi_helper).
+apps, Firefox, and Chromium and Electron apps started after it tell the
+accessibility bus the text around the cursor, so a dictation can fit the
+sentence it goes into (sentence_fit).
 
 TuxTalk turns it on only after the user says yes (startup_notices), keeps it
 on at each start until they turn it off in Preferences, and turns it off
