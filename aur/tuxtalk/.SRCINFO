@@ -37,6 +37,6 @@ pkgbase = tuxtalk
 	conflicts = talktype-appimage
 	conflicts = talktype
 	source = tuxtalk-0.23.1.tar.gz::https://github.com/ronb1964/TuxTalk/archive/refs/tags/v0.23.1.tar.gz
-	sha256sums = SKIP
+	sha256sums = c1fe204c380dda6f3430fe97c51ac5b63f40850de584c86c317b315eb68b907f
 
 pkgname = tuxtalk
