@@ -593,6 +593,9 @@ def main():
     # dictation twice. Checked on a thread so a slow flatpak never delays the tray.
     threading.Thread(target=startup_notices.handle_old_talktype_flatpak, daemon=True).start()
     _adopt_old_install()
+    from . import USING_BUNDLED_OPENSSL
+    if USING_BUNDLED_OPENSSL:
+        logger.info("The system has no OpenSSL 3; downloads use TuxTalk's own copy")
 
     # A copy of the settings to roll back to (Preferences → Advanced →
     # Restore Earlier Settings), taken before this version touches them.

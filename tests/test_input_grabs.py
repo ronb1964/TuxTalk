@@ -279,7 +279,8 @@ def test_a_failed_start_does_not_retry_while_its_close_is_stuck(monkeypatch, qui
     assert recording.start_recording(False, False, 0) is None
     assert len(attempts) == 1
     assert asked == ["restart"]
-    assert notices == [("Audio system stopped answering", "Restarting the dictation service.")]
+    assert notices == [("Audio system stopped answering",
+                        "Restarting the dictation service. Try again in a moment.")]
     assert rs.state.is_recording is False
 
 

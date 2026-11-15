@@ -10,6 +10,7 @@ import os
 import sys
 from collections.abc import Mapping
 
+from . import SSL_CERT_FILE_SET_BY_TUXTALK
 from .service_launcher import USERS_GDK_BACKEND
 
 # Set by TuxTalk or its launchers, never by the user's desktop.
@@ -25,6 +26,13 @@ CUDA_HIDDEN_BY_TUXTALK = "TUXTALK_SET_CUDA_VISIBLE_DEVICES"
 # Set beside CUDA_DEVICE_ORDER when TuxTalk set it (cuda_preload), so the
 # programs it starts keep CUDA's own card order.
 CUDA_ORDER_SET_BY_TUXTALK = "TUXTALK_SET_CUDA_DEVICE_ORDER"
+# Variables a user may set too, each with the marker TuxTalk sets beside it
+# when the value is TuxTalk's.
+_SET_BY_TUXTALK = (
+    ("CUDA_VISIBLE_DEVICES", CUDA_HIDDEN_BY_TUXTALK),
+    ("CUDA_DEVICE_ORDER", CUDA_ORDER_SET_BY_TUXTALK),
+    ("SSL_CERT_FILE", SSL_CERT_FILE_SET_BY_TUXTALK),
+)
 
 
 def _running_venv() -> str:
@@ -69,10 +77,9 @@ def clean(environ: Mapping[str, str], venv: str | None = None) -> dict[str, str]
                 env[name] = _without_under(env[name], root)
     if not env.get("LD_LIBRARY_PATH"):
         env.pop("LD_LIBRARY_PATH", None)
-    if environ.get(CUDA_HIDDEN_BY_TUXTALK):
-        env.pop("CUDA_VISIBLE_DEVICES", None)
-    if environ.get(CUDA_ORDER_SET_BY_TUXTALK):
-        env.pop("CUDA_DEVICE_ORDER", None)
+    for name, marker in _SET_BY_TUXTALK:
+        if environ.get(marker):
+            env.pop(name, None)
     if USERS_GDK_BACKEND in environ:
         env.pop("GDK_BACKEND", None)
         if environ[USERS_GDK_BACKEND]:

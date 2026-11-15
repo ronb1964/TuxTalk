@@ -50,6 +50,19 @@ def test_the_engine_starts_through_the_launcher_with_its_own_libraries(dead_engi
     assert kwargs["stderr"] is ai_server.subprocess.PIPE       # read, to explain a failed start
 
 
+def test_the_engine_gets_tuxtalks_openssl_when_the_system_has_none(dead_engine, monkeypatch):
+    """llama.cpp's build links libssl.so.3, which Fedora 45 doesn't have."""
+    import tuxtalk
+    options = []
+    monkeypatch.setattr(ai_server.subprocess, "Popen",
+                        lambda argv, **k: options.append(k) or _Proc())
+    monkeypatch.setattr(tuxtalk, "USING_BUNDLED_OPENSSL", True)
+    monkeypatch.setattr(tuxtalk, "BUNDLED_OPENSSL_DIR", "/app/usr/lib/openssl3")
+    dead_engine.start(_replacing=dead_engine._proc)
+    libraries = options[0]["env"][engine_process.engine_launcher.ENGINE_LIBRARY_PATH]
+    assert libraries == "/x:/app/usr/lib/openssl3"
+
+
 def test_the_engine_key_is_not_on_its_command_line(dead_engine, monkeypatch):
     """Every user of the computer can read a process's command line; with the
     key from there, another user could talk to the engine."""

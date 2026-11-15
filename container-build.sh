@@ -25,6 +25,7 @@ apt-get install -y -qq \
     gir1.2-ayatanaappindicator3-0.1 \
     libayatana-appindicator3-1 \
     libportaudio2 \
+    libssl3 \
     patchelf \
     python3-gi \
     python3-gi-cairo \
@@ -367,6 +368,15 @@ if ldd "$PA_DIR/libportaudio.so.2" | grep -E 'libjack|libdb' | grep -qv "$PA_DIR
 fi
 echo "   ✅ PortAudio fallback bundled"
 
+# Bundle OpenSSL 3 as a fallback. Python's ssl module takes libssl.so.3 from
+# the system, and Fedora 45 ships only OpenSSL 4: there every download failed.
+# tuxtalk/__init__.py loads these only when the system's own won't load, so
+# they stay off LD_LIBRARY_PATH, in a folder of their own.
+echo "   Bundling OpenSSL 3 fallback..."
+SSL_DIR=AppDir/usr/lib/openssl3
+mkdir -p "$SSL_DIR"
+cp -L /usr/lib/x86_64-linux-gnu/libcrypto.so.3 /usr/lib/x86_64-linux-gnu/libssl.so.3 "$SSL_DIR/"
+
 # Copy TuxTalk source
 echo "   Copying TuxTalk source..."
 cp -r src/tuxtalk AppDir/usr/src/
@@ -374,6 +384,24 @@ cp -r src/tuxtalk AppDir/usr/src/
 # bundle unreadable. The AppImage's FUSE mount hides this, but a .deb/.rpm built from the
 # same tree installs real files and a 0600 module then fails to import for the user.
 chmod -R a+rX AppDir/usr/src/tuxtalk
+
+# Prove the OpenSSL 3 fallback with the system's copy out of the way, as on
+# Fedora 45. The container is thrown away after the build, so moving its
+# libraries is safe.
+_SYS_SSL=/usr/lib/x86_64-linux-gnu
+mkdir -p /tmp/hidden-openssl
+mv "$_SYS_SSL"/libssl.so.3 "$_SYS_SSL"/libcrypto.so.3 /tmp/hidden-openssl/
+_SSL_STATUS=0
+_SSL_CHECK=$(PYTHONHOME=AppDir/usr LD_LIBRARY_PATH=AppDir/usr/lib \
+    PYTHONPATH="AppDir/usr/src:AppDir/usr/lib/python${PYTHON_VERSION}/site-packages" \
+    AppDir/usr/bin/python3 -c "import tuxtalk, ssl
+trusted = ssl.create_default_context().cert_store_stats()['x509_ca']
+print(tuxtalk.USING_BUNDLED_OPENSSL, trusted > 0, ssl.OPENSSL_VERSION)" 2>&1) || _SSL_STATUS=$?
+mv /tmp/hidden-openssl/* "$_SYS_SSL"/
+case "$_SSL_STATUS:$_SSL_CHECK" in
+    "0:True True OpenSSL 3."*) echo "   ✅ OpenSSL 3 fallback bundled ($_SSL_CHECK)" ;;
+    *) echo "❌ ERROR: Python can't use the bundled OpenSSL 3: $_SSL_CHECK"; exit 1 ;;
+esac
 
 # NOTE: GNOME extension is NOT bundled - it's downloaded from GitHub releases during onboarding
 # This allows users to update the extension independently of the AppImage

@@ -20,6 +20,17 @@ before 0.15.0, so older entries use that name.
   capital. Uninstalling turns accessibility off again
   only if TuxTalk turned it on. With it on, TuxTalk also recognises
   password boxes in KDE apps and Firefox.
+
+## [0.23.1] - 2026-11-14
+
+- Downloads work on Fedora 45. Fedora 45 moved to OpenSSL 4, and the Python
+  inside TuxTalk's AppImage, .deb and .rpm needs OpenSSL 3, so on Fedora 45
+  every download failed: the speech model, the graphics engine and updates
+  alike, with "unknown url type: https" in the log. TuxTalk now carries its
+  own OpenSSL 3 and uses it when the computer has none, with the computer's
+  own list of trusted certificates, and the local AI's engine, which needs
+  OpenSSL 3 too, gets it as well. Where OpenSSL 3 is installed nothing
+  changes. Reported by a Fedora Magazine editor trying TuxTalk on Kinoite.
 - When the recording indicator follows the window you're dictating into, it
   sits higher in a tall window: a fifth of the window's height above its
   bottom (at least 40 px, as before), so it no longer covers a chat's message
@@ -40,7 +51,7 @@ before 0.15.0, so older entries use that name.
   plug it back in. When the sound system stays stuck on a microphone (one
   that didn't start, or didn't stop at the end of a recording), the next
   press restarts the dictation service instead of hanging, or, with no tray
-  running, tells you to restart TuxTalk. Help → When Something's Wrong says
+  running, tells you to restart TuxTalk. Help → Problems says
   what to do. Contributed by Bernát Gábor (#38, #39).
 
 ## [0.23.0] - 2026-11-12
