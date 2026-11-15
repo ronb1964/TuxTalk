@@ -4,7 +4,7 @@ Tests such as test_a_real_cuda_failure_still_falls_back_to_cpu go through the
 real notification path, so conftest holds back notify._send, the one place a
 notice leaves for the desktop, for the whole suite.
 """
-from tuxtalk import dbus_calls, notify, pipeline
+from tuxtalk import notify, pipeline
 
 
 def test_notifications_are_held_back_during_tests():
@@ -29,26 +29,17 @@ def test_the_service_notify_does_not_reach_the_desktop(monkeypatch):
 
 def test_a_notice_goes_to_the_desktops_notification_service(monkeypatch):
     """Over D-Bus, not libnotify: the AppImage couldn't load libnotify on
-    Fedora-family systems, so its notices never appeared (2026-10-18)."""
-    import sys
-    import types
+    Fedora-family systems, so its notices never appeared. With a time limit:
+    a hung notification service would hold the hotkey loop otherwise."""
+    from gi.repository import Gio
     calls = []
 
-    class Proxy:
-        def Notify(self, *args, **kwargs):
-            calls.append((args, kwargs))
+    class Connection:
+        def call_sync(self, name, path, interface, method, args, reply_type, flags,
+                      timeout_ms, cancellable):
+            calls.append((name, interface, method, args.unpack(), timeout_ms))
 
-    class Bus:
-        def get_object(self, name, path, introspect=True):
-            calls.append((name, path, introspect))
-            return Proxy()
-
-    fake_dbus = types.SimpleNamespace(
-        SessionBus=Bus, UInt32=int, Int32=int,
-        Array=lambda items, signature: list(items),
-        Dictionary=lambda items, signature: dict(items))
-    monkeypatch.setitem(sys.modules, "dbus", fake_dbus)
-    monkeypatch.setattr(dbus_calls, "session", Bus)
+    monkeypatch.setattr(Gio, "bus_get_sync", lambda kind, cancellable: Connection())
     import importlib
     before = dict(vars(notify))              # conftest's held-back _send among them
     real = importlib.reload(notify)          # the real _send, not the held-back one
@@ -58,12 +49,10 @@ def test_a_notice_goes_to_the_desktops_notification_service(monkeypatch):
         # The module as it was, so notify.notify is again the function
         # the service calls and _send is held back, whatever runs next.
         vars(notify).update(before)
-    # Without introspection: its own call has no 2-second limit, and a hung
-    # notification service would hold the hotkey loop for 25 seconds.
-    assert calls[0] == ("org.freedesktop.Notifications", "/org/freedesktop/Notifications", False)
-    args, kwargs = calls[1]
+    [(name, interface, method, args, timeout_ms)] = calls
+    assert (name, interface, method) == ("org.freedesktop.Notifications",) * 2 + ("Notify",)
     assert args[3:5] == ("TuxTalk", "Heard only silence")
-    assert kwargs["dbus_interface"] == "org.freedesktop.Notifications"
+    assert 0 < timeout_ms <= 5000
 
 
 def test_no_notification_service_is_not_an_error(monkeypatch):

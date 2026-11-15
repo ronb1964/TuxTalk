@@ -34,8 +34,8 @@ A11Y_ON_TITLE = "Turned on"
 A11Y_ON_BODY = (
     "Dictation now fits the sentence in apps that share the text around the cursor, like "
     "KDE and GNOME apps, Firefox, Chrome and Claude Desktop. An app that was already open "
-    "may need to be closed "
-    "and opened once. Anywhere else, dictation types as before.")
+    "may need to be closed and opened once, and Chrome and apps built on it always do. "
+    "Anywhere else, dictation types as before.")
 
 
 def handle_old_talktype_flatpak(stop=None, notify=None):

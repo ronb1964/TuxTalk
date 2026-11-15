@@ -357,12 +357,12 @@ forgot one. Help's Commands tab has them all.
 Click where the words should go, hold <b>{hold}</b>, say them, let go. TuxTalk looks at
 the text on either side of the cursor and fits them in: no capital in the middle of a
 sentence, a space where one is missing, and no period when more text follows.
-  • It works in apps that tell TuxTalk that text, like GNOME and KDE apps,
-    Firefox and Chrome (Gmail and other web pages there too), and apps built on
-    Chrome like Claude Desktop. All but the GNOME apps need the desktop's
-    accessibility on; an app that was already open when it was turned on needs
-    closing and opening once. With two or more Chrome windows open it may not
-    know which one you're in, and then types as before.
+  • It works in apps that tell TuxTalk that text: GTK apps (most GNOME, Cinnamon
+    and Xfce apps) always, and KDE apps, Firefox, Chrome (Gmail and other web pages
+    there too) and apps built on Chrome like Claude Desktop once the desktop's
+    accessibility is on. Chrome and the apps built on it need closing and opening
+    once if they were open when it went on; other apps may too. With two or more
+    Chrome windows open it may not know which one you're in, and then types as before.
   • TuxTalk asks once before it turns accessibility on, and it stays on until you
     turn it off: <b>Preferences → Advanced → Show fine-tuning → Accessibility</b>.
   • Anywhere else it types as before, with a capital and a period; a terminal keeps

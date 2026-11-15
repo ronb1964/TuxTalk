@@ -20,17 +20,19 @@ class TextBus:
 
     def __init__(self, clock):
         self.clock, self.nodes, self.pids, self.apps = clock, {}, {}, []
-        self.text_calls = []
+        self.text_calls, self.toolkits = [], {}
 
     def app(self, name, text="", caret=0, selection=None, active=True, is_text=True,
-            hang=False, pid=None, framed=False, role=TEXT):
+            hang=False, pid=None, framed=False, role=TEXT, toolkit="GTK"):
         """An app *name* whose focused widget holds *text* with its cursor at
         *caret*, or *selection* (start, end) selected. *is_text* False: the
         focused widget has no Text interface. *hang*: its text never comes.
         *framed*: the widget sits in a frame without text that says it has
         the focus too, ahead of it (KDE's editor, KTextEditor). *role*: the
-        widget's AT-SPI role."""
+        widget's AT-SPI role; *toolkit*: as the app tells it, "Chromium" for
+        Chrome and Electron apps."""
         own = f":{name}"
+        self.toolkits[own] = toolkit
         if pid is not None:
             self.pids[own] = pid
         self.nodes[(own, "/w")] = dict(states=SHOWING | FOCUSED | EDITABLE, text=text,
@@ -52,6 +54,8 @@ class TextBus:
                   cancellable):
         if method == "GetConnectionUnixProcessID":
             return GLib.Variant("(u)", (self.pids[args.unpack()[0]],))
+        if method == "Get" and args.unpack() == (atspi_helper._APPLICATION, "ToolkitName"):
+            return GLib.Variant("(v)", (GLib.Variant("s", self.toolkits[name]),))
         if (name, path) == (atspi_helper._REGISTRY, atspi_helper._ROOT):
             return GLib.Variant("(a(so))", (self.apps,))
         node = self.nodes[(name, path)]
@@ -77,13 +81,14 @@ class TextBus:
             return GLib.Variant("(as)", (["org.a11y.atspi.Accessible"] + text,))
         raise AssertionError(f"unexpected call {method}")
 
-    def web_editor(self, name, box):
+    def web_editor(self, name, box, toolkit="Gecko"):
         """A web page's rich text box as Firefox gives it, built from *box*:
         a dict with "role", "text" (a paragraph or list is one U+FFFC in its
         parent's text), "caret" (-1 where the cursor isn't: Firefox gives an
         offset only to the object whose own text holds it), "selection",
         "is_text" and "children", each a dict the same way."""
         own, count = f":{name}", [0]
+        self.toolkits[own] = toolkit
 
         def build(spec, focused=False):
             count[0] += 1
@@ -239,7 +244,8 @@ def test_chromes_box_pointing_at_the_paragraph_with_the_cursor_is_read_there(bus
     (Claude Desktop's message box), where Firefox gives -1."""
     bus.web_editor("claude-desktop", {"role": TEXT, "text": "\ufffc\ufffc", "caret": 1,
                                       "children": [paragraph("First one."),
-                                                   paragraph("the big dog", caret=7)]})
+                                                   paragraph("the big dog", caret=7)]},
+                   toolkit="Chromium")
     assert around(focus=("com.anthropic.Claude", None)) == ("the big", " dog")
 
 
@@ -322,25 +328,25 @@ def another_window(bus, name, text, caret):
 
 
 def test_chrome_with_no_window_marked_active_is_read(bus):
-    bus.app("Google Chrome", "the big dog", caret=7, active=False)
+    bus.app("Google Chrome", "the big dog", caret=7, active=False, toolkit="Chromium")
     assert around(focus=("google-chrome", None)) == ("the big", " dog")
 
 
 def test_fedoras_chromium_is_the_chromium_browser_window(bus):
-    bus.app("Chromium", "the big dog", caret=7, active=False)
+    bus.app("Chromium", "the big dog", caret=7, active=False, toolkit="Chromium")
     assert around(focus=("chromium-browser", None)) == ("the big", " dog")
 
 
 def test_two_windows_each_with_a_focused_box_say_nothing(bus):
     """Either may be the one in front."""
-    bus.app("Google Chrome", "the big dog", caret=7, active=False)
+    bus.app("Google Chrome", "the big dog", caret=7, active=False, toolkit="Chromium")
     another_window(bus, "Google Chrome", "other draft", 5)
     assert around(focus=("google-chrome", None)) is None
 
 
 def test_a_window_holding_a_page_without_a_box_isnt_a_second_window(bus):
     """Claude Desktop keeps a hidden window whose page says it's focused."""
-    bus.app("claude-desktop", "the big dog", caret=7, active=False)
+    bus.app("claude-desktop", "the big dog", caret=7, active=False, toolkit="Chromium")
     own = ":claude-desktop"
     bus.nodes[(own, "/page2")] = dict(states=SHOWING | FOCUSED, text="", caret=0,
                                       selection=None, is_text=True, hang=False,
@@ -353,7 +359,7 @@ def test_a_window_holding_a_page_without_a_box_isnt_a_second_window(bus):
 def test_the_box_typed_into_wins_over_a_page_that_says_it_is_focused(bus):
     """Claude Desktop's own page says it's focused, ahead of the claude.ai
     page whose box has the cursor."""
-    bus.app("claude-desktop", "the big dog", caret=7, active=False)
+    bus.app("claude-desktop", "the big dog", caret=7, active=False, toolkit="Chromium")
     own = ":claude-desktop"
     bus.nodes[(own, "/shell")] = dict(states=SHOWING | FOCUSED, text="", caret=0,
                                       selection=None, is_text=True, hang=False,
@@ -363,12 +369,12 @@ def test_the_box_typed_into_wins_over_a_page_that_says_it_is_focused(bus):
 
 
 def test_an_unmarked_app_in_the_background_isnt_read(bus):
-    bus.app("Google Chrome", "secret draft", caret=6, active=False)
+    bus.app("Google Chrome", "secret draft", caret=6, active=False, toolkit="Chromium")
     assert around(focus=("org.kde.konsole", None)) is None
 
 
 def test_an_unmarked_apps_password_field_is_never_read(bus):
-    bus.app("Google Chrome", "swordfish", caret=4, active=False, role=PASSWORD)
+    bus.app("Google Chrome", "swordfish", caret=4, active=False, role=PASSWORD, toolkit="Chromium")
     assert around(focus=("google-chrome", None)) is None
 
 
@@ -398,3 +404,43 @@ def test_when_it_can_t_be_told_the_answer_is_none(bus, kind):
     bus.app("kwrite", "the big dog", is_text=kind != "not text", hang=kind == "no answer",
             framed=True)
     assert selected(None if kind == "focus unknown" else ("org.kde.kwrite", None)) is None
+
+
+def test_a_recording_start_wakes_the_app_with_the_focus(monkeypatch):
+    """Chrome and Electron apps build their text boxes for the accessibility
+    bus only once asked: asked when the recording starts, they're there by
+    the time the words are typed."""
+    from tuxtalk import engine, focused_window, recording
+    from tuxtalk import recording_state as rs
+    woken = []
+    monkeypatch.setattr(focused_window, "wake_text_reading", lambda: woken.append(True))
+    monkeypatch.setattr(rs.state, "is_recording", False)
+    monkeypatch.setattr(engine, "model", object())
+    monkeypatch.setattr(recording, "follow_system_default", lambda idx: idx)
+    monkeypatch.setattr(recording, "open_input_stream", lambda rec, idx: None)
+    monkeypatch.setattr(recording, "pause_media_players", lambda: None)
+    monkeypatch.setattr(recording, "indicator", None)
+    monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
+    assert recording.start_recording(False, False, 0) is not None
+    assert woken == [True]
+
+
+def test_only_a_chromium_window_is_searched_for_every_focused_widget(bus):
+    """Every match would walk a whole web page in Firefox or a big GTK
+    window, before each line of a dictation."""
+    asked = []
+    real = bus.call_sync
+
+    def counting(name, path, interface, method, args, *rest):
+        if method == "GetMatches":
+            asked.append((name, args.unpack()[2]))
+        return real(name, path, interface, method, args, *rest)
+    bus.call_sync = counting
+    bus.app("gedit", "the big dog", caret=7)
+    assert around() == ("the big", " dog")
+    bus.apps.clear()
+    bus.app("Google Chrome", "the big dog", caret=7, toolkit="Chromium")
+    assert around(focus=("google-chrome", None)) == ("the big", " dog")
+    assert asked == [(":gedit", 1), (":Google Chrome", 0)]

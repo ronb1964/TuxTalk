@@ -348,13 +348,17 @@ def _first(csv, index=0):
 
 
 def _kde_layouts():
-    """([(layout, variant)], active index) from KDE's keyboard daemon."""
-    import dbus
+    """([(layout, variant)], active index) from KDE's keyboard daemon, each
+    call limited to 2 s like the other lookups here: it's asked before
+    typing, and a proxy's own look at the object has no limit at all."""
     from . import dbus_calls
-    obj = dbus_calls.session().get_object("org.kde.keyboard", "/Layouts")
-    iface = dbus.Interface(obj, "org.kde.KeyboardLayouts")
-    layouts = [(str(entry[0]), str(entry[1])) for entry in iface.getLayoutsList()]
-    return layouts, int(iface.getLayout())
+
+    def ask(method):
+        return dbus_calls.session().call_blocking(
+            "org.kde.keyboard", "/Layouts", "org.kde.KeyboardLayouts", method, "", (),
+            timeout=2)
+    layouts = [(str(entry[0]), str(entry[1])) for entry in ask("getLayoutsList")]
+    return layouts, int(ask("getLayout"))
 
 
 def _kde_options():

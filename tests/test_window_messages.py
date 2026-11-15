@@ -215,11 +215,8 @@ def test_the_label_says_it_short_and_the_notification_in_full(monkeypatch):
 # --- with no tray, the service answers itself --------------------------------------------------
 
 class _FakeBus:
-    def __init__(self, owner, me):
-        self.owner, self.me, self.asked = owner, me, []
-
-    def get_unique_name(self):
-        return self.me
+    def __init__(self, owner):
+        self.owner, self.asked = owner, []
 
     def call_blocking(self, bus_name, path, interface, method, signature, args, timeout=-1):
         import dbus
@@ -232,11 +229,10 @@ class _FakeBus:
 def test_the_service_holding_the_name_reads_its_own_cache(monkeypatch):
     """Calling its own bus name from the GTK thread would wait out the timeout
     every time the indicator follows a window."""
-    import dbus
     from tuxtalk import dbus_service
-    bus = _FakeBus(":1.5", ":1.5")
-    monkeypatch.setattr(dbus, "SessionBus", lambda: bus)
+    bus = _FakeBus(":1.5")
     monkeypatch.setattr(dbus_calls, "session", lambda: bus)
+    monkeypatch.setattr(dbus_service, "_exporting_as", ":1.5")
     monkeypatch.setattr(dbus_service, "_focus",
                         dbus_service.FocusReport(geometry="1,2,3,4|DP-6|0,0,10,10"))
     assert wg._reported() == "1,2,3,4|DP-6|0,0,10,10"
@@ -244,10 +240,10 @@ def test_the_service_holding_the_name_reads_its_own_cache(monkeypatch):
 
 
 def test_the_tray_is_asked_when_it_holds_the_name(monkeypatch):
-    import dbus
-    bus = _FakeBus(":1.2", ":1.5")
-    monkeypatch.setattr(dbus, "SessionBus", lambda: bus)
+    from tuxtalk import dbus_service
+    bus = _FakeBus(":1.2")
     monkeypatch.setattr(dbus_calls, "session", lambda: bus)
+    monkeypatch.setattr(dbus_service, "_exporting_as", ":1.5")
     assert wg._reported() is None and len(bus.asked) == 1
 
 

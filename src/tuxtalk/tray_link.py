@@ -23,15 +23,14 @@ def call(method: str, *args, what: str, signature: str | None = None) -> bool:
 
     Each call goes to the well-known name, so the bus delivers it to
     whichever tray holds it now: a service that outlived a crashed tray
-    reaches the one opened again. A blocking call needs no main loop, so it
-    also works when something else made the shared session bus without one
-    (an early notification); a proxy that follows the name refuses then.
+    reaches the one opened again. It goes on dbus_calls' connection, as it
+    is made from the hotkey loop and the dictation worker.
     """
     try:
         from . import dbus_calls
         from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
         dbus_calls.session().call_blocking(DBUS_NAME, DBUS_PATH, DBUS_INTERFACE, method,
-                                        signature, args, timeout=focused_window.TRAY_TIMEOUT_S)
+                                           signature, args, timeout=focused_window.TRAY_TIMEOUT_S)
         return True
     except Exception as e:
         logger.info(f"Could not {what}: {e}")

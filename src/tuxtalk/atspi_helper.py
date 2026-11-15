@@ -84,12 +84,17 @@ _NO_COLLECTION = {
     "org.freedesktop.DBus.Error.UnknownObject",
     "org.freedesktop.DBus.Error.NotSupported",
 }
+# Replies from an app that has no toolkit to tell (_toolkit).
+_NO_TOOLKIT = _NO_COLLECTION | {"org.freedesktop.DBus.Error.UnknownProperty",
+                                "org.freedesktop.DBus.Error.InvalidArgs"}
 
 _bus = None
 _connecting = False
 # Each app's toolkit by its connection's name on the bus (_toolkit), a few
 # hundred at most: names aren't reused, so apps that quit stay until then.
+# The checks before each line and the final delivery may ask at once.
 _toolkits = {}
+_toolkits_lock = threading.Lock()
 _TOOLKITS_KEPT = 256
 _bus_changed = threading.Condition()
 _last_active = ()
@@ -169,8 +174,12 @@ def _password_focus(bus, focused_app, deadline) -> bool:
                 # left for later would go unasked when the time runs out.
                 cleared = cleared or _focused_said_no(bus, said_no, focused(), deadline)
                 said_no.clear()
-        unmarked = _unmarked_password(bus, seen, apps, focused, deadline)
-        return _settle(bus, unmarked, suspects, cleared, shells, focused, deadline)
+        # The shell's prompt counts wherever the focus is: asked before the
+        # look at an unmarked app, which could use up the time.
+        if _shell_prompt(bus, shells, deadline):
+            return True
+        return _settle(_unmarked_password(bus, seen, apps, focused, deadline),
+                       suspects, cleared, focused)
     except Exception:
         if not suspects or cleared:
             raise
@@ -233,17 +242,20 @@ def _focused_widget(bus, focused_app, deadline):
     of its own active (issue #40), so only the app the desktop names
     counts, and nothing when it can't name one in time. Where it calls
     none of its windows active, its own windows are looked through
-    (_unmarked_focus)."""
+    (_unmarked_focus), if it's a Chromium or Electron app."""
     focus = _in_time(focused_app, deadline)
     if focus is None:
         return None
-    seen = []
-    windows = [(app, window) for app, window in _active_windows(bus, deadline, seen)
-               if app not in _SHELLS and _is_focused(bus, app, window, focus, deadline)]
+    seen, active, windows = [], [], []
+    for app, window in _active_windows(bus, deadline, seen):
+        active.append(app)
+        if app not in _SHELLS and _is_focused(bus, app, window, focus, deadline):
+            windows.append(window)
     if len(windows) > 1:
         return None
-    focused = (_focused_with_text(bus, windows[0][1], deadline) if windows
-               else _unmarked_focus(bus, seen, focus, deadline))
+    focused = (_focused_with_text(bus, windows[0], deadline) if windows
+               else _unmarked_focus(bus, _unmarked_apps(bus, seen, active, deadline),
+                                    focus, deadline))
     # The focus may have moved into a password field since its check.
     return None if focused is None or _is_password(bus, focused, deadline) else focused
 
@@ -290,34 +302,49 @@ def _unmarked_password(bus, seen, active_apps, focused, deadline) -> bool | None
     and _unmarked_focus can tell which widget it is; None otherwise. Which
     app has the focus is asked only when one such app is on the bus: a
     look for every check would slow every line."""
-    unmarked = [(name, app) for name, app in seen
-                if name not in active_apps and _toolkit(bus, app, deadline) == "Chromium"]
+    unmarked = _unmarked_apps(bus, seen, active_apps, deadline)
     focus = focused() if unmarked else None
     try:
         widget = None if focus is None else _unmarked_focus(bus, unmarked, focus, deadline)
         return None if widget is None else _is_password(bus, widget, deadline)
     except GLib.Error as e:
-        # A tree not built yet (wake) answers "unknown method": the shell's
-        # own prompt is still to be asked.
+        # A tree not built yet (wake) answers "unknown method": as when it
+        # can't be told, another app's password field may still count.
         logger.debug(f"Password field check: the focused app's windows didn't answer: {e.message}")
         return None
 
 
-def _toolkit(bus, app, deadline) -> str:
-    """*app*'s toolkit as it tells the bus ("Chromium" for Chrome and
-    Electron apps, "GTK", "Qt"), "" when it doesn't; kept, as it never
-    changes for one connection to the bus."""
-    if app[0] not in _toolkits:
+def _unmarked_apps(bus, seen, active_apps, deadline):
+    """(name, app) of the Chromium and Electron apps among *seen* that
+    have no window among the active ones (*active_apps*, by name): those
+    whose windows _unmarked_focus may look through."""
+    return [(name, app) for name, app in seen
+            if name not in active_apps and name not in _SHELLS
+            and _toolkit(bus, app[0], deadline) == "Chromium"]
+
+
+def _toolkit(bus, name, deadline) -> str:
+    """The toolkit of the app at bus name *name*, as it tells the bus
+    ("Chromium" for Chrome and Electron apps, "GTK", "Qt"), "" when it has
+    none to tell. An answer is kept, as it never changes for one
+    connection; no answer in time is asked again next time, or a slow
+    first answer would leave Chrome's password fields unchecked."""
+    with _toolkits_lock:
+        if name in _toolkits:
+            return _toolkits[name]
+    try:
+        answer = _call(bus, (name, _ROOT), "org.freedesktop.DBus.Properties", "Get",
+                       GLib.Variant("(ss)", (_APPLICATION, "ToolkitName")), deadline)[0]
+    except GLib.Error as e:
+        if Gio.DBusError.get_remote_error(e) not in _NO_TOOLKIT:
+            logger.debug(f"Accessibility bus: {name} didn't say its toolkit: {e.message}")
+            return ""
+        answer = ""
+    with _toolkits_lock:
         if len(_toolkits) > _TOOLKITS_KEPT:
             _toolkits.clear()   # apps that quit long ago
-        try:
-            _toolkits[app[0]] = _call(bus, app, "org.freedesktop.DBus.Properties", "Get",
-                                      GLib.Variant("(ss)", (_APPLICATION, "ToolkitName")),
-                                      deadline)[0]
-        except GLib.Error as e:
-            logger.debug(f"Accessibility bus: no toolkit for {app[0]}: {e.message}")
-            _toolkits[app[0]] = ""
-    return _toolkits[app[0]]
+        _toolkits[name] = answer
+    return answer
 
 
 def wake(focused_app) -> None:
@@ -331,7 +358,10 @@ def wake(focused_app) -> None:
     deadline = time.monotonic() + WAKE_BUDGET_S
     try:
         bus = _a11y_bus(deadline)
-        focus = None if bus is None else _in_time(focused_app, deadline)
+        # Asked here, not through _in_time: this runs on a thread of its
+        # own, and _in_time's one look at a time would leave a password
+        # check made meanwhile without an answer.
+        focus = None if bus is None else focused_app()
         if focus is None:
             return
         for name, app in _named_apps(bus, deadline):
@@ -339,6 +369,9 @@ def wake(focused_app) -> None:
                 _call(bus, app, _ACCESSIBLE, "GetAttributes", None, deadline)
     except (_OutOfTime, GLib.Error) as e:
         logger.debug(f"Waking the focused app on the accessibility bus: no answer: {e!r}")
+    except Exception as e:
+        # An answer in a shape nobody expected: a dictation reads as before.
+        logger.info(f"Waking the focused app on the accessibility bus failed: {e!r}")
 
 
 def _around(bus, widget, chars, deadline, depth=0):
@@ -415,19 +448,19 @@ def _caret_of(bus, widget, deadline) -> int:
         return -1
 
 
-def _settle(bus, unmarked, suspects, cleared, shells, focused, deadline) -> bool:
-    """The password check's answer once every active window was asked: the
-    focused app's own where it marks no window active (*unmarked*,
-    _unmarked_password), else a password field in an app that may be in
-    the background (*suspects*) unless the focused app's window said no
-    (*cleared*); a desktop shell's own prompt counts wherever the focus is."""
+def _settle(unmarked, suspects, cleared, focused) -> bool:
+    """The password check's answer once every active window and the shell
+    were asked: the focused app's own where it marks no window active
+    (*unmarked*, _unmarked_password), else a password field in an app that
+    may be in the background (*suspects*) unless the focused app said no
+    (*cleared*, or *unmarked* False)."""
     if unmarked:
         _say_found(focused()[0], focused())
         return True
     if suspects and not cleared and unmarked is None:
         _say_found(suspects[0], focused())
         return True
-    return _shell_prompt(bus, shells, deadline)
+    return False
 
 
 def _counts_at_once(bus, app, window, focused, deadline) -> bool:
@@ -688,15 +721,17 @@ def _log_several_active(apps):
 
 
 def _focused_in(bus, window, deadline):
-    """The focused widget inside *window*, or None. Where several say they
-    have the focus, the last one that can be typed into: Claude Desktop's
-    own page says so, ahead of the claude.ai page whose box has the cursor,
-    and a KDE editor's frame ahead of the text inside it."""
+    """The focused widget inside *window*, or None. In a Chromium or
+    Electron app several can say they have the focus, and the last one
+    that can be typed into is it: Claude Desktop's own page says so, ahead
+    of the claude.ai page whose box has the cursor. Elsewhere the first:
+    every match would walk a whole web page or a big GTK window."""
+    every = _toolkit(bus, window[0], deadline) == "Chromium"
     # Every part of the rule is "match all" (1): at-spi2-atk turns any other
     # match type on an empty part, even "invalid", into "no match".
     rule = GLib.Variant("((aiia{ss}iaiiasib)uib)", (
         ([1 << _STATE_FOCUSED, 0], 1, {}, 1, [0, 0, 0, 0], 1, [], 1, False),
-        1, 0, True))    # in tree order, every match, the whole window
+        1, 0 if every else 1, True))    # in tree order, the whole window
     try:
         found = _call(bus, window, _COLLECTION, "GetMatches", rule, deadline)[0]
         if len(found) > 1:

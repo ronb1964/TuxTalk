@@ -24,7 +24,6 @@ def test_the_tray_is_asked_with_a_time_limit(monkeypatch):
     the thread that types: neither the bus daemon nor a busy tray may hold
     the text up for dbus-python's 25 seconds. A proxy for the tray's name
     would look its owner up again without one."""
-    import dbus
     calls = []
 
     class Bus:
@@ -37,7 +36,6 @@ def test_the_tray_is_asked_with_a_time_limit(monkeypatch):
 
         def get_object(self, *a, **kw):
             raise AssertionError("a proxy asks the bus for the owner with no time limit")
-    monkeypatch.setattr(dbus, "SessionBus", Bus)     # whose name the service's own is
     monkeypatch.setattr(dbus_calls, "session", Bus)
     assert focused_window.reported() == ("org.kde.konsole", "", "")
     assert [(name, method) for name, method, _ in calls] == [

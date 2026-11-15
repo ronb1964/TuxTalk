@@ -46,6 +46,18 @@ def cached_focus() -> FocusReport:
     return _focus
 
 
+# This process's name on the connection that exports TuxTalk's service
+# (the tray's, or the dictation service's stand-in), None while it exports
+# none: read without a call, from any thread.
+_exporting_as = None
+
+
+def exporting_as() -> str | None:
+    """This process's unique name on the session bus where it exports
+    TuxTalk's D-Bus service; None when it exports none."""
+    return _exporting_as
+
+
 # The bus identifiers, at module level so providers that fill the focused-window
 # cache (the GNOME extension's Python side, and kwin_focus on KDE) can name the
 # same service without a second copy of these strings.
@@ -97,6 +109,8 @@ class TuxTalkDBusService(dbus.service.Object):
 
         # Get session bus
         self.bus = dbus.SessionBus()
+        global _exporting_as
+        _exporting_as = self.bus.get_unique_name()
 
         if primary:
             self.bus_name = dbus.service.BusName(

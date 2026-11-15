@@ -217,10 +217,10 @@ def show_update_result(result, install_appimage, install_package):
                      "latest version.", keep_above=True, markup=True, wait=False)
         return
     release = result.get("release", {})
-    # How TuxTalk was installed decides HOW to update. Only a self-managed
-    # AppImage can be swapped in place; .deb/.rpm/AUR/Flatpak users must use
-    # their package manager, so we show instructions instead of downloading
-    # and running an AppImage (which fails, e.g. missing libfuse.so.2).
+    # How TuxTalk was installed decides HOW to update: an AppImage is swapped
+    # in place, a .deb or .rpm is downloaded and installed with the password,
+    # and the AUR, Flatpak and source installs get the command to run, never
+    # an AppImage (which fails there, e.g. missing libfuse.so.2).
     install_type = installation.get_install_type()
     guidance = get_update_guidance(install_type, result.get("latest_version", "unknown"))
 

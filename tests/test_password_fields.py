@@ -415,6 +415,8 @@ class FakeA11yBus:
                   cancellable):
         if (name, path) == (atspi_helper._REGISTRY, atspi_helper._ROOT):
             name, path = "registry", "root"
+        elif path == atspi_helper._ROOT:
+            path = "/root"      # an app's own object
         if method == "GetConnectionUnixProcessID":
             self.calls.append((name, path, method))
             asked = args.unpack()[0]
@@ -801,7 +803,49 @@ def test_the_focused_window_isnt_asked_for_an_unmarked_app_of_another_toolkit(bu
     assert looks == []
 
 
-def test_a_recording_start_wakes_only_the_app_with_the_focus(bus):
+def test_chromes_password_field_counts_after_its_toolkit_was_slow_to_answer(bus, monkeypatch):
+    """A first question that ran out of time isn't kept as "not Chrome"."""
+    bus.app("Google Chrome", PASSWORD, active=False, toolkit="Chromium")
+    real, slow = bus.call_sync, [True]
+
+    def first_toolkit_question_times_out(name, path, interface, method, args, *rest):
+        if method == "Get" and args.unpack()[1] == "ToolkitName" and slow:
+            slow.clear()
+            raise GLib.Error.new_literal(Gio.io_error_quark(), "Timeout was reached",
+                                         Gio.IOErrorEnum.TIMED_OUT)
+        return real(name, path, interface, method, args, *rest)
+    monkeypatch.setattr(bus, "call_sync", first_toolkit_question_times_out)
+    assert atspi_helper.focused_is_password(focused_app=focus_on("google-chrome")) is False
+    assert atspi_helper.focused_is_password(focused_app=focus_on("google-chrome")) is True
+
+
+def test_the_shells_own_prompt_counts_while_another_apps_toolkit_hangs(bus, monkeypatch):
+    """A background app that never says its toolkit can't use up the time
+    of the check before each line before the shell's prompt is asked."""
+    bus.app("gnome-shell", PASSWORD)
+    bus.app("Slack", TEXT, active=False)
+    real = bus.call_sync
+
+    def toolkit_hangs(name, path, interface, method, args, reply_type, flags, timeout_ms, c):
+        if name == ":Slack" and method == "Get" and args.unpack()[1] == "ToolkitName":
+            bus.clock.sleep(timeout_ms / 1000)
+            raise GLib.Error("Timeout was reached")
+        return real(name, path, interface, method, args, reply_type, flags, timeout_ms, c)
+    monkeypatch.setattr(bus, "call_sync", toolkit_hangs)
+    assert atspi_helper.focused_is_password(atspi_helper.RECHECK_BUDGET_S,
+                                            focused_app=focus_on("org.gnome.Nautilus")) is True
+
+
+def test_a_recording_starts_wake_leaves_the_password_check_its_own_look(bus):
+    """The wake runs on a thread of its own; it must not hold the one look
+    at the focused app a password check made meanwhile needs."""
+    seen = []
+    bus.app("Google Chrome", TEXT, active=False, toolkit="Chromium")
+    atspi_helper.wake(lambda: seen.append(atspi_helper._looking) or ("google-chrome", None))
+    assert seen == [False]
+
+
+def test_waking_only_the_app_with_the_focus(bus):
     """Chromium and Electron build their tree of widgets only once asked."""
     bus.app("Google Chrome", TEXT, active=False, toolkit="Chromium")
     bus.app("Firefox", TEXT, active=False)

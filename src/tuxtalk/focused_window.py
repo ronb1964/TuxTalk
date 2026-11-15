@@ -71,10 +71,10 @@ def reported(timeout: float = TRAY_TIMEOUT_S):
         owner = bus.call_blocking("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                   "org.freedesktop.DBus", "GetNameOwner", "s", (DBUS_NAME,),
                                   timeout=timeout)
-        if owner == dbus.SessionBus().get_unique_name():
+        if owner == dbus_service.exporting_as():
             # With no tray running, the dictation service holds the name
-            # itself, on the shared connection; a call to its own name would
-            # wait on the GTK loop that is making it, and time out.
+            # itself; a call to its own name would wait on the GTK loop that
+            # is making it, and time out.
             return tuple(dbus_service.cached_focus())
         # To the owner's unique name: dbus-python looks a well-known name up
         # again for each proxy, with no time limit.

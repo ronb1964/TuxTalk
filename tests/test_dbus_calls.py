@@ -8,7 +8,6 @@ zoom late. Such calls go on dbus_calls' connection, which has no main loop.
 """
 import os
 import pathlib
-import re
 import subprocess
 import sys
 import textwrap
@@ -21,7 +20,8 @@ SRC = pathlib.Path(__file__).resolve().parent.parent / "src"
 
 # A service that answers every call 50 ms late, and a client that calls it
 # from four threads, each call giving up after 20 ms, while GLib's loop runs
-# on a thread of its own as in the service. CONNECTION picks the connection.
+# on a thread of its own as in the service. On dbus-python's shared
+# connection this aborted 3 runs in 3.
 _LATE_SERVICE = textwrap.dedent("""
     import dbus, dbus.service
     from dbus.mainloop.glib import DBusGMainLoop
@@ -39,13 +39,13 @@ _LATE_SERVICE = textwrap.dedent("""
     GLib.MainLoop().run()
 """)
 _CLIENT = textwrap.dedent("""
-    import sys, threading
+    import threading
     import dbus, dbus.mainloop.glib
     from gi.repository import GLib
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     dbus.SessionBus()
     from tuxtalk import dbus_calls
-    bus = dbus_calls.session() if sys.argv[1] == "dbus_calls" else dbus.SessionBus()
+    bus = dbus_calls.session()
     GLib.timeout_add(1, lambda: True)
     threading.Thread(target=GLib.MainLoop().run, daemon=True).start()
     def calls():
@@ -62,16 +62,16 @@ _CLIENT = textwrap.dedent("""
 """)
 
 
-def _late_answers(connection):
-    """Run the client on *connection* ("dbus_calls" or "shared") against
-    the late service, on the tests' session bus; its exit code."""
+def _late_answers():
+    """Run the client against the late service, on the tests' session bus;
+    its exit code."""
     service = subprocess.Popen([sys.executable, "-c", _LATE_SERVICE],
                                stdout=subprocess.PIPE, text=True)
     try:
         assert service.stdout.readline().strip() == "ready"
         env = dict(os.environ, PYTHONPATH=os.pathsep.join(
             [str(SRC), os.environ.get("PYTHONPATH", "")]))
-        return subprocess.run([sys.executable, "-c", _CLIENT, connection], env=env,
+        return subprocess.run([sys.executable, "-c", _CLIENT], env=env,
                               capture_output=True, timeout=120).returncode
     finally:
         service.kill()
@@ -79,7 +79,7 @@ def _late_answers(connection):
 
 
 def test_late_answers_to_blocking_calls_from_threads_dont_crash_it():
-    assert _late_answers("dbus_calls") == 0
+    assert _late_answers() == 0
 
 
 def test_one_connection_serves_every_call():
@@ -87,15 +87,11 @@ def test_one_connection_serves_every_call():
     assert dbus_calls.session() is dbus_calls.session()
 
 
-# Where a blocking call may run off GTK's thread in the service. The shared
-# connection's name is still read there (focused_window: whether the service
-# holds TuxTalk's name itself), but no call is made on it.
+# Where a blocking call may run off GTK's thread in the service.
 _CALLERS = ("app_focus", "app_launcher", "focused_window", "keyboard_layout", "kwin_desktop",
             "kwin_focus", "kwin_hotkeys", "notify", "tray_link", "update_ui")
 
 
 @pytest.mark.parametrize("module", _CALLERS)
 def test_blocking_calls_go_on_their_own_connection(module):
-    text = (SRC / "tuxtalk" / f"{module}.py").read_text()
-    assert not re.search(r"dbus\.SessionBus\(\)\.(call_blocking|get_object)", text)
-    assert not re.search(r"bus = dbus\.SessionBus\(\)", text)
+    assert "SessionBus(" not in (SRC / "tuxtalk" / f"{module}.py").read_text()

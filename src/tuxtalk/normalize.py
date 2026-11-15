@@ -81,7 +81,8 @@ LITERAL_REPLACEMENTS = {
     "dot dot dot": "__LIT_DOTDOTDOT__",
 }
 
-# Restore mapping: each placeholder → its original spoken word (1:1, lossless)
+# Restore mapping: each placeholder → its original spoken word ("press, tab"
+# comes back as "press tab", the one escape that takes a comma)
 LITERAL_RESTORE = {ph: word for word, ph in LITERAL_REPLACEMENTS.items()}
 
 # Precompile literal escape patterns: "literal <word>" or "the word <word>".

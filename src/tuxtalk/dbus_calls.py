@@ -8,8 +8,12 @@ with a first zoom, a tray whose loop is busy), both threads free the same
 timer and glibc ends the process (SIGABRT), with nothing in TuxTalk's log.
 The mouse grid's desktop zoom did that on KDE, in about one test run in
 four. This connection has no main loop: libdbus keeps the time limit
-itself, and any thread may use it. It only makes calls; whatever exports
-objects or listens for signals stays on the shared connection.
+itself, and any thread may use it. It only makes calls, to services that
+send nothing back but the answer: nothing ever reads its other messages,
+so a signal sent to it would wait there for good (notifications go over
+Gio for that reason). Whatever exports objects or listens for signals stays
+on the shared connection. It keeps dbus-python's calls and errors for the
+code that already used them; media_pause, written for Gio, uses Gio's.
 """
 import threading
 
