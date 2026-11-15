@@ -366,6 +366,7 @@ def test_press_tab_at_the_start_indents_the_line():
 
 def test_literal_press_tab_types_the_words():
     assert normalize_text("literal press tab to continue") == "Press tab to continue."
+    assert normalize_text("literal press, tab to continue") == "Press tab to continue."
 
 
 # --- append_auto_punct: auto-period/space placement around line-break markers ---
@@ -416,6 +417,8 @@ def test_return_command_before_sentence_starter_still_works():
     ("Name, press tab, address.", "Name\taddress."),
     ("Name. Press Tab. Address.", "Name.\tAddress."),
     ("first press tab second press tab third", "First\tsecond\tthird."),
+    # A short pause after "press" comes from Parakeet as a comma.
+    ("Name, press, tab, address.", "Name\taddress."),
 ])
 def test_press_tab_between_fields_types_a_tab(said, typed):
     assert normalize_text(said) == typed

@@ -26,6 +26,9 @@ from tuxtalk import delivery
     ("John. Press tab.", ("John", "TAB")),
     ("Is it ready? Press tab", ("Is it ready?", "TAB")),
     ("Hit tab.", ("", "TAB")),
+    # A short pause after "press" comes from Parakeet as a comma.
+    ("John, press, tab.", ("John", "TAB")),
+    ("See you at noon. Press, enter.", ("See you at noon.", "ENTER")),
     ("press tab", ("", "TAB")),
     ("Press the tab key.", ("", "TAB")),
     # Not at the end: normalize.py makes a tab character of it.
@@ -33,6 +36,7 @@ from tuxtalk import delivery
     ("every tab shows", ("every tab shows", "")),
     # normalize.py types the words for these.
     ("Type literal press tab", ("Type literal press tab", "")),
+    ("Type literal press, tab", ("Type literal press, tab", "")),
     ("Type the word press tab", ("Type the word press tab", "")),
 ])
 def test_split_press_tab(raw, expected):

@@ -5,6 +5,10 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- "press tab" said with a little pause after "press" moves to the next box
+  again. Parakeet writes that pause as a comma ("Name, press, tab,
+  address"), and TuxTalk then typed the words; "press, enter" at the end
+  of a dictation is the Enter key now too.
 - In KWrite and Kate, holding Shift with the dictation key when nothing is
   selected no longer throws the cursor to the start of the line. To find
   the selection TuxTalk pressed Ctrl+C, and KDE's editors copy the whole

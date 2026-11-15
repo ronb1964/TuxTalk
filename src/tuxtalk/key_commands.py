@@ -43,11 +43,12 @@ US_LETTER_KEYS = dict(zip("abcdefghijklmnopqrstuvwxyz",
 
 # "press enter", "hit enter", "press the enter key", "press return", "press
 # tab". Speech engines often capitalise and punctuate it ("... noon. Press
-# Enter."). "literal" or "the word" before it types the words.
+# Enter."), and a short pause after "press" comes out as a comma ("press,
+# tab"). "literal" or "the word" before it types the words.
 _TRAILING = re.compile(
     r"(?P<lead>^|[\s,;:.!?]+)"
     r"(?P<literal>(?:literal|the\s+words?)\s+)?"
-    r"(?:press|hit)\s+(?:the\s+)?(?P<key>enter|return|tab)(?:\s+key)?"
+    r"(?:press|hit),?\s+(?:the\s+)?(?P<key>enter|return|tab)(?:\s+key)?"
     r"[\s.!?,]*$",
     re.IGNORECASE,
 )

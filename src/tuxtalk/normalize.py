@@ -84,11 +84,14 @@ LITERAL_REPLACEMENTS = {
 # Restore mapping: each placeholder → its original spoken word (1:1, lossless)
 LITERAL_RESTORE = {ph: word for word, ph in LITERAL_REPLACEMENTS.items()}
 
-# Precompile literal escape patterns: "literal <word>" or "the word <word>"
+# Precompile literal escape patterns: "literal <word>" or "the word <word>".
+# "press, tab" too, which the Tab rule below also accepts; a comma in the
+# others is a real one ("the word question, Mark").
 _LITERAL_PATTERNS = [
     (re.compile(rf"\b(?:literal|the\s+words?)\s+{re.escape(word)}\b", re.IGNORECASE), placeholder)
     for word, placeholder in LITERAL_REPLACEMENTS.items()
-]
+] + [(re.compile(r"\b(?:literal|the\s+words?)\s+press,\s+tab\b", re.IGNORECASE),
+      LITERAL_REPLACEMENTS["press tab"])]
 
 # --- _protect_command_words: command words used as English nouns ---
 # Words like "period", "comma", "return" and "dash" are command triggers
@@ -187,7 +190,8 @@ _MULTI_WORD_REPLACEMENTS = [
     # tab shows"). Like "new line", it takes the spaces and punctuation the
     # engine wrote around it, so the next field doesn't start with a space.
     # "press tab key" and "press the tab key" are someone talking about the key.
-    (re.compile(r"[, ]*\bpress\s+tab\b(?!\s+key\b)[,.:; ]*", re.IGNORECASE), "\t"),
+    # A comma after "press" is a short pause there, not a second sentence.
+    (re.compile(r"[, ]*\bpress,?\s+tab\b(?!\s+key\b)[,.:; ]*", re.IGNORECASE), "\t"),
     # The engine often ends the sentence itself before a spoken mark ("Send
     # it. Question mark."): the spoken mark replaces that period, or the text
     # came out as "Send it. ?". Only a period right after a word and before a
