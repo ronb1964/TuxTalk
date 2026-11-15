@@ -57,7 +57,7 @@ def _row(command, say_width):
     return row
 
 
-def _spoken(section):
+def spoken(section):
     """What a screen reader says on *section*'s card: each command, what it
     does, and the notes, the text the card shows."""
     lines = [f"{', '.join(c.said)}: {cards.plain(c.result)}"
@@ -90,7 +90,7 @@ def section_card(section, say_width):
     card.add(rows)
     name = section.title + (f", needs Labs: {section.labs}" if section.labs else "")
     card.get_accessible().set_name(name)
-    card.get_accessible().set_description(_spoken(section))
+    card.get_accessible().set_description(spoken(section))
     return card
 
 
