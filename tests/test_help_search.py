@@ -163,3 +163,11 @@ def test_the_match_is_found_where_a_word_starts_with_other_names_too():
     assert help_search.first_match("Not again: the processor", "cpu") == (15, 24)
     assert help_search.first_match("explain the AI", "ai") == (12, 14)
     assert help_search.first_match("nothing here", "cpu") is None
+
+
+def test_uninstalling_says_the_shared_models_go_only_when_their_box_is_ticked(entries):
+    # Uninstall leaves the speech and AI models in the download folder other
+    # apps share unless that box is ticked; Help mustn't promise the space back.
+    card = _card(entries, "Problems", "Uninstalling")
+    assert "speech and AI models" in card.text
+    assert "only if you tick that box" in card.text

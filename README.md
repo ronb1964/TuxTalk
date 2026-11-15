@@ -303,11 +303,12 @@ enough interest and I'll make it happen.
 
 Open Preferences, go to **Updates & Backup** and click **Uninstall TuxTalk…**
 at the bottom. It removes TuxTalk and everything it set up on your computer:
-the program itself, the hotkey helper and the typing permission, the speech
-models and everything else it downloaded (CUDA libraries included), start at
-login, the menu entry and the GNOME extension. It asks for your password once.
-Your settings and word list stay unless you tick the box to delete them too,
-so installing again picks up where you left off.
+the program itself, the hotkey helper and the typing permission, its own
+downloads (the graphics and AI engines and the CUDA libraries), start at login, the
+menu entry and the GNOME extension. It asks for your password once. The speech
+and AI models sit in a download folder other apps can share, so they go only
+if you tick that box too. Your settings and word list stay unless you tick the
+box to delete them, so installing again picks up where you left off.
 
 If TuxTalk won't open, the same thing runs from a terminal:
 

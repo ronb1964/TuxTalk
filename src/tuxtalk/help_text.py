@@ -109,10 +109,11 @@ def _uninstall_text(is_flatpak):
     command = GLib.markup_escape_text(own_command())
     return ("<b>Preferences → Updates &amp; Backup → Uninstall TuxTalk…</b> removes TuxTalk and\n"
             "everything it set up: the program, the hotkey helper and the typing permission,\n"
-            "the speech models and the other downloads, start at login, the menu entry and\n"
-            "the GNOME extension. It asks for your password once. Your settings and Your\n"
-            "Words stay unless you tick the box to delete them too, so installing again\n"
-            "picks up where you left off.\n"
+            "its own downloads (the graphics and AI engines, CUDA), start at login, the menu\n"
+            "entry and the GNOME extension. It asks for your password once. The speech and\n"
+            "AI models sit in a download folder other apps share: they go only if you tick\n"
+            "that box too. Your settings and Your Words stay unless you tick theirs, so\n"
+            "installing again picks up where you left off.\n"
             f"If TuxTalk won't open, <tt>{command} --uninstall</tt>\n"
             "in a terminal does the same.")
 
