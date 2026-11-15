@@ -5,6 +5,22 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- Help can be searched. Type in the box at the top of Help, press Ctrl+F,
+  or just start typing, and the tabs make way for the cards that match, each
+  naming the tab it's on (and TuxTalk Labs where it is one), your words in
+  bold. Click one, or press Enter for the first, and Help opens that tab
+  with the card near the top, outlined for a moment. It looks through every
+  card and every voice command as Help shows them to you, your own keys
+  included; every word of a search counts, little words like "how" and
+  "to" don't, "labs" finds every Labs feature, and everyday words find
+  Help's own (CPU finds the processor, GPU the graphics card). The arrow
+  keys go through the results, and Esc empties the search before it closes
+  Help. Help is sorted by situation, so a feature you know only by its
+  name had no tab of its own to look under.
+- Help has an Uninstalling card under Problems: what Uninstall removes and
+  keeps, that the speech and AI models in the download folder other apps
+  share go only if you tick that box, and the command for your install if
+  TuxTalk won't open. Start Here now says where Launch TuxTalk at login is.
 - A dictation fits into the sentence you're in. Click into the middle of a
   sentence and dictate, and TuxTalk looks at the text on either side of
   the cursor: no capital in the middle of a sentence, a space in front
