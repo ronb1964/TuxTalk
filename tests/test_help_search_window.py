@@ -101,3 +101,26 @@ def test_search_reads_the_new_text_after_help_is_rewritten(help_window, monkeypa
     help_dialog.show_help_dialog()      # brings the open Help forward, rewritten
     stack = _search(help_window, "f6")
     assert _results(stack)
+
+
+def test_the_card_jumped_to_is_near_the_top_and_outlined():
+    """On a shown Help: the card a result goes to sits near the top of its
+    page, not wherever focusing it scrolled, and is outlined."""
+    from gtk_keys import settle
+    window = help_dialog.show_help_dialog()
+    try:
+        settle()
+        parts = help_dialog.open_help()
+        parts.box.set_text("live text")
+        settle()
+        entry = parts.matches[0]
+        parts.jump(entry)
+        settle()
+        focus, card = parts.found[(entry.tab, entry.part, entry.title)]
+        notebook = parts.notebook
+        page = notebook.get_nth_page(notebook.get_current_page())
+        _x, y = card.translate_coordinates(page, 0, 0)
+        assert 0 <= y < 80
+        assert card.get_style_context().has_class("tt-found")
+    finally:
+        window.destroy()

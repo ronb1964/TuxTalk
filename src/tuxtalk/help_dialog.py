@@ -26,8 +26,10 @@ _LINE_CHARS = 87
 _CARD_FRAME_PX = 100
 _TABS_FRAME_PX = 60
 HEIGHT = 600
-# How long the card a search went to stays outlined.
+# How long the card a search went to stays outlined, and how far below the
+# top of the page it's put (room for the feature's title over it).
 _FOUND_MS = 2500
+_ABOVE_FOUND_PX = 40
 
 
 def _open_report(_widget):
@@ -169,12 +171,12 @@ class _Help:
         keyboard (and a screen reader) on it; the box empties."""
         focus, card = self.found[(entry.tab, entry.part, entry.title)]
         self.box.set_text("")
-        self.notebook.set_current_page(_page_of(self.notebook, entry.tab))
+        number = _page_of(self.notebook, entry.tab)
+        self.notebook.set_current_page(number)
         style = card.get_style_context()
         style.add_class("tt-found")
         GLib.timeout_add(_FOUND_MS, lambda: style.remove_class("tt-found"))
-        # Once the tab is drawn: the page scrolls to what takes the focus.
-        GLib.idle_add(lambda: focus.grab_focus())
+        _show_found(self.notebook.get_nth_page(number), focus, card)
 
     def _on_key(self, _window, event):
         """Esc empties a search first and closes Help after; Ctrl+F, or a
@@ -197,6 +199,26 @@ class _Help:
         if not ctrl and not in_box and typed.isprintable() and not typed.isspace():
             self.box.grab_focus_without_selecting()     # the key then goes into it
         return False
+
+
+def _show_found(page, focus, card):
+    """Put *card* near the top of *page* (a scrolled page of Help), with
+    the keyboard on *focus*: focusing alone scrolls only as far as it must,
+    leaving the card at the bottom. A tab just opened isn't laid out yet,
+    and its scrolling then stops short: it's put there once it is."""
+    focus.grab_focus()
+    scroll = page.get_vadjustment()
+
+    content = page.get_child().get_child()      # the column, inside the viewport
+
+    def put(*_args):
+        place = card.translate_coordinates(content, 0, 0)
+        if place:
+            scroll.set_value(max(place[1] - _ABOVE_FOUND_PX, 0))
+    put()
+    handler = scroll.connect("changed", put)
+    # Only the first layout: later the person scrolls where they like.
+    GLib.timeout_add(_FOUND_MS, lambda: scroll.disconnect(handler))
 
 
 _open_help = None     # the _Help while Help is open

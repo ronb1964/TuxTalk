@@ -376,6 +376,12 @@ window.talktype-prefs, dialog.talktype-prefs {
     box-shadow: 0 0 0 1px #8ab4f8;
 }
 
+/* A feature's opening lines a search went to: outlined like a card. */
+.talktype-prefs label.tt-found {
+    border-radius: 6px;
+    box-shadow: 0 0 0 1px #8ab4f8;
+}
+
 /* Help's search results are buttons holding a card: the card is all there
    is to see, outlined (above) under the pointer and the keyboard. The card
    a result goes to is outlined a moment too (tt-found). */

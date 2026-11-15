@@ -73,7 +73,8 @@ def _result(entry, query, on_pick):
 def page(found, query, on_pick):
     """The results page for *query*: the count, then a result for each of
     *found* (help_search.search's entries); *on_pick* gets the one picked."""
-    children = [cards.heading(cards.escape(count_line(found, query)), "tt-page-title")]
+    count = f'<span size="x-large"><b>{cards.escape(count_line(found, query))}</b></span>'
+    children = [cards.heading(count, "tt-page-title")]
     if not found:
         children.append(cards.paragraph("Try a shorter word, or another name for it."))
     children.extend(_result(entry, query, on_pick) for entry in found)
