@@ -294,10 +294,10 @@ down instead (Discord calls, games), do both, or leave them alone.
 • <b>The TuxTalk menu</b>: the tray icon, TuxTalk in GNOME's top bar, or open TuxTalk
   again from your apps. It has Preferences, Help, Recent Dictations and Fix a Word,
   and the line under the switch says which speech model runs, and where.
-• <b>Preferences → General</b>: your keys, and the speech setup. On first run TuxTalk
-  recommends a setup for your computer (the speech model, on your graphics card if
-  it's faster) for the language you speak. "Change model, device or language" is
-  there if you ever want something else.
+• <b>Preferences → General</b>: your keys, Launch TuxTalk at login, and the speech
+  setup. On first run TuxTalk recommends a setup for your computer (the speech model,
+  on your graphics card if it's faster) for the language you speak. "Change model,
+  device or language" is there if you ever want something else.
 • <b>Search Help</b>: type in the box at the top of this window (or press Ctrl+F) to
   find any card or voice command by its name, TuxTalk Labs features too.'''
 

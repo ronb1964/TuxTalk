@@ -27,17 +27,18 @@ class Entry(NamedTuple):
 
 
 # Everyday words for what Help calls by another name: CPU is always "the
-# processor" there, GPU "the graphics card".
+# processor" there, GPU "the graphics card", starting with the desktop
+# "Launch TuxTalk at login".
 SYNONYMS = {
     "cpu": ("processor",),
     "gpu": ("graphics card",),
     "mic": ("microphone",),
-    "hotkey": ("key",),
-    "shortcut": ("key",),
-    "autostart": ("log in",),
-    "startup": ("log in",),
+    "hotkey": ("dictation key",),
+    "hotkeys": ("dictation key",),
+    "autostart": ("at login",),
+    "startup": ("at login",),
+    "login": ("at login",),
     "remove": ("uninstall",),
-    "delete": ("uninstall",),
 }
 _LABS_WORDS = ("lab", "labs", "tuxtalk labs")
 # Help's links (<a href>) are a GtkLabel's, which Pango's own parser doesn't
@@ -82,19 +83,23 @@ def index(sections):
 
 
 def _wanted(query):
-    """The words to look for: *query* itself and its other names."""
+    """What to look for: *query* itself and its other names, each where a
+    word starts ("ai" is no match in "again")."""
     query = _words(query)
-    return (query, *SYNONYMS.get(query, ())) if query else ()
+    if not query:
+        return ()
+    return tuple(re.compile(r"(?<!\w)" + re.escape(word))
+                 for word in (query, *SYNONYMS.get(query, ())))
 
 
 def _rank(entry, wanted, labs):
     """0 when *entry*'s heading or feature names a *wanted* word, 1 when
     its note, text or tab does or it's a Labs card and *labs* was asked
     for, else None."""
-    if any(word in _words(f"{entry.part} {entry.title}") for word in wanted):
+    if any(word.search(_words(f"{entry.part} {entry.title}")) for word in wanted):
         return 0
     if (labs and entry.labs) or any(
-            word in _words(f"{entry.note} {entry.text} {entry.tab}") for word in wanted):
+            word.search(_words(f"{entry.note} {entry.text} {entry.tab}")) for word in wanted):
         return 1
     return None
 
@@ -105,7 +110,7 @@ def search(entries, query):
     wanted = _wanted(query)
     if not wanted:
         return []
-    labs = wanted[0] in _LABS_WORDS
+    labs = _words(query) in _LABS_WORDS
     ranked = [(rank, n) for n, entry in enumerate(entries)
               if (rank := _rank(entry, wanted, labs)) is not None]
     return [entries[n] for _rank_, n in sorted(ranked)]
@@ -115,7 +120,8 @@ def highlight(text, query):
     """*text* as Pango markup with the first place *query* (or one of its
     other names) appears in bold."""
     lowered = text.lower()
-    spots = [(at, len(word)) for word in _wanted(query) if (at := lowered.find(word)) >= 0]
+    spots = [(found.start(), found.end() - found.start()) for word in _wanted(query)
+             if (found := word.search(lowered))]
     if not spots:
         return cards.escape(text)
     at, length = min(spots)

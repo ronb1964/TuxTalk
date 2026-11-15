@@ -102,3 +102,41 @@ def test_the_flatpak_is_told_its_own_uninstall_command(monkeypatch):
 def test_start_here_says_help_can_be_searched(entries):
     found = help_search.search(entries, "search help")
     assert ("Start Here", "", "Where things are") in _titles(found)
+
+
+# Words people are likely to type: each finds a card, so nobody is told
+# "no results" for something Help covers in its own words.
+LIKELY = [
+    "labs", "live text", "type at pause", "voice editing", "mouse", "cuda", "vulkan", "cpu",
+    "gpu", "processor", "graphics card", "device", "model", "parakeet", "whisper", "language",
+    "microphone", "mic", "hotkey", "shortcut", "key", "password", "uninstall", "update",
+    "backup", "settings", "start at login", "autostart", "terminal", "send", "enter", "tab",
+    "punctuation", "comma", "period", "new paragraph", "numbers", "undo", "scratch that",
+    "snippets", "your words", "music", "flatpak", "gnome", "kde", "log", "privacy", "stats",
+    "recent dictations", "transcribe", "file", "ai", "performance", "slow", "indicator",
+]
+
+
+@pytest.mark.parametrize("word", LIKELY)
+def test_likely_searches_find_something(entries, word):
+    assert help_search.search(entries, word), f"nothing found for {word!r}"
+
+
+def test_a_short_word_matches_words_not_the_middle_of_others(entries):
+    import re
+    found = help_search.search(entries, "ai")
+    assert found
+    assert all(re.search(r"(?<!\w)ai", f"{e.part} {e.title} {e.note} {e.text}", re.I)
+               for e in found), "'ai' matched inside 'again' or 'explain'"
+
+
+def test_autostart_finds_where_starting_at_login_is_set(entries):
+    found = _titles(help_search.search(entries, "autostart"))
+    assert ("Start Here", "", "Where things are") in found
+    assert ("Problems", "", "Password fields") not in found
+
+
+def test_hotkey_finds_the_dictation_key_not_every_key(entries):
+    found = _titles(help_search.search(entries, "hotkey"))
+    assert ("Problems", "", "No key works") in found
+    assert len(found) < 10
