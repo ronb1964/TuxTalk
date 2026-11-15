@@ -28,9 +28,9 @@ def call(method: str, *args, what: str, signature: str | None = None) -> bool:
     (an early notification); a proxy that follows the name refuses then.
     """
     try:
-        import dbus
+        from . import dbus_calls
         from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
-        dbus.SessionBus().call_blocking(DBUS_NAME, DBUS_PATH, DBUS_INTERFACE, method,
+        dbus_calls.session().call_blocking(DBUS_NAME, DBUS_PATH, DBUS_INTERFACE, method,
                                         signature, args, timeout=focused_window.TRAY_TIMEOUT_S)
         return True
     except Exception as e:

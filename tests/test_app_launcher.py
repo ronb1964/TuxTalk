@@ -8,7 +8,7 @@ import types
 import pytest
 from gi.repository import GLib
 
-from tuxtalk import app_launcher
+from tuxtalk import app_launcher, dbus_calls
 from tuxtalk.app_finder import AppEntry
 from tuxtalk.app_launcher import launch, own_scope
 
@@ -140,15 +140,13 @@ class FakeSessionBus:
 
 
 def test_a_desktop_without_systemd_has_no_scope_to_ask(monkeypatch):
-    import dbus
-    monkeypatch.setattr(dbus, "SessionBus", lambda: FakeSessionBus(False))
+    monkeypatch.setattr(dbus_calls, "session", lambda: FakeSessionBus(False))
     assert app_launcher._systemd() is None
 
 
 def test_the_scope_is_asked_for_in_the_app_slice(monkeypatch):
-    import dbus
     bus = FakeSessionBus(True)
-    monkeypatch.setattr(dbus, "SessionBus", lambda: bus)
+    monkeypatch.setattr(dbus_calls, "session", lambda: bus)
     own_scope(99, "firefox.desktop")
     service, path, interface, method, signature, args = bus.calls[0]
     assert (service, path, method) == (

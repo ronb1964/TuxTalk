@@ -20,6 +20,7 @@ data directory must cost the paste hint, never the tray.
 import pytest
 
 from gnome_extension_js import run_kwin_script
+from tuxtalk import dbus_calls
 from tuxtalk import kwin_focus as K
 
 
@@ -243,7 +244,7 @@ class TestRenameToTuxTalk:
 def test_a_frozen_kwin_holds_tray_start_and_quit_only_seconds(monkeypatch):
     """Without a timeout each call waits dbus-python's 25 s default, and the
     tray starts and quits through several."""
-    dbus = pytest.importorskip("dbus")
+    pytest.importorskip("dbus")
     calls = []
 
     class Scripting:
@@ -255,7 +256,7 @@ def test_a_frozen_kwin_holds_tray_start_and_quit_only_seconds(monkeypatch):
             # Introspecting is a call of its own, waited for with no timeout.
             assert kwargs.get("introspect") is False
             return Scripting()
-    monkeypatch.setattr(dbus, "SessionBus", Bus)
+    monkeypatch.setattr(dbus_calls, "session", Bus)
     bus = K.session_bus()
     bus.call("loadScript", "/x.js", "tuxtalk")
     bus.call("start")

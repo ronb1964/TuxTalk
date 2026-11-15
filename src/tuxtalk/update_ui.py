@@ -447,8 +447,9 @@ def _installed_restart_prompt(restart=None):
 def tray_interface():
     """The running tray's D-Bus interface. Raises when it can't be reached."""
     import dbus
+    from . import dbus_calls
     from .dbus_service import DBUS_NAME, DBUS_PATH, DBUS_INTERFACE
-    bus = dbus.SessionBus()
+    bus = dbus_calls.session()
     return dbus.Interface(bus.get_object(DBUS_NAME, DBUS_PATH), DBUS_INTERFACE)
 
 

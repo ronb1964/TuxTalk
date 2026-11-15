@@ -98,14 +98,10 @@ def should_claim() -> bool:
 
 def session_bus():
     """A .call(method, *args) shim over KWin scripting (kwin_focus's) and
-    kglobalaccel.
+    kglobalaccel, on dbus_calls' connection."""
+    from . import dbus_calls
 
-    Imported lazily so this module stays importable (and testable) without
-    dbus-python.
-    """
-    import dbus
-
-    bus = dbus.SessionBus()
+    bus = dbus_calls.session()
     scripting = kwin_focus.session_bus()
 
     class _Bus:

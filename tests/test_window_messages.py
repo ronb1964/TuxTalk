@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from tuxtalk import compositor_focus, compositor_ipc, window_geometry as wg
+from tuxtalk import compositor_focus, compositor_ipc, dbus_calls, window_geometry as wg
 from tuxtalk.window_geometry import Rect
 from tuxtalk import notices
 
@@ -236,6 +236,7 @@ def test_the_service_holding_the_name_reads_its_own_cache(monkeypatch):
     from tuxtalk import dbus_service
     bus = _FakeBus(":1.5", ":1.5")
     monkeypatch.setattr(dbus, "SessionBus", lambda: bus)
+    monkeypatch.setattr(dbus_calls, "session", lambda: bus)
     monkeypatch.setattr(dbus_service, "_focus",
                         dbus_service.FocusReport(geometry="1,2,3,4|DP-6|0,0,10,10"))
     assert wg._reported() == "1,2,3,4|DP-6|0,0,10,10"
@@ -246,6 +247,7 @@ def test_the_tray_is_asked_when_it_holds_the_name(monkeypatch):
     import dbus
     bus = _FakeBus(":1.2", ":1.5")
     monkeypatch.setattr(dbus, "SessionBus", lambda: bus)
+    monkeypatch.setattr(dbus_calls, "session", lambda: bus)
     assert wg._reported() is None and len(bus.asked) == 1
 
 

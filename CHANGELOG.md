@@ -5,6 +5,12 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- Fixed a rare crash of the dictation service, seen on KDE when the mouse
+  grid zoomed the desktop and KWin was slow to answer: dictation then
+  stopped working, with nothing in the log, until TuxTalk was restarted.
+  Any of TuxTalk's calls to another program that was answered late could
+  set it off (KWin, the tray, notifications); those calls now go on a
+  connection of their own that can't trip over the window thread's.
 - Chrome, Brave and the apps built on Chrome, like Claude Desktop, now
   share the text around the cursor too, so a dictation fits the sentence
   there, and TuxTalk keeps out of their password boxes. They have to be

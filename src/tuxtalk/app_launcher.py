@@ -50,8 +50,8 @@ class _Systemd:
 
 def _systemd():
     """The user's systemd, or None on a desktop without it."""
-    import dbus
-    bus = dbus.SessionBus()
+    from . import dbus_calls
+    bus = dbus_calls.session()
     if not bus.name_has_owner(_SYSTEMD):
         return None
     return _Systemd(bus)

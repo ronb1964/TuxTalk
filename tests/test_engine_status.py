@@ -168,7 +168,7 @@ def test_the_service_tells_the_tray_once_the_model_is_loaded(service_main):
 def test_the_tray_is_told_what_was_loaded(monkeypatch):
     told = []
     monkeypatch.setattr(engine, "_running_engine", ("small", "cpu"))
-    monkeypatch.setattr("dbus.SessionBus", lambda: types.SimpleNamespace(
+    monkeypatch.setattr("tuxtalk.dbus_calls.session", lambda: types.SimpleNamespace(
         call_blocking=lambda name, path, iface, method, sig, args, **k: told.append(
             (method, *args))))
     engine.notify_tray()

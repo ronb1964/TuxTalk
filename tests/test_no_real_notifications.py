@@ -4,7 +4,7 @@ Tests such as test_a_real_cuda_failure_still_falls_back_to_cpu go through the
 real notification path, so conftest holds back notify._send, the one place a
 notice leaves for the desktop, for the whole suite.
 """
-from tuxtalk import notify, pipeline
+from tuxtalk import dbus_calls, notify, pipeline
 
 
 def test_notifications_are_held_back_during_tests():
@@ -48,6 +48,7 @@ def test_a_notice_goes_to_the_desktops_notification_service(monkeypatch):
         Array=lambda items, signature: list(items),
         Dictionary=lambda items, signature: dict(items))
     monkeypatch.setitem(sys.modules, "dbus", fake_dbus)
+    monkeypatch.setattr(dbus_calls, "session", Bus)
     import importlib
     before = dict(vars(notify))              # conftest's held-back _send among them
     real = importlib.reload(notify)          # the real _send, not the held-back one

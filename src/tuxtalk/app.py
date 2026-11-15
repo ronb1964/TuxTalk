@@ -151,7 +151,8 @@ def _dbus_main_loop_first():
     dbus-python shares one session-bus connection, and one made without a
     main loop (an early notification: guard_large_v3_without_cuda notifies
     before GTK starts) can't export the stand-in D-Bus service, so with no
-    tray the GNOME extension and the KWin script got no answer."""
+    tray the GNOME extension and the KWin script got no answer. Blocking
+    calls from other threads go on dbus_calls' connection instead."""
     try:
         import dbus.mainloop.glib
     except ImportError:

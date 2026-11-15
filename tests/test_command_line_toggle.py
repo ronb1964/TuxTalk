@@ -434,7 +434,7 @@ def service(monkeypatch):
         def call_blocking(self, name, path, interface, method, signature, args, timeout):
             told.append((int(args[0]), signature))
 
-    monkeypatch.setattr("dbus.SessionBus", Bus)
+    monkeypatch.setattr("tuxtalk.dbus_calls.session", Bus)
     recording.start_requested.clear()
     recording.stop_requested.clear()
     yield types.SimpleNamespace(app=app, written=written, told=told)

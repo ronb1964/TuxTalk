@@ -842,9 +842,9 @@ class RecordingBus:
 
 @pytest.fixture
 def tray_proxy(monkeypatch):
-    import dbus
+    from tuxtalk import dbus_calls
     bus = RecordingBus()
-    monkeypatch.setattr(dbus, "SessionBus", lambda: bus)
+    monkeypatch.setattr(dbus_calls, "session", lambda: bus)
     return bus
 
 

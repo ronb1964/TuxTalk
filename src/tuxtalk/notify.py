@@ -26,7 +26,8 @@ def _send(title: str, body: str) -> None:
     # D-Bus's 25-second default, and a hung notification service held the
     # hotkey loop that long. Every argument below carries its D-Bus type.
     import dbus
-    proxy = dbus.SessionBus().get_object("org.freedesktop.Notifications",
+    from . import dbus_calls
+    proxy = dbus_calls.session().get_object("org.freedesktop.Notifications",
                                          "/org/freedesktop/Notifications",
                                          introspect=False)
     proxy.Notify("TuxTalk", dbus.UInt32(0), APP_ICON, title, body,

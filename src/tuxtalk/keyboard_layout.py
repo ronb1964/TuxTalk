@@ -350,7 +350,8 @@ def _first(csv, index=0):
 def _kde_layouts():
     """([(layout, variant)], active index) from KDE's keyboard daemon."""
     import dbus
-    obj = dbus.SessionBus().get_object("org.kde.keyboard", "/Layouts")
+    from . import dbus_calls
+    obj = dbus_calls.session().get_object("org.kde.keyboard", "/Layouts")
     iface = dbus.Interface(obj, "org.kde.KeyboardLayouts")
     layouts = [(str(entry[0]), str(entry[1])) for entry in iface.getLayoutsList()]
     return layouts, int(iface.getLayout())

@@ -70,8 +70,8 @@ def call_extension(method: str, signature: str, args: tuple, timeout: float):
     """Call *method* of TuxTalk's GNOME extension, inside GNOME Shell, and
     return its answer. Raises a D-Bus error with no extension to answer, or
     one from before *method* (UnknownMethod)."""
-    import dbus
-    bus = dbus.SessionBus()
+    from . import dbus_calls
+    bus = dbus_calls.session()
     return bus.call_blocking(GNOME_SHELL, EXTENSION_PATH, EXTENSION_INTERFACE, method,
                              signature, args, timeout=timeout)
 

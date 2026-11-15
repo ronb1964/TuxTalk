@@ -63,17 +63,18 @@ def reported(timeout: float = TRAY_TIMEOUT_S):
     tray, each "" when not told; None when the tray couldn't be asked. The
     frame is "x,y,w,h|output|ox,oy,ow,oh" (window_geometry.parse_reported)."""
     import dbus
+    from . import dbus_calls
     from . import dbus_service
     from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
     try:
-        bus = dbus.SessionBus()
+        bus = dbus_calls.session()
         owner = bus.call_blocking("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                   "org.freedesktop.DBus", "GetNameOwner", "s", (DBUS_NAME,),
                                   timeout=timeout)
-        if owner == bus.get_unique_name():
+        if owner == dbus.SessionBus().get_unique_name():
             # With no tray running, the dictation service holds the name
-            # itself; a call to its own name would wait on the GTK loop that
-            # is making it, and time out.
+            # itself, on the shared connection; a call to its own name would
+            # wait on the GTK loop that is making it, and time out.
             return tuple(dbus_service.cached_focus())
         # To the owner's unique name: dbus-python looks a well-known name up
         # again for each proxy, with no time limit.

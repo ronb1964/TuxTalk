@@ -9,7 +9,7 @@ import types
 
 import pytest
 
-from tuxtalk import hotkey_claims
+from tuxtalk import dbus_calls, hotkey_claims
 from tuxtalk import kwin_hotkeys as kh
 
 # The real one, before conftest swaps it for one that refuses: the test of the
@@ -334,7 +334,7 @@ class TestAppLaunchShortcuts:
 def test_every_kwin_call_is_bounded_and_scripting_goes_through_kwin_focus(monkeypatch):
     """A frozen KWin held each call 25 s; the scripting calls kept a copy of
     kwin_focus's proxy code, overloaded loadScript's signature included."""
-    dbus = pytest.importorskip("dbus")
+    pytest.importorskip("dbus")
     calls = []
 
     class Remote:
@@ -348,7 +348,7 @@ def test_every_kwin_call_is_bounded_and_scripting_goes_through_kwin_focus(monkey
         def get_object(self, service, path, **kwargs):
             assert kwargs.get("introspect") is False    # a call of its own, unbounded
             return Remote(path)
-    monkeypatch.setattr(dbus, "SessionBus", Bus)
+    monkeypatch.setattr(dbus_calls, "session", Bus)
     bus = _REAL_SESSION_BUS()
     bus.call("loadScript", "/x.js", "tuxtalk-hotkeys")
     bus.call("unregister", "kwin", "tuxtalk-F8")

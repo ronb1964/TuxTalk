@@ -139,14 +139,11 @@ DBUS_TIMEOUT_S = 3.0
 
 
 def session_bus():
-    """A .call(method, *args) shim over KWin's Scripting interface.
+    """A .call(method, *args) shim over KWin's Scripting interface, on
+    dbus_calls' connection: it's called from the dictation worker too."""
+    from . import dbus_calls
 
-    dbus is imported here rather than at module scope so this module stays
-    importable (and testable) without dbus-python present.
-    """
-    import dbus
-
-    bus = dbus.SessionBus()
+    bus = dbus_calls.session()
 
     # KWin publishes loadScript twice — (path) and (path, pluginName). Without
     # an explicit signature dbus-python matches the one-argument overload and

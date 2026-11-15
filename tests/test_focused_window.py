@@ -3,7 +3,7 @@ window is and which one, so typing that waited and an automatic send can
 tell the window the text went to from any other."""
 import pytest
 
-from tuxtalk import compositor_focus, focused_window
+from tuxtalk import compositor_focus, dbus_calls, focused_window
 
 FRAME = "0,0,800,600|DP-1|0,0,1920,1080"
 
@@ -37,7 +37,8 @@ def test_the_tray_is_asked_with_a_time_limit(monkeypatch):
 
         def get_object(self, *a, **kw):
             raise AssertionError("a proxy asks the bus for the owner with no time limit")
-    monkeypatch.setattr(dbus, "SessionBus", Bus)
+    monkeypatch.setattr(dbus, "SessionBus", Bus)     # whose name the service's own is
+    monkeypatch.setattr(dbus_calls, "session", Bus)
     assert focused_window.reported() == ("org.kde.konsole", "", "")
     assert [(name, method) for name, method, _ in calls] == [
         ("org.freedesktop.DBus", "GetNameOwner"), (":1.7", "GetFocusedWindow")]

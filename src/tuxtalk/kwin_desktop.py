@@ -56,8 +56,8 @@ _SCREENS_PLUGIN = "tuxtalk-screens"
 
 def _call(path: str, interface: str, method: str, signature: str, args: tuple,
           service: str, timeout: float):
-    import dbus
-    return dbus.SessionBus().call_blocking(service, path, interface, method, signature, args,
+    from . import dbus_calls
+    return dbus_calls.session().call_blocking(service, path, interface, method, signature, args,
                                            timeout=min(timeout, kwin_focus.DBUS_TIMEOUT_S))
 
 
