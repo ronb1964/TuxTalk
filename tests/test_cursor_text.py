@@ -8,9 +8,10 @@ from gi.repository import Gio, GLib
 
 from tuxtalk import atspi_helper
 
-ACTIVE, FOCUSED, SHOWING = 1 << 1, 1 << 12, 1 << 25
+ACTIVE, EDITABLE, FOCUSED, SHOWING = 1 << 1, 1 << 7, 1 << 12, 1 << 25
 # AT-SPI roles (atspi-constants.h)
 FILLER, LIST, LIST_ITEM, PASSWORD, TEXT, PARAGRAPH, SECTION = 20, 31, 32, 40, 61, 73, 85
+DOCUMENT_WEB = 95
 
 
 class TextBus:
@@ -32,7 +33,8 @@ class TextBus:
         own = f":{name}"
         if pid is not None:
             self.pids[own] = pid
-        self.nodes[(own, "/w")] = dict(states=SHOWING | FOCUSED, text=text, caret=caret,
+        self.nodes[(own, "/w")] = dict(states=SHOWING | FOCUSED | EDITABLE, text=text,
+                                       caret=caret,
                                        selection=selection, is_text=is_text, hang=hang,
                                        children=[], role=role)
         top = (own, "/w")
@@ -296,7 +298,8 @@ def test_one_active_app_isnt_read_when_the_desktop_cant_say_it_has_the_focus(bus
 def another_window(bus, name, text, caret):
     """A second window of the app *name*, with a focused box of its own."""
     own = f":{name}"
-    bus.nodes[(own, "/w2")] = dict(states=SHOWING | FOCUSED, text=text, caret=caret,
+    bus.nodes[(own, "/w2")] = dict(states=SHOWING | FOCUSED | EDITABLE, text=text,
+                                   caret=caret,
                                    selection=None, is_text=True, hang=False, children=[],
                                    role=TEXT)
     bus.nodes[(own, "/win2")] = dict(states=SHOWING, children=[(own, "/w2")])
@@ -318,6 +321,30 @@ def test_two_windows_each_with_a_focused_box_say_nothing(bus):
     bus.app("Google Chrome", "the big dog", caret=7, active=False)
     another_window(bus, "Google Chrome", "other draft", 5)
     assert around(focus=("google-chrome", None)) is None
+
+
+def test_a_window_holding_a_page_without_a_box_isnt_a_second_window(bus):
+    """Claude Desktop keeps a hidden window whose page says it's focused."""
+    bus.app("claude-desktop", "the big dog", caret=7, active=False)
+    own = ":claude-desktop"
+    bus.nodes[(own, "/page2")] = dict(states=SHOWING | FOCUSED, text="", caret=0,
+                                      selection=None, is_text=True, hang=False,
+                                      children=[], role=DOCUMENT_WEB)
+    bus.nodes[(own, "/win2")] = dict(states=SHOWING, children=[(own, "/page2")])
+    bus.nodes[(own, "/root")]["children"].append((own, "/win2"))
+    assert around(focus=("com.anthropic.Claude", None)) == ("the big", " dog")
+
+
+def test_the_box_typed_into_wins_over_a_page_that_says_it_is_focused(bus):
+    """Claude Desktop's own page says it's focused, ahead of the claude.ai
+    page whose box has the cursor."""
+    bus.app("claude-desktop", "the big dog", caret=7, active=False)
+    own = ":claude-desktop"
+    bus.nodes[(own, "/shell")] = dict(states=SHOWING | FOCUSED, text="", caret=0,
+                                      selection=None, is_text=True, hang=False,
+                                      children=[], role=DOCUMENT_WEB)
+    bus.nodes[(own, "/win")]["children"].insert(0, (own, "/shell"))
+    assert around(focus=("com.anthropic.Claude", None)) == ("the big", " dog")
 
 
 def test_an_unmarked_app_in_the_background_isnt_read(bus):

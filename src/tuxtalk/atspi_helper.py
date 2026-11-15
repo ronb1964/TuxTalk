@@ -67,6 +67,7 @@ _CONTAINERS = {31, 32, 85, 105}     # list, list item, section, block quote
 
 # AtspiStateType and AtspiRole numbers (at-spi2-core's atspi-constants.h).
 _STATE_ACTIVE = 1
+_STATE_EDITABLE = 7
 _STATE_FOCUSED = 12
 _STATE_SHOWING = 25
 _ROLE_PASSWORD_TEXT = 40
@@ -269,14 +270,15 @@ def _unmarked_focus(bus, seen, focus, deadline):
     exactly one. *seen*: (name, app) of the apps on the bus. Chromium and
     Electron apps mark a window active only now and then on Plasma 6, and
     each of their windows keeps a focused widget of its own: with two,
-    either may be the one in front."""
+    either may be the one in front. Only a widget that can be typed into
+    counts: Claude Desktop's hidden second window keeps a focused page."""
     found = []
     for name, app in seen:
         if name in _SHELLS or not _is_focused(bus, name, app, focus, deadline):
             continue
         for window in _children(bus, app, deadline):
             widget = _focused_with_text(bus, window, deadline)
-            if widget is not None:
+            if widget is not None and _states(bus, widget, deadline) & 1 << _STATE_EDITABLE:
                 found.append(widget)
     return found[0] if len(found) == 1 else None
 
@@ -523,7 +525,8 @@ def _look(focused_app, answer, done):
 # Apps whose name on the accessibility bus is in neither their window class
 # nor its last part: the class and the name, as _plain has them. Brave
 # names itself "Brave" there, and its windows "brave-browser" (Fedora's
-# Chromium "Chromium" and "chromium-browser"); GNOME
+# Chromium "Chromium" and "chromium-browser", Claude Desktop
+# "claude-desktop" and "com.anthropic.Claude"); GNOME
 # Terminal "gnome-terminal-server" (its windows "Gnome-terminal" on X11,
 # "org.gnome.Terminal" on Wayland); LibreOffice "soffice". Only known
 # pairs: a name like a class's first word ("Code", "code-oss") may be
@@ -532,6 +535,7 @@ def _look(focused_app, answer, done):
 _BUS_NAMES = {
     "bravebrowser": "brave",
     "chromiumbrowser": "chromium",
+    "comanthropicclaude": "claudedesktop",
     "gnometerminal": "gnometerminalserver",
     "orggnometerminal": "gnometerminalserver",
     **{f"libreoffice{part}": "soffice"
@@ -677,14 +681,21 @@ def _log_several_active(apps):
 
 
 def _focused_in(bus, window, deadline):
-    """The focused widget inside *window*, or None."""
+    """The focused widget inside *window*, or None. Where several say they
+    have the focus, the last one that can be typed into: Claude Desktop's
+    own page says so, ahead of the claude.ai page whose box has the cursor,
+    and a KDE editor's frame ahead of the text inside it."""
     # Every part of the rule is "match all" (1): at-spi2-atk turns any other
     # match type on an empty part, even "invalid", into "no match".
     rule = GLib.Variant("((aiia{ss}iaiiasib)uib)", (
         ([1 << _STATE_FOCUSED, 0], 1, {}, 1, [0, 0, 0, 0], 1, [], 1, False),
-        1, 1, True))    # in tree order, one match, the whole window
+        1, 0, True))    # in tree order, every match, the whole window
     try:
         found = _call(bus, window, _COLLECTION, "GetMatches", rule, deadline)[0]
+        if len(found) > 1:
+            typed_into = [w for w in found
+                          if _states(bus, w, deadline) & 1 << _STATE_EDITABLE]
+            return typed_into[-1] if typed_into else found[0]
         return found[0] if found else None
     except GLib.Error as e:
         if Gio.DBusError.get_remote_error(e) not in _NO_COLLECTION:

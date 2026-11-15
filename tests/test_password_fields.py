@@ -32,6 +32,7 @@ from tuxtalk import hotkeys
 
 ACTIVE = 1 << atspi_helper._STATE_ACTIVE
 FOCUSED = 1 << atspi_helper._STATE_FOCUSED
+EDITABLE = 1 << atspi_helper._STATE_EDITABLE
 SHOWING = 1 << atspi_helper._STATE_SHOWING
 PASSWORD = atspi_helper._ROLE_PASSWORD_TEXT
 TEXT = 61      # ATSPI_ROLE_TEXT
@@ -403,7 +404,7 @@ class FakeA11yBus:
         if pid is not None:
             self.pids[f":{name}"] = pid
         common = dict(collection=collection, hang=hang)
-        self._add(ref("/2"), role=focus_role, states=SHOWING | FOCUSED, **common)
+        self._add(ref("/2"), role=focus_role, states=SHOWING | FOCUSED | EDITABLE, **common)
         self._add(ref("/3"), role=TEXT, states=SHOWING, **common)
         self._add(ref("/1"), states=SHOWING | (ACTIVE if active else 0),
                   children=[ref("/3"), ref("/2")], asleep=asleep, **common)
