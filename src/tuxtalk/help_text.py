@@ -376,6 +376,16 @@ sentence, a space where one is missing, and no period when more text follows.
 "25 chickens"). With digits, "seven thirty" after at becomes 7:30 and "october
 fifteenth" becomes october 15th; "one of them" and fractions stay words.
 
+### Email and web addresses
+Say them the way you'd say them out loud. Hold <b>{hold}</b>, say "john at gmail dot com",
+let go: john@gmail.com. "github dot com" types github.com.
+  • Said on its own, an address gets no period after it, ready for a To: box or a
+    browser's address bar, and every word before "at" is the name: "john doe at gmail
+    dot com" types johndoe@gmail.com.
+  • In a sentence only the last word before "at" is the name. Say the marks in it:
+    "john dot doe", "jane underscore smith".
+  • Your own address: a snippet does it every time (Preferences → Words → Add Snippet).
+
 ### Taking it back
 Each of these is a dictation of its own, said right after the one it takes back.
 Hold <b>{hold}</b>, say "meet me at noon", let go: it's typed. Changed your mind?

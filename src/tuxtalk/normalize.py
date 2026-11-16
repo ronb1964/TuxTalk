@@ -296,7 +296,10 @@ _RE_PUNCT_OUTSIDE_QUOTE = re.compile(r"\u201d( ?)([!?,;:.])")
 _EMAIL_TLDS_SAFE = "com|org|net|edu|gov|io"
 _EMAIL_TLDS_ALL = (_EMAIL_TLDS_SAFE + "|co|uk|ca|de|fr|us|au|jp|cn|in|br|mx|ru|kr|es|it|nl|se|"
                    "no|fi|pl|cz|hu|ro|gr|pt|ie|nz|za|ae|il|tr|th|vn|ph|id|my|sg|hk|tw")
-_EMAIL_NAME = r"(?<![\w'’])([a-zA-Z0-9._-]+)"
+# A name may be said with its marks: "john dot doe", "jane underscore smith".
+_SPOKEN_NAME_MARKS = {"dot": ".", "underscore": "_", "dash": "-", "hyphen": "-"}
+_EMAIL_NAME = (r"(?<![\w'’])((?:[a-zA-Z0-9._-]+\s+(?:dot|underscore|dash|hyphen)\s+)*"
+               r"[a-zA-Z0-9._-]+)")
 # Case-sensitive: endings are lowercase, and "three.No" is a missed space.
 _RE_EMAIL_JOINED = re.compile(
     _EMAIL_NAME + r"\s+at\s+([a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.(?:" + _EMAIL_TLDS_ALL + r"))\b"
@@ -316,6 +319,8 @@ _RE_EMAIL_SPLIT_TLD = re.compile(
 )
 _RE_EMAIL_AT_SPACE = re.compile(r"@\s+")
 _RE_ENDS_IN_TLD = re.compile(r"\.(?:" + _EMAIL_TLDS_ALL + r")$")
+# A dot in an email address's name ("john.doe@gmail.com").
+_RE_IN_MAILBOX = re.compile(r"\.[\w.+-]*@")
 # A dot written joined to a lowercase web ending is part of an address, and
 # so is one followed by more lowercase parts that end in one ("www.example.org").
 _RE_JOINED_TLD = re.compile(r"\.(?:[a-z0-9-]+\.)*(?:" + _EMAIL_TLDS_ALL + r"|dev)\b")
@@ -365,13 +370,52 @@ def _join_email(m):
     """"ron at example.de" -> "ron@example.de", unless "ron" is an ordinary word.
     Lower case, as addresses are written: Parakeet capitalizes names ("John")."""
     name, domain = m.groups()
-    return m.group(0) if name.lower() in _NOT_EMAIL_NAMES else f"{name}@{domain}".lower()
+    if name.lower() in _NOT_EMAIL_NAMES:
+        return m.group(0)
+    return f"{_spoken_name(name)}@{domain}".lower()
 
 
 def _join_spaced_email(m):
     """"ron at gmail. com" -> "ron@gmail.com", unless "ron" is an ordinary word."""
     name, domain, tld = m.groups()
-    return m.group(0) if name.lower() in _NOT_EMAIL_NAMES else f"{name}@{domain}.{tld}".lower()
+    if name.lower() in _NOT_EMAIL_NAMES:
+        return m.group(0)
+    return f"{_spoken_name(name)}@{domain}.{tld}".lower()
+
+
+def _spoken_name(name):
+    """A mailbox name as said, written out: "john dot doe" -> "john.doe",
+    "john doe" -> "johndoe"."""
+    return "".join(_SPOKEN_NAME_MARKS.get(word.lower(), word) for word in name.split())
+
+
+# An address said on its own goes into a To: box or an address bar (issue
+# #44): every word before "at" is the name ("john doe at gmail dot com"),
+# unless one is an ordinary word ("we arrived at example dot com" is a
+# sentence), and no full stop ends it.
+_RE_EMAIL_ALONE = re.compile(
+    r"(?i)([a-z0-9][\w' -]*?)\s+at\s+([a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:" + _EMAIL_TLDS_ALL + r"))")
+_RE_ADDRESS_ALONE = re.compile(
+    r"(?i)\s*(?:[\w.+-]+@|https?://)?[\w-]+(?:\.[\w-]+)*\.(?:" + _EMAIL_TLDS_ALL
+    + r")(?:/\S*)?\s*")
+_NOT_NAME_WORDS = _NOT_EMAIL_NAMES | frozenset("""
+    i we they he she the a an to and my our email mail send write message reach text cc
+""".split())
+_NAME_WORDS_MAX = 4
+
+
+def _address_alone(text):
+    """*text*, a whole dictation, as the one address it says ("John doe at
+    gmail dot com." -> "johndoe@gmail.com", "github dot com." ->
+    "github.com"), or None when it says more than an address."""
+    said = _RE_SPOKEN_DOT_DOMAIN.sub(_join_spoken_dots, text).strip().rstrip(".").rstrip()
+    m = _RE_EMAIL_ALONE.fullmatch(said)
+    if m:
+        words = m.group(1).replace("'", "").split()
+        if len(words) > _NAME_WORDS_MAX or any(w.lower() in _NOT_NAME_WORDS for w in words):
+            return None
+        return f"{_spoken_name(' '.join(words))}@{m.group(2)}".lower()
+    return said.lower() if _RE_ADDRESS_ALONE.fullmatch(said) else None
 
 
 def _close_tld_gap(m):
@@ -499,33 +543,32 @@ def format_times(text: str) -> str:
 
 
 def _space_after_ender_repl(m: re.Match) -> str:
-    """Insert a space after a sentence ender — except inside numbers,
-    single-letter abbreviations and filenames, where the period is part of
-    the token: '3.5', '$19.99', 'U.S.', 'e.g.', 'a.m.', 'report.pdf' must
-    not be split apart."""
+    """Insert a space after a sentence ender, except a period that belongs
+    to the token around it (_dot_binds)."""
     ch = m.group(1)
-    if ch == ".":
-        s, i = m.string, m.start(1)
-        prev = s[i - 1] if i > 0 else ""
-        prev2 = s[i - 2] if i > 1 else ""
-        nxt = s[i + 1] if i + 1 < len(s) else ""
-        nxt2 = s[i + 2] if i + 2 < len(s) else ""
-        # Decimal/price/version numbers: digit.digit
-        if prev.isdigit() and nxt.isdigit():
-            return ch
-        # Single-letter abbreviations: e.g., i.e., U.S., a.m.
-        # (single letter before the dot, letter+dot after it)
-        if prev.isalpha() and not prev2.isalpha() and nxt.isalpha() and nxt2 == ".":
-            return ch
-        # Filenames: the dot binds a name to its extension, so splitting here
-        # would invent a sentence break and the capitalization pass would then
-        # upper-case the extension ("report.pdf" -> "report. Pdf").
-        if (prev.isalnum() or prev in "_-") and _RE_FILE_EXT.match(s, i):
-            return ch
-        # Domains written joined ("example.com", "a.co.uk"): same reason.
-        if (prev.isalnum() or prev == "-") and _RE_JOINED_TLD.match(s, i):
-            return ch
+    if ch == "." and _dot_binds(m.string, m.start(1)):
+        return ch
     return ch + " "
+
+
+def _dot_binds(s: str, i: int) -> bool:
+    """Whether the period at *i* in *s* is part of a token, not a sentence's
+    end: '3.5', '$19.99', 'U.S.', 'e.g.', 'a.m.', 'report.pdf',
+    'example.com', 'john.doe@gmail.com' must not be split apart. Split, the
+    capitalization pass would then upper-case the rest ("report. Pdf")."""
+    prev = s[i - 1] if i > 0 else ""
+    prev2 = s[i - 2] if i > 1 else ""
+    nxt = s[i + 1] if i + 1 < len(s) else ""
+    nxt2 = s[i + 2] if i + 2 < len(s) else ""
+    if prev.isdigit() and nxt.isdigit():
+        return True     # a decimal, a price, a version
+    if prev.isalpha() and not prev2.isalpha() and nxt.isalpha() and nxt2 == ".":
+        return True     # single letters with dots: e.g., U.S., a.m.
+    if not (prev.isalnum() or prev in "_-"):
+        return False
+    # A file's extension, a domain written joined, an email address's name.
+    return bool(_RE_FILE_EXT.match(s, i) or _RE_JOINED_TLD.match(s, i)
+                or _RE_IN_MAILBOX.match(s, i))
 
 
 # Trailing line-break markers (possibly repeated) at the end of an utterance.
@@ -559,7 +602,7 @@ def append_auto_punct(text: str, auto_period: bool, auto_space: bool) -> str:
         if auto_period and not _ends_punctuated(core) and not core.rstrip().endswith(","):
             core = core.rstrip() + "."
         return core + trailing
-    if auto_period and not _ends_punctuated(text):
+    if auto_period and not _ends_punctuated(text) and not _RE_ADDRESS_ALONE.fullmatch(text):
         text = text.rstrip() + "."
     if auto_space and not text.endswith((" ", "\n", "\t")):
         text = text + " "
@@ -695,6 +738,9 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     """
     if not text:
         return text
+    alone = _address_alone(text)
+    if alone:
+        return alone
     text = _join_spoken_addresses(text)
     # Everything inside "open quote ... close quote" is kept as said.
     text, quoted_sections = _hold_quoted(text)

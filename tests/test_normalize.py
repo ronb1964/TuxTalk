@@ -806,6 +806,30 @@ def test_a_spoken_address_is_lower_case(said, expected):
     assert normalize_text(said) == expected
 
 
+# An address said on its own goes into a To: box or an address bar (issue
+# #44): no full stop after it, and every word of the name is the name.
+@pytest.mark.parametrize("said, expected", [
+    ("Doe at gmail dot com.", "doe@gmail.com"),
+    ("John doe at gmail dot com.", "johndoe@gmail.com"),
+    ("John dot doe at gmail dot com.", "john.doe@gmail.com"),
+    ("Jane underscore smith at example dot org", "jane_smith@example.org"),
+    ("github dot com.", "github.com"),
+    ("Www dot example dot org.", "www.example.org"),
+], ids=["one word", "two words", "dot", "underscore", "web address", "www"])
+def test_an_address_said_alone_is_the_address_and_nothing_else(said, expected):
+    assert normalize_text(said) == expected
+    assert append_auto_punct(normalize_text(said), True, True) == expected + " "
+
+
+@pytest.mark.parametrize("said, expected", [
+    ("We arrived at example dot com.", "We arrived at example.com."),
+    ("My email is john at gmail dot com.", "My email is john@gmail.com."),
+    ("Send it to john dot doe at gmail dot com.", "Send it to john.doe@gmail.com."),
+], ids=["ordinary words", "in a sentence", "dot in a sentence"])
+def test_an_address_in_a_sentence_keeps_the_sentence(said, expected):
+    assert normalize_text(said) == expected
+
+
 # --- hour and minutes run together ("641 p.m.") --------------------------------
 # Parakeet writes the same spoken time different ways: "6.41 p.m." one time,
 # "641 p.m." the next. Both must become 6:41 PM.

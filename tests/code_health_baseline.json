@@ -20,9 +20,6 @@
   "kwin_hotkeys.py::_app_shortcut_clashes": {
    "decisions": 19
   },
-  "normalize.py::_space_after_ender_repl": {
-   "decisions": 18
-  },
   "output_backends.py::LibeiOutputBackend._run_handshake": {
    "lines": 106
   },
