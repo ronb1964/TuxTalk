@@ -699,7 +699,8 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
   • Closing asks to save unsaved work, just like clicking the X.
   • Apps open in a terminal too. The keys are the terminal's own there, so <b>select all</b>,
     <b>save the file</b>, <b>find on page</b>, <b>reopen tab</b>, <b>go back a page</b>,
-    <b>go forward a page</b> and <b>reload the page</b> don't apply in a terminal. On GNOME
+    <b>go forward a page</b> and <b>reload the page</b> don't apply in a terminal, the terminal
+    panel in Kate, KDevelop or Dolphin included: click into the document first. On GNOME
     without the TuxTalk extension, TuxTalk can't tell a terminal, so those and copy, paste
     and the tab keys aren't pressed.
   • <b>go to</b> needs a real web address, like youtube.com. Only <b>web search</b> searches.
@@ -711,9 +712,10 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
 
 TERMINALS = '''# Terminals and Code Editors
 
-Everything here about terminals holds in the terminal panel inside Kate, KDevelop
-or Dolphin too, while accessibility is on (<b>Preferences → Advanced →
-Fine-tuning → Accessibility</b>).
+Everything here about terminals holds in the terminal panel (F4) inside Kate,
+KDevelop or Dolphin too, while accessibility is on (<b>Preferences → Advanced →
+Fine-tuning → Accessibility</b>). One already open when it went on may need closing
+and opening once.
 
 ### Plain text, by itself
 In a terminal a dictation starts without a capital and ends without a period, so

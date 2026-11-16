@@ -5,22 +5,34 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
-- With Type at pause (TuxTalk Labs), a recording that ends in a pause in
-  the middle of a line no longer leaves a period and a second space
-  before the next word ("the big very.  dog").
+- With Type at pause (TuxTalk Labs), the end of a recording fits the text
+  after the cursor too, where the sentence fitting works: in the middle
+  of a line it no longer leaves a period and a second space before the
+  next word ("the big very.  dog").
 - The terminal panel inside Kate, KDevelop or Dolphin is treated as the
-  terminal it is, while accessibility is on: a dictation there is pasted
-  with Shift+Ctrl+V as plain text and never sent with Enter (it showed
-  "^V" before), and a voice edit is refused (it pressed Ctrl+C, which
-  stopped the program running in the panel).
-- In Kate, and other KDE and Qt apps with tabs or lists, TuxTalk now
-  finds the text box with the cursor: the sentence fitting works in Kate,
-  and a password box behind a tab can no longer be missed by the password
-  check.
-- With two copies of one app open, like two Firefox profiles, a password
-  box left selected in the one behind no longer stops a dictation into
-  the one in front, where the words were lost. On X11, TuxTalk now tells
-  them apart by which program each window belongs to.
+  terminal it is, while accessibility is on. A dictation there is typed
+  as plain text (no capital, no period), pasted with Shift+Ctrl+V and
+  never sent with Enter; it showed "^V" before. A voice edit is refused:
+  it pressed Ctrl+C, which stopped the program running in the panel.
+  Voice commands follow a terminal's rules there too: "copy" presses
+  Shift+Ctrl+C, "delete everything" clears the line, select and move and
+  Fix a Word leave it alone, and "save" or "select all" say they don't
+  apply in a terminal.
+- In Kate, and other KDE and Qt apps with tabs or lists, TuxTalk now finds
+  the text box with the cursor while accessibility is on. A tab or list
+  item there says it has the focus even when it doesn't, and TuxTalk
+  looked no further: the sentence fitting and the check for selected text
+  didn't work in Kate, and the password check could miss a password box
+  in such a window and type into it.
+- On X11, with two copies of one app open, like two Firefox profiles, a
+  password box left selected in the one behind no longer stops a
+  dictation into the one in front, where the words were lost: TuxTalk now
+  tells them apart by which program each window belongs to. On Wayland,
+  and for Flatpak apps, it still goes by the app's name.
+- On a computer shared by two people logged in at once, the other
+  person's password prompt no longer stops your dictation on Cinnamon or
+  COSMIC (newer polkit: the prompt's helper runs as root, and TuxTalk
+  now tells whose prompt it is).
 - Fixed a rare crash of the dictation service, seen on KDE when the mouse
   grid zoomed the desktop and KWin was slow to answer: dictation then
   stopped working, with nothing in the log, until TuxTalk was restarted.

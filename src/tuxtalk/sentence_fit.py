@@ -46,15 +46,15 @@ def fit(text: str, before: str, after: str, lowercase_ok: bool, words=()) -> str
     return _fit_end(_fit_start(text, before, lowercase_ok, words), after, own_sentence)
 
 
-def fit_held_end(typed: str, tail: str, before: str, after: str) -> str:
-    """*tail*, the mark and space held back after *typed*, the last phrase
-    of a recording typed at each pause (type_at_pause), fitted before
-    *after* as the end of a whole dictation is. *before*: the text before
-    the cursor, which ends with *typed* once its keys have landed; when it
-    doesn't, the phrase counts as a sentence of its own."""
-    earlier = before[:-len(typed)] if typed and before.endswith(typed) else ""
-    fitted = _fit_end(typed + tail, after, _starts_sentence(earlier))
-    return fitted[len(typed):] if fitted.startswith(typed) else tail
+def fit_end(text: str, after: str) -> str:
+    """The end of *text* fitted before *after*, the text after the cursor:
+    the last phrase of a recording typed at each pause (type_at_pause), or
+    the mark and space held back after it. As a whole dictation's end, but
+    its period stays before a capital: where its sentence began can't be
+    read back (the read is a few characters, and the phrase's keys may not
+    have landed yet), and a period too many is easier to see than two
+    sentences run together."""
+    return _fit_end(text, after, own_sentence=True) if text else text
 
 
 def _starts_sentence(before):
@@ -73,7 +73,7 @@ def _fit_start(text, before, lowercase_ok, words):
     if text[0] in _PUNCTUATION + _LINE_BREAKS + _BLANKS or not visible \
             or visible[-1] in _LINE_BREAKS:
         return text     # joins as it is, or a new line: a new sentence, as always
-    if not visible.rstrip(_CLOSERS).endswith(tuple(_SENTENCE_ENDS)) and lowercase_ok \
+    if not _starts_sentence(before) and lowercase_ok \
             and text[0].isupper() and safe_to_lowercase_first_word(text, words):
         text = text[0].lower() + text[1:]
     if before[-1] in _BLANKS or _opens(before):

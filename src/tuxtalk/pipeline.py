@@ -229,19 +229,26 @@ def _cancelled(job: _Job) -> bool:
 def _read_cursor(job: _Job) -> tuple[str, str] | None:
     """The text on either side of the cursor, for _fit_to_cursor; None in a
     terminal (its "text" is the prompt and what scrolled by), for a Type at
-    pause phrase after one this recording typed (those keys may not have
-    reached the app yet, and continue_mid_sentence knows that text exactly),
-    or in an app that doesn't say. A password field was refused before
+    pause phrase after one this recording typed, but for its last
+    (_after_a_phrase: only that one's end is fitted), or in an app that
+    doesn't say. A password field was refused before
     this. Read before the words are shaped: when the app says, the screen
     decides whether a sentence carries on, not the last dictation
     (continue_mid_sentence), which the user may have typed after since."""
-    if (job.chunk_role is not None and job.message.has_words) \
+    if (_after_a_phrase(job) and job.chunk_role != "last") \
             or app_kind(focused_window.acts_as(focused_window.window_class())) == "terminal":
         return None
     around = focused_window.text_around_cursor()
-    if around is not None:
+    if around is not None and not _after_a_phrase(job):
         rs.state.continue_mid_sentence = False
     return around
+
+
+def _after_a_phrase(job: _Job) -> bool:
+    """Whether this is a Type at pause phrase after one its recording typed:
+    its start carries on from that one (continue_mid_sentence), and only
+    the text after the cursor is sure to be the app's yet."""
+    return job.chunk_role is not None and job.message.has_words
 
 
 def _fit_to_cursor(words: _Words, around: tuple[str, str] | None, job: _Job) -> _Words:
@@ -250,6 +257,8 @@ def _fit_to_cursor(words: _Words, around: tuple[str, str] | None, job: _Job) -> 
     language that capitalises its nouns."""
     if around is None:
         return words
+    if _after_a_phrase(job):
+        return words._replace(text=sentence_fit.fit_end(words.text, around[1]))
     return words._replace(text=sentence_fit.fit(words.text, *around, _lowercase_ok(job),
                                                 live.words))
 

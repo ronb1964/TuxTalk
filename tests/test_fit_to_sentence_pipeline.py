@@ -10,6 +10,7 @@ from tuxtalk import (atspi_helper, delivery, engine, focused_window, history, ke
                      pipeline, screen_message)
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
+from tuxtalk.sentence_fit import WINDOW
 
 
 @pytest.fixture
@@ -146,18 +147,43 @@ def test_a_held_german_cue_doesnt_make_the_noun_after_it_small(monkeypatch):
     assert (said, taken_back) == ("nein, Hunde", "")
 
 
-@pytest.mark.parametrize("before, after, typed, end", [
-    ("the big ", " dog", "very", []),               # mid-line: no period, no second space
-    ("the big ", "", "very", [". "]),               # the end of the line: as always
-    ("We met. ", " Then we left.", "Very", ["."]),  # a sentence of its own, before another
-], ids=["mid-line", "end of line", "before a sentence"])
+def cursor_reads(monkeypatch, *texts):
+    """The app's text around the cursor at each read, *texts* (before,
+    after) cut to the few characters a real read gets."""
+    reads = iter([(before[-WINDOW:], after[:WINDOW]) for before, after in texts])
+    monkeypatch.setattr(focused_window, "text_around_cursor", lambda: next(reads))
+
+
+@pytest.mark.parametrize("after, end", [
+    (" dog", []),                   # mid-line: no period, no second space
+    ("", [". "]),                   # the end of the line: as always
+    (" Then we left.", ["."]),      # before a capital: the period stays
+], ids=["mid-line", "end of line", "before a capital"])
 def test_type_at_pause_ending_in_a_pause_fits_the_text_after_the_cursor(
-        desktop, monkeypatch, before, after, typed, end):
+        desktop, monkeypatch, after, end):
     """A recording ended in a pause types the mark held back after its last
     phrase. Mid-line it left "the big very.  dog"; the cursor is read once
-    more for it, now that the phrase is on the screen."""
-    reads = iter([(before, after), (before + typed, after)])
-    monkeypatch.setattr(focused_window, "text_around_cursor", lambda: next(reads))
+    more for it."""
+    cursor_reads(monkeypatch, ("the big ", after), ("the big very", after))
     dictate(monkeypatch, "Very.", chunk_role="middle")
     dictate(monkeypatch, "", chunk_role="last")
-    assert desktop["typed"] == [typed] + end
+    assert desktop["typed"] == ["very"] + end
+
+
+def test_type_at_pause_let_go_mid_phrase_fits_the_last_phrases_end(desktop, monkeypatch):
+    """The key let go while still talking: the last phrase has words, and its
+    end goes before the text after the cursor as a whole dictation's does."""
+    cursor_reads(monkeypatch, ("the big ", " dog"), ("the big very", " dog"))
+    dictate(monkeypatch, "Very.", chunk_role="middle")
+    dictate(monkeypatch, "Old.", chunk_role="last")
+    assert not "".join(desktop["typed"]).endswith((".", " "))
+
+
+def test_type_at_pause_never_reads_a_terminal_at_the_end(desktop, monkeypatch):
+    """Not even with "Adapt to the app" off: a terminal's text is its prompt."""
+    monkeypatch.setattr(live, "adapt_to_app", False)
+    desktop["class"] = "org.gnome.Terminal"
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.gnome.Terminal", None))
+    dictate(monkeypatch, "Very.", chunk_role="middle")
+    dictate(monkeypatch, "", chunk_role="last")
+    assert desktop["reads"] == 0

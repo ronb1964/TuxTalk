@@ -103,6 +103,7 @@
           <li>Help can be searched, and has an Uninstalling card</li>
           <li>TuxTalk keeps out of password boxes in Chrome, Brave and Claude Desktop too</li>
           <li>In KWrite and Kate, Shift with the dictation key and nothing selected no longer moves the cursor</li>
+          <li>The terminal panel in Kate, KDevelop and Dolphin is treated as a terminal: dictation is typed there as plain text and never sent with Enter</li>
           <li>"press tab" and "press enter" said with a short pause after "press" work</li>
           <li>Fixed a crash of the dictation service when another program answered it late</li>
         </ul>

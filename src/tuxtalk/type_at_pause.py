@@ -442,17 +442,21 @@ def flush_boundary(message, auto_period: bool, auto_space: bool, injection_mode:
     if focused_window.changed(pending["where"], now):
         message.sentence_audio = []
         return  # the end of this sentence isn't in the window that has focus
-    kind = app_kind(focused_window.acts_as(now[0])) if live.adapt_to_app else ""
+    acting = focused_window.acts_as(now[0])
+    kind = app_kind(acting) if live.adapt_to_app else ""
     mark = heard_whole_mark(message, pending["mark"] or ("." if auto_period and not kind else ""),
                             None, language, pending.get("may_change", False))
     if message.cancelled:
         return  # Esc while the engine heard the whole sentence
     tail = mark + (" " if auto_space and not kind else "")
-    around = None if kind or not tail else focused_window.text_around_cursor()
-    if around is not None:
-        # The phrase is on the screen now: mid-line, its period and space
-        # went in before the next word ("the big very.  dog").
-        tail = sentence_fit.fit_held_end(pending["typed"], tail, *around)
+    # Mid-line the end goes before the next word: no period or second space
+    # there. A terminal's text is its prompt, whatever the settings.
+    if tail and app_kind(acting) != "terminal":
+        around = focused_window.text_around_cursor()
+        if message.cancelled:
+            return  # Esc during the read
+        if around is not None:
+            tail = sentence_fit.fit_end(tail, around[1])
     _type_boundary(message, pending, tail, injection_mode)
 
 
