@@ -5,7 +5,9 @@ selected; when they can't be asked, it presses Ctrl+C and puts the cursor
 back where the last dictation left it: "select the last sentence" selected
 text in the paragraph before, and the next dictation landed at the line's
 start."""
+import numpy as np
 import pytest
+from voice_edit_rig import fake_edit_world
 
 from tuxtalk import clipboard as cb
 from tuxtalk import focused_window, keyboard_output, voice_edit
@@ -310,3 +312,18 @@ def test_with_the_cursor_away_from_the_dictation_it_is_remembered_as_it_was(kwri
     monkeypatch.setattr(focused_window, "text_around_cursor", lambda: ("Other words", " here"))
     copy_in(KWRITE)
     assert rs.state.last_inserted_text == "Hello. "
+
+
+def test_no_shift_f8_edit_in_kates_terminal_panel(monkeypatch):
+    """Kate's terminal panel (Dolphin's and KDevelop's too) has Kate's window
+    class; the accessibility bus tells it's a terminal, and no Ctrl+C goes
+    in to stop the program running there."""
+    seen = fake_edit_world(monkeypatch)
+    copied = []
+    monkeypatch.setattr(cb, "copy_selection", lambda *a, **k: copied.append(True))
+    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kate")
+    monkeypatch.setattr(focused_window, "focused_is_terminal", lambda: True)
+    frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
+    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.current.message,
+                                   None)
+    assert copied == [] and seen["typed"] == [] and "terminal" in seen["notices"][0]

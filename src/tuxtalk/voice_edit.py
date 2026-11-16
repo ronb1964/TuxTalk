@@ -83,7 +83,7 @@ def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode, mess
         notices.edit_problem("focus_moved", beeps_on)
         return
     focused_class = focused_window.window_class()
-    if is_terminal_class(focused_class):
+    if _in_a_terminal(focused_class):
         notices.edit_problem("terminal", beeps_on)
         return
     heard = []
@@ -94,6 +94,13 @@ def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode, mess
         return heard[0]
     edit_selection(instruction, beeps_on, injection_mode, focused_class, t0, message,
                    window=where[1] if where is not None else None)
+
+
+def _in_a_terminal(focused_class) -> bool:
+    """Whether the edit would go into a terminal, whose Ctrl+C stops the
+    program running there: a terminal's window, or a terminal panel inside
+    another app's (Kate's, Dolphin's), told by the accessibility bus."""
+    return is_terminal_class(focused_class) or focused_window.focused_is_terminal() is True
 
 
 def _only_into(focused_class, window):
@@ -679,7 +686,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
         notices.edit_problem("focus_moved", beeps_on)
         return True
     focused_class = where[0]
-    if is_terminal_class(focused_class):
+    if _in_a_terminal(focused_class):
         notices.edit_problem("terminal", beeps_on)
         return True
     if not instruction.strip():

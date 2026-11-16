@@ -36,6 +36,7 @@ EDITABLE = 1 << atspi_helper._STATE_EDITABLE
 SHOWING = 1 << atspi_helper._STATE_SHOWING
 PASSWORD = atspi_helper._ROLE_PASSWORD_TEXT
 TEXT = 61      # ATSPI_ROLE_TEXT
+PAGE_TAB = 37
 # Taken before conftest swaps in a stand-in, which every test gets.
 REAL_PROMPT_WAITING = focused_window._polkit_prompt_waiting
 
@@ -404,7 +405,7 @@ class FakeA11yBus:
         return self.nodes[ref]
 
     def app(self, name, focus_role, active=True, collection=True, hang=False, pid=None,
-            toolkit="GTK", asleep=False, connection=None):
+            toolkit="GTK", asleep=False, connection=None, tab_ahead=False):
         """An app with one window holding a text box and the focused widget,
         of *focus_role*. *collection* False is an app without the Collection
         interface (Qt 5), so it is walked; "slow" times out on it. *hang*: it
@@ -413,7 +414,8 @@ class FakeA11yBus:
         bus, "Chromium" for Chrome and Electron apps. *asleep*: a Chromium
         tree not built yet, whose window answers only for its states.
         *connection*: its bus name, when two processes of one app are on the
-        bus; ":" and the app's name otherwise."""
+        bus; ":" and the app's name otherwise. *tab_ahead*: a tab without
+        text says it's focused too, ahead of both (Qt's item views)."""
         own = connection or f":{name}"
 
         def ref(path):
@@ -423,8 +425,12 @@ class FakeA11yBus:
         common = dict(collection=collection, hang=hang)
         self._add(ref("/2"), role=focus_role, states=SHOWING | FOCUSED | EDITABLE, **common)
         self._add(ref("/3"), role=TEXT, states=SHOWING, **common)
+        ahead = []
+        if tab_ahead:
+            ahead = [ref("/0")]
+            self._add(ref("/0"), role=PAGE_TAB, states=SHOWING | FOCUSED, is_text=False, **common)
         self._add(ref("/1"), states=SHOWING | (ACTIVE if active else 0),
-                  children=[ref("/3"), ref("/2")], asleep=asleep, **common)
+                  children=ahead + [ref("/3"), ref("/2")], asleep=asleep, **common)
         self._add(ref("/root"), name=name, children=[ref("/1")], toolkit=toolkit, **common)
         self.apps.append(ref("/root"))
 
@@ -471,9 +477,11 @@ class FakeA11yBus:
                     "org.freedesktop.DBus.Error.UnknownMethod",
                     "No such interface “org.a11y.atspi.Collection”")
             found = [c for c in node["children"] if self.nodes[c]["states"] & FOCUSED]
-            return GLib.Variant("(a(so))", (found,))
+            count = args.unpack()[2]    # as many as the rule asks: 0 is every one
+            return GLib.Variant("(a(so))", (found[:count] if count else found,))
         if method == "GetInterfaces":
-            return GLib.Variant("(as)", (["org.a11y.atspi.Accessible", "org.a11y.atspi.Text"],))
+            text = ["org.a11y.atspi.Text"] if node.get("is_text", True) else []
+            return GLib.Variant("(as)", (["org.a11y.atspi.Accessible"] + text,))
         if method == "GetAttributes":
             return GLib.Variant("(a{ss})", ({},))
         raise AssertionError(f"unexpected call {method}")
@@ -729,6 +737,16 @@ def test_the_focused_processs_no_counts_when_later_apps_use_up_the_time(bus, bud
         bus.app(f"frozen{n}", TEXT, hang=True)
     focused = focus_on("jetbrains-idea", 4003)
     assert atspi_helper.focused_is_password(budget, focused) is False
+
+
+@pytest.mark.parametrize("collection", [True, False])
+def test_a_qt_apps_password_field_behind_a_focused_tab_still_refuses(bus, collection):
+    """Qt's item views say their current tab or list item is focused,
+    whether they have the keyboard or not, ahead of the box that has it:
+    asked (Qt 6) or walked (Qt 5), they're passed by for the password
+    field."""
+    bus.app("keepassxc", PASSWORD, collection=collection, tab_ahead=True)
+    assert atspi_helper.focused_is_password() is True
 
 
 def test_a_second_process_of_the_focused_app_with_a_password_field_doesnt_refuse(bus):

@@ -732,7 +732,9 @@ period.
 ### What's different in a terminal
   • <b>delete everything</b> clears the line you're typing (Ctrl+E, Ctrl+U).
   • Select and move and voice editing don't work there: a terminal has no
-    selection to change, and those keys mean other things.
+    selection to change, and those keys mean other things. The terminal panel
+    inside Kate or Dolphin counts too, while accessibility is on
+    (<b>Preferences → Advanced → Fine-tuning → Accessibility</b>).
   • Pasting uses Shift+Ctrl+V, which TuxTalk picks by itself.{ctrl_space_line}{shortcut_line}'''
 
 HANDS_FREE = '''# Hands-free and Long Talks

@@ -71,6 +71,7 @@ _STATE_EDITABLE = 7
 _STATE_FOCUSED = 12
 _STATE_SHOWING = 25
 _ROLE_PASSWORD_TEXT = 40
+_ROLE_TERMINAL = 60
 
 # GNOME Shell's own "window" is always active, so it's no sign of a second
 # app with the focus. It's asked all the same: the shell's password prompts
@@ -213,6 +214,17 @@ def has_selection(budget: float = CONTEXT_BUDGET_S, focused_app=lambda: None) ->
     return _ask_focused_text("Selection", budget, focused_app, _selected)
 
 
+def focused_is_terminal(budget: float = CONTEXT_BUDGET_S,
+                        focused_app=lambda: None) -> bool | None:
+    """Whether the focused text widget of the app with the focus (as for
+    has_selection) is a terminal: Konsole's panel inside Kate, KDevelop or
+    Dolphin has the app's window class, so only the widget tells it. None
+    when that can't be told in *budget* seconds."""
+    return _ask_focused_text("Terminal", budget, focused_app,
+                             lambda bus, widget, deadline:
+                             _role(bus, widget, deadline) == _ROLE_TERMINAL)
+
+
 def _selected(bus, widget, deadline) -> bool:
     """Whether *widget* has a selection that holds any text."""
     if not _call(bus, widget, _TEXT, "GetNSelections", None, deadline)[0]:
@@ -269,14 +281,17 @@ def _focused_with_text(bus, window, deadline):
     KTextEditor, whose outer view is focused along with the text inside),
     so a focused widget without text is looked into for one with it."""
     focused = _focused_in(bus, window, deadline)
-    while focused is not None and _TEXT not in _call(bus, focused, _ACCESSIBLE,
-                                                     "GetInterfaces", None, deadline)[0]:
+    if focused is not None and not _has_text(bus, focused, deadline):
         focused = _walk_for_focus(bus, focused, deadline)
     return focused
 
 
 def _is_password(bus, widget, deadline) -> bool:
-    return _call(bus, widget, _ACCESSIBLE, "GetRole", None, deadline)[0] == _ROLE_PASSWORD_TEXT
+    return _role(bus, widget, deadline) == _ROLE_PASSWORD_TEXT
+
+
+def _role(bus, widget, deadline) -> int:
+    return _call(bus, widget, _ACCESSIBLE, "GetRole", None, deadline)[0]
 
 
 def _unmarked_focus(bus, seen, focus, deadline):
@@ -761,24 +776,25 @@ def _focused_in(bus, window, deadline):
     """The focused widget inside *window*, or None. In a Chromium or
     Electron app several can say they have the focus, and the last one
     that can be typed into is it: Claude Desktop's own page says so, ahead
-    of the claude.ai page whose box has the cursor. Elsewhere the first:
-    every match would walk a whole web page or a big GTK window. Only a
+    of the claude.ai page whose box has the cursor. Elsewhere the first
+    (every match would walk a whole web page or a big GTK window), or the
+    first with text when that one has none (Qt's item views). Only a
     toolkit already known counts (wake learns the focused app's): asking
     here, before each line, a slow app could use up the time before the
     shell's own password prompt is asked."""
     with _toolkits_lock:
         every = _toolkits.get(window[0]) == "Chromium"
-    # Every part of the rule is "match all" (1): at-spi2-atk turns any other
-    # match type on an empty part, even "invalid", into "no match".
-    rule = GLib.Variant("((aiia{ss}iaiiasib)uib)", (
-        ([1 << _STATE_FOCUSED, 0], 1, {}, 1, [0, 0, 0, 0], 1, [], 1, False),
-        1, 0 if every else 1, True))    # in tree order, the whole window
     try:
-        found = _call(bus, window, _COLLECTION, "GetMatches", rule, deadline)[0]
+        found = _focused_matches(bus, window, every, deadline)
         if len(found) > 1:
             typed_into = [w for w in found
                           if _states(bus, w, deadline) & 1 << _STATE_EDITABLE]
             return typed_into[-1] if typed_into else found[0]
+        if found and not _has_text(bus, found[0], deadline):
+            # Qt's item views say their current item is focused, ahead of the
+            # box with the keyboard (_walk_for_focus): the first with text.
+            every_one = _focused_matches(bus, window, True, deadline)
+            return next((w for w in every_one if _has_text(bus, w, deadline)), found[0])
         return found[0] if found else None
     except GLib.Error as e:
         if Gio.DBusError.get_remote_error(e) not in _NO_COLLECTION:
@@ -786,13 +802,34 @@ def _focused_in(bus, window, deadline):
         return _walk_for_focus(bus, window, deadline)
 
 
+def _focused_matches(bus, window, every, deadline):
+    """The focused widgets in *window* in tree order, by its Collection
+    interface: every one, or only the first."""
+    # Every part of the rule is "match all" (1): at-spi2-atk turns any other
+    # match type on an empty part, even "invalid", into "no match".
+    rule = GLib.Variant("((aiia{ss}iaiiasib)uib)", (
+        ([1 << _STATE_FOCUSED, 0], 1, {}, 1, [0, 0, 0, 0], 1, [], 1, False),
+        1, 0 if every else 1, True))    # in tree order, the whole window
+    return _call(bus, window, _COLLECTION, "GetMatches", rule, deadline)[0]
+
+
 def _walk_for_focus(bus, node, deadline):
+    """The first focused widget with text under *node*, in tree order, or
+    None. One without text doesn't end the walk: Qt's item views say their
+    current item is focused whether they have the keyboard or not (Kate's
+    tabs and side panel lists, ahead of its editor and terminal panel), and
+    KTextEditor's frame says so along with the text inside it. Each is
+    looked into, then passed by."""
     for child in _children(bus, node, deadline):
         states = _states(bus, child, deadline)
-        if states & 1 << _STATE_FOCUSED:
+        if states & 1 << _STATE_FOCUSED and _has_text(bus, child, deadline):
             return child
-        if states & 1 << _STATE_SHOWING:
+        if states & (1 << _STATE_SHOWING | 1 << _STATE_FOCUSED):
             found = _walk_for_focus(bus, child, deadline)
             if found is not None:
                 return found
     return None
+
+
+def _has_text(bus, widget, deadline) -> bool:
+    return _TEXT in _call(bus, widget, _ACCESSIBLE, "GetInterfaces", None, deadline)[0]

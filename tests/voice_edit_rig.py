@@ -43,6 +43,7 @@ def fake_edit_world(monkeypatch):
     monkeypatch.setattr(history, "add_entry", lambda text: seen["history"].append(text))
     monkeypatch.setattr(voice_edit, "EDIT_RESTORE_DELAY_S", 0)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr("tuxtalk.focused_window.focused_is_terminal", lambda: None)
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     seen["engine"], seen["selection"] = engine, selection
     return seen

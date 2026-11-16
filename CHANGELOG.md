@@ -5,6 +5,10 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- A voice edit (Shift with the dictation key, or "edit that") in the
+  terminal panel inside Kate, KDevelop or Dolphin is refused, as in any
+  terminal, while accessibility is on. It used to press Ctrl+C there,
+  which stopped the program running in the panel.
 - With two copies of one app open, like two Firefox profiles, a password
   box left selected in the one behind no longer stops a dictation into
   the one in front, where the words were lost. On X11, TuxTalk now tells

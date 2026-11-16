@@ -10,7 +10,8 @@ from tuxtalk import atspi_helper
 
 ACTIVE, EDITABLE, FOCUSED, SHOWING = 1 << 1, 1 << 7, 1 << 12, 1 << 25
 # AT-SPI roles (atspi-constants.h)
-FILLER, LIST, LIST_ITEM, PASSWORD, TEXT, PARAGRAPH, SECTION = 20, 31, 32, 40, 61, 73, 85
+FILLER, LIST, LIST_ITEM, PAGE_TAB, PASSWORD, TERMINAL, TEXT, PARAGRAPH, SECTION = (
+    20, 31, 32, 37, 40, 60, 61, 73, 85)
 DOCUMENT_WEB = 95
 
 
@@ -72,6 +73,9 @@ class TextBus:
         if method == "GetState":
             return GLib.Variant("(au)", ([node["states"] & 0xFFFFFFFF, node["states"] >> 32],))
         if method == "GetMatches":
+            if node.get("qt"):
+                raise Gio.DBusError.new_for_dbus_error(
+                    "org.freedesktop.DBus.Error.UnknownMethod", "No Collection interface")
             # Every focused descendant in tree order, as many as the rule asks.
             count = args.unpack()[2]
             found = [c for c in self._tree(node) if self.nodes[c]["states"] & FOCUSED]
@@ -80,6 +84,19 @@ class TextBus:
             text = ["org.a11y.atspi.Text"] if node.get("is_text") else []
             return GLib.Variant("(as)", (["org.a11y.atspi.Accessible"] + text,))
         raise AssertionError(f"unexpected call {method}")
+
+    def kate(self, text, role=TEXT, selection=None, qt5=False):
+        """Kate as Qt shows it: a tab of its side panel says it has the
+        focus, ahead of the focused widget of *role* (its editor, or its
+        terminal panel) with *text*. *qt5*: without the Collection
+        interface, so it's walked."""
+        self.app("kate", text, caret=len(text), role=role, selection=selection)
+        tab = (":kate", "/tab")
+        self.nodes[tab] = dict(states=SHOWING | FOCUSED, is_text=False, hang=False,
+                               children=[], role=PAGE_TAB)
+        window = self.nodes[(":kate", "/win")]
+        window["children"].insert(0, tab)
+        window["qt"] = qt5
 
     def web_editor(self, name, box, toolkit="Gecko"):
         """A web page's rich text box as Firefox gives it, built from *box*:
@@ -406,6 +423,24 @@ def test_when_it_can_t_be_told_the_answer_is_none(bus, kind):
     bus.app("kwrite", "the big dog", is_text=kind != "not text", hang=kind == "no answer",
             framed=True)
     assert selected(None if kind == "focus unknown" else ("org.kde.kwrite", None)) is None
+
+
+@pytest.mark.parametrize("qt5", [False, True])
+@pytest.mark.parametrize("role, is_terminal", [(TERMINAL, True), (TEXT, False)])
+def test_a_terminal_panel_inside_kate_is_told_from_its_editor(bus, role, is_terminal, qt5):
+    """Konsole's widget says it's a terminal (Kate's, KDevelop's and
+    Dolphin's panel too), where the window class is the app's; found past
+    the tabs that say they're focused too."""
+    bus.kate("ron@pc:~$ make", role=role, qt5=qt5)
+    focus = ("org.kde.kate", None)
+    assert atspi_helper.focused_is_terminal(focused_app=lambda: focus) is is_terminal
+
+
+def test_kates_editor_is_read_past_its_focused_tabs(bus):
+    """The sentence fitting and the selection check read Kate's editor, not
+    the side panel's tab ahead of it that says it's focused too."""
+    bus.kate("the big red dog", selection=(8, 12))
+    assert atspi_helper.has_selection(focused_app=lambda: ("org.kde.kate", None)) is True
 
 
 def test_a_recording_start_wakes_the_app_with_the_focus(monkeypatch):

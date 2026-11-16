@@ -67,6 +67,7 @@ def editing(monkeypatch):
     monkeypatch.setattr(live, "voice_editing", True)
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("org.kde.kwrite", None))
+    monkeypatch.setattr("tuxtalk.focused_window.focused_is_terminal", lambda: None)
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr(voice_edit, "edit_selection",
                         lambda get, beeps, mode, focused, t0, message, expected=None, window=None:
@@ -143,6 +144,17 @@ def test_not_in_a_terminal(editing, monkeypatch):
     pressed, edits, problems = editing
     monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("org.kde.konsole", None))
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.konsole")
+    assert _said("Edit that, make it shorter.")
+    assert problems == ["terminal"] and pressed == [] and edits == []
+
+
+def test_not_in_kates_terminal_panel(editing, monkeypatch):
+    """Kate's terminal panel has Kate's window class; the accessibility
+    bus tells it's a terminal, whose Ctrl+C would stop its program."""
+    pressed, edits, problems = editing
+    monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("org.kde.kate", None))
+    monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kate")
+    monkeypatch.setattr("tuxtalk.focused_window.focused_is_terminal", lambda: True)
     assert _said("Edit that, make it shorter.")
     assert problems == ["terminal"] and pressed == [] and edits == []
 
