@@ -37,7 +37,7 @@ SHOWING = 1 << atspi_helper._STATE_SHOWING
 PASSWORD = atspi_helper._ROLE_PASSWORD_TEXT
 TEXT = 61      # ATSPI_ROLE_TEXT
 PAGE_TAB = 37
-PUSH_BUTTON, LABEL = 43, 29
+PUSH_BUTTON, LABEL, LIST_ITEM = 43, 29, 32
 # Taken before conftest swaps in a stand-in, which every test gets.
 REAL_PROMPT_WAITING = focused_window._polkit_prompt_waiting
 
@@ -749,7 +749,7 @@ def test_a_qt_apps_password_field_behind_a_focused_tab_still_refuses(bus, collec
     whether they have the keyboard or not, ahead of the box that has it:
     asked (Qt 6) or walked (Qt 5), they're passed by for the password
     field."""
-    bus.app("keepassxc", PASSWORD, collection=collection, tab_ahead=True)
+    bus.app("keepassxc", PASSWORD, collection=collection, tab_ahead=True, toolkit="Qt")
     assert atspi_helper.focused_is_password() is True
 
 
@@ -761,11 +761,13 @@ def test_a_password_field_found_first_counts_however_slow_its_other_answers(bus)
     assert atspi_helper.focused_is_password() is True
 
 
-def test_a_focused_button_ends_the_walk_at_once(bus):
+@pytest.mark.parametrize("focused", [PUSH_BUTTON, LIST_ITEM])
+def test_a_focused_button_or_list_row_ends_the_walk_at_once(bus, focused):
     """GTK 4 has no Collection interface, so its windows are walked: a
-    focused button ends the walk there, and the rest of a big window isn't
-    asked, which would use up the time the check before each line has."""
-    bus.app("gnome-calculator", PUSH_BUTTON, collection=False)
+    focused button or list row (a role Qt's item views share) ends the
+    walk there, and the rest of a big window isn't asked, which would use
+    up the time the check before each line has."""
+    bus.app("gnome-calculator", focused, collection=False)
     button = bus.nodes[(":gnome-calculator", "/2")]
     button["is_text"] = False
     window = bus.nodes[(":gnome-calculator", "/1")]

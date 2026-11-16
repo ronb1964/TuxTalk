@@ -29,6 +29,9 @@ and with or without an id ("own"): an automatic Enter never goes into one,
 where it would press its default button, and a key said after the words
 only when they were dictated there. wl-copy's brief window, which the tray
 leaves out of its reports, counts as unknown.
+
+Which rules hold is acts_as's: the class itself, except in the terminal
+panel inside Kate, KDevelop or Dolphin, which is a terminal.
 """
 import os
 import threading
@@ -114,6 +117,10 @@ def window_class():
     return look()[0]
 
 
+# The terminal panel inside Kate, KDevelop or Dolphin is Konsole's part.
+_KONSOLE = "org.kde.konsole"
+
+
 def acts_as(wm_class):
     """The class whose rules hold in the focused window of class *wm_class*
     (the paste keys, plain text, the automatic Enter, the keys a command
@@ -127,9 +134,6 @@ def acts_as(wm_class):
             and atspi_helper.focused_is_terminal(focused_app=focused_app) is True):
         return _KONSOLE
     return wm_class
-
-
-_KONSOLE = "org.kde.konsole"
 
 
 def focused_app():

@@ -783,7 +783,7 @@ def _focused_in(bus, window, deadline):
     that can be typed into is it: Claude Desktop's own page says so, ahead
     of the claude.ai page whose box has the cursor. Elsewhere the first
     (every match would walk a whole web page or a big GTK window), unless
-    it's a Qt item view's (_ITEM_ROLES): then the first with text. Only a
+    it's a Qt item view's (_qt_item): then the first with text. Only a
     toolkit already known counts (wake learns the focused app's): asking
     here, before each line, a slow app could use up the time before the
     shell's own password prompt is asked."""
@@ -795,7 +795,7 @@ def _focused_in(bus, window, deadline):
             typed_into = [w for w in found
                           if _states(bus, w, deadline) & 1 << _STATE_EDITABLE]
             return typed_into[-1] if typed_into else found[0]
-        if found and _role(bus, found[0], deadline) in _ITEM_ROLES:
+        if found and _qt_item(bus, window, found[0], deadline):
             return next((w for w in _focused_matches(bus, window, True, deadline)
                          if _has_text(bus, w, deadline)), None)
         return found[0] if found else None
@@ -803,9 +803,19 @@ def _focused_in(bus, window, deadline):
         if Gio.DBusError.get_remote_error(e) not in _NO_COLLECTION:
             raise   # a timeout: walking the same slow app would only take longer
     first = _walk_for_focus(bus, window, deadline)
-    if first is not None and _role(bus, first, deadline) in _ITEM_ROLES:
+    if first is not None and _qt_item(bus, window, first, deadline):
         return _walk_for_focus(bus, window, deadline, with_text=True)
     return first
+
+
+def _qt_item(bus, window, widget, deadline) -> bool:
+    """Whether *widget*, the first focused one in *window*, is a Qt item
+    view's (_ITEM_ROLES). GTK 4's list rows and web pages' tabs and rows
+    have the same roles, but only in Qt do the other widgets say they're
+    focused too, so only there is the rest of the window looked through.
+    The toolkit is asked only on this rare path: it's kept once known."""
+    return (_role(bus, widget, deadline) in _ITEM_ROLES
+            and _toolkit(bus, window[0], deadline) == "Qt")
 
 
 def _focused_matches(bus, window, every, deadline):

@@ -92,7 +92,7 @@ class TextBus:
         of the focused widget of *role* (its editor, or its terminal panel)
         with *text*, and a status bar button after it says so too. *qt5*:
         without the Collection interface, so it's walked."""
-        self.app("kate", text, caret=len(text), role=role, selection=selection)
+        self.app("kate", text, caret=len(text), role=role, selection=selection, toolkit="Qt")
         ahead, after = [(":kate", "/tab"), (":kate", "/frame")], (":kate", "/button")
         for ref, kind in zip(ahead + [after], (PAGE_TAB, FILLER, PUSH_BUTTON), strict=True):
             self.nodes[ref] = dict(states=SHOWING | FOCUSED, is_text=False, hang=False,
