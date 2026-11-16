@@ -5,6 +5,9 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- With Type at pause (TuxTalk Labs), a recording that ends in a pause in
+  the middle of a line no longer leaves a period and a second space
+  before the next word ("the big very.  dog").
 - The terminal panel inside Kate, KDevelop or Dolphin is treated as the
   terminal it is, while accessibility is on: a dictation there is pasted
   with Shift+Ctrl+V as plain text and never sent with Enter (it showed

@@ -42,11 +42,27 @@ def fit(text: str, before: str, after: str, lowercase_ok: bool, words=()) -> str
     capitalise nouns. *words*: Your Words, which keep their capitals."""
     if not text:
         return text
-    visible = before.rstrip(_BLANKS)
-    own_sentence = not visible or visible[-1] in _LINE_BREAKS \
-        or visible.rstrip(_CLOSERS).endswith(tuple(_SENTENCE_ENDS)) \
-        or _breaks_inside(text.rstrip())
+    own_sentence = _starts_sentence(before) or _breaks_inside(text.rstrip())
     return _fit_end(_fit_start(text, before, lowercase_ok, words), after, own_sentence)
+
+
+def fit_held_end(typed: str, tail: str, before: str, after: str) -> str:
+    """*tail*, the mark and space held back after *typed*, the last phrase
+    of a recording typed at each pause (type_at_pause), fitted before
+    *after* as the end of a whole dictation is. *before*: the text before
+    the cursor, which ends with *typed* once its keys have landed; when it
+    doesn't, the phrase counts as a sentence of its own."""
+    earlier = before[:-len(typed)] if typed and before.endswith(typed) else ""
+    fitted = _fit_end(typed + tail, after, _starts_sentence(earlier))
+    return fitted[len(typed):] if fitted.startswith(typed) else tail
+
+
+def _starts_sentence(before):
+    """Whether text put after *before* starts a sentence: at the start of
+    the field or a line, or after a sentence's end."""
+    visible = before.rstrip(_BLANKS)
+    return not visible or visible[-1] in _LINE_BREAKS \
+        or visible.rstrip(_CLOSERS).endswith(tuple(_SENTENCE_ENDS))
 
 
 def _fit_start(text, before, lowercase_ok, words):

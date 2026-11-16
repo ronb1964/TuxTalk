@@ -144,3 +144,20 @@ def test_a_held_german_cue_doesnt_make_the_noun_after_it_small(monkeypatch):
     message = types.SimpleNamespace(held_cue="nein", cancelled=False)
     said, taken_back = type_at_pause.correct_across_pause("Hunde", message, lowercase_ok=False)
     assert (said, taken_back) == ("nein, Hunde", "")
+
+
+@pytest.mark.parametrize("before, after, typed, end", [
+    ("the big ", " dog", "very", []),               # mid-line: no period, no second space
+    ("the big ", "", "very", [". "]),               # the end of the line: as always
+    ("We met. ", " Then we left.", "Very", ["."]),  # a sentence of its own, before another
+], ids=["mid-line", "end of line", "before a sentence"])
+def test_type_at_pause_ending_in_a_pause_fits_the_text_after_the_cursor(
+        desktop, monkeypatch, before, after, typed, end):
+    """A recording ended in a pause types the mark held back after its last
+    phrase. Mid-line it left "the big very.  dog"; the cursor is read once
+    more for it, now that the phrase is on the screen."""
+    reads = iter([(before, after), (before + typed, after)])
+    monkeypatch.setattr(focused_window, "text_around_cursor", lambda: next(reads))
+    dictate(monkeypatch, "Very.", chunk_role="middle")
+    dictate(monkeypatch, "", chunk_role="last")
+    assert desktop["typed"] == [typed] + end

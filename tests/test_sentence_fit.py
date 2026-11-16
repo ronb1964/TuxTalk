@@ -2,7 +2,7 @@
 capital, the spaces and the closing period (sentence_fit)."""
 import pytest
 
-from tuxtalk.sentence_fit import capitalised_nouns, fit
+from tuxtalk.sentence_fit import capitalised_nouns, fit, fit_held_end
 
 
 @pytest.mark.parametrize("before, after, typed", [
@@ -124,3 +124,14 @@ def test_an_abbreviation_s_period_is_no_sentence_break(said, typed):
 @pytest.mark.parametrize("said", ["It cost 3.14. We left. ", "See github.com. We left. "])
 def test_a_number_or_an_address_before_a_sentence_end_is_still_a_break(said):
     assert fit(said, "Yesterday ", "Today we", True).endswith("We left. ")
+
+
+@pytest.mark.parametrize("before, after, tail", [
+    ("the big very", " dog", ""),           # mid-line: neither the period nor the space
+    ("the big very", "dog", " "),           # right before the next word: only the space
+    ("the big very", "", ". "),             # the end of the field: as it was
+    ("the big very", "\nNext line", ". "),  # the end of the line
+    ("We met. Very", " Then", "."),         # its own sentence before another: the period
+], ids=["mid-line", "before a word", "end of field", "end of line", "own sentence"])
+def test_a_held_back_end_fits_the_text_after_the_cursor(before, after, tail):
+    assert fit_held_end(before.split()[-1], ". ", before, after) == tail

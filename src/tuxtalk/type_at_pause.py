@@ -22,6 +22,7 @@ from . import (
     last_dictation,
     notices,
     send_countdown,
+    sentence_fit,
     virtual_keyboard,
 )
 from . import live_settings as live
@@ -446,8 +447,13 @@ def flush_boundary(message, auto_period: bool, auto_space: bool, injection_mode:
                             None, language, pending.get("may_change", False))
     if message.cancelled:
         return  # Esc while the engine heard the whole sentence
-    _type_boundary(message, pending, mark + (" " if auto_space and not kind else ""),
-                   injection_mode)
+    tail = mark + (" " if auto_space and not kind else "")
+    around = None if kind or not tail else focused_window.text_around_cursor()
+    if around is not None:
+        # The phrase is on the screen now: mid-line, its period and space
+        # went in before the next word ("the big very.  dog").
+        tail = sentence_fit.fit_held_end(pending["typed"], tail, *around)
+    _type_boundary(message, pending, tail, injection_mode)
 
 
 def start_afresh(message, ended=True) -> None:
