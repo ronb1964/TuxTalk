@@ -403,7 +403,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **See the words while you talk (Labs).** A box by the recording indicator shows what you've said so far, on a graphics card. Or pick Type at pause instead, and each phrase is typed as soon as you pause.
 - **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. A separate setting with no AI drops "um", "uh" and stutters.
 - **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
-- **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com. Said on its own, an address gets no period after it and every word of the name joins ("john doe at gmail dot com" types johndoe@gmail.com); "john dot doe" and "jane underscore smith" work anywhere.
+- **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com. Said on its own, an address gets no period after it, and a longer name is said with its marks: "john dot doe", "jane underscore smith", "john no space doe" for johndoe@gmail.com.
 - **Numbers as digits, if you want them.** 25 instead of twenty-five, and 7:30 and 15th too. Works in English and seven other languages.
 - **Fits the sentence at the cursor.** Dictating into the middle of a sentence carries it on, with no capital and the right spaces, where the app says what's around the cursor: GTK apps always, KDE apps, Firefox, Chrome and apps built on Chrome once you let TuxTalk turn on the desktop's accessibility.
 - **Plain text in terminals.** No capital at the start and no period at the end when you dictate a command.

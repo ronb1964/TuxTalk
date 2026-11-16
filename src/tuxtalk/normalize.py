@@ -296,10 +296,12 @@ _RE_PUNCT_OUTSIDE_QUOTE = re.compile(r"\u201d( ?)([!?,;:.])")
 _EMAIL_TLDS_SAFE = "com|org|net|edu|gov|io"
 _EMAIL_TLDS_ALL = (_EMAIL_TLDS_SAFE + "|co|uk|ca|de|fr|us|au|jp|cn|in|br|mx|ru|kr|es|it|nl|se|"
                    "no|fi|pl|cz|hu|ro|gr|pt|ie|nz|za|ae|il|tr|th|vn|ph|id|my|sg|hk|tw")
-# A name may be said with its marks: "john dot doe", "jane underscore smith".
-_SPOKEN_NAME_MARKS = {"dot": ".", "underscore": "_", "dash": "-", "hyphen": "-"}
-_EMAIL_NAME = (r"(?<![\w'’])((?:[a-zA-Z0-9._-]+\s+(?:dot|underscore|dash|hyphen)\s+)*"
-               r"[a-zA-Z0-9._-]+)")
+# A name may be said with its marks between two of its words: "john dot doe",
+# "jane underscore smith", "john no space doe" (as in Dragon).
+_SPOKEN_NAME_MARKS = {"dot": ".", "underscore": "_", "dash": "-", "hyphen": "-", "no space": ""}
+_NAME_MARK = r"\s+(?i:dot|underscore|dash|hyphen|no\s+space)\s+"
+_RE_NAME_MARK = re.compile(_NAME_MARK)
+_EMAIL_NAME = r"(?<![\w'’])((?:[a-zA-Z0-9._-]+" + _NAME_MARK + r")*[a-zA-Z0-9._-]+)"
 # Case-sensitive: endings are lowercase, and "three.No" is a missed space.
 _RE_EMAIL_JOINED = re.compile(
     _EMAIL_NAME + r"\s+at\s+([a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.(?:" + _EMAIL_TLDS_ALL + r"))\b"
@@ -370,52 +372,65 @@ def _join_email(m):
     """"ron at example.de" -> "ron@example.de", unless "ron" is an ordinary word.
     Lower case, as addresses are written: Parakeet capitalizes names ("John")."""
     name, domain = m.groups()
-    if name.lower() in _NOT_EMAIL_NAMES:
-        return m.group(0)
-    return f"{_spoken_name(name)}@{domain}".lower()
+    return _email_or_said(m.group(0), name, domain)
 
 
 def _join_spaced_email(m):
     """"ron at gmail. com" -> "ron@gmail.com", unless "ron" is an ordinary word."""
     name, domain, tld = m.groups()
+    return _email_or_said(m.group(0), name, f"{domain}.{tld}")
+
+
+def _email_or_said(said, name, domain):
+    """*said*, "name at domain", as the email it says: the name with its
+    spoken marks written out (_spoken_name), or only its last word when
+    another word in it is an ordinary one ("put a dot here at ..."); *said*
+    as it was when that word is ordinary too."""
+    head = ""
+    if any(word.lower() in _NOT_NAME_WORDS for word in _RE_NAME_MARK.split(name)[:-1]):
+        head, _, name = name.rpartition(" ")
+        head += " "
     if name.lower() in _NOT_EMAIL_NAMES:
-        return m.group(0)
-    return f"{_spoken_name(name)}@{domain}.{tld}".lower()
+        return said
+    return head + f"{_spoken_name(name)}@{domain}".lower()
 
 
 def _spoken_name(name):
-    """A mailbox name as said, written out: "john dot doe" -> "john.doe",
-    "john doe" -> "johndoe"."""
-    return "".join(_SPOKEN_NAME_MARKS.get(word.lower(), word) for word in name.split())
+    """A mailbox name as said, written out: "john dot doe" -> "john.doe"."""
+    return _RE_NAME_MARK.sub(
+        lambda m: _SPOKEN_NAME_MARKS[" ".join(m.group().lower().split())], name)
 
 
-# An address said on its own goes into a To: box or an address bar (issue
-# #44): every word before "at" is the name ("john doe at gmail dot com"),
-# unless one is an ordinary word ("we arrived at example dot com" is a
-# sentence), and no full stop ends it.
+# A dictation that is only an address goes into a To: box or an address bar
+# (issue #44): it's typed as the address alone, with no full stop after it.
+# Its name is one word, or words joined by spoken marks: "john doe at ..."
+# could as well be "ssh john at ..." or "it's john at ...". A country ending
+# counts in lower case only, as in the passes above: "Wait.No." is a missed
+# space, not an address.
+_ADDRESS_ENDING = r"(?:(?i:" + _EMAIL_TLDS_SAFE + r")|" + _EMAIL_TLDS_ALL + r")"
 _RE_EMAIL_ALONE = re.compile(
-    r"(?i)([a-z0-9][\w' -]*?)\s+at\s+([a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:" + _EMAIL_TLDS_ALL + r"))")
-_RE_ADDRESS_ALONE = re.compile(
-    r"(?i)\s*(?:[\w.+-]+@|https?://)?[\w-]+(?:\.[\w-]+)*\.(?:" + _EMAIL_TLDS_ALL
-    + r")(?:/\S*)?\s*")
-_NOT_NAME_WORDS = _NOT_EMAIL_NAMES | frozenset("""
-    i we they he she the a an to and my our email mail send write message reach text cc
-""".split())
-_NAME_WORDS_MAX = 4
+    r"((?:[\w.+-]+" + _NAME_MARK + r")*[\w.+-]+)\s+(?i:at)\s+"
+    r"([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\." + _ADDRESS_ENDING + r")")
+_RE_WEB_ALONE = re.compile(
+    r"(?:(?i:https?://))?[\w-]+(?:\.[\w-]+)*\." + _ADDRESS_ENDING + r"(?:/\S*)?")
+_RE_SPACED_ENDING = re.compile(r"\.\s+((?i:" + _EMAIL_TLDS_SAFE + r"))\b")
+_NOT_NAME_WORDS = _NOT_EMAIL_NAMES | frozenset("i we they he she the a an to and my our".split())
 
 
-def _address_alone(text):
-    """*text*, a whole dictation, as the one address it says ("John doe at
-    gmail dot com." -> "johndoe@gmail.com", "github dot com." ->
-    "github.com"), or None when it says more than an address."""
-    said = _RE_SPOKEN_DOT_DOMAIN.sub(_join_spoken_dots, text).strip().rstrip(".").rstrip()
+def address_alone(text: str) -> str | None:
+    """*text*, a whole dictation as the engine wrote it, as the one address
+    it says ("Doe at gmail dot com." -> "doe@gmail.com", "github dot com."
+    -> "github.com"), or None when it says anything else. A web address
+    keeps its case: a path may need it."""
+    said = _RE_SPOKEN_DOT_DOMAIN.sub(_join_spoken_dots, text.strip())
+    said = _RE_SPACED_ENDING.sub(r".\1", said).rstrip(".!?").rstrip()
     m = _RE_EMAIL_ALONE.fullmatch(said)
     if m:
-        words = m.group(1).replace("'", "").split()
-        if len(words) > _NAME_WORDS_MAX or any(w.lower() in _NOT_NAME_WORDS for w in words):
+        name = m.group(1)
+        if any(word.lower() in _NOT_NAME_WORDS for word in _RE_NAME_MARK.split(name)):
             return None
-        return f"{_spoken_name(' '.join(words))}@{m.group(2)}".lower()
-    return said.lower() if _RE_ADDRESS_ALONE.fullmatch(said) else None
+        return f"{_spoken_name(name)}@{m.group(2)}".lower()
+    return said if _RE_WEB_ALONE.fullmatch(said) else None
 
 
 def _close_tld_gap(m):
@@ -602,7 +617,7 @@ def append_auto_punct(text: str, auto_period: bool, auto_space: bool) -> str:
         if auto_period and not _ends_punctuated(core) and not core.rstrip().endswith(","):
             core = core.rstrip() + "."
         return core + trailing
-    if auto_period and not _ends_punctuated(text) and not _RE_ADDRESS_ALONE.fullmatch(text):
+    if auto_period and not _ends_punctuated(text):
         text = text.rstrip() + "."
     if auto_space and not text.endswith((" ", "\n", "\t")):
         text = text + " "
@@ -738,9 +753,6 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     """
     if not text:
         return text
-    alone = _address_alone(text)
-    if alone:
-        return alone
     text = _join_spoken_addresses(text)
     # Everything inside "open quote ... close quote" is kept as said.
     text, quoted_sections = _hold_quoted(text)

@@ -807,27 +807,54 @@ def test_a_spoken_address_is_lower_case(said, expected):
 
 
 # An address said on its own goes into a To: box or an address bar (issue
-# #44): no full stop after it, and every word of the name is the name.
+# #44): it's the address alone, with no full stop after it. Its name is one
+# word or words joined by spoken marks; "john doe at ..." could as well be
+# "ssh john at ..." or "it's john at ...", which stay as they were.
+def _whole(said, **kwargs):
+    from tuxtalk.dictation_text import prepare_text
+    return prepare_text(said, True, True, True, **kwargs)
+
+
 @pytest.mark.parametrize("said, expected", [
     ("Doe at gmail dot com.", "doe@gmail.com"),
-    ("John doe at gmail dot com.", "johndoe@gmail.com"),
+    ("John no space doe at gmail dot com.", "johndoe@gmail.com"),
     ("John dot doe at gmail dot com.", "john.doe@gmail.com"),
+    ("John.doe at gmail dot com.", "john.doe@gmail.com"),
     ("Jane underscore smith at example dot org", "jane_smith@example.org"),
+    ("Doe at gmail. com.", "doe@gmail.com"),
     ("github dot com.", "github.com"),
     ("Www dot example dot org.", "www.example.org"),
-], ids=["one word", "two words", "dot", "underscore", "web address", "www"])
+    ("https://github.com/RonB1964/TuxTalk", "https://github.com/RonB1964/TuxTalk"),
+], ids=["one word", "no space", "dot", "written dot", "underscore", "spaced ending",
+        "web address", "www", "a path keeps its capitals"])
 def test_an_address_said_alone_is_the_address_and_nothing_else(said, expected):
-    assert normalize_text(said) == expected
-    assert append_auto_punct(normalize_text(said), True, True) == expected + " "
+    assert _whole(said) == expected + " "
 
 
 @pytest.mark.parametrize("said, expected", [
-    ("We arrived at example dot com.", "We arrived at example.com."),
-    ("My email is john at gmail dot com.", "My email is john@gmail.com."),
-    ("Send it to john dot doe at gmail dot com.", "Send it to john.doe@gmail.com."),
-], ids=["ordinary words", "in a sentence", "dot in a sentence"])
-def test_an_address_in_a_sentence_keeps_the_sentence(said, expected):
-    assert normalize_text(said) == expected
+    ("John doe at gmail dot com.", "John doe@gmail.com. "),
+    ("It's john at gmail dot com.", "It's john@gmail.com. "),
+    ("Please contact john at gmail dot com.", "Please contact john@gmail.com. "),
+    ("We arrived at example dot com.", "We arrived at example.com. "),
+    ("Wait.No.", "Wait. No. "),
+    ("Dinner at eight.No.", "Dinner at eight. No. "),
+    ("Put a dot here at example.com.", "Put a dot here at example.com. "),
+    ("Send it to john dot doe at gmail dot com.", "Send it to john.doe@gmail.com. "),
+], ids=["two words", "it's", "an instruction", "ordinary words", "a missed space",
+        "a missed space after at", "a dot that's a word", "dot in a sentence"])
+def test_anything_more_than_an_address_stays_a_sentence(said, expected):
+    assert _whole(said) == expected
+
+
+def test_ssh_in_a_terminal_keeps_its_command():
+    assert _whole("ssh john at example dot com", app_kind="terminal") == "ssh john@example.com "
+
+
+def test_a_type_at_pause_phrase_may_be_part_of_a_sentence():
+    """"Send it to" (pause) "john at gmail dot com.": the sentence's period stays."""
+    assert _whole("John at gmail dot com.", whole=False) == "john@gmail.com. "
+
+
 
 
 # --- hour and minutes run together ("641 p.m.") --------------------------------

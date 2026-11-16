@@ -380,10 +380,9 @@ fifteenth" becomes october 15th; "one of them" and fractions stay words.
 Say them the way you'd say them out loud. Hold <b>{hold}</b>, say "john at gmail dot com",
 let go: john@gmail.com. "github dot com" types github.com.
   • Said on its own, an address gets no period after it, ready for a To: box or a
-    browser's address bar, and every word before "at" is the name: "john doe at gmail
-    dot com" types johndoe@gmail.com.
-  • In a sentence only the last word before "at" is the name. Say the marks in it:
-    "john dot doe", "jane underscore smith".
+    browser's address bar.
+  • Only the word right before "at" is the name. Say the marks in a longer one:
+    "john dot doe", "jane underscore smith", and "john no space doe" for johndoe.
   • Your own address: a snippet does it every time (Preferences → Words → Add Snippet).
 
 ### Taking it back

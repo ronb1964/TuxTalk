@@ -447,7 +447,8 @@ def _shape_text(raw: str, said: str, key, job: _Job):
     # four") goes to the AI together with the phrase it corrects.
     across = type_at_pause.corrects_across_pause(raw, job.chunk_role, job.message)
     text = dictation_text.prepare_text(raw, job.smart_quotes, chunk_period, job.auto_space,
-                                       app_kind=kind, ai=not across)
+                                       app_kind=kind, ai=not across,
+                                       whole=job.chunk_role is None)
     if cut_off:
         # The engine may have put its own period after the "and".
         text = re.sub(r"\.(\s*)$", r"\1", text)

@@ -7,6 +7,7 @@ from . import live_settings as live
 from . import recording_state as rs
 from .logger import setup_logger
 from .normalize import (
+    address_alone,
     append_auto_punct,
     normalize_text,
     plain_for_app,
@@ -62,7 +63,7 @@ def _carry_on_sentence(text):
 
 
 def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool,
-                 app_kind: str = "", ai: bool = True) -> str:
+                 app_kind: str = "", ai: bool = True, whole: bool = True) -> str:
     """Apply voice commands, normalize, handle mid-sentence, add auto-period/space.
 
     *app_kind* ("terminal", "code" or ""): the focused app wants plain text
@@ -70,9 +71,15 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     either).
     *ai* False skips the AI self-corrections: Type at pause asks the AI about
     a phrase together with the one before it instead (type_at_pause.correct_across_pause).
+    *whole* False is a Type at pause phrase, which may be part of a sentence:
+    only a whole dictation can be an address said on its own (address_alone).
 
     Returns the final text string ready for injection.
     """
+    address = whole and address_alone(raw)
+    if address:
+        logger.info(f"Normalized text: {live.loggable(address)} (an address on its own)")
+        return address + (" " if auto_space else "")
     if app_kind:
         # A shell or a compiler doesn't read “curly” quotes as quotes.
         auto_period = smart_quotes = False

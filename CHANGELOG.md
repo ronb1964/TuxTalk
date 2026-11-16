@@ -6,10 +6,10 @@ before 0.15.0, so older entries use that name.
 ## [Unreleased]
 
 - An email or web address said on its own, for a To: box or an address
-  bar, no longer gets a period after it, and every word before "at" is
-  its name: "john doe at gmail dot com" types johndoe@gmail.com. "Dot",
-  "underscore" and "dash" said in a name work anywhere ("john dot doe at
-  gmail dot com" types john.doe@gmail.com). Thanks to Jim Orcheson (#44).
+  bar, no longer gets a period after it. A longer name is said with its
+  marks, anywhere: "john dot doe at gmail dot com" types
+  john.doe@gmail.com, "jane underscore smith" jane_smith, and "john no
+  space doe" johndoe. Thanks to Jim Orcheson (#44).
 - With Type at pause (TuxTalk Labs), the end of a recording fits the text
   after the cursor too, where the sentence fitting works: in the middle
   of a line it no longer leaves a period and a second space before the
