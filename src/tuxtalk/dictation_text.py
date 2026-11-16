@@ -76,10 +76,6 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
 
     Returns the final text string ready for injection.
     """
-    address = whole and address_alone(raw)
-    if address:
-        logger.info(f"Normalized text: {live.loggable(address)} (an address on its own)")
-        return address + (" " if auto_space else "")
     if app_kind:
         # A shell or a compiler doesn't read “curly” quotes as quotes.
         auto_period = smart_quotes = False
@@ -91,6 +87,12 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     if live.words:
         from .custom_words import fix_spelling
         processed = fix_spelling(processed, live.words)
+    # After the snippets, so "my email" said alone is an address on its own too.
+    address = whole and address_alone(processed)
+    if address:
+        rs.state.continue_mid_sentence = False
+        logger.info(f"Normalized text: {live.loggable(address)} (an address on its own)")
+        return address + (" " if auto_space else "")
 
     # Normalize text (capitalization, punctuation, etc.). auto_period is passed
     # through because this pass otherwise ends every line with a full stop of

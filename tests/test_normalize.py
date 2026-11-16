@@ -825,8 +825,11 @@ def _whole(said, **kwargs):
     ("github dot com.", "github.com"),
     ("Www dot example dot org.", "www.example.org"),
     ("https://github.com/RonB1964/TuxTalk", "https://github.com/RonB1964/TuxTalk"),
+    ("John@gmail.com.", "john@gmail.com"),
+    ("https://example.com/Reset/AbC!", "https://example.com/Reset/AbC!"),
 ], ids=["one word", "no space", "dot", "written dot", "underscore", "spaced ending",
-        "web address", "www", "a path keeps its capitals"])
+        "web address", "www", "a path keeps its capitals", "written with its @",
+        "a path keeps its last mark"])
 def test_an_address_said_alone_is_the_address_and_nothing_else(said, expected):
     assert _whole(said) == expected + " "
 
@@ -846,6 +849,17 @@ def test_anything_more_than_an_address_stays_a_sentence(said, expected):
     assert _whole(said) == expected
 
 
+def test_a_snippet_for_your_own_address_gets_no_period(monkeypatch):
+    """Help suggests a snippet ("my email") for your own address."""
+    from tuxtalk import dictation_text
+    from tuxtalk import recording_state as rs
+    monkeypatch.setattr(dictation_text, "apply_custom_commands",
+                        lambda raw: ("ron@example.com", {}))
+    monkeypatch.setattr(rs.state, "continue_mid_sentence", True)
+    assert _whole("My email.") == "ron@example.com "
+    assert rs.state.continue_mid_sentence is False
+
+
 def test_ssh_in_a_terminal_keeps_its_command():
     assert _whole("ssh john at example dot com", app_kind="terminal") == "ssh john@example.com "
 
@@ -853,8 +867,6 @@ def test_ssh_in_a_terminal_keeps_its_command():
 def test_a_type_at_pause_phrase_may_be_part_of_a_sentence():
     """"Send it to" (pause) "john at gmail dot com.": the sentence's period stays."""
     assert _whole("John at gmail dot com.", whole=False) == "john@gmail.com. "
-
-
 
 
 # --- hour and minutes run together ("641 p.m.") --------------------------------

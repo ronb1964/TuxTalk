@@ -411,6 +411,8 @@ _ADDRESS_ENDING = r"(?:(?i:" + _EMAIL_TLDS_SAFE + r")|" + _EMAIL_TLDS_ALL + r")"
 _RE_EMAIL_ALONE = re.compile(
     r"((?:[\w.+-]+" + _NAME_MARK + r")*[\w.+-]+)\s+(?i:at)\s+"
     r"([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\." + _ADDRESS_ENDING + r")")
+_RE_EMAIL_WRITTEN = re.compile(
+    r"[\w.+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\." + _ADDRESS_ENDING)
 _RE_WEB_ALONE = re.compile(
     r"(?:(?i:https?://))?[\w-]+(?:\.[\w-]+)*\." + _ADDRESS_ENDING + r"(?:/\S*)?")
 _RE_SPACED_ENDING = re.compile(r"\.\s+((?i:" + _EMAIL_TLDS_SAFE + r"))\b")
@@ -424,14 +426,18 @@ def address_alone(text: str) -> str | None:
     -> "github.com"), or None when it says anything else. A web address
     keeps its case: a path may need it."""
     said = _RE_SPOKEN_DOT_DOMAIN.sub(_join_spoken_dots, text.strip())
-    said = _RE_SPACED_ENDING.sub(r".\1", said).rstrip(".!?").rstrip()
+    said = _RE_SPACED_ENDING.sub(r".\1", said).rstrip(".").rstrip()
+    web = said
+    said = said.rstrip("!?")     # an email's; a web address's may be its path's
     m = _RE_EMAIL_ALONE.fullmatch(said)
     if m:
         name = m.group(1)
         if any(word.lower() in _NOT_NAME_WORDS for word in _RE_NAME_MARK.split(name)):
             return None
         return f"{_spoken_name(name)}@{m.group(2)}".lower()
-    return said if _RE_WEB_ALONE.fullmatch(said) else None
+    if _RE_EMAIL_WRITTEN.fullmatch(said):
+        return said.lower()     # written with its @ by the engine, or a snippet
+    return web if _RE_WEB_ALONE.fullmatch(web) else None
 
 
 def _close_tld_gap(m):
