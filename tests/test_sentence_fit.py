@@ -126,7 +126,6 @@ def test_a_number_or_an_address_before_a_sentence_end_is_still_a_break(said):
     assert fit(said, "Yesterday ", "Today we", True).endswith("We left. ")
 
 
-
 @pytest.mark.parametrize("text, after, fitted", [
     ("after lunch. ", " dog", "after lunch"),       # mid-line: no period, no second space
     ("after lunch. ", "dog", "after lunch "),       # right before the next word: its space

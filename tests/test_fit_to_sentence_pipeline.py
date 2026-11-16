@@ -176,7 +176,7 @@ def test_type_at_pause_let_go_mid_phrase_fits_the_last_phrases_end(desktop, monk
     cursor_reads(monkeypatch, ("the big ", " dog"), ("the big very", " dog"))
     dictate(monkeypatch, "Very.", chunk_role="middle")
     dictate(monkeypatch, "Old.", chunk_role="last")
-    assert not "".join(desktop["typed"]).endswith((".", " "))
+    assert desktop["typed"] == ["very", ". ", "Old"]
 
 
 def test_type_at_pause_never_reads_a_terminal_at_the_end(desktop, monkeypatch):
