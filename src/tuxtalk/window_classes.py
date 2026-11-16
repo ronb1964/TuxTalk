@@ -175,3 +175,11 @@ def tab_may_send(wm_class) -> bool:
 KDE_EDITOR_CLASSES_LOWER = frozenset({
     "org.kde.kwrite", "kwrite", "org.kde.kate", "kate", "org.kde.kdevelop",
 })
+
+
+# Apps that hold Konsole's part as a terminal panel (F4), which has the app's
+# window class; the accessibility bus tells it from the rest of the window
+# (focused_window.window_class).
+TERMINAL_PANEL_HOSTS_LOWER = frozenset({
+    "org.kde.kate", "kate", "org.kde.kdevelop", "kdevelop", "org.kde.dolphin", "dolphin",
+})

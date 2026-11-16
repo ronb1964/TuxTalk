@@ -3,7 +3,7 @@ window is and which one, so typing that waited and an automatic send can
 tell the window the text went to from any other."""
 import pytest
 
-from tuxtalk import compositor_focus, dbus_calls, focused_window
+from tuxtalk import atspi_helper, compositor_focus, dbus_calls, focused_window, keyboard_output
 
 FRAME = "0,0,800,600|DP-1|0,0,1920,1080"
 
@@ -176,3 +176,37 @@ def test_which_looks_are_one_window(before, after, same):
 def test_going_into_a_password_field_changes_where_the_keys_go():
     before = focused_window.Destination("firefox", ("tray", "{a}"), False)
     assert focused_window.changed(before, before._replace(password=True))
+
+
+KATE = ("org.kde.kate", ("tray", "{9b1c}"))
+
+
+@pytest.mark.parametrize("panel, shift", [(True, True), (False, False), (None, False)])
+def test_kates_terminal_panel_gets_a_terminals_paste_keys(monkeypatch, keyboard, panel, shift):
+    """Kate's terminal panel (Konsole's part, Dolphin's and KDevelop's too)
+    has Kate's window class: the accessibility bus tells it, and it gets
+    Shift+Ctrl+V, where Ctrl+V showed ^V. Kate's editor, or no answer
+    (accessibility off), keeps Ctrl+V."""
+    monkeypatch.setattr(focused_window, "look", lambda: KATE)
+    monkeypatch.setattr(atspi_helper, "focused_is_terminal", lambda **_: panel)
+    assert keyboard_output.send_paste_keystroke(focused_window.window_class())
+    assert ((42, 1) in keyboard.events) is shift      # KEY_LEFTSHIFT
+
+
+def test_a_dictation_asks_about_the_panel_once(monkeypatch):
+    """A dictation asks for the class at several steps (the words' shape,
+    the paste keys, the Enter); the bus is asked once, and each step gets
+    the same answer."""
+    asked = []
+    monkeypatch.setattr(focused_window, "look", lambda: KATE)
+    monkeypatch.setattr(atspi_helper, "focused_is_terminal",
+                        lambda **_: asked.append(True) or True)
+    assert {focused_window.window_class() for _ in range(5)} == {"org.kde.konsole"}
+    assert len(asked) == 1
+
+
+def test_apps_without_a_terminal_panel_are_never_asked(monkeypatch):
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", ("tray", "{1}")))
+    monkeypatch.setattr(atspi_helper, "focused_is_terminal",
+                        lambda **_: pytest.fail("asked the accessibility bus"))
+    assert focused_window.window_class() == "org.kde.kwrite"

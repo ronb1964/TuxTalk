@@ -10,7 +10,7 @@ import pytest
 from voice_edit_rig import fake_edit_world
 
 from tuxtalk import clipboard as cb
-from tuxtalk import focused_window, keyboard_output, voice_edit
+from tuxtalk import atspi_helper, focused_window, keyboard_output, voice_edit
 from tuxtalk import recording_state as rs
 
 PARAGRAPH = ("Okay, this is another little dictation. It's going to be a new "
@@ -318,11 +318,13 @@ def test_no_shift_f8_edit_in_kates_terminal_panel(monkeypatch):
     """Kate's terminal panel (Dolphin's and KDevelop's too) has Kate's window
     class; the accessibility bus tells it's a terminal, and no Ctrl+C goes
     in to stop the program running there."""
+    real_window_class = focused_window.window_class
     seen = fake_edit_world(monkeypatch)
+    monkeypatch.setattr(focused_window, "window_class", real_window_class)
     copied = []
     monkeypatch.setattr(cb, "copy_selection", lambda *a, **k: copied.append(True))
-    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kate")
-    monkeypatch.setattr(focused_window, "focused_is_terminal", lambda: True)
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kate", ("tray", "{k1}")))
+    monkeypatch.setattr(atspi_helper, "focused_is_terminal", lambda **_: True)
     frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
     voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.current.message,
                                    None)

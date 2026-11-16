@@ -32,9 +32,11 @@ leaves out of its reports, counts as unknown.
 """
 import os
 import threading
+import time
 from typing import NamedTuple
 
 from .logger import setup_logger
+from .window_classes import TERMINAL_PANEL_HOSTS_LOWER
 
 logger = setup_logger(__name__)
 
@@ -109,8 +111,37 @@ def look(timeout: float = TRAY_TIMEOUT_S):
 
 
 def window_class():
-    """The focused window's class (or Wayland app_id), None when not known."""
-    return look()[0]
+    """The focused window's class (or Wayland app_id), None when not known.
+    Konsole's for the terminal panel inside Kate, KDevelop or Dolphin, so
+    every rule for terminals holds there too: the paste keys, plain text, no
+    automatic Enter, no voice edits."""
+    seen = look()
+    if (seen[0] or "").lower() in TERMINAL_PANEL_HOSTS_LOWER and _in_terminal_panel(seen):
+        return TERMINAL_PANEL_CLASS
+    return seen[0]
+
+
+TERMINAL_PANEL_CLASS = "org.kde.konsole"
+_PANEL_ANSWER_S = 1.0
+_panel_answer = (None, False, 0.0)     # (look, answer, when)
+
+
+def _in_terminal_panel(seen) -> bool:
+    """Whether the focused widget in the window *seen* (a look) is a
+    terminal panel, asked of the accessibility bus at most once a second
+    for one window: a dictation asks for the class several times in a
+    moment, and each answer must be the same. Said in the log when it
+    changes."""
+    global _panel_answer
+    from . import atspi_helper
+    last_seen, last, when = _panel_answer
+    if last_seen == seen and time.monotonic() - when < _PANEL_ANSWER_S:
+        return last
+    answer = atspi_helper.focused_is_terminal(focused_app=focused_app) is True
+    if answer != last:
+        logger.info(f"{seen[0]}'s terminal panel {'has' if answer else 'lost'} the focus")
+    _panel_answer = (seen, answer, time.monotonic())
+    return answer
 
 
 def focused_app():
@@ -231,13 +262,6 @@ def has_selection() -> bool | None:
     (atspi_helper.has_selection), or None when it can't be told."""
     from . import atspi_helper
     return atspi_helper.has_selection(focused_app=focused_app)
-
-
-def focused_is_terminal() -> bool | None:
-    """Whether the focused text box of the app with the focus is a terminal
-    (atspi_helper.focused_is_terminal), or None when it can't be told."""
-    from . import atspi_helper
-    return atspi_helper.focused_is_terminal(focused_app=focused_app)
 
 
 def _password_prompt_has_focus() -> bool:

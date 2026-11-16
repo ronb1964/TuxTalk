@@ -711,6 +711,10 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
 
 TERMINALS = '''# Terminals and Code Editors
 
+Everything here about terminals holds in the terminal panel inside Kate, KDevelop
+or Dolphin too, while accessibility is on (<b>Preferences → Advanced →
+Fine-tuning → Accessibility</b>).
+
 ### Plain text, by itself
 In a terminal a dictation starts without a capital and ends without a period, so
 "git status" is typed as git status. In code editors (VS Code, Zed, JetBrains
@@ -732,9 +736,7 @@ period.
 ### What's different in a terminal
   • <b>delete everything</b> clears the line you're typing (Ctrl+E, Ctrl+U).
   • Select and move and voice editing don't work there: a terminal has no
-    selection to change, and those keys mean other things. The terminal panel
-    inside Kate or Dolphin counts too, while accessibility is on
-    (<b>Preferences → Advanced → Fine-tuning → Accessibility</b>).
+    selection to change, and those keys mean other things.
   • Pasting uses Shift+Ctrl+V, which TuxTalk picks by itself.{ctrl_space_line}{shortcut_line}'''
 
 HANDS_FREE = '''# Hands-free and Long Talks

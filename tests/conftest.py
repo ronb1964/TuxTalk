@@ -210,6 +210,8 @@ def _no_remembered_dictation_window(monkeypatch):
     whatever the user was doing."""
     monkeypatch.setattr(rs.state, "last_inserted_window", None)
     monkeypatch.setattr(rs.state, "nav_context", None)
+    from tuxtalk import focused_window
+    monkeypatch.setattr(focused_window, "_panel_answer", (None, False, 0.0))
 
 
 @pytest.fixture(autouse=True)

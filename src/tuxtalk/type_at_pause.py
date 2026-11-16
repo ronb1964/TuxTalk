@@ -441,7 +441,7 @@ def flush_boundary(message, auto_period: bool, auto_space: bool, injection_mode:
     if focused_window.changed(pending["where"], now):
         message.sentence_audio = []
         return  # the end of this sentence isn't in the window that has focus
-    kind = app_kind(now[0]) if live.adapt_to_app else ""
+    kind = app_kind(focused_window.window_class()) if live.adapt_to_app else ""
     mark = heard_whole_mark(message, pending["mark"] or ("." if auto_period and not kind else ""),
                             None, language, pending.get("may_change", False))
     if message.cancelled:
