@@ -197,8 +197,9 @@ def _focus_moves_into_a_password_field_after_the_first_line(desktop, monkeypatch
         @staticmethod
         def sleep(seconds):
             desktop["password"] = True
-    monkeypatch.setattr(keyboard_output, "time", Clock())
-    monkeypatch.setattr(delivery, "time", Clock())
+    clock = Clock()
+    monkeypatch.setattr(keyboard_output, "time", clock)
+    monkeypatch.setattr(delivery, "time", clock)
 
 
 def test_delivery_stops_when_the_focus_moves_into_a_password_field(desktop, monkeypatch,
@@ -393,7 +394,7 @@ class FakeA11yBus:
     widgets, each a (bus name, path) pair like the real ones."""
 
     def __init__(self, clock=None):
-        self.nodes, self.calls, self.pids = {}, [], {}
+        self.nodes, self.calls, self.pids, self.commands = {}, [], {}, {}
         self.apps = self._add(("registry", "root"))["children"]
         self.clock = clock or time
 
@@ -495,6 +496,7 @@ def bus(monkeypatch):
     fake = FakeA11yBus(clock)
     monkeypatch.setattr(atspi_helper, "_a11y_bus", lambda deadline: fake)
     monkeypatch.setattr(atspi_helper, "_toolkits", {})
+    monkeypatch.setattr(atspi_helper, "_command_of", fake.commands.get)
     return fake
 
 
@@ -744,13 +746,25 @@ def test_the_focused_process_with_the_password_field_still_refuses(bus):
     assert atspi_helper.focused_is_password(focused_app=focus_on("firefox", 3400)) is True
 
 
-def test_a_flatpak_app_is_the_focused_one_by_its_number_inside_the_sandbox(bus, monkeypatch):
-    """A Flatpak app on X11 gives its window its number inside the sandbox;
-    the bus tells its number outside. Either counts."""
-    monkeypatch.setattr(atspi_helper, "_inner_pid", lambda pid: {5100: 2}.get(pid))
-    bus.app("org.gnome.TextEditor", PASSWORD, pid=5100)
-    assert atspi_helper.focused_is_password(
-        focused_app=focus_on("org.gnome.TextEditor", 2)) is True
+def test_a_flatpak_app_in_front_is_told_by_its_name(bus):
+    """A Flatpak app reaches the accessibility bus through xdg-dbus-proxy,
+    so the bus names the proxy's process, never the focused window's. Its
+    name decides: its text box in front clears a background browser's
+    stale login box, and the words are typed."""
+    bus.app("Firefox", PASSWORD, pid=1200)
+    bus.app("org.gnome.TextEditor", TEXT, pid=4652)
+    bus.commands[4652] = "xdg-dbus-proxy"
+    focused = focus_on("org.gnome.TextEditor", 4740)
+    assert atspi_helper.focused_is_password(focused_app=focused) is False
+
+
+def test_a_flatpak_chromiums_own_login_box_still_refuses(bus):
+    """Flatpak Chromium, its window not marked active (Plasma 6), its login
+    box focused: found by its name, and the words aren't typed into it."""
+    bus.app("Chromium", PASSWORD, pid=4652, active=False, toolkit="Chromium")
+    bus.commands[4652] = "xdg-dbus-proxy"
+    focused = focus_on("chromium-browser", 4740)
+    assert atspi_helper.focused_is_password(focused_app=focused) is True
 
 
 @pytest.mark.parametrize("app_pid, focused_pid", [
@@ -759,7 +773,8 @@ def test_a_flatpak_app_is_the_focused_one_by_its_number_inside_the_sandbox(bus, 
     (4003, None),       # the desktop can't (Wayland, a window over the network)
     ("hang", 4003),     # the bus daemon too slow to tell
 ])
-def test_without_the_same_process_the_names_decide(bus, app_pid, focused_pid):
+def test_an_app_not_known_to_be_the_focused_process_cant_clear_a_password_field(
+        bus, app_pid, focused_pid):
     """An app that isn't the focused window's process, or can't be told to
     be, can't clear another app's password field."""
     bus.app("Chromium", PASSWORD, pid=3643)

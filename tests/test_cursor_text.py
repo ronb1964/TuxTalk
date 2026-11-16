@@ -138,6 +138,8 @@ def bus(monkeypatch):
     monkeypatch.setattr(atspi_helper, "time", clock)
     fake = TextBus(clock)
     monkeypatch.setattr(atspi_helper, "_a11y_bus", lambda deadline: fake)
+    # Its processes are made up: none is a real one's, a Flatpak proxy's.
+    monkeypatch.setattr(atspi_helper, "_command_of", lambda pid: None)
     return fake
 
 

@@ -504,39 +504,44 @@ def _is_focused(bus, app, window, focus, deadline) -> bool:
     missed apps on the bus by another name, whose own no then didn't clear
     a background browser's password field; and they took a second process
     of one app (two Firefox profiles) for the one in front, whose stale
-    password field then refused the dictation."""
+    password field then refused the dictation. A Flatpak app's process
+    isn't told (_process_of), so its name decides."""
     wm_class, pid = focus
     if pid is not None:
         owner = _process_of(bus, window[0], deadline)
         if owner is not None:
-            return pid in (owner, _inner_pid(owner))
+            return owner == pid
     return _names_the_app(app, wm_class)
 
 
-def _inner_pid(pid):
-    """*pid*'s number inside its own sandbox (a Flatpak app's), which is
-    the one it gives its X11 window; None outside one or when it can't be
-    read. /proc's NSpid lists the numbers from the outside in."""
-    try:
-        with open(f"/proc/{pid}/status", encoding="ascii") as status:
-            line = next((l for l in status if l.startswith("NSpid:")), "")
-    except OSError as e:
-        logger.debug(f"Accessibility bus: no sandbox number for process {pid}: {e}")
-        return None
-    numbers = line.split()[1:]
-    return int(numbers[-1]) if len(numbers) > 1 else None
+# A Flatpak app reaches the accessibility bus through this go-between, so
+# the bus daemon names its process, not the app's.
+_FLATPAK_PROXY = "xdg-dbus-proxy"
 
 
 def _process_of(bus, name, deadline):
     """The process behind the bus name *name*, as the accessibility bus
-    tells it; None when it doesn't. Out of time it's None too: then the
-    names decide, which never clears a password field they can't place."""
+    tells it; None when it doesn't, or names only a Flatpak app's proxy.
+    Out of time it's None too: then the names decide, which never clears a
+    password field they can't place."""
     try:
-        return _call(bus, ("org.freedesktop.DBus", "/org/freedesktop/DBus"),
-                     "org.freedesktop.DBus", "GetConnectionUnixProcessID",
-                     GLib.Variant("(s)", (name,)), deadline)[0]
+        pid = _call(bus, ("org.freedesktop.DBus", "/org/freedesktop/DBus"),
+                    "org.freedesktop.DBus", "GetConnectionUnixProcessID",
+                    GLib.Variant("(s)", (name,)), deadline)[0]
     except (GLib.Error, _OutOfTime) as e:
         logger.debug(f"Password field check: no process for {name}: {e!r}")
+        return None
+    return None if _command_of(pid) == _FLATPAK_PROXY else pid
+
+
+def _command_of(pid):
+    """The program name of process *pid* (/proc's comm), None when it's
+    gone or can't be read."""
+    try:
+        with open(f"/proc/{pid}/comm", "rb") as comm:
+            return comm.read().decode(errors="replace").rstrip("\n")
+    except OSError as e:
+        logger.debug(f"Accessibility bus: no program name for process {pid}: {e}")
         return None
 
 
@@ -602,7 +607,8 @@ def _look(focused_app, answer, done):
 # "org.gnome.Terminal" on Wayland); LibreOffice "soffice". Only known
 # pairs: a name like a class's first word ("Code", "code-oss") may be
 # another app, whose stale password field would then refuse the dictation.
-# On X11 the process tells them apart without a pair (_is_focused).
+# On X11 the process tells them apart without a pair, except a Flatpak
+# app's (_is_focused).
 _BUS_NAMES = {
     "bravebrowser": "brave",
     "chromiumbrowser": "chromium",

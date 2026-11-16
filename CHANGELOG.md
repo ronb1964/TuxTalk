@@ -8,8 +8,7 @@ before 0.15.0, so older entries use that name.
 - With two copies of one app open, like two Firefox profiles, a password
   box left selected in the one behind no longer stops a dictation into
   the one in front, where the words were lost. On X11, TuxTalk now tells
-  them apart by which program each window belongs to, Flatpak apps
-  included.
+  them apart by which program each window belongs to.
 - Fixed a rare crash of the dictation service, seen on KDE when the mouse
   grid zoomed the desktop and KWin was slow to answer: dictation then
   stopped working, with nothing in the log, until TuxTalk was restarted.
