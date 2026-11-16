@@ -414,7 +414,8 @@ _RE_EMAIL_ALONE = re.compile(
 _RE_WEB_ALONE = re.compile(
     r"(?:(?i:https?://))?[\w-]+(?:\.[\w-]+)*\." + _ADDRESS_ENDING + r"(?:/\S*)?")
 _RE_SPACED_ENDING = re.compile(r"\.\s+((?i:" + _EMAIL_TLDS_SAFE + r"))\b")
-_NOT_NAME_WORDS = _NOT_EMAIL_NAMES | frozenset("i we they he she the a an to and my our".split())
+_NOT_NAME_WORDS = _NOT_EMAIL_NAMES | {"i", "we", "they", "he", "she", "the", "a", "an", "to", "and",
+                                        "my", "our"}
 
 
 def address_alone(text: str) -> str | None:
