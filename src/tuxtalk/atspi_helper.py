@@ -72,6 +72,11 @@ _STATE_FOCUSED = 12
 _STATE_SHOWING = 25
 _ROLE_PASSWORD_TEXT = 40
 _ROLE_TERMINAL = 60
+# Qt's item views say their current item is focused whether the view has
+# the keyboard or not, and the frames and buttons around them too: in Kate
+# a side panel's list comes first, and the editor or terminal panel with
+# the keyboard is the first focused widget with text (_focused_in).
+_ITEM_ROLES = frozenset({32, 37, 56, 91})     # list item, page tab, table cell, tree item
 
 # GNOME Shell's own "window" is always active, so it's no sign of a second
 # app with the focus. It's asked all the same: the shell's password prompts
@@ -281,7 +286,7 @@ def _focused_with_text(bus, window, deadline):
     KTextEditor, whose outer view is focused along with the text inside),
     so a focused widget without text is looked into for one with it."""
     focused = _focused_in(bus, window, deadline)
-    if focused is not None and not _has_text(bus, focused, deadline):
+    while focused is not None and not _has_text(bus, focused, deadline):
         focused = _walk_for_focus(bus, focused, deadline)
     return focused
 
@@ -455,7 +460,7 @@ def _holder(bus, widget, deadline, depth=0):
     are looked into. Only a web editor's own kinds of block count: never a
     password field."""
     for child in _children(bus, widget, deadline):
-        role = _call(bus, child, _ACCESSIBLE, "GetRole", None, deadline)[0]
+        role = _role(bus, child, deadline)
         if role in _BLOCKS and _caret_of(bus, child, deadline) >= 0:
             return child
         if role in _CONTAINERS and depth < _MAX_DEPTH:
@@ -777,8 +782,8 @@ def _focused_in(bus, window, deadline):
     Electron app several can say they have the focus, and the last one
     that can be typed into is it: Claude Desktop's own page says so, ahead
     of the claude.ai page whose box has the cursor. Elsewhere the first
-    (every match would walk a whole web page or a big GTK window), or the
-    first with text when that one has none (Qt's item views). Only a
+    (every match would walk a whole web page or a big GTK window), unless
+    it's a Qt item view's (_ITEM_ROLES): then the first with text. Only a
     toolkit already known counts (wake learns the focused app's): asking
     here, before each line, a slow app could use up the time before the
     shell's own password prompt is asked."""
@@ -790,16 +795,17 @@ def _focused_in(bus, window, deadline):
             typed_into = [w for w in found
                           if _states(bus, w, deadline) & 1 << _STATE_EDITABLE]
             return typed_into[-1] if typed_into else found[0]
-        if found and not _has_text(bus, found[0], deadline):
-            # Qt's item views say their current item is focused, ahead of the
-            # box with the keyboard (_walk_for_focus): the first with text.
-            every_one = _focused_matches(bus, window, True, deadline)
-            return next((w for w in every_one if _has_text(bus, w, deadline)), found[0])
+        if found and _role(bus, found[0], deadline) in _ITEM_ROLES:
+            return next((w for w in _focused_matches(bus, window, True, deadline)
+                         if _has_text(bus, w, deadline)), None)
         return found[0] if found else None
     except GLib.Error as e:
         if Gio.DBusError.get_remote_error(e) not in _NO_COLLECTION:
             raise   # a timeout: walking the same slow app would only take longer
-        return _walk_for_focus(bus, window, deadline)
+    first = _walk_for_focus(bus, window, deadline)
+    if first is not None and _role(bus, first, deadline) in _ITEM_ROLES:
+        return _walk_for_focus(bus, window, deadline, with_text=True)
+    return first
 
 
 def _focused_matches(bus, window, every, deadline):
@@ -813,19 +819,15 @@ def _focused_matches(bus, window, every, deadline):
     return _call(bus, window, _COLLECTION, "GetMatches", rule, deadline)[0]
 
 
-def _walk_for_focus(bus, node, deadline):
-    """The first focused widget with text under *node*, in tree order, or
-    None. One without text doesn't end the walk: Qt's item views say their
-    current item is focused whether they have the keyboard or not (Kate's
-    tabs and side panel lists, ahead of its editor and terminal panel), and
-    KTextEditor's frame says so along with the text inside it. Each is
-    looked into, then passed by."""
+def _walk_for_focus(bus, node, deadline, with_text=False):
+    """The first focused widget under *node*, in tree order, or None; with
+    *with_text*, the first that has text."""
     for child in _children(bus, node, deadline):
         states = _states(bus, child, deadline)
-        if states & 1 << _STATE_FOCUSED and _has_text(bus, child, deadline):
+        if states & 1 << _STATE_FOCUSED and (not with_text or _has_text(bus, child, deadline)):
             return child
-        if states & (1 << _STATE_SHOWING | 1 << _STATE_FOCUSED):
-            found = _walk_for_focus(bus, child, deadline)
+        if states & 1 << _STATE_SHOWING:
+            found = _walk_for_focus(bus, child, deadline, with_text)
             if found is not None:
                 return found
     return None

@@ -83,7 +83,7 @@ def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode, mess
         notices.edit_problem("focus_moved", beeps_on)
         return
     focused_class = focused_window.window_class()
-    if is_terminal_class(focused_class):
+    if is_terminal_class(focused_window.acts_as(focused_class)):
         notices.edit_problem("terminal", beeps_on)
         return
     heard = []
@@ -679,8 +679,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
         notices.edit_problem("focus_moved", beeps_on)
         return True
     focused_class = where[0]
-    # The window's class, or Konsole's for a terminal panel inside Kate.
-    if is_terminal_class(focused_window.window_class()):
+    if is_terminal_class(focused_window.acts_as(focused_class)):
         notices.edit_problem("terminal", beeps_on)
         return True
     if not instruction.strip():

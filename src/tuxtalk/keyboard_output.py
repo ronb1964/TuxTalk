@@ -427,7 +427,8 @@ def type_text(text: str) -> bool:
     Raises virtual_keyboard.StoppedPartway when a later line or a line
     break failed after earlier lines went in: told "Couldn't type the
     dictation", the user would paste it all again over them."""
-    in_kde_editor = (focused_window.window_class() or "").lower() in KDE_EDITOR_CLASSES_LOWER
+    acting = focused_window.acts_as(focused_window.window_class())
+    in_kde_editor = (acting or "").lower() in KDE_EDITOR_CLASSES_LOWER
     lines = text.split(LINE_BREAK)
     # The line breaks there are pastes, and so is a line holding an emoji:
     # the user's clipboard is kept from the first and comes back after the
@@ -589,7 +590,7 @@ def paste_text_x11(text: str) -> bool:
         return False
     try:
         time.sleep(0.08)    # let the selection settle before the app asks for it
-        return send_paste_keystroke(focused_window.window_class(),
+        return send_paste_keystroke(focused_window.acts_as(focused_window.window_class()),
                                     right_before=x11_clipboard.reads_from_now)
     finally:
         if keeper is not None:
@@ -648,7 +649,7 @@ def _send_paste(text, keeping):
     primary selection gets the text too, so the key works in a terminal as
     well. *keeping*: the user's clipboard is being kept to put back."""
     from . import clipboard
-    focused_class = focused_window.window_class()
+    focused_class = focused_window.acts_as(focused_window.window_class())
     primary_holds_text = False
     if focused_class is None:
         if keeping:

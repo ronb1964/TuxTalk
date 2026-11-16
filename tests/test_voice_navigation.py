@@ -193,6 +193,15 @@ def test_a_terminal_is_refused(dictation, monkeypatch):
     assert dictation["pressed"] == [] and dictation["problems"] == ["nav_terminal"]
 
 
+def test_kates_terminal_panel_is_refused_too(dictation, monkeypatch):
+    """Kate's terminal panel has Kate's class; the accessibility bus says
+    it's a terminal, where select and move keys mean other things."""
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kate")
+    monkeypatch.setattr("tuxtalk.atspi_helper.focused_is_terminal", lambda **_: True)
+    assert voice_commands.handle_navigation("select all", False) is True
+    assert dictation["pressed"] == [] and dictation["problems"] == ["nav_terminal"]
+
+
 def test_select_that_with_nothing_dictated_says_so(dictation, monkeypatch):
     monkeypatch.setattr(rs.state, "last_inserted_text", "")
     assert voice_commands.handle_navigation("select that", False) is True
@@ -406,6 +415,14 @@ def test_delete_everything_in_a_terminal_clears_the_line_the_shells_way(dictatio
     """Ctrl+A in Konsole jumped to the start of the line and Backspace
     deleted nothing."""
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.konsole")
+    dictation["backend"].select_all_delete = lambda: pytest.fail("Ctrl+A in a terminal")
+    assert voice_commands.handle_undo("delete everything", False, False) is True
+    assert dictation["pressed"] == [[((C,), "E"), ((C,), "U")]]
+
+
+def test_delete_everything_in_kates_terminal_panel_clears_the_line_too(dictation, monkeypatch):
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kate")
+    monkeypatch.setattr("tuxtalk.atspi_helper.focused_is_terminal", lambda **_: True)
     dictation["backend"].select_all_delete = lambda: pytest.fail("Ctrl+A in a terminal")
     assert voice_commands.handle_undo("delete everything", False, False) is True
     assert dictation["pressed"] == [[((C,), "E"), ((C,), "U")]]

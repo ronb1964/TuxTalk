@@ -189,24 +189,22 @@ def test_kates_terminal_panel_gets_a_terminals_paste_keys(monkeypatch, keyboard,
     (accessibility off), keeps Ctrl+V."""
     monkeypatch.setattr(focused_window, "look", lambda: KATE)
     monkeypatch.setattr(atspi_helper, "focused_is_terminal", lambda **_: panel)
-    assert keyboard_output.send_paste_keystroke(focused_window.window_class())
+    assert keyboard_output.send_paste_keystroke(
+        focused_window.acts_as(focused_window.window_class()))
     assert ((42, 1) in keyboard.events) is shift      # KEY_LEFTSHIFT
 
 
-def test_a_dictation_asks_about_the_panel_once(monkeypatch):
-    """A dictation asks for the class at several steps (the words' shape,
-    the paste keys, the Enter); the bus is asked once, and each step gets
-    the same answer."""
-    asked = []
-    monkeypatch.setattr(focused_window, "look", lambda: KATE)
-    monkeypatch.setattr(atspi_helper, "focused_is_terminal",
-                        lambda **_: asked.append(True) or True)
-    assert {focused_window.window_class() for _ in range(5)} == {"org.kde.konsole"}
-    assert len(asked) == 1
+def test_moving_between_kates_editor_and_its_panel_is_seen_at_once(monkeypatch):
+    """One window, the focus moved from the editor into the panel: the next
+    ask goes by where the focus is now, not by an earlier answer."""
+    in_panel = iter([False, True])
+    monkeypatch.setattr(atspi_helper, "focused_is_terminal", lambda **_: next(in_panel))
+    assert focused_window.acts_as("org.kde.kate") == "org.kde.kate"
+    assert focused_window.acts_as("org.kde.kate") == "org.kde.konsole"
 
 
 def test_apps_without_a_terminal_panel_are_never_asked(monkeypatch):
-    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", ("tray", "{1}")))
     monkeypatch.setattr(atspi_helper, "focused_is_terminal",
                         lambda **_: pytest.fail("asked the accessibility bus"))
-    assert focused_window.window_class() == "org.kde.kwrite"
+    assert focused_window.acts_as("org.kde.kwrite") == "org.kde.kwrite"
+    assert focused_window.acts_as(None) is None

@@ -37,6 +37,7 @@ SHOWING = 1 << atspi_helper._STATE_SHOWING
 PASSWORD = atspi_helper._ROLE_PASSWORD_TEXT
 TEXT = 61      # ATSPI_ROLE_TEXT
 PAGE_TAB = 37
+PUSH_BUTTON, LABEL = 43, 29
 # Taken before conftest swaps in a stand-in, which every test gets.
 REAL_PROMPT_WAITING = focused_window._polkit_prompt_waiting
 
@@ -480,6 +481,9 @@ class FakeA11yBus:
             count = args.unpack()[2]    # as many as the rule asks: 0 is every one
             return GLib.Variant("(a(so))", (found[:count] if count else found,))
         if method == "GetInterfaces":
+            if node.get("slow_interfaces"):
+                self.clock.sleep(timeout_ms / 1000)
+                raise GLib.Error("Timeout was reached")
             text = ["org.a11y.atspi.Text"] if node.get("is_text", True) else []
             return GLib.Variant("(as)", (["org.a11y.atspi.Accessible"] + text,))
         if method == "GetAttributes":
@@ -747,6 +751,30 @@ def test_a_qt_apps_password_field_behind_a_focused_tab_still_refuses(bus, collec
     field."""
     bus.app("keepassxc", PASSWORD, collection=collection, tab_ahead=True)
     assert atspi_helper.focused_is_password() is True
+
+
+def test_a_password_field_found_first_counts_however_slow_its_other_answers(bus):
+    """The focused widget's role is all the check needs: a slow answer to
+    another question about it can't hide the password field."""
+    bus.app("gedit", PASSWORD)
+    bus.nodes[(":gedit", "/2")]["slow_interfaces"] = True
+    assert atspi_helper.focused_is_password() is True
+
+
+def test_a_focused_button_ends_the_walk_at_once(bus):
+    """GTK 4 has no Collection interface, so its windows are walked: a
+    focused button ends the walk there, and the rest of a big window isn't
+    asked, which would use up the time the check before each line has."""
+    bus.app("gnome-calculator", PUSH_BUTTON, collection=False)
+    button = bus.nodes[(":gnome-calculator", "/2")]
+    button["is_text"] = False
+    window = bus.nodes[(":gnome-calculator", "/1")]
+    for i in range(200):
+        label = (":gnome-calculator", f"/label{i}")
+        bus._add(label, role=LABEL, states=SHOWING, collection=False, hang=False)
+        window["children"].append(label)
+    assert atspi_helper.focused_is_password() is False
+    assert not any(path.startswith("/label") for _, path, _ in bus.calls)
 
 
 def test_a_second_process_of_the_focused_app_with_a_password_field_doesnt_refuse(bus):

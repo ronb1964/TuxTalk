@@ -453,7 +453,7 @@ def _not_here(window, where):
         return "window"
     if focused_window.is_password():
         return "password"
-    return "terminal" if is_terminal_class(now[0] or window) else None
+    return "terminal" if is_terminal_class(focused_window.acts_as(now[0] or window)) else None
 
 
 def _left_alone(why) -> bool:

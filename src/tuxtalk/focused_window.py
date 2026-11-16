@@ -32,7 +32,6 @@ leaves out of its reports, counts as unknown.
 """
 import os
 import threading
-import time
 from typing import NamedTuple
 
 from .logger import setup_logger
@@ -111,37 +110,26 @@ def look(timeout: float = TRAY_TIMEOUT_S):
 
 
 def window_class():
-    """The focused window's class (or Wayland app_id), None when not known.
-    Konsole's for the terminal panel inside Kate, KDevelop or Dolphin, so
-    every rule for terminals holds there too: the paste keys, plain text, no
-    automatic Enter, no voice edits."""
-    seen = look()
-    if (seen[0] or "").lower() in TERMINAL_PANEL_HOSTS_LOWER and _in_terminal_panel(seen):
-        return TERMINAL_PANEL_CLASS
-    return seen[0]
+    """The focused window's class (or Wayland app_id), None when not known."""
+    return look()[0]
 
 
-TERMINAL_PANEL_CLASS = "org.kde.konsole"
-_PANEL_ANSWER_S = 1.0
-_panel_answer = (None, False, 0.0)     # (look, answer, when)
-
-
-def _in_terminal_panel(seen) -> bool:
-    """Whether the focused widget in the window *seen* (a look) is a
-    terminal panel, asked of the accessibility bus at most once a second
-    for one window: a dictation asks for the class several times in a
-    moment, and each answer must be the same. Said in the log when it
-    changes."""
-    global _panel_answer
+def acts_as(wm_class):
+    """The class whose rules hold in the focused window of class *wm_class*
+    (the paste keys, plain text, the automatic Enter, the keys a command
+    sends): Konsole's when that's Kate, KDevelop or Dolphin with the focus in
+    its terminal panel, which is Konsole's part with its app's class; else
+    *wm_class*. Asked of the accessibility bus each time in those apps, since
+    the focus moves between the panel and the rest of the window; with
+    accessibility off, the app's own rules hold."""
     from . import atspi_helper
-    last_seen, last, when = _panel_answer
-    if last_seen == seen and time.monotonic() - when < _PANEL_ANSWER_S:
-        return last
-    answer = atspi_helper.focused_is_terminal(focused_app=focused_app) is True
-    if answer != last:
-        logger.info(f"{seen[0]}'s terminal panel {'has' if answer else 'lost'} the focus")
-    _panel_answer = (seen, answer, time.monotonic())
-    return answer
+    if ((wm_class or "").lower() in TERMINAL_PANEL_HOSTS_LOWER
+            and atspi_helper.focused_is_terminal(focused_app=focused_app) is True):
+        return _KONSOLE
+    return wm_class
+
+
+_KONSOLE = "org.kde.konsole"
 
 
 def focused_app():

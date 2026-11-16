@@ -2,7 +2,7 @@
 "scroll down 3", "copy". The keys differ in a terminal, where Ctrl+C stops the
 running program and Ctrl+Shift+C copies, so the focused window's class picks
 the set, and the keys go only into the window the command was checked against."""
-from . import command_notices, keyboard_output
+from . import command_notices, focused_window, keyboard_output
 from .command_phrases import KeyRequest
 from .window_classes import is_terminal_class
 
@@ -55,7 +55,7 @@ def press(request: KeyRequest, where, beeps_on: bool) -> bool:
     if where[0] is None and request.name in _TERMINAL:
         command_notices.say_focus_unknown(beeps_on)
         return False
-    chords = chords_for(request.name, where[0])
+    chords = chords_for(request.name, focused_window.acts_as(where[0]))
     if chords is None:
         command_notices.say("terminal", beeps_on)
         return False

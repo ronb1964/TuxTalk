@@ -209,7 +209,7 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
     # would backspace characters the user's document never received.
     inject_ok = True
     if use_paste and not one_block and (LINE_BREAK in text or "\n" in text):
-        outcome = _paste_in_parts(text, focused_class)
+        outcome = _paste_in_parts(text, focused_window.acts_as(focused_class))
         if outcome is not None:
             return outcome
     elif not (use_paste and _paste_whole(text, injection_start)):
@@ -386,7 +386,7 @@ def _type_rest(parts, delivered):
     # safer in a terminal, so typed_breaks_for turns them into spaces
     # there; other apps get Shift+Enter.
     remainder = typed_breaks_for(remainder.replace("\n", LINE_BREAK),
-                                 focused_window.window_class())
+                                 focused_window.acts_as(focused_window.window_class()))
     if not keyboard_output.output_backend().type_text(remainder):
         # The chunks before the failure reached the document, and so did
         # the line break after the last of them unless that break is what
@@ -410,7 +410,7 @@ def _type_all(text, injection_start):
     # runs a terminal's half-typed command. A snippet's line breaks are real
     # newlines, so they go in as Shift+Enter like a spoken "new line".
     text = typed_breaks_for(text.replace("\n", LINE_BREAK),
-                            focused_window.window_class())
+                            focused_window.acts_as(focused_window.window_class()))
     backend = keyboard_output.output_backend()
     # The Flatpak's keyboard path types "…" as "..." and "café" as "cafe";
     # recording that form below keeps undo's backspace count right.

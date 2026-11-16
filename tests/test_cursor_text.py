@@ -12,6 +12,7 @@ ACTIVE, EDITABLE, FOCUSED, SHOWING = 1 << 1, 1 << 7, 1 << 12, 1 << 25
 # AT-SPI roles (atspi-constants.h)
 FILLER, LIST, LIST_ITEM, PAGE_TAB, PASSWORD, TERMINAL, TEXT, PARAGRAPH, SECTION = (
     20, 31, 32, 37, 40, 60, 61, 73, 85)
+PUSH_BUTTON = 43
 DOCUMENT_WEB = 95
 
 
@@ -86,16 +87,18 @@ class TextBus:
         raise AssertionError(f"unexpected call {method}")
 
     def kate(self, text, role=TEXT, selection=None, qt5=False):
-        """Kate as Qt shows it: a tab of its side panel says it has the
-        focus, ahead of the focused widget of *role* (its editor, or its
-        terminal panel) with *text*. *qt5*: without the Collection
-        interface, so it's walked."""
+        """Kate as Qt shows it, in the order a real one gave: a tab of its
+        side panel and a frame without text say they have the focus, ahead
+        of the focused widget of *role* (its editor, or its terminal panel)
+        with *text*, and a status bar button after it says so too. *qt5*:
+        without the Collection interface, so it's walked."""
         self.app("kate", text, caret=len(text), role=role, selection=selection)
-        tab = (":kate", "/tab")
-        self.nodes[tab] = dict(states=SHOWING | FOCUSED, is_text=False, hang=False,
-                               children=[], role=PAGE_TAB)
+        ahead, after = [(":kate", "/tab"), (":kate", "/frame")], (":kate", "/button")
+        for ref, kind in zip(ahead + [after], (PAGE_TAB, FILLER, PUSH_BUTTON), strict=True):
+            self.nodes[ref] = dict(states=SHOWING | FOCUSED, is_text=False, hang=False,
+                                   children=[], role=kind)
         window = self.nodes[(":kate", "/win")]
-        window["children"].insert(0, tab)
+        window["children"] = ahead + window["children"] + [after]
         window["qt"] = qt5
 
     def web_editor(self, name, box, toolkit="Gecko"):

@@ -236,7 +236,7 @@ def _read_cursor(job: _Job) -> tuple[str, str] | None:
     decides whether a sentence carries on, not the last dictation
     (continue_mid_sentence), which the user may have typed after since."""
     if (job.chunk_role is not None and job.message.has_words) \
-            or app_kind(focused_window.window_class()) == "terminal":
+            or app_kind(focused_window.acts_as(focused_window.window_class())) == "terminal":
         return None
     around = focused_window.text_around_cursor()
     if around is not None:
@@ -412,7 +412,7 @@ def _key_to_press(raw: str, said: str, job: _Job):
     phrase of Type at pause."""
     if said or not live.press_enter_after or job.chunk_role == "middle":
         return said, "", ""
-    why_not = why_no_automatic_enter(focused_window.window_class())
+    why_not = why_no_automatic_enter(focused_window.acts_as(focused_window.window_class()))
     sending, cut_off = auto_send(raw, why_not)
     # Only where it would have sent does a cut-off say why it wasn't.
     return ("ENTER" if sending else ""), cut_off, ("" if why_not else cut_off)
@@ -424,7 +424,8 @@ def _shape_text(raw: str, said: str, key, job: _Job):
     press, cut_off, held_back = key
     # Normalize text (voice commands, punctuation, spacing), plainer for a
     # terminal or code editor ("Plain text in terminals and code editors").
-    kind = app_kind(focused_window.window_class()) if live.adapt_to_app else ""
+    kind = (app_kind(focused_window.acts_as(focused_window.window_class()))
+            if live.adapt_to_app else "")
     # A pause is not a sentence end, so a middle chunk gets no auto-period
     # of its own; the last chunk (or type_at_pause.flush_boundary) ends the sentence.
     # "press enter" at the end of one does end it: the message is sent.

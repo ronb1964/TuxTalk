@@ -77,7 +77,7 @@ def _clear_text_box(beeps_on, notify_on):
     partway and Esc before the first key look the same."""
     backend = keyboard_output.output_backend()
     where = focused_window.look()
-    if is_terminal_class(where[0]):
+    if is_terminal_class(focused_window.acts_as(where[0])):
         cleared = keyboard_output.send_only_into(
             where, lambda: backend.press_keys([(("CTRL",), "E"), (("CTRL",), "U")]))
     else:
@@ -269,7 +269,7 @@ def navigate(raw: str, beeps_on: bool, where=None):
     logger.info(f"Voice command: {command.name}")
     if where is None:
         where = focused_window.look()
-    if is_terminal_class(where[0]):
+    if is_terminal_class(focused_window.acts_as(where[0])):
         notices.edit_problem("nav_terminal", beeps_on)
         return False
     # Right after a dictation the cursor is at its end; after an exact move,

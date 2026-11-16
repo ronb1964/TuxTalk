@@ -5,7 +5,7 @@ running program."""
 import pytest
 
 from desktop_fakes import FakeShell
-from tuxtalk import everyday_keys, focused_window, keyboard_output, screen_message
+from tuxtalk import atspi_helper, everyday_keys, focused_window, keyboard_output, screen_message
 from tuxtalk.command_phrases import KEY_PHRASES, KeyRequest
 
 FIREFOX = ("firefox", ("tray", "1"))
@@ -73,6 +73,24 @@ def test_every_key_command_has_its_shortcut_pinned():
 def test_some_keys_dont_apply_in_a_terminal(name, keyboard, at_konsole, floated):
     assert everyday_keys.press(KeyRequest(name), KONSOLE, False) is False
     assert keyboard.events == [] and floated == ["Doesn't apply in a terminal"]
+
+
+KATE = ("org.kde.kate", ("tray", "3"))
+
+
+@pytest.mark.parametrize("name, sent", [("copy", True), ("save", False)])
+def test_kates_terminal_panel_gets_a_terminals_keys(name, sent, keyboard, monkeypatch,
+                                                    floated):
+    """Kate's terminal panel has Kate's class: "copy" is the terminal's
+    Ctrl+Shift+C there (Ctrl+C would stop the running program), and "save",
+    whose Ctrl+S would freeze it, doesn't apply."""
+    monkeypatch.setattr(focused_window, "look", lambda *a, **k: KATE)
+    monkeypatch.setattr(atspi_helper, "focused_is_terminal", lambda **_: True)
+    assert everyday_keys.press(KeyRequest(name), KATE, False) is sent
+    if sent:
+        assert 42 in keyboard.typed_keys()          # KEY_LEFTSHIFT
+    else:
+        assert keyboard.events == [] and floated == ["Doesn't apply in a terminal"]
 
 
 UNKNOWN = (None, None)     # GNOME without the extension: no class, no window id
