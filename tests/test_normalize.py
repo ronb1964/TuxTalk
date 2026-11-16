@@ -860,6 +860,13 @@ def test_a_snippet_for_your_own_address_gets_no_period(monkeypatch):
     assert rs.state.continue_mid_sentence is False
 
 
+def test_a_quoted_snippet_for_your_address_is_typed_as_written_with_no_period(monkeypatch):
+    from tuxtalk import dictation_text
+    monkeypatch.setattr(dictation_text, "apply_custom_commands",
+                        lambda raw: ("§CMDLIT_0§", {"§CMDLIT_0§": "Ron@Example.com"}))
+    assert _whole("My email.") == "Ron@Example.com "
+
+
 def test_ssh_in_a_terminal_keeps_its_command():
     assert _whole("ssh john at example dot com", app_kind="terminal") == "ssh john@example.com "
 

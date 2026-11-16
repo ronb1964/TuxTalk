@@ -87,8 +87,12 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     if live.words:
         from .custom_words import fix_spelling
         processed = fix_spelling(processed, live.words)
-    # After the snippets, so "my email" said alone is an address on its own too.
-    address = whole and address_alone(processed)
+    # After the snippets, so "my email" said alone is an address on its own too;
+    # a quoted one is typed exactly as written.
+    literal = custom_commands.restore_protected(processed, protected)
+    address = whole and address_alone(literal)
+    if address and literal != processed:
+        address = literal.strip()
     if address:
         rs.state.continue_mid_sentence = False
         logger.info(f"Normalized text: {live.loggable(address)} (an address on its own)")
