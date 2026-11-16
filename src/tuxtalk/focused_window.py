@@ -34,6 +34,7 @@ Which rules hold is acts_as's: the class itself, except in the terminal
 panel inside Kate, KDevelop or Dolphin, which is a terminal.
 """
 import os
+import re
 import threading
 from typing import NamedTuple
 
@@ -302,8 +303,28 @@ def _polkit_prompt_waiting() -> bool | None:
                     uid = next(int(line.split()[1]) for line in f if line.startswith("Uid:"))
             except (OSError, StopIteration, ValueError):
                 continue    # a process that ended meanwhile
-            # Set-user-ID root, so the real user is whoever it asks for; a
-            # socket-activated one (polkit 124 and later) runs as root itself.
-            if uid in (os.getuid(), 0):
+            # Set-user-ID root, so the real user is whoever it asks for; one
+            # started for each connection to polkit's socket (polkit 127 and
+            # later) runs as root itself, for the user its service names.
+            if uid == os.getuid() or (uid == 0
+                                      and _socket_client(entry.name) in (os.getuid(), None)):
                 return True
     return False
+
+
+# systemd names the service it starts for each connection to a socket
+# "<n>-<id>-<pid>-<uid>", the connecting process's: here the user's agent.
+_SOCKET_CLIENT = re.compile(r"polkit-agent-helper@[^/@]*-(\d+)\.service$", re.MULTILINE)
+
+
+def _socket_client(pid) -> int | None:
+    """The user whose polkit agent started the root-run helper *pid*, by its
+    service's name; None when that can't be read, which counts as this
+    user's: a prompt missed would have the dictation typed into it."""
+    try:
+        with open(f"{_PROC}/{pid}/cgroup") as f:
+            match = _SOCKET_CLIENT.search(f.read())
+    except OSError as e:
+        logger.debug(f"Password field check: no service name for process {pid}: {e}")
+        return None
+    return int(match.group(1)) if match else None

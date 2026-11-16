@@ -352,26 +352,39 @@ def test_with_no_prompt_waiting_the_focused_window_isnt_asked(desktop, monkeypat
     assert asked == []
 
 
-def _proc(root, *processes):
-    """A /proc holding *processes*, each (pid, comm, real uid)."""
+def _proc(root, *processes, cgroup=None):
+    """A /proc holding *processes*, each (pid, comm, real uid); the last
+    one's service is *cgroup* when given."""
     (root / "1").mkdir(parents=True)
     for pid, comm, uid in processes:
         (root / str(pid)).mkdir()
         (root / str(pid) / "comm").write_text(comm + "\n")
         (root / str(pid) / "status").write_text(f"Name:\t{comm}\nUid:\t{uid}\t{uid}\t0\t0\n")
+    if cgroup is not None:
+        (root / str(processes[-1][0]) / "cgroup").write_text(cgroup + "\n")
 
 
-@pytest.mark.parametrize("helper_uid, waiting", [
-    ("mine", True),
-    (0, True),           # socket-activated polkit (124 and later) runs it as root
-    (54321, False),      # another user's prompt, logged in at the same time
+def _socket_service(client_uid):
+    """The cgroup of polkit's helper as systemd starts it for a connection."""
+    return ("0::/system.slice/system-polkit\\x2dagent\\x2dhelper.slice/"
+            f"polkit-agent-helper@0-49156-4100_1124950-{client_uid}.service")
+
+
+@pytest.mark.parametrize("helper_uid, client, waiting", [
+    ("mine", None, True),
+    (0, "mine", True),      # polkit 127 and later: run as root for the user who connected
+    (0, 54321, False),      # ... for another user, logged in at the same time
+    (0, None, True),        # run as root, whose user can't be read: counts as this one's
+    (54321, None, False),   # another user's prompt, set-user-ID
 ])
 def test_a_waiting_prompt_is_seen_by_its_helper_process(tmp_path, monkeypatch, helper_uid,
-                                                        waiting):
+                                                        client, waiting):
     """polkit-agent-helper-1 runs while a prompt waits; the kernel keeps the
     first 15 characters of its name."""
     uid = os.getuid() if helper_uid == "mine" else helper_uid
-    _proc(tmp_path, (77, "bash", os.getuid()), (4242, "polkit-agent-he", uid))
+    cgroup = None if client is None else _socket_service(
+        os.getuid() if client == "mine" else client)
+    _proc(tmp_path, (77, "bash", os.getuid()), (4242, "polkit-agent-he", uid), cgroup=cgroup)
     monkeypatch.setattr(focused_window, "_PROC", str(tmp_path))
     assert REAL_PROMPT_WAITING() is waiting
 
