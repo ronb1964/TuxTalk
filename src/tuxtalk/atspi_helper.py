@@ -499,13 +499,32 @@ def _shell_prompt(bus, shells, deadline) -> bool:
 
 def _is_focused(bus, app, window, focus, deadline) -> bool:
     """Whether *app*, whose active *window* this is, is the one with the
-    focus by *focus* (class, process): the same process where the desktop
-    and the bus both tell it, else the same name (_names_the_app). The
-    names alone missed apps on the bus by another name, whose own no then
-    didn't clear a background browser's password field."""
+    focus by *focus* (class, process): by the process where the desktop and
+    the bus both tell it, else by the name (_names_the_app). The names alone
+    missed apps on the bus by another name, whose own no then didn't clear
+    a background browser's password field; and they took a second process
+    of one app (two Firefox profiles) for the one in front, whose stale
+    password field then refused the dictation."""
     wm_class, pid = focus
-    return ((pid is not None and _process_of(bus, window[0], deadline) == pid)
-            or _names_the_app(app, wm_class))
+    if pid is not None:
+        owner = _process_of(bus, window[0], deadline)
+        if owner is not None:
+            return pid in (owner, _inner_pid(owner))
+    return _names_the_app(app, wm_class)
+
+
+def _inner_pid(pid):
+    """*pid*'s number inside its own sandbox (a Flatpak app's), which is
+    the one it gives its X11 window; None outside one or when it can't be
+    read. /proc's NSpid lists the numbers from the outside in."""
+    try:
+        with open(f"/proc/{pid}/status", encoding="ascii") as status:
+            line = next((l for l in status if l.startswith("NSpid:")), "")
+    except OSError as e:
+        logger.debug(f"Accessibility bus: no sandbox number for process {pid}: {e}")
+        return None
+    numbers = line.split()[1:]
+    return int(numbers[-1]) if len(numbers) > 1 else None
 
 
 def _process_of(bus, name, deadline):

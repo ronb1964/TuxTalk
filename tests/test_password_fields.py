@@ -185,8 +185,20 @@ def _pasted_with_real_keys(desktop):
 
 def _focus_moves_into_a_password_field_after_the_first_line(desktop, monkeypatch):
     """The first wait after the first line (the paste settling, or the
-    pause before its line break) is when the user tabs into a password box."""
-    monkeypatch.setattr("time.sleep", lambda s: desktop.__setitem__("password", True))
+    pause before its line break) is when the user tabs into a password box.
+    Only delivery's own waits: one replaced for the whole process let a
+    thread left by an earlier test, sleeping meanwhile, move the focus
+    before the first line was typed."""
+    class Clock:
+        """The time module, with a sleep that moves the focus."""
+        def __getattr__(self, name):
+            return getattr(time, name)
+
+        @staticmethod
+        def sleep(seconds):
+            desktop["password"] = True
+    monkeypatch.setattr(keyboard_output, "time", Clock())
+    monkeypatch.setattr(delivery, "time", Clock())
 
 
 def test_delivery_stops_when_the_focus_moves_into_a_password_field(desktop, monkeypatch,
@@ -391,18 +403,22 @@ class FakeA11yBus:
         return self.nodes[ref]
 
     def app(self, name, focus_role, active=True, collection=True, hang=False, pid=None,
-            toolkit="GTK", asleep=False):
+            toolkit="GTK", asleep=False, connection=None):
         """An app with one window holding a text box and the focused widget,
         of *focus_role*. *collection* False is an app without the Collection
         interface (Qt 5), so it is walked; "slow" times out on it. *hang*: it
         never answers at all. *pid*: its process, as the bus daemon tells it;
         "hang": the daemon takes too long to say. *toolkit*: as it tells the
         bus, "Chromium" for Chrome and Electron apps. *asleep*: a Chromium
-        tree not built yet, whose window answers only for its states."""
+        tree not built yet, whose window answers only for its states.
+        *connection*: its bus name, when two processes of one app are on the
+        bus; ":" and the app's name otherwise."""
+        own = connection or f":{name}"
+
         def ref(path):
-            return (f":{name}", path)
+            return (own, path)
         if pid is not None:
-            self.pids[f":{name}"] = pid
+            self.pids[own] = pid
         common = dict(collection=collection, hang=hang)
         self._add(ref("/2"), role=focus_role, states=SHOWING | FOCUSED | EDITABLE, **common)
         self._add(ref("/3"), role=TEXT, states=SHOWING, **common)
@@ -711,6 +727,30 @@ def test_the_focused_processs_no_counts_when_later_apps_use_up_the_time(bus, bud
         bus.app(f"frozen{n}", TEXT, hang=True)
     focused = focus_on("jetbrains-idea", 4003)
     assert atspi_helper.focused_is_password(budget, focused) is False
+
+
+def test_a_second_process_of_the_focused_app_with_a_password_field_doesnt_refuse(bus):
+    """Two Firefox profiles: the one in the background left its login box
+    focused, the one in front has a text box. By name both are the focused
+    app; the process tells them apart, and the words are typed."""
+    bus.app("Firefox", PASSWORD, pid=1200, connection=":1.20")
+    bus.app("Firefox", TEXT, pid=3400, connection=":1.34")
+    assert atspi_helper.focused_is_password(focused_app=focus_on("firefox", 3400)) is False
+
+
+def test_the_focused_process_with_the_password_field_still_refuses(bus):
+    bus.app("Firefox", TEXT, pid=1200, connection=":1.20")
+    bus.app("Firefox", PASSWORD, pid=3400, connection=":1.34")
+    assert atspi_helper.focused_is_password(focused_app=focus_on("firefox", 3400)) is True
+
+
+def test_a_flatpak_app_is_the_focused_one_by_its_number_inside_the_sandbox(bus, monkeypatch):
+    """A Flatpak app on X11 gives its window its number inside the sandbox;
+    the bus tells its number outside. Either counts."""
+    monkeypatch.setattr(atspi_helper, "_inner_pid", lambda pid: {5100: 2}.get(pid))
+    bus.app("org.gnome.TextEditor", PASSWORD, pid=5100)
+    assert atspi_helper.focused_is_password(
+        focused_app=focus_on("org.gnome.TextEditor", 2)) is True
 
 
 @pytest.mark.parametrize("app_pid, focused_pid", [
