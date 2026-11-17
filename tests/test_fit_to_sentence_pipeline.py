@@ -28,8 +28,9 @@ def desktop(monkeypatch):
             seen["typed"].append(text)
             return True
 
-    def read():
+    def read(cancelled=lambda: False):
         seen["reads"] += 1
+        seen["cancelled"] = cancelled
         return seen["around"]
 
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Keyboard())
@@ -65,6 +66,16 @@ def test_a_word_said_into_the_middle_of_a_sentence_joins_it(desktop, monkeypatch
 def test_where_the_app_doesnt_say_it_is_typed_as_always(desktop, monkeypatch):
     dictate(monkeypatch, "Very.")
     assert desktop["typed"] == ["Very. "]
+
+
+def test_esc_during_the_read_is_seen_by_it(desktop, monkeypatch):
+    """The read waits while a dictation key is held: Esc meanwhile must end
+    that wait, so it asks this dictation whether it was cancelled."""
+    desktop["around"] = ("", "")
+    dictate(monkeypatch, "Very.")
+    assert desktop["cancelled"]() is False
+    rs.state.current.message.cancelled = True
+    assert desktop["cancelled"]() is True
 
 
 def test_a_terminal_is_never_asked(desktop, monkeypatch):
@@ -151,7 +162,7 @@ def cursor_reads(monkeypatch, *texts):
     """The app's text around the cursor at each read, *texts* (before,
     after) cut to the few characters a real read gets."""
     reads = iter([(before[-WINDOW:], after[:WINDOW]) for before, after in texts])
-    monkeypatch.setattr(focused_window, "text_around_cursor", lambda: next(reads))
+    monkeypatch.setattr(focused_window, "text_around_cursor", lambda cancelled: next(reads))
 
 
 @pytest.mark.parametrize("after, end", [

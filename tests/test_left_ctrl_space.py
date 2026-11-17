@@ -333,12 +333,13 @@ def test_typing_waits_while_a_second_keyboard_still_holds_left_ctrl(setup, tmp_p
     assert modifier_hotkeys.wait_while_held()() is None
 
 
-def test_the_text_beside_the_cursor_is_read_once_left_ctrl_is_up(watched, monkeypatch):
+def test_the_text_beside_the_cursor_is_read_once_left_ctrl_is_up(keyboard, watched,
+                                                                  monkeypatch):
     """Left Ctrl kept down after the hold, and A tapped: Ctrl+A selects the
     old text, which the dictation replaces. Read before Ctrl came up, the
     text would be "old" before the cursor, and the dictation would be typed
     as its continuation, " this is a test", instead of "This is a test"."""
-    monkeypatch.setattr(modifier_hotkeys.time, "sleep", lambda s: None)
+    monkeypatch.setattr(modifier_hotkeys, "time", keyboard.clock)
     screen = {"around": ("old", "")}
 
     def pressed(look):
@@ -352,16 +353,41 @@ def test_the_text_beside_the_cursor_is_read_once_left_ctrl_is_up(watched, monkey
     assert focused_window.text_around_cursor() == ("", "")
 
 
-def test_a_left_ctrl_stuck_down_holds_the_read_back_only_so_long(keyboard, watched,
-                                                                monkeypatch):
-    """A key that never reads as up (a KVM switch, a lost release) delays the
-    read by HELD_LIMIT_S at most; typing's own wait then gives up and says so."""
+def test_a_left_ctrl_stuck_down_costs_the_dictation_one_wait_not_two(keyboard, watched,
+                                                                     monkeypatch):
+    """A key that never reads as up (a KVM switch, a lost release): the read
+    waits HELD_LIMIT_S, and typing, told the key is stuck, gives up at once
+    rather than waiting as long again."""
     monkeypatch.setattr(modifier_hotkeys, "time", keyboard.clock)
     monkeypatch.setattr(atspi_helper, "text_around_cursor",
                         lambda chars, focused_app: ("old", ""))
     watched([Keyboard(lambda look: True, code=LCTRL)])
     assert focused_window.text_around_cursor() == ("old", "")
+    assert keyboard_output.send_keys(A_KEY, what="a") is False
+    assert keyboard.events == []
     assert modifier_hotkeys.HELD_LIMIT_S <= keyboard.clock.now < modifier_hotkeys.HELD_LIMIT_S + 1
+
+
+def test_a_key_already_found_stuck_isnt_waited_for_again(keyboard, watched, monkeypatch):
+    monkeypatch.setattr(modifier_hotkeys, "time", keyboard.clock)
+    monkeypatch.setattr(atspi_helper, "text_around_cursor",
+                        lambda chars, focused_app: ("old", ""))
+    watched([Keyboard(lambda look: True, code=LCTRL)])
+    modifier_hotkeys._stuck.add(LCTRL)
+    assert focused_window.text_around_cursor() == ("old", "")
+    assert keyboard.clock.now == 0
+
+
+def test_esc_with_left_ctrl_still_down_ends_the_wait_at_once(keyboard, watched, monkeypatch):
+    """The dictation is cancelled while Ctrl stays down: the next one isn't
+    kept waiting behind it until Ctrl comes up, and nothing is read."""
+    monkeypatch.setattr(modifier_hotkeys, "time", keyboard.clock)
+    reads = []
+    monkeypatch.setattr(atspi_helper, "text_around_cursor",
+                        lambda chars, focused_app: reads.append(1) or ("old", ""))
+    watched([Keyboard(lambda look: True, code=LCTRL)])
+    assert focused_window.text_around_cursor(cancelled=lambda: keyboard.clock.now >= 0.5) is None
+    assert reads == [] and keyboard.clock.now < 1
 
 
 @pytest.fixture

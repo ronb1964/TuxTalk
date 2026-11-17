@@ -5,7 +5,8 @@ shortcut (Ctrl+W closes the tab), and a lone tap of Alt opens an app's menu
 bar. Where the keyboard options make one the Compose key (Pop!_OS's Right
 Ctrl), its press begins a compose that would swallow the next keys typed.
 The hotkey loop notes its keyboards and dictation keys here, and typing
-asks before each key whether it must wait or end a compose first.
+asks before each key whether it must wait or end a compose first; the text
+beside the cursor is read only once they're up too (wait_until_let_go).
 """
 import itertools
 import threading
@@ -29,7 +30,8 @@ _noted = ([], frozenset())
 # for that; set by note_hidden().
 _hidden = (frozenset(), ())
 
-# How long typing waits for the key to come up while the desktop can see it.
+# How long typing, or a read of the text beside the cursor before it, waits
+# for the key to come up while the desktop can see it.
 # Pressed again while the last dictation is still being typed, it starts the
 # next recording, whose grab hides it within moments, and typing carries on
 # under it (note_hidden). Longer than nearly any dictation all the same: a
@@ -79,7 +81,7 @@ _NAMES = {**{ecodes.ecodes[key]: name for name, key in HOTKEY_CHOICES.items()},
 
 def note(devices, *keys) -> None:
     """Remember the hotkey loop's *devices* and which of its dictation *keys*
-    are modifiers, for wait_while_held: Right Ctrl or Right Alt, and the
+    are modifiers, for wait_while_held and wait_until_let_go: Right Ctrl or Right Alt, and the
     Left Ctrl a Left Ctrl+Space dictation key is held with, which the hotkey
     loop names among *keys* (ctrl_space.held_with)."""
     global _noted
@@ -241,20 +243,23 @@ def _held(keyboards, modifiers):
     return keys_down(keyboards) & (modifiers - _hidden_now()) | kept
 
 
-def wait_until_let_go() -> None:
+def wait_until_let_go(cancelled=lambda: False) -> None:
     """Wait while a dictation modifier the desktop can see is down, as typing
-    does (wait_while_held), for HELD_LIMIT_S at most. Kept down, it's still
-    the user's: Left Ctrl kept after a Left Ctrl+Space hold makes A select
-    all, and the dictation replaces it, so the text beside the cursor is
-    read only once the key is up. A key known to be stuck isn't waited for;
-    typing's own wait gives up on it and says so."""
-    devices, modifiers = _noted
+    does (wait_while_held), until *cancelled* says the dictation was. Kept
+    down, it's still the user's: Left Ctrl kept after a Left Ctrl+Space hold
+    makes A select all, and the dictation replaces it, so the text beside the
+    cursor is read only once the key is up. A key known to be stuck isn't
+    waited for, and one down for HELD_LIMIT_S is noted as stuck, so typing
+    gives up on it at once instead of waiting as long again."""
+    modifiers = _noted[1]
     if not modifiers and not ctrl_kept.pressed():
         return
-    keyboards = [d for d in list(devices) if is_keyboard_device(d)]
+    keyboards = _keyboards()
     give_up_at = time.monotonic() + HELD_LIMIT_S
-    while (still := _held(keyboards, modifiers)) and not still & _stuck \
-            and time.monotonic() < give_up_at:
+    while (still := _held(keyboards, modifiers)) and not still & _stuck and not cancelled():
+        if time.monotonic() >= give_up_at:
+            _note_stuck(still, "TuxTalk stopped waiting for it")
+            return
         time.sleep(0.02)
 
 
@@ -276,10 +281,10 @@ def wait_while_held(destination=None,
     know (focused_window.changed): the checks made before typing began are
     out of date by then, and the user may have clicked into a password
     field meanwhile. *gave_up* says in the log what giving up stopped."""
-    devices, modifiers = _noted
+    modifiers = _noted[1]
     if not modifiers and _compose is None and not ctrl_kept.pressed():
         return None
-    keyboards = [d for d in list(devices) if is_keyboard_device(d)]
+    keyboards = _keyboards()
 
     def held():
         return _held(keyboards, modifiers)
@@ -485,11 +490,17 @@ def _guard_if_alone(keyboards) -> None:
         guard_alt_tap()
 
 
-def _give_up(held, what: str) -> None:
+def _note_stuck(held, what: str) -> None:
+    """Note the keys *held* as stuck, saying in the log what that stopped
+    (*what*) the first time."""
     if not held & _stuck:
         names = " and ".join(sorted(_NAMES.get(code, str(code)) for code in held))
         logger.warning(f"{names} has been down for {HELD_LIMIT_S:g} s, so {what}")
         _stuck.update(held)
+
+
+def _give_up(held, what: str) -> None:
+    _note_stuck(held, what)
     raise virtual_keyboard.GaveUp("key_held")
 
 

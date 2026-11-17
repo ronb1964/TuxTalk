@@ -234,11 +234,13 @@ def _read_cursor(job: _Job) -> tuple[str, str] | None:
     doesn't say. A password field was refused before
     this. Read before the words are shaped: when the app says, the screen
     decides whether a sentence carries on, not the last dictation
-    (continue_mid_sentence), which the user may have typed after since."""
+    (continue_mid_sentence), which the user may have typed after since. So
+    a dictation key still held after the stop holds the shaping back too,
+    not only the typing."""
     if (_after_a_phrase(job) and job.chunk_role != "last") \
             or app_kind(focused_window.acts_as(focused_window.window_class())) == "terminal":
         return None
-    around = focused_window.text_around_cursor()
+    around = focused_window.text_around_cursor(lambda: job.message.cancelled)
     if around is not None and not _after_a_phrase(job):
         rs.state.continue_mid_sentence = False
     return around

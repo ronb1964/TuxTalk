@@ -452,7 +452,7 @@ def flush_boundary(message, auto_period: bool, auto_space: bool, injection_mode:
     # Mid-line the end goes before the next word: no period or second space
     # there. A terminal's text is its prompt, whatever the settings.
     if tail and app_kind(acting) != "terminal":
-        around = focused_window.text_around_cursor()
+        around = focused_window.text_around_cursor(lambda: message.cancelled)
         if message.cancelled:
             return  # Esc during the read
         if around is not None:

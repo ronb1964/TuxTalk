@@ -151,7 +151,8 @@ class AdvancedTab(Tab):
         return row
 
     def _build_fine_tuning(self, grid, row):
-        """Fine-tuning, closed: formatting, inserting text and privacy; returns the next row."""
+        """Fine-tuning, closed: formatting, inserting text, accessibility and privacy;
+        returns the next row."""
         # Each of these already does the sensible thing; they're here for the
         # day something looks off.
         fine_fold = fold(grid, row, "Show fine-tuning", "Hide fine-tuning")
