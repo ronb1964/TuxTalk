@@ -1,8 +1,8 @@
 """What the tray says once at start-up, about what happened before it: an
 old TalkType Flatpak it stopped, the update that just went in, and the
 rename from TalkType; and the one question before TuxTalk turns on the
-desktop's accessibility switch (a11y_switch), asked here or at the end of
-first-run setup. Only from the tray's start, though a dictation may be
+desktop's accessibility switch (a11y_switch), asked here, at a start or
+just after first-run setup. Only from the tray's start, though a dictation may be
 going on then (offer_a11y_switch says how that's handled)."""
 import os
 
@@ -105,14 +105,15 @@ def offer_a11y_switch(parent=None):
     there's none to turn on. After a yes, say where it works and that an
     app already open may need a restart.
     Enter alone says Not Now: TuxTalk's own auto-send presses Enter, and the
-    question can come up while the user dictates."""
+    question can come up while the user dictates, and it doesn't take the
+    keyboard for the same reason."""
     from . import a11y_switch
     if a11y_switch.answer() or a11y_switch.is_on() is not False:
         return
     answer = show_message(parent, Gtk.MessageType.QUESTION, A11Y_QUESTION_TITLE,
                           A11Y_QUESTION_BODY, [("Not Now", Gtk.ResponseType.CANCEL),
                                                ("Turn On", Gtk.ResponseType.OK)],
-                          keep_above=True, default=Gtk.ResponseType.CANCEL)
+                          keep_above=True, default=Gtk.ResponseType.CANCEL, take_focus=False)
     if answer != Gtk.ResponseType.OK:
         a11y_switch.decline()
     elif a11y_switch.allow():

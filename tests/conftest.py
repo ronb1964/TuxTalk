@@ -1425,6 +1425,9 @@ class _MessageBox:
     def set_keep_above(self, on):
         self.keep_above = on
 
+    def set_focus_on_map(self, on):
+        self.takes_focus = on
+
     def run(self):
         answer = self._boxes.answer
         return answer(self) if callable(answer) else answer

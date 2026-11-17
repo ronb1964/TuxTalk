@@ -86,6 +86,16 @@ def test_after_setup_dictation_starts_before_the_question_is_asked(monkeypatch):
     assert started and startup_notices.offer_a11y_switch_after_setup in timers
 
 
+def test_the_question_leaves_the_keyboard_where_it_is(switch, monkeypatch):
+    """It can come up while the user dictates: taking the keyboard, the
+    words would go into it and a space would press Not Now."""
+    asked = []
+    monkeypatch.setattr(startup_notices, "show_message",
+                        lambda *a, **k: asked.append(k) or Gtk.ResponseType.CANCEL)
+    startup_notices.offer_a11y_switch()
+    assert asked[0]["take_focus"] is False
+
+
 def test_not_asked_over_first_run_setup(switch, message_boxes, monkeypatch):
     """Setup has it asked once dictation runs; the tray's start mustn't ask over it."""
     monkeypatch.setattr(first_run_marker, "is_first_run", lambda: True)

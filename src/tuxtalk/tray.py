@@ -748,8 +748,9 @@ def _finish_first_run(tray, result):
         # No tray and no extension running yet: without this
         # the user would see no menu at all.
         GLib.timeout_add(2500, tray.show_menu_window_if_no_tray)
-        # Once the service below is starting: nothing waits on its answer.
-        GLib.timeout_add(3000, startup_notices.offer_a11y_switch_after_setup)
+        # Once the service below is starting, so nothing waits on its answer,
+        # and after KDE's notification help (first_run_setup, at 3 s).
+        GLib.timeout_add(6000, startup_notices.offer_a11y_switch_after_setup)
     else:
         logger.info("Onboarding failed - starting anyway; it shows again next launch")
 
