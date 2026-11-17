@@ -108,8 +108,8 @@ def prefs_folds(run):
     texts = run.vm.ui("texts", PREFS) or []
     if find(run, "button", "Show fine-tuning") is None:
         problems.append("no “Show fine-tuning” button")
-    elif "formatting, inserting text, privacy" not in texts:
-        problems.append("no “formatting, inserting text, privacy” beside it")
+    elif "formatting, inserting text, accessibility, privacy" not in texts:
+        problems.append("no “formatting, inserting text, accessibility, privacy” beside it")
     else:
         open_fold(run, "Show fine-tuning")
         if find(run, "button", "Hide fine-tuning") is None:
