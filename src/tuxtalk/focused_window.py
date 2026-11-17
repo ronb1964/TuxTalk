@@ -236,8 +236,12 @@ def is_password(budget: float | None = None) -> bool:
 
 def text_around_cursor() -> tuple[str, str] | None:
     """The few characters on either side of the cursor in the app with the
-    focus (atspi_helper.text_around_cursor), or None when it can't be told."""
-    from . import atspi_helper, sentence_fit
+    focus (atspi_helper.text_around_cursor), or None when it can't be told.
+    Read once no dictation modifier is down (modifier_hotkeys.wait_until_let_go):
+    while one is, the user may still be changing the text, and typing waits
+    for it anyway."""
+    from . import atspi_helper, modifier_hotkeys, sentence_fit
+    modifier_hotkeys.wait_until_let_go()
     return atspi_helper.text_around_cursor(sentence_fit.WINDOW, focused_app=focused_app)
 
 

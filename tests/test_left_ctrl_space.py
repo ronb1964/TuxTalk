@@ -14,9 +14,10 @@ from evdev import ecodes
 from conftest import KeyEvent
 from hotkey_helper_fakes import FakeKeyboard, ready_client
 from hotkey_loop_fakes import Cfg, Grabbable, Keyboard
-from tuxtalk import (cosmic_hotkeys, ctrl_kept, ctrl_space, ctrl_space_clashes, gnome_hotkeys,
-                     hotkey_claims, hotkeys, keyboard_grab, keyboard_layout, keyboard_output,
-                     modifier_hotkeys, pipeline, recording, x11_hotkeys)
+from tuxtalk import (atspi_helper, cosmic_hotkeys, ctrl_kept, ctrl_space, ctrl_space_clashes,
+                     focused_window, gnome_hotkeys, hotkey_claims, hotkeys, keyboard_grab,
+                     keyboard_layout, keyboard_output, modifier_hotkeys, pipeline, recording,
+                     x11_hotkeys)
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk.hotkey_helper_client import HelperKeyboard
@@ -330,6 +331,37 @@ def test_typing_waits_while_a_second_keyboard_still_holds_left_ctrl(setup, tmp_p
     for line in heard(sock):
         kb._handle(line.split())
     assert modifier_hotkeys.wait_while_held()() is None
+
+
+def test_the_text_beside_the_cursor_is_read_once_left_ctrl_is_up(watched, monkeypatch):
+    """Left Ctrl kept down after the hold, and A tapped: Ctrl+A selects the
+    old text, which the dictation replaces. Read before Ctrl came up, the
+    text would be "old" before the cursor, and the dictation would be typed
+    as its continuation, " this is a test", instead of "This is a test"."""
+    monkeypatch.setattr(modifier_hotkeys.time, "sleep", lambda s: None)
+    screen = {"around": ("old", "")}
+
+    def pressed(look):
+        if look == 2:
+            screen["around"] = ("", "")     # Ctrl+A selected "old"
+        return look <= 3
+
+    monkeypatch.setattr(atspi_helper, "text_around_cursor",
+                        lambda chars, focused_app: screen["around"])
+    watched([Keyboard(pressed, code=LCTRL)])
+    assert focused_window.text_around_cursor() == ("", "")
+
+
+def test_a_left_ctrl_stuck_down_holds_the_read_back_only_so_long(keyboard, watched,
+                                                                monkeypatch):
+    """A key that never reads as up (a KVM switch, a lost release) delays the
+    read by HELD_LIMIT_S at most; typing's own wait then gives up and says so."""
+    monkeypatch.setattr(modifier_hotkeys, "time", keyboard.clock)
+    monkeypatch.setattr(atspi_helper, "text_around_cursor",
+                        lambda chars, focused_app: ("old", ""))
+    watched([Keyboard(lambda look: True, code=LCTRL)])
+    assert focused_window.text_around_cursor() == ("old", "")
+    assert modifier_hotkeys.HELD_LIMIT_S <= keyboard.clock.now < modifier_hotkeys.HELD_LIMIT_S + 1
 
 
 @pytest.fixture

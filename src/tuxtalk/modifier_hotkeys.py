@@ -233,6 +233,31 @@ def _keyboards():
     return [d for d in list(devices) if is_keyboard_device(d)]
 
 
+def _held(keyboards, modifiers):
+    """The dictation modifiers among *modifiers* down on *keyboards* that the
+    desktop can see, with the Left Ctrl TuxTalk holds for the desktop
+    (ctrl_kept) until it's let go: the real one may be up a moment before."""
+    kept = {ctrl_kept.CODE} if ctrl_kept.pressed() else set()
+    return keys_down(keyboards) & (modifiers - _hidden_now()) | kept
+
+
+def wait_until_let_go() -> None:
+    """Wait while a dictation modifier the desktop can see is down, as typing
+    does (wait_while_held), for HELD_LIMIT_S at most. Kept down, it's still
+    the user's: Left Ctrl kept after a Left Ctrl+Space hold makes A select
+    all, and the dictation replaces it, so the text beside the cursor is
+    read only once the key is up. A key known to be stuck isn't waited for;
+    typing's own wait gives up on it and says so."""
+    devices, modifiers = _noted
+    if not modifiers and not ctrl_kept.pressed():
+        return
+    keyboards = [d for d in list(devices) if is_keyboard_device(d)]
+    give_up_at = time.monotonic() + HELD_LIMIT_S
+    while (still := _held(keyboards, modifiers)) and not still & _stuck \
+            and time.monotonic() < give_up_at:
+        time.sleep(0.02)
+
+
 def wait_while_held(destination=None,
                     gave_up="typing stopped; the dictation is in Recent Dictations"):
     """A check for virtual_keyboard.send to make before each key: None when
@@ -257,10 +282,7 @@ def wait_while_held(destination=None,
     keyboards = [d for d in list(devices) if is_keyboard_device(d)]
 
     def held():
-        # With the Left Ctrl TuxTalk holds for the desktop (ctrl_kept),
-        # until it's let go: the real one may be up a moment before.
-        kept = {ctrl_kept.CODE} if ctrl_kept.pressed() else set()
-        return keys_down(keyboards) & (modifiers - _hidden_now()) | kept
+        return _held(keyboards, modifiers)
 
     def wait():
         """Until no such key is down, guarding a Right Alt first; GaveUp
