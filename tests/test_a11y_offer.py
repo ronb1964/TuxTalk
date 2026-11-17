@@ -69,21 +69,27 @@ def test_never_asked_when_it_is_already_on_or_cant_be(switch, message_boxes, on)
 
 def test_after_setup_dictation_starts_before_the_question_is_asked(monkeypatch):
     """Asked at setup's end, the question held the dictation service back
-    until it was answered; now the service starts and the question comes a
-    moment later, on its own timer."""
+    until it was answered; now the service launches first, and the question
+    comes on its own later timer. The timers run in the order they're due."""
     from tuxtalk import menu_cache, tray
-    started, timers = [], []
+    timers, happened = [], []
+
+    def timeout_add(ms, fn, *args):
+        timers.append((ms, len(timers), fn, args))
     fake_tray = types.SimpleNamespace(
         onboarding_in_progress=True, refresh_menu=lambda: None,
         show_menu_window_if_no_tray=lambda: False,
-        _auto_start_service=lambda delay: started.append(delay))
+        _auto_start_service=lambda delay: timeout_add(delay, lambda: happened.append("service")))
     monkeypatch.setattr(first_run_marker, "mark_first_run_complete", lambda: None)
     monkeypatch.setattr(menu_cache, "refresh_menu_cache", lambda: None)
-    monkeypatch.setattr(tray.GLib, "timeout_add", lambda ms, fn, *a: timers.append(fn))
+    monkeypatch.setattr(tray.GLib, "timeout_add", timeout_add)
     monkeypatch.setattr(startup_notices, "offer_a11y_switch",
-                        lambda parent=None: pytest.fail("asked before the service started"))
+                        lambda parent=None: happened.append("question"))
     tray._finish_first_run(fake_tray, {"continue": True})
-    assert started and startup_notices.offer_a11y_switch_after_setup in timers
+    assert happened == []   # nothing asked while setup returns
+    for _ms, _n, fn, args in sorted(timers):
+        fn(*args)
+    assert happened == ["service", "question"]
 
 
 def test_the_question_leaves_the_keyboard_where_it_is(switch, monkeypatch):
