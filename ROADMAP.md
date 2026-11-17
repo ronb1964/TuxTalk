@@ -29,6 +29,8 @@ big ways. Roughly in order:
 - [~] Some kind of signal when a dictation heard nothing at all. A silent microphone already says "No sound from the microphone", and hands-free mode beeps and stops when you say nothing, but a hold-to-talk that heard sound and no words just types nothing.
 - [ ] Spoken templates, like "compose email" putting in an email layout.
 
+- [ ] Start and stop dictation with spoken words ("wake up", "go to sleep"), for people who can't press a key ([#45](https://github.com/ronb1964/TuxTalk/discussions/45)). The microphone would stay on, all on your own computer, so it has to never wake up from a TV or other voices and never miss you in noise. Off unless you turn it on, in TuxTalk Labs first.
+
 ## Audio
 
 - [ ] A choice of beep sounds, a volume control for them, or your own sound files.
@@ -39,7 +41,6 @@ big ways. Roughly in order:
 
 ## Look and feel
 
-- [ ] A search box in Help that finds a word in every card and opens the right one. Finding the TuxTalk Labs card took a while in the 0.23 test. Planned for 0.24.
 - [ ] A custom symbolic icon for the tray and panel.
 - [ ] Native Wayland positioning for the recording indicator (gtk-layer-shell). Today it uses XWayland to place itself.
 - [~] Voice Commands reference (Ctrl+Alt+V) with a way to try a command and see what it types. The reference is done, the try-it part isn't.
