@@ -24,6 +24,7 @@ big ways. Roughly in order:
 
 - [ ] Importable packs of snippets, like a "Linux developer" pack that turns "why do tool" into ydotool and "dee bus" into D-Bus, so people don't have to build their list from scratch. Could grow into a library people send in by pull request.
 - [~] Per-app profiles, picked by the window you're typing into (cleanup on or off, paste mode, maybe a different model). Window class only. TuxTalk won't read the screen or take screenshots. Started: terminals get no capital or closing period, and code editors no closing period. Full profiles aren't done.
+- [ ] Choose your own dictation keys, combos like Alt+D included, with a warning when the desktop or a common app already uses that key. Today it's F1 to F12, Right Ctrl, Right Alt, Scroll Lock or Left Ctrl+Space, which leaves a left hand few choices.
 - [ ] Language quick switch in the tray menu. The setting exists, but only in Preferences.
 - [ ] Ignore background noise that gets transcribed as a word or two (a confidence threshold).
 - [~] Some kind of signal when a dictation heard nothing at all. A silent microphone already says "No sound from the microphone", and hands-free mode beeps and stops when you say nothing, but a hold-to-talk that heard sound and no words just types nothing.
