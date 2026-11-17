@@ -79,12 +79,24 @@ def show_after_start():
 
 def offer_a11y_switch_at_start():
     """At the tray's start: the switch on again after a yes (a11y_switch.keep_on),
-    or the question, unless first-run setup is still to come, which asks at
-    its end."""
+    or the question, unless first-run setup is still to come, which has it
+    asked once the dictation service runs (offer_a11y_switch_after_setup)."""
     from . import a11y_switch, first_run_marker
     a11y_switch.keep_on()
     if not first_run_marker.is_first_run():
         offer_a11y_switch()
+
+
+def offer_a11y_switch_after_setup():
+    """The question, a moment after first-run setup started the dictation
+    service. Asked at setup's end, it held the service back until it was
+    answered: dictation didn't start for anyone who left it unanswered.
+    False, for its GLib timer."""
+    try:
+        offer_a11y_switch()
+    except Exception as e:
+        logger.warning(f"Could not offer the accessibility switch: {e}")
+    return False
 
 
 def offer_a11y_switch(parent=None):

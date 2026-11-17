@@ -67,8 +67,27 @@ def test_never_asked_when_it_is_already_on_or_cant_be(switch, message_boxes, on)
     assert message_boxes.shown == []
 
 
+def test_after_setup_dictation_starts_before_the_question_is_asked(monkeypatch):
+    """Asked at setup's end, the question held the dictation service back
+    until it was answered; now the service starts and the question comes a
+    moment later, on its own timer."""
+    from tuxtalk import menu_cache, tray
+    started, timers = [], []
+    fake_tray = types.SimpleNamespace(
+        onboarding_in_progress=True, refresh_menu=lambda: None,
+        show_menu_window_if_no_tray=lambda: False,
+        _auto_start_service=lambda delay: started.append(delay))
+    monkeypatch.setattr(first_run_marker, "mark_first_run_complete", lambda: None)
+    monkeypatch.setattr(menu_cache, "refresh_menu_cache", lambda: None)
+    monkeypatch.setattr(tray.GLib, "timeout_add", lambda ms, fn, *a: timers.append(fn))
+    monkeypatch.setattr(startup_notices, "offer_a11y_switch",
+                        lambda parent=None: pytest.fail("asked before the service started"))
+    tray._finish_first_run(fake_tray, {"continue": True})
+    assert started and startup_notices.offer_a11y_switch_after_setup in timers
+
+
 def test_not_asked_over_first_run_setup(switch, message_boxes, monkeypatch):
-    """Setup asks at its own end; the tray's start mustn't ask over it."""
+    """Setup has it asked once dictation runs; the tray's start mustn't ask over it."""
     monkeypatch.setattr(first_run_marker, "is_first_run", lambda: True)
     startup_notices.offer_a11y_switch_at_start()
     assert message_boxes.shown == []

@@ -223,17 +223,26 @@ def ready(run):
     shot = run.shot("ready")
     mark = run.log_mark()
     run.vm.ui("click", "button", "Start Using TuxTalk!", check=True)
+    # Dictation must start without an answer to the accessibility question,
+    # which comes a moment later; then it's answered Not Now, so the checks
+    # after this run as before and its window (titled TuxTalk too) is gone.
     if run.wait_log(mark, "Dictation service is ready", timeout=120) is None:
         raise Abort("the dictation service never reported ready")
+    asked = run.vm.ui("find", "label", "Let dictation fit into your sentences?",
+                      timeout=30) is not None
+    if asked:
+        run.vm.ui("click", "button", "Not Now", check=True)
+    question = ("the accessibility question came after it and was answered Not Now" if asked
+                else "no accessibility question (the desktop's switch is on already)")
     if run.vm.spec.tray:
-        return Outcome("pass", "Dictation service ready", screenshot=shot)
+        return Outcome("pass", f"Dictation service ready; {question}", screenshot=shot)
     log = run.log_since(mark)
     menu = run.vm.ui("find", "frame", "TuxTalk", timeout=10)
     menu_shot = run.shot("menu-window")
     if "No system tray and no extension running" in log and menu is not None:
         run.vm.tap("esc")   # close it, so the test windows get the clicks
         return Outcome("pass", "Menu window opened by itself (log: “No system tray and no "
-                       "extension running”)", screenshot=menu_shot)
+                       f"extension running”); {question}", screenshot=menu_shot)
     return Outcome("fail", f"menu window found: {menu is not None}", screenshot=menu_shot)
 
 
