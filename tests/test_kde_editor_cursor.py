@@ -5,6 +5,8 @@ selected; when they can't be asked, it presses Ctrl+C and puts the cursor
 back where the last dictation left it: "select the last sentence" selected
 text in the paragraph before, and the next dictation landed at the line's
 start."""
+import types
+
 import numpy as np
 import pytest
 from voice_edit_rig import fake_edit_world
@@ -300,7 +302,7 @@ def test_with_nothing_selected_after_a_save_select_that_still_selects_the_dictat
     from tuxtalk import voice_navigation as nav
     kwrite["selected"] = False
     monkeypatch.setattr(rs.state, "last_inserted_text", dictated)
-    monkeypatch.setattr(focused_window, "text_around_cursor", lambda: (line, ""))
+    monkeypatch.setattr(focused_window, "text_around_cursor", lambda cancelled: (line, ""))
     assert copy_in(KWRITE) is None
     keys = nav.chords(nav.parse("select that"), rs.state.last_inserted_text)
     assert selected_by(keys, line) == "Hello."
@@ -309,9 +311,25 @@ def test_with_nothing_selected_after_a_save_select_that_still_selects_the_dictat
 def test_with_the_cursor_away_from_the_dictation_it_is_remembered_as_it_was(kwrite, monkeypatch):
     kwrite["selected"] = False
     monkeypatch.setattr(rs.state, "last_inserted_text", "Hello. ")
-    monkeypatch.setattr(focused_window, "text_around_cursor", lambda: ("Other words", " here"))
+    monkeypatch.setattr(focused_window, "text_around_cursor",
+                        lambda cancelled: ("Other words", " here"))
     copy_in(KWRITE)
     assert rs.state.last_inserted_text == "Hello. "
+
+
+def test_esc_during_the_read_after_a_kwrite_edit_is_seen_by_it(kwrite, monkeypatch):
+    """The read waits while a dictation key is held: Esc on the voice edit
+    must end that wait, or the next dictation queues behind it."""
+    kwrite["selected"] = False
+    monkeypatch.setattr(rs.state, "last_inserted_text", "Hello. ")
+    seen = {}
+    monkeypatch.setattr(focused_window, "text_around_cursor",
+                        lambda cancelled: seen.setdefault("cancelled", cancelled) and None)
+    message = types.SimpleNamespace(cancelled=False)
+    copy_in(KWRITE, message)
+    assert seen["cancelled"]() is False
+    message.cancelled = True
+    assert seen["cancelled"]() is True
 
 
 def test_no_shift_f8_edit_in_kates_terminal_panel(monkeypatch):

@@ -238,7 +238,7 @@ def text_around_cursor(cancelled=lambda: False) -> tuple[str, str] | None:
     """Wait while a dictation modifier is down, then read the few characters
     on either side of the cursor in the app with the focus
     (atspi_helper.text_around_cursor); None when that can't be told, or
-    when *cancelled* says the dictation was meanwhile. While the key is down
+    when *cancelled* says the dictation was cancelled meanwhile. While the key is down
     the user may still be changing the text (modifier_hotkeys.wait_until_let_go),
     and typing waits for it anyway."""
     from . import atspi_helper, modifier_hotkeys, sentence_fit

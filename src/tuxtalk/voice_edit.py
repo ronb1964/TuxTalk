@@ -509,7 +509,7 @@ def _copy_in(where, send_copy, message=None, ask=True):
     selected = focused_window.has_selection() if ask else None
     if selected is False:
         logger.info("Voice edit: nothing selected in KDE's editor, so no Ctrl+C")
-        _remember_as_saved(where)
+        _remember_as_saved(where, message)
         return None, lambda also=(): None
     if selected:
         # Known to be a selection: a whole line with its line break, which
@@ -558,15 +558,16 @@ def _as_the_line_has_it(last, line_end):
     return last.rstrip() + line_end[len(line_end.rstrip()):]
 
 
-def _remember_as_saved(where):
+def _remember_as_saved(where, message):
     """With nothing selected in KDE's editor and its cursor at the end of
     the last dictation there, remember the dictation as the line has it
     (_as_the_line_has_it), read on the accessibility bus. A cursor anywhere
-    else leaves it as it was."""
+    else leaves it as it was, and so does Esc on *message* during the read."""
     last = rs.state.last_inserted_text
     if not last or keyboard_output.not_where_typed(where[0], where):
         return
-    around = focused_window.text_around_cursor()
+    around = focused_window.text_around_cursor(
+        lambda: message is not None and message.cancelled)
     if around is None:
         return
     line_end = around[0].split("\n")[-1]

@@ -245,12 +245,12 @@ def _held(keyboards, modifiers):
 
 def wait_until_let_go(cancelled=lambda: False) -> None:
     """Wait while a dictation modifier the desktop can see is down, as typing
-    does (wait_while_held), until *cancelled* says the dictation was. Kept
-    down, it's still the user's: Left Ctrl kept after a Left Ctrl+Space hold
-    makes A select all, and the dictation replaces it, so the text beside the
-    cursor is read only once the key is up. A key known to be stuck isn't
-    waited for, and one down for HELD_LIMIT_S is noted as stuck, so typing
-    gives up on it at once instead of waiting as long again."""
+    does (wait_while_held), until *cancelled* says the dictation was
+    cancelled. Kept down, it's still the user's: Left Ctrl kept after a Left
+    Ctrl+Space hold makes A select all, and the dictation replaces it, so the
+    text beside the cursor is read only once the key is up. A key known to
+    be stuck isn't waited for, and one down for HELD_LIMIT_S is noted as
+    stuck, so typing gives up on it at once instead of waiting as long again."""
     modifiers = _noted[1]
     if not modifiers and not ctrl_kept.pressed():
         return
