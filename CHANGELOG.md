@@ -6,10 +6,11 @@ before 0.15.0, so older entries use that name.
 ## [Unreleased]
 
 - An email or web address said on its own, for a To: box or an address
-  bar, no longer gets a period after it. A longer name is said with its
-  marks, anywhere: "john dot doe at gmail dot com" types
-  john.doe@gmail.com, "jane underscore smith" jane_smith, and "john no
-  space doe" johndoe. Thanks to Jim Orcheson (#44).
+  bar, no longer gets a period after it, and neither does a snippet that
+  types your address. A longer name is said with its marks, in a sentence
+  too: "john dot doe at gmail dot com" types john.doe@gmail.com, "jane
+  underscore smith" jane_smith, and "john no space doe" johndoe. Thanks
+  to Jim Orcheson (#44).
 - With Type at pause (TuxTalk Labs), the end of a recording fits the text
   after the cursor too, where the sentence fitting works: in the middle
   of a line it no longer leaves a period and a second space before the
@@ -68,8 +69,8 @@ before 0.15.0, so older entries use that name.
 - Help can be searched. Type in the box at the top of Help, press Ctrl+F,
   or just start typing, and the tabs make way for the cards that match, each
   naming the tab it's on (and TuxTalk Labs where it is one), where your
-  words first appear in bold. Click one, or press Enter for the first, and Help opens that tab
-  with the card near the top, outlined for a moment. It looks through every
+  words first appear in bold. Click one, or press Enter for the first, and
+  Help opens that tab with the card near the top, outlined for a moment. It looks through every
   card and every voice command as Help shows them to you, your own keys
   included; every word of a search counts, little words like "how" and
   "to" don't, "labs" finds every Labs feature, and everyday words find
@@ -86,13 +87,13 @@ before 0.15.0, so older entries use that name.
   the cursor: no capital in the middle of a sentence, a space in front
   where one is missing, and no closing period or doubled space when more
   text follows. It works in apps that tell the desktop's accessibility
-  system that text: GTK apps always, and KDE apps and Firefox once
-  accessibility is on. TuxTalk asks once before turning it on (it stays on
+  system that text: GTK apps always, and KDE apps, Firefox, and Chrome and
+  the apps built on it (see their entry above) once accessibility is on. TuxTalk asks once before turning it on (it stays on
   until you turn it off in Preferences → Advanced → Fine-tuning →
   Accessibility), and then says that an app already open may need to be
   closed and opened once. Web pages' rich text boxes (Gmail and the like)
-  work too, in Firefox and in Chrome. Where an app doesn't say, and in terminals, a
-  dictation is typed as before. In German, the first word keeps its
+  work too, in Firefox and in Chrome. Where an app doesn't say, and in
+  terminals, a dictation is typed as before. In German, the first word keeps its
   capital. Uninstalling turns accessibility off again
   only if TuxTalk turned it on. With it on, TuxTalk also recognises
   password boxes in KDE apps and Firefox.

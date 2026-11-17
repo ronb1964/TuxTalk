@@ -381,9 +381,12 @@ Say them the way you'd say them out loud. Hold <b>{hold}</b>, say "john at gmail
 let go: john@gmail.com. "github dot com" types github.com.
   • Said on its own, an address gets no period after it, ready for a To: box or a
     browser's address bar.
-  • Only the word right before "at" is the name. Say the marks in a longer one:
-    "john dot doe", "jane underscore smith", and "john no space doe" for johndoe.
-  • Your own address: a snippet does it every time (Preferences → Words → Add Snippet).
+  • Only the word right before "at" is the name, so "john doe at gmail dot com" types
+    John doe@gmail.com. Say the marks in a longer name: hold <b>{hold}</b>, say "john dot
+    doe at gmail dot com", let go: john.doe@gmail.com. "jane underscore smith" types
+    jane_smith, "john dash doe" john-doe, and "john no space doe" johndoe.
+  • Your own address: make it a snippet (Preferences → Words → Add Snippet), then hold
+    <b>{hold}</b>, say "my email", let go: your address, with no period after it.
 
 ### Taking it back
 Each of these is a dictation of its own, said right after the one it takes back.
@@ -403,7 +406,8 @@ One box at a time, each box a dictation of its own:
   4. When every box is filled, send the form as you would by hand: click its
      button, or press Enter. Ending a box with <b>press enter</b> types it with a
      period, as at the end of a sentence, then presses Enter: right for a search
-     box or a message, not for a name or an email address.
+     box or a message, not for a name. An email or web address said on its own
+     gets no period, with <b>press enter</b> or without.
   • Said in the middle of a dictation, <b>press tab</b> types a tab character
     instead, for lining things up in a document. A form box isn't the place for
     one, so in a form keep <b>press tab</b> for the end, one box per dictation.

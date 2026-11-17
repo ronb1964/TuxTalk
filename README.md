@@ -65,7 +65,7 @@ Plus a fix for Transcribe a File, where a damaged list of earlier transcripts co
 ## What it does
 
 <p align="center">
-  <img src="screenshots/you-say.png" alt="You say: Let's say three o'clock, no wait, make that four o'clock. TuxTalk types: Let's say four o'clock. You say: send the plans to john at gmail dot com. TuxTalk types: john@gmail.com. You say: new paragraph could we meet on Thursday question mark. TuxTalk types a new paragraph with Could we meet on Thursday?" width="760">
+  <img src="screenshots/you-say.png" alt="You say: Let's say three o'clock, no wait, make that four o'clock. TuxTalk types: Let's say four o'clock. You say: send the plans to john at gmail dot com. TuxTalk types: Send the plans to john@gmail.com. You say: new paragraph could we meet on Thursday question mark. TuxTalk types a new paragraph with Could we meet on Thursday?" width="760">
 </p>
 
 **It fixes it when you change your mind.** Say "no wait", "scratch that" or "actually" and correct yourself, and a small AI model on your own computer drops the wrong part. Every fix gets checked, and if the AI changed anything else, your words are typed exactly as you said them. It's optional, and it's off until you turn it on.
@@ -403,7 +403,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **See the words while you talk (Labs).** A box by the recording indicator shows what you've said so far, on a graphics card. Or pick Type at pause instead, and each phrase is typed as soon as you pause.
 - **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. A separate setting with no AI drops "um", "uh" and stutters.
 - **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
-- **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com. Said on its own, an address gets no period after it, and a longer name is said with its marks: "john dot doe", "jane underscore smith", "john no space doe" for johndoe@gmail.com.
+- **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com. Said on its own, an address gets no period after it. Only the word right before "at" is the name; say the marks in a longer one: "john dot doe at gmail dot com" types john.doe@gmail.com, and "underscore" and "no space" work the same way ("john no space doe" is johndoe).
 - **Numbers as digits, if you want them.** 25 instead of twenty-five, and 7:30 and 15th too. Works in English and seven other languages.
 - **Fits the sentence at the cursor.** Dictating into the middle of a sentence carries it on, with no capital and the right spaces, where the app says what's around the cursor: GTK apps always, KDE apps, Firefox, Chrome and apps built on Chrome once you let TuxTalk turn on the desktop's accessibility.
 - **Plain text in terminals.** No capital at the start and no period at the end when you dictate a command.
