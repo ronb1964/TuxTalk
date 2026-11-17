@@ -476,14 +476,10 @@ def test_hotkey_test_without_the_helper():
     assert hotkey_test_devices.hotkey_test_helper(ecodes, connect=broken) is None
 
 
-def test_fix_typing_success_updates_the_status_lines(monkeypatch):
+def test_fix_typing_success_updates_the_status_lines(message_boxes):
     """After Fix Typing worked, the ❌ "needed" line above the button stayed
     (Silverblue VM, 2026-10-16)."""
     from tuxtalk import welcome_dialog
-    fake_msg = types.SimpleNamespace(format_secondary_text=lambda t: None,
-                                     set_position=lambda p: None,
-                                     run=lambda: None, destroy=lambda: None)
-    monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: fake_msg)
     uinput = Gtk.Label()
     me = types.SimpleNamespace(
         dialog=None, uinput_fixed=False, restart_needed=False, needs_uinput_fix=True,
