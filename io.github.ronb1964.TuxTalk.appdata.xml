@@ -95,7 +95,7 @@
   </screenshots>
 
   <releases>
-    <release version="0.24.0" date="2026-11-15">
+    <release version="0.24.0" date="2026-11-19">
       <description>
         <p>Dictation fits the sentence at the cursor, and Help can be searched</p>
         <ul>
