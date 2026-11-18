@@ -351,6 +351,9 @@ class RecordingIndicator(Gtk.Window):
             self.follow_window = follow_window
         new_scale = _scale_for_size(size)
         if new_scale != self.scale:
+            # A late X configure event can restore the hidden popup's old position on the next map.
+            if not self.get_visible():
+                self.unrealize()
             self.scale = new_scale
             self.base_size = int(15 * new_scale)     # the orb, with its window
             # The window must match the size the positioning maths assumes.

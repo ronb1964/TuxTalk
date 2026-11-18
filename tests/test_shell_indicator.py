@@ -1,3 +1,5 @@
+import threading
+
 import numpy as np
 import pytest
 
@@ -5,7 +7,8 @@ gi = pytest.importorskip("gi")
 from gi.repository import Gio, GLib, Gtk  # noqa: E402
 
 from tuxtalk import shell_indicator as si  # noqa: E402
-from tuxtalk import live_text_window  # noqa: E402
+from tuxtalk import live_text_window, recording  # noqa: E402
+from tuxtalk.indicator_dsp import SpectrumProcessor
 from tuxtalk.recording_indicator import RecordingIndicator  # noqa: E402
 from tuxtalk.window_geometry import Rect  # noqa: E402
 
@@ -48,6 +51,8 @@ def shell(bus):
     """Calls the extension's indicator received, as (method, arguments)."""
     class Calls(list):
         disconnected = False
+        defer_show = False
+        pending = None
 
         def disconnect(self):
             bus.unregister_object(registration)
@@ -62,7 +67,10 @@ def shell(bus):
 
     def on_call(_bus, _sender, _path, _iface, method, params, invocation):
         calls.append((method, params.unpack()))
-        invocation.return_value(None)
+        if method == "Show" and calls.defer_show:
+            calls.pending = invocation
+        else:
+            invocation.return_value(None)
 
     info = Gio.DBusNodeInfo.new_for_xml(INTERFACE_XML).interfaces[0]
     registration = bus.register_object(si.OBJECT_PATH, info, on_call, None, None)
@@ -76,19 +84,33 @@ def shell(bus):
     Gio.bus_unown_name(owner)
     if not calls.disconnected:
         calls.disconnect()
-    _wait_for(lambda: not si.available())
 
 
 def _methods(calls):
     return [method for method, _ in calls]
 
 
-def test_without_the_extension_the_x11_window_draws_the_indicator(bus, monkeypatch):
-    monkeypatch.setattr(RecordingIndicator, "__init__", lambda self, **_: None)
-    assert isinstance(si.create_recording_indicator(style="orb"), RecordingIndicator)
+def test_other_desktops_draw_the_x11_indicator(monkeypatch):
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "KDE")
+    window = si.create_recording_indicator(style="orb")
+    assert isinstance(window, RecordingIndicator)
+    window.destroy()
 
 
-def test_with_the_extension_the_shell_draws_the_indicator(shell):
+def test_gnome_without_a_session_bus_uses_x11(monkeypatch):
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "GNOME")
+
+    def unavailable(*_args):
+        raise GLib.Error("session bus disconnected")
+
+    monkeypatch.setattr(Gio, "bus_get_sync", unavailable)
+    window = si.create_recording_indicator()
+    assert isinstance(window, RecordingIndicator)
+    window.destroy()
+
+
+def test_with_the_extension_the_shell_draws_the_indicator(shell, monkeypatch):
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "GNOME")
     assert isinstance(si.create_recording_indicator(style="orb"), si.ShellIndicator)
 
 
@@ -150,7 +172,7 @@ def test_no_updates_after_hiding(shell):
     assert _methods(shell).count("Update") == count
 
 
-def test_extension_disabling_mid_recording_shows_the_x11_indicator(shell):
+def test_extension_disabling_mid_recording_shows_the_x11_indicator(shell, caplog):
     existing = set(Gtk.Window.list_toplevels())
     ind = si.ShellIndicator()
     ind.show_at_position()
@@ -160,36 +182,109 @@ def test_extension_disabling_mid_recording_shows_the_x11_indicator(shell):
     assert _wait_for(lambda: any(isinstance(window, RecordingIndicator) and
                                  window not in existing and window.get_visible()
                                  for window in Gtk.Window.list_toplevels()))
+    assert "indicator Update failed" in caplog.text
+    assert "UnknownMethod" in caplog.text
     ind.hide_indicator()
 
 
-def test_the_shell_indicator_returns_after_the_extension_is_enabled(shell):
-    existing = set(Gtk.Window.list_toplevels())
-    ind = si.ShellIndicator()
-    ind.show_at_position()
-    assert _wait_for(lambda: "Update" in _methods(shell))
+def test_extension_enabled_after_startup_takes_over_the_next_dictation(shell, monkeypatch):
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "GNOME")
     shell.disconnect()
-    assert _wait_for(lambda: any(isinstance(window, RecordingIndicator) and
-                                 window not in existing and window.get_visible()
-                                 for window in Gtk.Window.list_toplevels()))
+    existing = set(Gtk.Window.list_toplevels())
+    ind = si.create_recording_indicator(style="bars")
+    ind.show_at_position()
+    windows = lambda: set(Gtk.Window.list_toplevels()) - existing
+    assert _wait_for(lambda: any(window.get_visible() for window in windows()))
+    fallback, = windows()
+    ind.start_recording()
+    assert _wait_for(lambda: fallback.is_recording)
+    ind.set_audio_level(0.75)
+    ind.set_spectrum([0.4, 0.7])
+    ind.set_waveform([0.1, 0.2])
+    assert (fallback.audio_level, fallback.spectrum, fallback.waveform) == (0.75, [0.4, 0.7],
+                                                                           [0.1, 0.2])
+    assert (ind.get_position(), ind.get_size()) == (fallback.get_position(), fallback.get_size())
+    ind.hide_indicator()
+    assert _wait_for(lambda: not fallback.get_visible())
+    ind.apply_settings("top-left", "large", 4, 8, style="radial")
+    ind.show_at_position()
+    assert _wait_for(fallback.get_visible)
+    assert _wait_for(lambda: fallback.get_position() == (24, 28))
+    assert (windows(), fallback.style) == ({fallback}, "radial")
     ind.hide_indicator()
     shell.reconnect()
     ind.show_at_position()
-    assert _wait_for(lambda: _methods(shell).count("Show") == 2)
+    assert _wait_for(lambda: "Show" in _methods(shell))
+    assert _wait_for(lambda: not fallback.get_visible())
     ind.hide_indicator()
 
 
-def test_style_changes_wait_until_the_next_show(shell):
-    ind = si.ShellIndicator(style="bars")
+def test_a_late_show_error_cannot_switch_the_next_dictation_to_x11(shell, caplog):
+    shell.defer_show = True
+    ind = si.ShellIndicator()
+    ind.show_at_position()
+    assert _wait_for(lambda: shell.pending is not None)
+    ind.hide_indicator()
+    shell.defer_show = False
+    ind.show_at_position()
+    assert _wait_for(lambda: _methods(shell).count("Show") == 2)
+    shell.pending.return_dbus_error("org.freedesktop.DBus.Error.Failed", "old dictation")
+    ind.set_audio_level(0.4)
+    assert _wait_for(lambda: ("Update", (0.4, [])) in shell)
+    assert "Switching to X11" not in caplog.text
+    ind.hide_indicator()
+
+
+def test_key_release_during_x11_construction_hides_the_window(shell, monkeypatch):
+    shell.disconnect()
+    ind = si.ShellIndicator()
+    built = threading.Event()
+    released = threading.Event()
+    windows = []
+
+    def build(**settings):
+        window = RecordingIndicator(**settings)
+        windows.append(window)
+        built.set()
+        assert released.wait(timeout=3)
+        return window
+
+    def release():
+        if built.wait(timeout=3):
+            ind.hide_indicator()
+            released.set()
+
+    monkeypatch.setattr(si, "RecordingIndicator", build)
+    key = threading.Thread(target=release)
+    key.start()
+    ind.show_at_position()
+    assert _wait_for(lambda: released.is_set())
+    key.join(timeout=3)
+    # Drain both the Shell backend's idle callbacks and the GTK window's own show/hide.
+    idle = []
+    GLib.idle_add(lambda: idle.append(True), priority=GLib.PRIORITY_LOW)
+    assert _wait_for(lambda: idle)
+    assert not windows[0].get_visible()
+
+
+def test_style_and_geometry_changes_wait_until_the_next_show(shell, monkeypatch):
+    monkeypatch.setattr(si, "main_monitor_rect", lambda: Rect(0, 0, 1920, 1080))
+    ind = si.ShellIndicator(style="bars", position="bottom-center")
     ind.show_at_position()
     assert _wait_for(lambda: "Show" in _methods(shell))
-    ind.apply_settings("center", "medium", 0, 0, style="radial")
-    ind.set_spectrum([0.3, 0.7])
-    assert _wait_for(lambda: ("Update", (0.0, [0.3, 0.7])) in shell)
+    ind.apply_settings("top-left", "large", 8, 12, style="radial", sensitivity=2)
+    audio = (np.sin(np.linspace(0, 40, 512)) * 8000).astype(np.int16)
+    recording.feed_indicator(ind, audio, SpectrumProcessor(bins=20))
+    assert _wait_for(lambda: any(m == "Update" and len(args[1]) == 20 and max(args[1]) > 0
+                                 for m, args in shell))
+    assert (ind.get_position(), ind.get_size()) == ((860, 880), (200, 180))
     ind.hide_indicator()
     assert _wait_for(lambda: "Hide" in _methods(shell))
     ind.show_at_position()
     assert _wait_for(lambda: _methods(shell).count("Show") == 2)
+    recording.feed_indicator(ind, audio, None)
+    assert _wait_for(lambda: any(m == "Update" and len(args[1]) == 96 for m, args in shell))
+    assert (ind.get_position(), ind.get_size()) == ((28, 32), (280, 252))
     assert [args[0]["style"] for method, args in shell if method == "Show"] == ["bars", "radial"]
     ind.hide_indicator()
 
@@ -201,4 +296,36 @@ def test_the_radial_style_sends_its_ring(shell):
     assert _wait_for(lambda: any(m == "Update" and args[1] for m, args in shell))
     ring = next(args[1] for m, args in shell if m == "Update" and args[1])
     assert len(ring) == 96 and all(0.0 <= d <= 1.0 for d in ring)
+    ind.hide_indicator()
+
+
+def test_waveform_updates_reach_shell_after_a_quick_restart(shell):
+    ind = si.ShellIndicator(style="waveform")
+    ind.show_at_position()
+    assert _wait_for(lambda: "Show" in _methods(shell))
+    ind.hide_indicator()
+    ind.show_at_position()
+    ind.set_waveform([0.25, -0.5])
+    assert _wait_for(lambda: ("Update", (0.0, [0.75, -1.0])) in shell)
+    ind.hide_indicator()
+
+
+def test_failure_to_show_x11_hides_the_window(shell, monkeypatch, caplog):
+    shell.disconnect()
+    windows = []
+    show = RecordingIndicator.show_at_position
+
+    def fail(window):
+        windows.append(window)
+        show(window)
+        raise GLib.Error("lost X display")
+
+    monkeypatch.setattr(RecordingIndicator, "show_at_position", fail)
+    ind = si.ShellIndicator()
+    ind.show_at_position()
+    assert _wait_for(lambda: "lost X display" in caplog.text)
+    idle = []
+    GLib.idle_add(lambda: idle.append(True), priority=GLib.PRIORITY_LOW)
+    assert _wait_for(lambda: idle)
+    assert not windows[0].get_visible()
     ind.hide_indicator()
