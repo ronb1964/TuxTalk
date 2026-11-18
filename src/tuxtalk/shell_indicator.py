@@ -61,14 +61,6 @@ def create_recording_indicator(**settings):
     return indicator_class(**settings)
 
 
-def waveform_points(samples, width, sensitivity):
-    """The waveform as the extension draws it: about one point per pixel of
-    its *width*-wide line, scaled by sensitivity and kept within -1..1."""
-    count = max(1, int(width))
-    step = max(1, len(samples) // count)
-    return [max(-1.0, min(1.0, float(v) * 3.0 * sensitivity)) for v in samples[::step][:count]]
-
-
 class ShellIndicator:
     """RecordingIndicator's calls, forwarded to the Shell extension.
 
@@ -252,7 +244,8 @@ class ShellIndicator:
         # A copy: the audio thread extends and trims the live list meanwhile.
         samples = list(self._wave_history)
         if self._shown_style == "waveform":
-            return waveform_points(samples, BASE_WIDTH * self.scale * 0.60, self.sensitivity)
+            return indicator_styles.waveform_points(
+                samples, BASE_WIDTH * self.scale * 0.60, self.sensitivity)
         if self._shown_style == "radial":
             return indicator_styles.radial_offsets(samples, self.sensitivity,
                                                    gain=self._radial_gain)

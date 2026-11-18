@@ -132,16 +132,19 @@ def draw_waveform(cr, w, h, samples, level, color_rgb, sensitivity):
     x0 = (w - iw) / 2
     mid = h / 2
     amp = (h * 0.46 / 2) * 0.9
-    n = max(1, int(iw))
-    step = max(1, len(samples) // n)
-    pts = samples[::step][:n]
     cr.new_path()
-    for i, v in enumerate(pts):
-        y = mid - max(-1.0, min(1.0, v * 3.0 * sensitivity)) * amp
+    for i, value in enumerate(waveform_points(samples, iw, sensitivity)):
+        y = mid - value * amp
         cr.line_to(x0 + i, y) if i else cr.move_to(x0 + i, y)
     cr.set_source_rgba(*_fg(color_rgb, min(1.0, level + 0.3)))
     cr.set_line_width(2.6)
     cr.stroke()
+
+
+def waveform_points(samples, width, sensitivity):
+    count = max(1, int(width))
+    step = max(1, len(samples) // count)
+    return [max(-1.0, min(1.0, float(v) * 3.0 * sensitivity)) for v in samples[::step][:count]]
 
 
 def draw_bars(cr, w, h, spectrum, color_rgb, sensitivity=1.0):

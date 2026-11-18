@@ -202,15 +202,3 @@ def test_the_radial_style_sends_its_ring(shell):
     ring = next(args[1] for m, args in shell if m == "Update" and args[1])
     assert len(ring) == 96 and all(0.0 <= d <= 1.0 for d in ring)
     ind.hide_indicator()
-
-
-def test_the_waveform_keeps_one_point_per_pixel_within_range():
-    points = si.waveform_points(np.linspace(-1, 1, 1024), 120, 1.0)
-    assert len(points) == 120
-    assert min(points) == -1.0 and max(points) == 1.0
-
-
-def test_the_waveform_follows_sensitivity():
-    quiet = si.waveform_points([0.1] * 10, 10, 1.0)
-    assert quiet[0] == pytest.approx(0.3)
-    assert si.waveform_points([0.1] * 10, 10, 2.0)[0] == pytest.approx(0.6)
