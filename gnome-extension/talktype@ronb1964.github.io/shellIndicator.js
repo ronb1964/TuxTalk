@@ -91,10 +91,10 @@ function followPosition(win, width, height, monitor, position) {
 }
 
 function fixedPosition(position, width, height, monitor, offsetX, offsetY) {
-    const x = monitor.x + offsetX + horizontal(position, EDGE_MARGIN, monitor.width - width - EDGE_MARGIN,
-        (monitor.width - width) / 2);
-    const y = monitor.y + offsetY + vertical(position, EDGE_MARGIN, monitor.height - height - EDGE_MARGIN,
-        (monitor.height - height) / 2);
+    const x = monitor.x + offsetX + horizontal(position, EDGE_MARGIN,
+        monitor.width - width - EDGE_MARGIN, (monitor.width - width) / 2);
+    const y = monitor.y + offsetY + vertical(position, EDGE_MARGIN,
+        monitor.height - height - EDGE_MARGIN, (monitor.height - height) / 2);
     return [
         clamp(x, monitor.x, monitor.x + monitor.width - width),
         clamp(y, monitor.y, monitor.y + monitor.height - height),
@@ -172,7 +172,9 @@ export class ShellIndicator {
         this._windowPositionId = 0;
         this._windowSizeId = 0;
 
-        this._area = new St.DrawingArea({reactive: false, visible: false, accessible_name: 'TuxTalk Recording'});
+        this._area = new St.DrawingArea({
+            reactive: false, visible: false, accessible_name: 'TuxTalk Recording',
+        });
         this._monitorsId = Main.layoutManager.connect('monitors-changed', () => {
             if (this._tickId)
                 this._place();
@@ -194,7 +196,8 @@ export class ShellIndicator {
         const follow = value('follow') ?? false;
         const offsetX = value('offset_x') ?? 0;
         const offsetY = value('offset_y') ?? 0;
-        if (!Array.isArray(rgb) || rgb.length !== 3 || rgb.some(v => !Number.isFinite(v) || v < 0 || v > 1) ||
+        if (!Array.isArray(rgb) || rgb.length !== 3 ||
+            rgb.some(v => !Number.isFinite(v) || v < 0 || v > 1) ||
             !Number.isFinite(scale) || scale < 0.5 || scale > 2 ||
             typeof position !== 'string' || position.length > 32 ||
             !['orb', 'waveform', 'bars', 'radial'].includes(style) || typeof follow !== 'boolean' ||
@@ -219,7 +222,8 @@ export class ShellIndicator {
         this._area.set_size(BASE_WIDTH * this._settings.scale, BASE_HEIGHT * this._settings.scale);
         this._focusChanged();
         if (!this._focusId)
-            this._focusId = global.display.connect('notify::focus-window', () => this._focusChanged());
+            this._focusId = global.display.connect('notify::focus-window',
+                () => this._focusChanged());
         if (!this._tickId)
             this._tickId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => this._tick());
     }
@@ -240,7 +244,8 @@ export class ShellIndicator {
         this._lastUpdate = GLib.get_monotonic_time();
         if (!this._tickId) {
             this._focusChanged();
-            this._focusId = global.display.connect('notify::focus-window', () => this._focusChanged());
+            this._focusId = global.display.connect('notify::focus-window',
+                () => this._focusChanged());
             this._tickId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => this._tick());
         }
     }
@@ -300,7 +305,8 @@ export class ShellIndicator {
             const monitor = display.get_monitor_geometry(follow && win
                 ? win.get_monitor() : display.get_primary_monitor());
             const primary = display.get_monitor_geometry(display.get_primary_monitor());
-            if (monitor.width <= 0 || monitor.height <= 0 || primary.width <= 0 || primary.height <= 0) {
+            if (monitor.width <= 0 || monitor.height <= 0 ||
+                primary.width <= 0 || primary.height <= 0) {
                 this._area.hide();
                 return;
             }
@@ -337,12 +343,13 @@ export class ShellIndicator {
     _repaint(area) {
         const cr = area.get_context();
         try {
-            if (!this._settings)
-                return;
-            const [width, height] = area.get_surface_size();
             cr.setOperator(Cairo.Operator.CLEAR);
             cr.paint();
             cr.setOperator(Cairo.Operator.OVER);
+            // Hide clears the settings, and a repaint queued before it can follow.
+            if (!this._settings)
+                return;
+            const [width, height] = area.get_surface_size();
             const {style, rgb} = this._settings;
             if (style === 'waveform')
                 this._drawWaveform(cr, width, height, rgb);
@@ -381,7 +388,9 @@ export class ShellIndicator {
             return;
         const iw = w * 0.52;
         const x0 = (w - iw) / 2;
-        const gap = 4;
+        // A share of the width, as indicator_styles.draw_bars: a fixed
+        // 4 pixels left the bars at Small narrower than nothing.
+        const gap = w * 0.02;
         const bw = (iw - gap * (bands.length - 1)) / bands.length;
         const ch = h * 0.40;
         const baseline = h / 2 + ch / 2;

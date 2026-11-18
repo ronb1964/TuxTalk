@@ -630,12 +630,10 @@ class RecordingIndicator(Gtk.Window):
 
     def draw_timer(self, cr, x, y, seconds):
         """Draw the timer text centered vertically with orb"""
-        # Format time as MM:SS
         minutes = seconds // 60
         secs = seconds % 60
         time_text = f"{minutes}:{secs:02d}"
 
-        # Set font - scaled
         cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
         cr.set_font_size(22 * self.scale)
 

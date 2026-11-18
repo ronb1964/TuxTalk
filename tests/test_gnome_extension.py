@@ -734,6 +734,23 @@ def test_shell_repaints_the_recording_style(style, command, expected):
     assert result == ["TuxTalk Recording", expected, ["$dispose"]]
 
 
+def test_shell_bars_at_the_small_size_are_real_bars():
+    """The Shell's bars had the same fixed 4-pixel gap: at Small, with the
+    20 bands the service sends, each bar came out narrower than nothing."""
+    widths, _logs = run("""
+        await t.enable();
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
+        indicator.Show({style: t.variant('bars'), scale: t.variant(0.6)});
+        indicator.SetRecording(true);
+        indicator.Update(0.5, new Array(20).fill(0.5));
+        t.shell.timeouts.at(-1).callback();
+        const area = t.shell.uiGroup[0];
+        t.report(area.commands.filter(([op]) => op === 'rectangle').map(c => c[3]));
+    """)
+    assert len(widths) == 20 and min(widths) > 0
+
+
 @pytest.mark.parametrize("missing", ["monitor", "frame", "zero-width", "zero-height"])
 def test_shell_recovers_when_display_geometry_returns(missing):
     state, _logs = run(f"""
@@ -763,18 +780,26 @@ def test_shell_recovers_when_display_geometry_returns(missing):
     assert state == [True, True, [310, 230], 1]
 
 
-def test_repaint_after_hide_disposes_the_context():
+CLEARED = [["setOperator", 0], ["paint"], ["setOperator", 2]]
+
+
+def test_a_repaint_with_nothing_shown_clears_and_disposes_the_context():
+    """GNOME can repaint the area before the first Show or after a Hide: the
+    settings are gone then, and it must neither throw nor keep the context."""
     commands, _logs = run("""
         await t.enable();
         const indicator = t.shell.exported.find(item =>
             item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
-        indicator.Show({});
-        indicator.Hide();
         const area = t.shell.uiGroup[0];
         area.emit('repaint');
-        t.report(area.commands);
+        const before = area.commands.splice(0);
+        indicator.Show({});
+        indicator.Hide();
+        area.commands.length = 0;
+        area.emit('repaint');
+        t.report([before, area.commands]);
     """)
-    assert commands == [["$dispose"]]
+    assert commands == [CLEARED + [["$dispose"]]] * 2
 
 
 def test_repaint_failure_disposes_the_context():
@@ -793,4 +818,4 @@ def test_repaint_failure_disposes_the_context():
         }
         t.report([message, area.commands]);
     """)
-    assert result == ["surface unavailable", [["$dispose"]]]
+    assert result == ["surface unavailable", CLEARED + [["$dispose"]]]

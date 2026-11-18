@@ -1,3 +1,6 @@
+"""The GNOME Shell recording indicator (shell_indicator): the extension's side
+is a stand-in on a real session bus, so Show, Update and Hide go over D-Bus
+as they do on GNOME, and the X11 window takes over when it doesn't answer."""
 import logging
 import threading
 
@@ -54,6 +57,7 @@ def shell(bus):
     class Calls(list):
         disconnected = False
         defer_show = False
+        fail_hide = False
         pending = None
 
         def disconnect(self):
@@ -71,6 +75,8 @@ def shell(bus):
         calls.append((method, params.unpack()))
         if method == "Show" and calls.defer_show:
             calls.pending = invocation
+        elif method == "Hide" and calls.fail_hide:
+            invocation.return_dbus_error("org.freedesktop.DBus.Error.Failed", "no hide")
         else:
             invocation.return_value(None)
 
@@ -452,3 +458,49 @@ def test_x11_owns_the_radial_history_after_fallback(shell, monkeypatch):
     (fallback,) = set(Gtk.Window.list_toplevels()) - existing
     assert fallback.waveform == [0.1, 0.2, 0.3, 0.4]
     ind.hide_indicator()
+
+
+def test_after_the_shell_drew_again_a_switch_to_x11_warns_again(shell, caplog):
+    """Warned once and then quiet, a real failure hours after the Shell came
+    back went only to the debug log, which the log file never keeps."""
+    caplog.set_level(logging.DEBUG, logger=si.__name__)
+    ind = si.ShellIndicator()
+
+    def switched():
+        return [r.levelno for r in caplog.records if "Switching to X11" in r.message]
+
+    def dictate(done):
+        ind.show_at_position()
+        assert _wait_for(done)
+        ind.hide_indicator()
+        _wait_for(lambda: False, seconds=0.1)
+
+    shell.disconnect()
+    dictate(lambda: len(switched()) == 1)
+    shell.reconnect()
+    dictate(lambda: ind._on_shell)
+    shell.disconnect()
+    dictate(lambda: len(switched()) == 2)
+    assert switched() == [logging.WARNING, logging.WARNING]
+
+
+def test_a_hide_the_shell_refused_is_logged(shell, caplog):
+    """The indicator would stay up until its watchdog, with nothing saying why."""
+    ind = si.ShellIndicator()
+    ind.show_at_position()
+    assert _wait_for(lambda: ind._on_shell)
+    shell.fail_hide = True
+    ind.hide_indicator()
+    assert _wait_for(lambda: "didn't hide the recording indicator" in caplog.text)
+
+
+def test_no_hide_line_on_the_way_to_x11(shell, caplog):
+    """Without the extension every Hide fails too: not a line per dictation."""
+    shell.disconnect()
+    ind = si.ShellIndicator()
+    ind.show_at_position()
+    assert _wait_for(lambda: "Switching to X11" in caplog.text)
+    ind.hide_indicator()
+    _wait_for(lambda: False, seconds=0.2)
+    assert "didn't hide" not in caplog.text
+

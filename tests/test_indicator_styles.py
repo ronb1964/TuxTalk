@@ -90,6 +90,30 @@ def test_bars_draw_something():
     assert _has_ink(lambda cr: S.draw_bars(cr, 200, 120, spec, (0.3, 0.7, 0.96)))
 
 
+class _Recording:
+    """A cairo context that also notes each rectangle drawn on it."""
+
+    def __init__(self, cr):
+        self._cr, self.rectangles = cr, []
+
+    def rectangle(self, *rect):
+        self.rectangles.append(rect)
+        self._cr.rectangle(*rect)
+
+    def __getattr__(self, name):
+        return getattr(self._cr, name)
+
+
+def test_bars_at_the_small_size_are_real_bars():
+    """Small is 120 wide: a fixed 4-pixel gap between the 20 bands left
+    each bar narrower than nothing, thin slivers drawn backwards."""
+    cairo = pytest.importorskip("cairo")
+    cr = _Recording(cairo.Context(cairo.ImageSurface(cairo.FORMAT_ARGB32, 120, 72)))
+    S.draw_bars(cr, 120, 72, [0.5] * 20, (0.3, 0.7, 0.96))
+    widths = [width for _x, _y, width, _h in cr.rectangles[-20:]]
+    assert len(cr.rectangles) >= 20 and min(widths) > 0
+
+
 def test_animation_response_moves_the_bars():
     """The slider changed the waveform and the ring, never the bars."""
     spec = np.full(20, 0.3, dtype=np.float32)

@@ -1,9 +1,14 @@
-"""Recording indicator for GNOME Shell, with an X11 fallback."""
+"""Recording indicator for GNOME Shell, with an X11 fallback.
 
-# Mutter scales XWayland windows from their X11 resolution, blurring the indicator on fractional
-# monitors. Shell draws at the monitor's own scale. The service sends Show with appearance settings,
-# then Update with audio-driven shapes about 30 times a second.
+Mutter scales XWayland windows from their X11 resolution, blurring the
+indicator on fractional monitors, and places them where it likes. The
+TuxTalk extension draws it in the Shell at the monitor's own scale: the
+service sends Show with the appearance settings, then Update with the
+audio-driven shapes about 30 times a second. Without the extension, or an
+older one, each dictation falls back to the X11 window.
+"""
 
+import threading
 import time
 from dataclasses import asdict, dataclass, replace
 
@@ -79,7 +84,9 @@ class ShellIndicator:
         sensitivity: float = 1.0,
         follow_window: bool = False,
     ) -> None:
-        """Keep the X11 window on hand after its first use."""
+        """The settings as RecordingIndicator takes them. Nothing is shown
+        until show_at_position; the X11 window is made on the first fallback
+        and kept for later ones."""
         self._bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
         self._settings = self._shown = _Settings(
             position,
@@ -98,7 +105,15 @@ class ShellIndicator:
         self._session = 0
         self._visible = False
         self._recording = False
+        # The first switch to X11 since the Shell last drew is a warning, the
+        # rest debug: without the extension it would be one per dictation.
         self._fallback_warned = False
+        # Whether this dictation's Show reached the Shell, so a failed Hide
+        # there is worth a line, while one on the way to X11 isn't.
+        self._on_shell = False
+        # The audio thread's samples and the switch to X11 on GTK's thread:
+        # samples between the handover and the switch would be lost.
+        self._audio_lock = threading.Lock()
         self._update_id = None
         self._level = 0.0
         self._wave_history = []
@@ -174,8 +189,11 @@ class ShellIndicator:
             bounds, primary = params.unpack()
             self._geometry = Rect(*bounds), Rect(*primary)
 
-    def _call(self, method: str, params: GLib.Variant | None, session: int) -> None:
-        """Keep the session with the reply so an old failure cannot switch the new backend."""
+    def _call(self, method: str, params: GLib.Variant | None, session: int,
+              quiet: bool = False) -> None:
+        """Keep the session with the reply so an old failure cannot switch the
+        new backend. *quiet*: a failure needs no log line (a Hide on the way
+        to X11, where the Shell may well not answer)."""
         self._bus.call(
             BUS_NAME,
             OBJECT_PATH,
@@ -189,22 +207,35 @@ class ShellIndicator:
             self._on_reply,
             method,
             session,
+            quiet,
         )
 
-    def _on_reply(self, bus, result, method, session):
+    def _on_reply(self, bus, result, method, session, quiet):
+        """A failed Show or Update of this dictation switches it to X11; a
+        failed Hide is only logged. A Show that worked means the Shell draws
+        again, so the next switch to X11 warns again."""
         try:
             bus.call_finish(result)
         except GLib.Error as error:
-            if method != "Hide" and session == self._session and self._fallback is None:
+            if method == "Hide":
+                if not quiet:
+                    logger.warning("The Shell didn't hide the recording indicator: %s",
+                                   error.message)
+            elif session == self._session and self._fallback is None:
                 log = logger.debug if self._fallback_warned else logger.warning
                 log("Switching to X11 after Shell indicator %s failed: %s", method, error.message)
                 self._fallback_warned = True
                 self._activate_fallback()
+            return
+        if method == "Show" and session == self._session:
+            self._on_shell = True
+            self._fallback_warned = False
 
     def _activate_fallback(self):
         """Reuse the GTK window across dictations while Shell is unavailable."""
         self._stop_updates()
-        self._call("Hide", None, self._session)
+        self._on_shell = False
+        self._call("Hide", None, self._session, quiet=True)
         settings = asdict(self._shown)
         try:
             if self._x11 is None:
@@ -212,13 +243,14 @@ class ShellIndicator:
             else:
                 self._x11.apply_settings(**settings)
             self._x11.set_audio_level(self._level)
-            self._x11.set_waveform(self._wave_history.copy())
             self._x11.set_spectrum(self._spectrum)
             self._x11.show_at_position()
             if self._recording:
                 self._x11.start_recording()
-            self._fallback = self._x11
-            self._wave_history = []
+            with self._audio_lock:
+                self._x11.set_waveform(self._wave_history)
+                self._fallback = self._x11
+                self._wave_history = []
             if self.style == "radial" and (line := self._radial_gain.summary()):
                 logger.info(line)
         except Exception:
@@ -280,7 +312,8 @@ class ShellIndicator:
         self._visible = False
         self._session += 1
         self._level = 0.0
-        self._wave_history = []
+        with self._audio_lock:
+            self._wave_history = []
         self._spectrum = []
         GLib.idle_add(self._do_hide, self.style)
 
@@ -291,7 +324,8 @@ class ShellIndicator:
             self._fallback = None
         self._stop_updates()
         self._recording = False
-        self._call("Hide", None, self._session)
+        was_on_shell, self._on_shell = self._on_shell, False
+        self._call("Hide", None, self._session, quiet=not was_on_shell)
         if style == "radial" and (line := self._radial_gain.summary()):
             logger.info(line)
         return False
@@ -302,13 +336,14 @@ class ShellIndicator:
             fallback.set_audio_level(level)
 
     def set_waveform(self, samples):
-        if (fallback := self._fallback) is not None:
-            fallback.set_waveform(samples)
-            return
-        if self.style == "radial":
-            self._radial_gain.update(samples, time.monotonic())
-        self._wave_history.extend(samples)
-        del self._wave_history[:-1024]
+        with self._audio_lock:
+            if self._fallback is not None:
+                self._fallback.set_waveform(samples)
+                return
+            if self.style == "radial":
+                self._radial_gain.update(samples, time.monotonic())
+            self._wave_history.extend(samples)
+            del self._wave_history[:-1024]
 
     def set_spectrum(self, bands):
         self._spectrum = [float(v) for v in bands]
