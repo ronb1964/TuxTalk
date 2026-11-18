@@ -3,6 +3,8 @@ for GNOME Shell (gnome_extension_js): what a GNOME user, or a screen reader,
 gets from it as TuxTalk starts, changes and quits."""
 import json
 
+import pytest
+
 from gnome_extension_js import run
 
 STARTED = """
@@ -663,9 +665,12 @@ def test_shell_indicator_tracks_window_moves_and_resizes():
         window.frame.height += 100;
         window.emit('size-changed');
         positions.push(area.position);
-        t.report(positions);
+        const {lastSignal} = t.shell.exported.find(item => item.object === indicator);
+        t.report([positions, lastSignal]);
     """)
-    assert positions == [[310, 320], [410, 320], [410, 400]]
+    assert positions == [[[310, 320], [410, 320], [410, 400]], [
+        "GeometryChanged", "((iiii)(iiii))", [[410, 400, 200, 180], [0, 0, 1920, 1080]],
+    ]]
 
 
 def test_shell_indicator_rejects_unbounded_dbus_values():
@@ -705,3 +710,50 @@ def test_shell_indicator_hides_after_updates_stop():
         t.report([hidden, area.visible, t.shell.timeouts.length]);
     """)
     assert result == [[False, False, 0], True, 1]
+
+
+@pytest.mark.parametrize(("style", "command", "expected"), [
+    ("orb", "showText", ["0:00"]),
+    ("bars", "rectangle", [48, 126 - 18, 50, 18]),
+    ("waveform", "lineTo", [40, 90 - 0.25 * (180 * 0.46 / 2) * 0.9]),
+    ("radial", "lineTo", pytest.approx([100, 47.286])),
+])
+def test_shell_repaints_the_recording_style(style, command, expected):
+    result, _logs = run(f"""
+        await t.enable();
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
+        indicator.Show({{style: t.variant({json.dumps(style)})}});
+        indicator.SetRecording(true);
+        indicator.Update(0.5, [0.25, 0.75]);
+        t.shell.timeouts.at(-1).callback();
+        const area = t.shell.uiGroup[0];
+        t.report([area.accessible_name, area.commands.find(([op]) =>
+            op === {json.dumps(command)}).slice(1), area.commands.at(-1)]);
+    """)
+    assert result == ["TuxTalk Recording", expected, ["$dispose"]]
+
+
+@pytest.mark.parametrize("missing", ["monitor", "frame"])
+def test_shell_recovers_when_display_geometry_returns(missing):
+    state, _logs = run(f"""
+        await t.enable();
+        const window = new t.Window('Firefox', 1);
+        t.focus(window);
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
+        const area = t.shell.uiGroup[0];
+        const frame = window.frame;
+        const monitors = t.shell.monitorGeometries;
+        if ({json.dumps(missing)} === 'frame')
+            window.frame = null;
+        else
+            t.shell.monitorGeometries = [];
+        indicator.Show({{follow: t.variant(true)}});
+        const hidden = !area.visible;
+        window.frame = frame;
+        t.shell.monitorGeometries = monitors;
+        t.layoutManager.emit('monitors-changed');
+        t.report([hidden, area.visible, area.position, t.shell.timeouts.length]);
+    """)
+    assert state == [True, True, [310, 230], 1]

@@ -71,6 +71,12 @@ class Signals {
 // --- gi:// libraries -------------------------------------------------------------
 
 export const GLib = {
+    Variant: class {
+        constructor(type, value) {
+            this.type = type;
+            this.value = value;
+        }
+    },
     PRIORITY_DEFAULT: 0,
     SOURCE_REMOVE: false,
     SOURCE_CONTINUE: true,
@@ -123,7 +129,23 @@ class DrawingArea extends Actor {
     }
 
     queue_repaint() {
-        this.repaints = (this.repaints ?? 0) + 1;
+        this.emit('repaint');
+    }
+
+    get_surface_size() {
+        return this.size;
+    }
+
+    get_context() {
+        this.commands = [];
+        const context = {textExtents: text => ({height: text.length * 4})};
+        for (const name of ['setOperator', 'paint', 'save', 'translate', 'scale', 'setSource',
+            'arc', 'fill', 'restore', 'newSubPath', 'closePath', 'newPath', 'lineTo',
+            'setSourceRGBA', 'setLineWidth', 'stroke', 'rectangle', 'fillPreserve',
+            'selectFontFace', 'setFontSize', 'moveTo', 'showText', '$dispose']) {
+            context[name] = (...args) => this.commands.push([name, ...args]);
+        }
+        return context;
     }
 
     destroy() {
@@ -161,12 +183,13 @@ export const Shell = {
     },
 };
 
-// cairo, GJS's built-in module: only its constants; nothing draws in these tests.
 export const Cairo = {
     FontSlant: {NORMAL: 0},
     FontWeight: {BOLD: 1},
     Operator: {CLEAR: 0, OVER: 2},
-    RadialGradient: class {},
+    RadialGradient: class {
+        addColorStopRGBA() {}
+    },
 };
 
 export const Gio = {
@@ -202,6 +225,9 @@ export const Gio = {
                 export(bus, path) {
                     Object.assign(exported, {bus, path});
                     shell.exported.push(exported);
+                },
+                emit_signal(name, args) {
+                    this.lastSignal = [name, args.type, args.value];
                 },
                 unexport() {
                     exported.path = null;
@@ -253,9 +279,9 @@ export const overview = {
     },
 };
 
-export const layoutManager = {
+export const layoutManager = Object.assign(new Signals(), {
     uiGroup: {add_child: actor => shell.uiGroup.push(actor)},
-};
+});
 
 export const panel = {
     addToStatusArea(role, button) {
@@ -496,10 +522,6 @@ class Display extends Signals {
 
     get_monitor_geometry(index) {
         return shell.monitorGeometries[index];
-    }
-
-    get_current_monitor() {
-        return 0;
     }
 
     get_primary_monitor() {

@@ -34,6 +34,10 @@ const IndicatorIface = `
       <arg type="ad" direction="in" name="values"/>
     </method>
     <method name="Hide"/>
+    <signal name="GeometryChanged">
+      <arg type="(iiii)" name="bounds"/>
+      <arg type="(iiii)" name="primary"/>
+    </signal>
   </interface>
 </node>`;
 
@@ -168,7 +172,11 @@ export class ShellIndicator {
         this._windowPositionId = 0;
         this._windowSizeId = 0;
 
-        this._area = new St.DrawingArea({reactive: false, visible: false});
+        this._area = new St.DrawingArea({reactive: false, visible: false, accessible_name: 'TuxTalk Recording'});
+        this._monitorsId = Main.layoutManager.connect('monitors-changed', () => {
+            if (this._tickId)
+                this._place();
+        });
         this._area.connect('repaint', area => this._repaint(area));
         // Above the windows; not reactive, so clicks go through to them.
         Main.layoutManager.uiGroup.add_child(this._area);
@@ -210,7 +218,6 @@ export class ShellIndicator {
         this._lastUpdate = this._startTime;
         this._area.set_size(BASE_WIDTH * this._settings.scale, BASE_HEIGHT * this._settings.scale);
         this._focusChanged();
-        this._area.show();
         if (!this._focusId)
             this._focusId = global.display.connect('notify::focus-window', () => this._focusChanged());
         if (!this._tickId)
@@ -233,7 +240,6 @@ export class ShellIndicator {
         this._lastUpdate = GLib.get_monotonic_time();
         if (!this._tickId) {
             this._focusChanged();
-            this._area.show();
             this._focusId = global.display.connect('notify::focus-window', () => this._focusChanged());
             this._tickId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => this._tick());
         }
@@ -249,6 +255,7 @@ export class ShellIndicator {
 
     destroy() {
         this._stop();
+        Main.layoutManager.disconnect(this._monitorsId);
         this._dbus.unexport();
         this._area.destroy();
     }
@@ -288,12 +295,25 @@ export class ShellIndicator {
         const [width, height] = this._area.get_size();
         const display = global.display;
         const win = display.focus_window;
-        const monitor = display.get_monitor_geometry(follow && win
-            ? win.get_monitor() : display.get_primary_monitor());
-        const [x, y] = follow && win
-            ? followPosition(win.get_frame_rect(), width, height, monitor, position)
-            : fixedPosition(position, width, height, monitor, offsetX, offsetY);
-        this._area.set_position(Math.round(x), Math.round(y));
+        // Mutter can lose the frame or monitor while it reconfigures the displays.
+        try {
+            const monitor = display.get_monitor_geometry(follow && win
+                ? win.get_monitor() : display.get_primary_monitor());
+            const [x, y] = follow && win
+                ? followPosition(win.get_frame_rect(), width, height, monitor, position)
+                : fixedPosition(position, width, height, monitor, offsetX, offsetY);
+            const left = Math.round(x);
+            const top = Math.round(y);
+            const primary = display.get_monitor_geometry(display.get_primary_monitor());
+            this._area.set_position(left, top);
+            this._dbus.emit_signal('GeometryChanged', new GLib.Variant('((iiii)(iiii))', [
+                [left, top, width, height], [primary.x, primary.y, primary.width, primary.height],
+            ]));
+            this._area.show();
+        } catch (error) {
+            this._area.hide();
+            console.warn('TuxTalk could not place the recording indicator:', error);
+        }
     }
 
     _tick() {

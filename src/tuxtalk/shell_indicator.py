@@ -19,9 +19,11 @@ from .recording_indicator import (
 )
 from .ui_style import desktop_accent_rgb
 from .window_geometry import (
+    Rect,
     active_window_rect,
     main_monitor_rect,
     monitor_rect_at,
+    to_screen_rect,
 )
 
 logger = setup_logger(__name__)
@@ -87,6 +89,8 @@ class ShellIndicator:
             follow_window,
         )
         self._x11 = self._fallback = None
+        self._geometry_id = None
+        self._geometry = None
         self._session = 0
         self._visible = False
         self._recording = False
@@ -145,9 +149,24 @@ class ShellIndicator:
             "offset_x": GLib.Variant("i", int(shown.offset_x)),
             "offset_y": GLib.Variant("i", int(shown.offset_y)),
         }
+        self._geometry_id = self._bus.signal_subscribe(
+            BUS_NAME,
+            INTERFACE,
+            "GeometryChanged",
+            OBJECT_PATH,
+            None,
+            Gio.DBusSignalFlags.NONE,
+            self._on_geometry,
+            session,
+        )
         self._call("Show", GLib.Variant("(a{sv})", (settings,)), session)
         self._update_id = GLib.timeout_add(UPDATE_MS, self._send_update, session)
         return False
+
+    def _on_geometry(self, _bus, _sender, _path, _interface, _signal, params, session):
+        if session == self._session:
+            bounds, primary = params.unpack()
+            self._geometry = Rect(*bounds), Rect(*primary)
 
     def _call(self, method: str, params: GLib.Variant | None, session: int) -> None:
         """Keep the session with the reply so an old failure cannot switch the new backend."""
@@ -200,6 +219,10 @@ class ShellIndicator:
                 self._x11.hide_indicator()
 
     def _stop_updates(self):
+        if self._geometry_id is not None:
+            self._bus.signal_unsubscribe(self._geometry_id)
+            self._geometry_id = None
+        self._geometry = None
         if self._update_id is not None:
             GLib.source_remove(self._update_id)
             self._update_id = None
@@ -288,6 +311,8 @@ class ShellIndicator:
     def get_position(self) -> tuple[int, int]:
         if self._fallback is not None:
             return self._fallback.get_position()
+        if self._geometry is not None:
+            return self._screen_bounds()[:2]
         width, height = self.get_size()
         shown = self._shown
         if shown.follow_window and (window := active_window_rect()) is not None:
@@ -297,8 +322,15 @@ class ShellIndicator:
             shown.position, width, height, main_monitor_rect(), shown.offset_x, shown.offset_y
         )
 
+    def _screen_bounds(self) -> Rect:
+        # XWayland has one coordinate scale across the desktop. Both APIs identify the primary.
+        bounds, primary = self._geometry
+        return to_screen_rect(bounds, "", primary, [("", main_monitor_rect())])
+
     def get_size(self) -> tuple[int, int]:
         if self._fallback is not None:
             return self._fallback.get_size()
+        if self._geometry is not None:
+            return self._screen_bounds()[2:]
         scale = self._shown.scale
         return round(BASE_WIDTH * scale), round(BASE_HEIGHT * scale)

@@ -161,6 +161,17 @@ def test_live_text_anchors_by_the_shell_indicator(bus, monkeypatch):
     ind.hide_indicator()
 
 
+def test_live_text_maps_shell_bounds_to_xwayland(shell, bus, monkeypatch):
+    monkeypatch.setattr(si, "main_monitor_rect", lambda: Rect(2560, 0, 2560, 1440))
+    ind = si.ShellIndicator()
+    ind.show_at_position()
+    assert _wait_for(lambda: "Show" in _methods(shell))
+    bus.emit_signal(None, si.OBJECT_PATH, si.INTERFACE, "GeometryChanged",
+                    GLib.Variant("((iiii)(iiii))", ((220, 120, 200, 180), (1280, 0, 1280, 720))))
+    assert _wait_for(lambda: (ind.get_position(), ind.get_size()) == ((440, 240), (400, 360)))
+    ind.hide_indicator()
+
+
 def test_no_updates_after_hiding(shell):
     ind = si.ShellIndicator()
     ind.show_at_position()
