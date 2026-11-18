@@ -22,6 +22,14 @@ Rect = namedtuple("Rect", "x y w h")
 _DBUS_TIMEOUT_S = 0.3     # the tray answers from a cache in a millisecond
 
 
+def overlap(first, second):
+    """The Rect two (x, y, width, height) rectangles share, or None."""
+    left, top = max(first[0], second[0]), max(first[1], second[1])
+    right = min(first[0] + first[2], second[0] + second[2])
+    bottom = min(first[1] + first[3], second[1] + second[3])
+    return Rect(left, top, right - left, bottom - top) if right > left and bottom > top else None
+
+
 def _rect(text):
     """"x,y,w,h" -> Rect; raises ValueError for anything else."""
     parts = [int(round(float(p))) for p in text.split(",")]
@@ -149,16 +157,32 @@ def active_window_report():
 
 
 def active_window_rect(report=_ASK):
-    """The active window's frame where TuxTalk's own windows are drawn, or
-    None when nothing could say. *report* is an active_window_report() taken
-    earlier. GTK thread only: GDK lists the monitors, and finds the window
-    in an X11 session."""
+    """The active window's frame where TuxTalk's own windows are drawn, cut
+    to its part on its monitor (_shown_part), or None when nothing could
+    say. *report* is an active_window_report() taken earlier. GTK thread
+    only: GDK lists the monitors, and finds the window in an X11 session."""
     if report is _ASK:
         report = active_window_report()
     if report is None:
         rect = _x11_active_rect()
         report = (rect, "", None) if rect else None
-    return to_screen_rect(*report, screen_monitors()) if report else None
+    if not report:
+        return None
+    monitors = screen_monitors()
+    return _shown_part(to_screen_rect(*report, monitors), monitors)
+
+
+def _shown_part(rect, monitors):
+    """The part of *rect* on the monitor holding its centre, so a window
+    partly off the screen, or bigger than it, gets the indicator and messages
+    over what can be seen. Ubuntu's desktop icons layer is one: it keeps the
+    screen's unscaled size under fractional scaling. *rect* as it is when
+    its centre is on no monitor of *monitors* ([(name, Rect)])."""
+    cx, cy = rect.x + rect.w // 2, rect.y + rect.h // 2
+    for _name, mon in monitors:
+        if mon.x <= cx < mon.x + mon.w and mon.y <= cy < mon.y + mon.h:
+            return overlap(rect, mon) or rect
+    return rect
 
 
 def active_window_center(report=_ASK):

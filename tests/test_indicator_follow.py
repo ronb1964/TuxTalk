@@ -29,6 +29,34 @@ def test_the_active_window_rect_follows_the_same_sources(monkeypatch):
     assert wg.active_window_rect() == Rect(100, 200, 800, 600)
 
 
+def test_a_window_bigger_than_its_screen_counts_only_its_part_on_the_screen(monkeypatch):
+    # Ubuntu's desktop icons layer keeps the screen's unscaled size at 150 %:
+    # 1920x1200 on a 1280x800 logical screen, which GDK sees as 1920x1200.
+    monkeypatch.setattr(wg, "screen_monitors", lambda: [("Virtual-1", Rect(0, 0, 1920, 1200))])
+    monkeypatch.setattr(wg, "_reported", lambda: "0,0,1920,1200|Virtual-1|0,0,1280,800")
+    assert wg.active_window_rect() == Rect(0, 0, 1920, 1200)
+
+
+def test_a_window_partly_off_the_screen_counts_only_the_part_shown(monkeypatch):
+    monkeypatch.setattr(wg, "screen_monitors", lambda: [("DP-1", Rect(0, 0, 1920, 1080))])
+    monkeypatch.setattr(wg, "_reported", lambda: "-400,100,800,600|DP-1|0,0,1920,1080")
+    assert wg.active_window_rect() == Rect(0, 100, 400, 600)
+
+
+def test_a_window_across_two_screens_counts_its_part_on_the_one_holding_its_middle(
+        monkeypatch):
+    monkeypatch.setattr(wg, "screen_monitors", lambda: [
+        ("DP-1", Rect(0, 0, 1920, 1080)), ("DP-2", Rect(1920, 0, 1920, 1080))])
+    monkeypatch.setattr(wg, "_reported", lambda: "1800,100,800,600|DP-2|1920,0,1920,1080")
+    assert wg.active_window_rect() == Rect(1920, 100, 680, 600)
+
+
+def test_a_window_whose_middle_is_on_no_screen_is_kept_whole(monkeypatch):
+    monkeypatch.setattr(wg, "screen_monitors", lambda: [("DP-1", Rect(0, 0, 1920, 1080))])
+    monkeypatch.setattr(wg, "_reported", lambda: "4000,100,800,600|DP-1|0,0,1920,1080")
+    assert wg.active_window_rect() == Rect(4000, 100, 800, 600)
+
+
 # --- where the indicator goes ----------------------------------------------------------------
 
 def test_centred_a_fifth_of_the_window_above_its_bottom():
@@ -43,18 +71,7 @@ def test_a_short_window_keeps_the_minimum_gap_at_the_bottom():
 
 def test_kept_on_the_monitor():
     pos = ri.follow_position(Rect(3300, 1300, 300, 300), 200, 80, Rect(0, 0, 3440, 1440))
-    assert pos == (3240, 1320)
-
-
-def test_a_window_bigger_than_its_screen_centres_it_on_the_screen():
-    # Ubuntu's desktop icons layer keeps the screen's unscaled size at 150 %.
-    pos = ri.follow_position(Rect(0, 0, 1920, 1200), 200, 180, Rect(0, 0, 1280, 800), "center")
-    assert pos == (540, 310)
-
-
-def test_a_window_partly_off_the_screen_centres_it_on_the_part_shown():
-    pos = ri.follow_position(Rect(-400, 100, 800, 600), 200, 80, Rect(0, 0, 1920, 1080), "center")
-    assert pos == (100, 360)
+    assert pos == (3240, 1360)
 
 
 def test_a_tiny_window_still_gets_the_indicator_inside_its_monitor():

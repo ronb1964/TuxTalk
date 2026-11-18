@@ -22,7 +22,7 @@ import os
 import time
 
 from . import indicator_styles, ui_style, x11_desktop
-from .window_geometry import Rect, main_monitor_rect, monitor_rect_at
+from .window_geometry import main_monitor_rect, monitor_rect_at
 from .indicator_styles import RadialGain
 from .logger import setup_logger
 
@@ -68,26 +68,12 @@ FOLLOW_TOP = 50         # below the top edge
 FOLLOW_SIDE = 20        # in from the left and right edges
 
 
-def _shown_part(window, monitor):
-    """The part of *window* on *monitor*, so a window partly off the screen,
-    or bigger than it, gets the indicator over what can be seen. Ubuntu's
-    desktop icons layer is one: it keeps the screen's unscaled size under
-    fractional scaling. A window wholly off the monitor stays as it is."""
-    left, top = max(window.x, monitor.x), max(window.y, monitor.y)
-    right = min(window.x + window.w, monitor.x + monitor.w)
-    bottom = min(window.y + window.h, monitor.y + monitor.h)
-    if right <= left or bottom <= top:
-        return window
-    return Rect(left, top, right - left, bottom - top)
-
-
 def follow_position(window, width, height, monitor, position="bottom-center"):
     """Top-left corner for a *width* x *height* indicator at *position* (the
     Audio tab's choice: "bottom-center", "top-left", "center"...) within
     *window*, kept on *monitor* (window_geometry.Rect values). The Audio
     tab's offset is for the whole screen, so it doesn't apply here."""
     position = (position or "").lower()
-    window = _shown_part(window, monitor)
     if "left" in position:
         x = window.x + FOLLOW_SIDE
     elif "right" in position:

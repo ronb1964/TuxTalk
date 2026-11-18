@@ -25,6 +25,7 @@ import threading
 import time
 
 from . import desktop_detect, x11_activate
+from .window_geometry import overlap
 
 log = logging.getLogger(__name__)
 
@@ -73,14 +74,6 @@ def monitors(display) -> list:
     return [whole] if whole else []
 
 
-def _overlap(first, second):
-    """The rectangle two (x, y, width, height) rectangles share, or None."""
-    left, top = max(first[0], second[0]), max(first[1], second[1])
-    right = min(first[0] + first[2], second[0] + second[2])
-    bottom = min(first[1] + first[3], second[1] + second[3])
-    return (left, top, right - left, bottom - top) if right > left and bottom > top else None
-
-
 def _monitor_index(screens, rect) -> int:
     """Which of *screens* holds the centre of *rect* (the first when none does)."""
     cx, cy = rect[0] + rect[2] // 2, rect[1] + rect[3] // 2
@@ -104,7 +97,7 @@ def _work_area(display, screen):
     areas = display.cardinals(display.root, b"_NET_WORKAREA")
     start = _current_desktop(display) * 4
     if len(areas) >= start + 4:
-        screen = _overlap(screen, tuple(areas[start:start + 4])) or screen
+        screen = overlap(screen, tuple(areas[start:start + 4])) or screen
     return _less_panels(display, screen)
 
 
@@ -119,7 +112,7 @@ def _less_panels(display, area):
         if len(strut) < 12 or whole is None:
             continue
         for side, (rect, edge) in enumerate(_strut_rects(strut, whole)):
-            if not edge or _overlap(area, rect) is None:
+            if not edge or overlap(area, rect) is None:
                 continue
             if side == 0:
                 left = max(left, rect[0] + rect[2])
