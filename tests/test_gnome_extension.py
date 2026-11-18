@@ -734,7 +734,7 @@ def test_shell_repaints_the_recording_style(style, command, expected):
     assert result == ["TuxTalk Recording", expected, ["$dispose"]]
 
 
-@pytest.mark.parametrize("missing", ["monitor", "frame"])
+@pytest.mark.parametrize("missing", ["monitor", "frame", "zero-width", "zero-height"])
 def test_shell_recovers_when_display_geometry_returns(missing):
     state, _logs = run(f"""
         await t.enable();
@@ -747,6 +747,10 @@ def test_shell_recovers_when_display_geometry_returns(missing):
         const monitors = t.shell.monitorGeometries;
         if ({json.dumps(missing)} === 'frame')
             window.frame = null;
+        else if ({json.dumps(missing)} === 'zero-width')
+            t.shell.monitorGeometries = [{{x: 0, y: 0, width: 0, height: 1080}}];
+        else if ({json.dumps(missing)} === 'zero-height')
+            t.shell.monitorGeometries = [{{x: 0, y: 0, width: 1920, height: 0}}];
         else
             t.shell.monitorGeometries = [];
         indicator.Show({{follow: t.variant(true)}});
@@ -757,3 +761,36 @@ def test_shell_recovers_when_display_geometry_returns(missing):
         t.report([hidden, area.visible, area.position, t.shell.timeouts.length]);
     """)
     assert state == [True, True, [310, 230], 1]
+
+
+def test_repaint_after_hide_disposes_the_context():
+    commands, _logs = run("""
+        await t.enable();
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
+        indicator.Show({});
+        indicator.Hide();
+        const area = t.shell.uiGroup[0];
+        area.emit('repaint');
+        t.report(area.commands);
+    """)
+    assert commands == [["$dispose"]]
+
+
+def test_repaint_failure_disposes_the_context():
+    result, _logs = run("""
+        await t.enable();
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
+        indicator.Show({});
+        const area = t.shell.uiGroup[0];
+        area.get_surface_size = () => { throw new Error('surface unavailable'); };
+        let message;
+        try {
+            area.emit('repaint');
+        } catch (error) {
+            message = error.message;
+        }
+        t.report([message, area.commands]);
+    """)
+    assert result == ["surface unavailable", [["$dispose"]]]

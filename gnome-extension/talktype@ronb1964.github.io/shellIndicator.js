@@ -299,12 +299,16 @@ export class ShellIndicator {
         try {
             const monitor = display.get_monitor_geometry(follow && win
                 ? win.get_monitor() : display.get_primary_monitor());
+            const primary = display.get_monitor_geometry(display.get_primary_monitor());
+            if (monitor.width <= 0 || monitor.height <= 0 || primary.width <= 0 || primary.height <= 0) {
+                this._area.hide();
+                return;
+            }
             const [x, y] = follow && win
                 ? followPosition(win.get_frame_rect(), width, height, monitor, position)
                 : fixedPosition(position, width, height, monitor, offsetX, offsetY);
             const left = Math.round(x);
             const top = Math.round(y);
-            const primary = display.get_monitor_geometry(display.get_primary_monitor());
             this._area.set_position(left, top);
             this._dbus.emit_signal('GeometryChanged', new GLib.Variant('((iiii)(iiii))', [
                 [left, top, width, height], [primary.x, primary.y, primary.width, primary.height],
@@ -332,20 +336,25 @@ export class ShellIndicator {
 
     _repaint(area) {
         const cr = area.get_context();
-        const [width, height] = area.get_surface_size();
-        cr.setOperator(Cairo.Operator.CLEAR);
-        cr.paint();
-        cr.setOperator(Cairo.Operator.OVER);
-        const {style, rgb} = this._settings;
-        if (style === 'waveform')
-            this._drawWaveform(cr, width, height, rgb);
-        else if (style === 'bars')
-            this._drawBars(cr, width, height, rgb);
-        else if (style === 'radial')
-            this._drawRadial(cr, width, height, rgb);
-        else
-            this._drawOrb(cr, width, height);
-        cr.$dispose();
+        try {
+            if (!this._settings)
+                return;
+            const [width, height] = area.get_surface_size();
+            cr.setOperator(Cairo.Operator.CLEAR);
+            cr.paint();
+            cr.setOperator(Cairo.Operator.OVER);
+            const {style, rgb} = this._settings;
+            if (style === 'waveform')
+                this._drawWaveform(cr, width, height, rgb);
+            else if (style === 'bars')
+                this._drawBars(cr, width, height, rgb);
+            else if (style === 'radial')
+                this._drawRadial(cr, width, height, rgb);
+            else
+                this._drawOrb(cr, width, height);
+        } finally {
+            cr.$dispose();
+        }
     }
 
     // values: the waveform's points, already scaled to -1..1 by the service.
