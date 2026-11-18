@@ -652,7 +652,9 @@ def _names_the_app(name: str, wm_class: str) -> bool:
     ignoring case, as the whole class, its last part, a three-part app id's
     last two (GNOME apps go by "gnome-text-editor" on the bus), or a known
     pair (_BUS_NAMES). Only three parts: in a longer id the second-to-last
-    is a project's owner (io.github.<user>.App), who could be called gnome."""
+    can be a project's owner (io.github.<user>.App), who could be called
+    gnome. So KDE's few longer ids (org.kde.kdeconnect.app) don't match it,
+    as before: an app there by such a name would need a pair."""
     said, whole = _plain(name), _plain(wm_class)
     parts = wm_class.split(".")
     vendor_and_app = _plain("".join(parts[-2:])) if len(parts) == 3 else None
