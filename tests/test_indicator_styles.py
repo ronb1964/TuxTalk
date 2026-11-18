@@ -199,3 +199,15 @@ def test_a_malformed_custom_color_falls_back_to_cyan():
     """It is drawn every frame, so raising would leave the indicator blank."""
     for bad in ("red", "#fff", "", "#12345g", None):
         assert S.resolve_color("custom", bad, (0, 0, 0)) == S.CYAN
+
+
+def test_the_waveform_keeps_one_point_per_pixel_within_range():
+    points = S.waveform_points(np.linspace(-1, 1, 1024), 120, 1.0)
+    assert len(points) == 120
+    assert min(points) == -1.0 and max(points) == 1.0
+
+
+def test_the_waveform_follows_sensitivity():
+    quiet = S.waveform_points([0.1] * 10, 10, 1.0)
+    assert quiet[0] == pytest.approx(0.3)
+    assert S.waveform_points([0.1] * 10, 10, 2.0)[0] == pytest.approx(0.6)
