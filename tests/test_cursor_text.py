@@ -359,6 +359,19 @@ def test_fedoras_chromium_is_the_chromium_browser_window(bus):
     assert around(focus=("chromium-browser", None)) == ("the big", " dog")
 
 
+def test_gnomes_text_editor_is_its_app_id_window(bus):
+    """GNOME Text Editor 50 is "gnome-text-editor" on the bus and
+    org.gnome.TextEditor as a window: the sentence fitting did nothing there
+    (Ubuntu 26.04 VM)."""
+    bus.app("gnome-text-editor", "the big dog", caret=7)
+    assert around(focus=("org.gnome.TextEditor", None)) == ("the big", " dog")
+
+
+def test_another_gnome_app_in_front_isnt_taken_for_the_text_editor(bus):
+    bus.app("gnome-text-editor", "secret draft", caret=6)
+    assert around(focus=("org.gnome.Nautilus", None)) is None
+
+
 def test_two_windows_each_with_a_focused_box_say_nothing(bus):
     """Either may be the one in front."""
     bus.app("Google Chrome", "the big dog", caret=7, active=False, toolkit="Chromium")

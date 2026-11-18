@@ -649,10 +649,12 @@ def _names_the_app(name: str, wm_class: str) -> bool:
     """Whether the accessibility bus's app *name* ("kwrite", "Text Editor",
     "Brave") is the app of the window class *wm_class* ("org.kde.kwrite",
     "org.gnome.TextEditor", "brave-browser"): the same letters and digits,
-    ignoring case, as the whole class or its last part, or a known pair
-    (_BUS_NAMES)."""
+    ignoring case, as the whole class, its last part or its last two (GNOME
+    apps go by "gnome-text-editor" on the bus and "org.gnome.TextEditor" as
+    a window), or a known pair (_BUS_NAMES)."""
     said, whole = _plain(name), _plain(wm_class)
-    return bool(said) and said in {whole, _plain(wm_class.rsplit(".", 1)[-1]),
+    parts = wm_class.split(".")
+    return bool(said) and said in {whole, _plain(parts[-1]), _plain("".join(parts[-2:])),
                                    _BUS_NAMES.get(whole)}
 
 
