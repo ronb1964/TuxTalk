@@ -542,6 +542,9 @@ def fits_the_sentence(run):
     # --as-is) would go with it, unsaved work and all.
     if run.vm.ssh(f"pgrep -x {editor[:15]}", check=False).returncode == 0:
         return Outcome("skip", f"{editor} is already open in the VM: close it first")
+    # The test window is maximised, and Cinnamon opens the editor behind
+    # it: the words went into the test window. The checks after reopen it.
+    run.close_sink()
     with apps_seen(run):
         said = [(phrase, expected, *_said_into(run, editor, text, column, phrase))
                 for text, column, phrase, expected in FIT_CASES]
