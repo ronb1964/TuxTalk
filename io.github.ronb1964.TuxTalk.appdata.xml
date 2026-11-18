@@ -99,7 +99,8 @@
       <description>
         <p>Dictation fits the sentence at the cursor, and Help can be searched</p>
         <ul>
-          <li>Dictating into the middle of a sentence carries it on: no capital, a space where one is missing, and no period before the words that follow. It works in GTK apps, and in KDE apps, Firefox, Chrome and apps built on it once the desktop's accessibility is on, which TuxTalk asks before turning on</li>
+          <li>Dictating into the middle of a sentence carries it on: no capital, a space where one is missing, and no period before the words that follow. It works in GTK apps (on GNOME with the TuxTalk extension), and in KDE apps, Firefox, Chrome and apps built on it once the desktop's accessibility is on, which TuxTalk asks before turning on</li>
+          <li>On GNOME, the TuxTalk extension draws the recording indicator itself: sharp on a scaled screen and where Preferences puts it, after a logout once the extension updates. Contributed by Bernát Gábor</li>
           <li>Help can be searched, and has an Uninstalling card</li>
           <li>TuxTalk keeps out of password boxes in Chrome, Brave and Claude Desktop too</li>
           <li>In KWrite and Kate, Shift with the dictation key and nothing selected no longer moves the cursor</li>

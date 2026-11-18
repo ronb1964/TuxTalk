@@ -270,6 +270,10 @@ The Hands-free section has a way to make it stop by itself when you stop talking
 • The recording indicator, an orb on the screen while it records. Change its
   look and place in <b>Preferences → Audio → Customize…</b>
 • If the microphone heard nothing but silence, TuxTalk says so and types nothing.
+• On GNOME, the TuxTalk extension (version 32 or newer) draws the indicator
+  itself: it's sharp on a scaled screen and sits where Preferences puts it.
+  After the extension updates, log out and back in once; until then it looks
+  as before.
 
 ### Indicator follows your window
 The recording indicator shows up in the window you're dictating into, wherever
@@ -284,9 +288,8 @@ the start.
 • When TuxTalk can't tell where the window is, the indicator uses its usual
   position from <b>Preferences → Audio → Customize…</b>.
 • Works on KDE, on GNOME with the TuxTalk extension, on Sway and Hyprland,
-  and on X11 desktops like Cinnamon and XFCE. On GNOME the extension draws
-  the indicator itself, sharp on a scaled screen too; elsewhere a scaled
-  screen can put it a little off.
+  and on X11 desktops like Cinnamon and XFCE. On GNOME it moves with your
+  window while you talk. Outside GNOME, a scaled screen can put it a little off.
 
 ### Music, videos and calls
 While you talk, TuxTalk pauses music and videos and plays them again after.
@@ -360,7 +363,8 @@ Click where the words should go, hold <b>{hold}</b>, say them, let go. TuxTalk l
 the text on either side of the cursor and fits them in: no capital in the middle of a
 sentence, a space where one is missing, and no period when more text follows.
   • It works in apps that tell TuxTalk that text: GTK apps (most GNOME, Cinnamon
-    and Xfce apps) always, and KDE apps, Firefox, Chrome, Brave and apps built on
+    and Xfce apps; on GNOME with the TuxTalk extension, which tells TuxTalk
+    which app you're in), and KDE apps, Firefox, Chrome, Brave and apps built on
     Chrome like Claude Desktop once the desktop's accessibility is on, web pages'
     text boxes like Gmail's included. Chrome and the apps built on it need closing and opening
     once if they were open when it went on; other apps may too. With two or more

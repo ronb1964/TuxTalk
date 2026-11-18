@@ -405,7 +405,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
 - **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com. Said on its own, an address gets no period after it. Only the word right before "at" is the name; say the marks in a longer one: "john dot doe at gmail dot com" types john.doe@gmail.com, and "underscore" and "no space" work the same way ("john no space doe" is johndoe).
 - **Numbers as digits, if you want them.** 25 instead of twenty-five, and 7:30 and 15th too. Works in English and seven other languages.
-- **Fits the sentence at the cursor.** Dictating into the middle of a sentence carries it on, with no capital and the right spaces, where the app says what's around the cursor: GTK apps always, KDE apps, Firefox, Chrome and apps built on Chrome once you let TuxTalk turn on the desktop's accessibility.
+- **Fits the sentence at the cursor.** Dictating into the middle of a sentence carries it on, with no capital and the right spaces, where the app says what's around the cursor: GTK apps (on GNOME with the TuxTalk extension), KDE apps, Firefox, Chrome and apps built on Chrome once you let TuxTalk turn on the desktop's accessibility.
 - **Plain text in terminals.** No capital at the start and no period at the end when you dictate a command.
 - **Voice editing (Labs).** Select text, hold Shift+F8 and say how to change it. Tone and rewrites go to the AI, while caps, lists, commas and removing a word are done exactly in code. Bold, italics and underline work in LibreOffice and other word processors.
 - **Select and move by voice (Labs).** Say "select the last sentence" or "go to the end" on its own and TuxTalk does it instead of typing it.
@@ -427,7 +427,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Swiss German spelling.** Types ss instead of ß, on by itself when your system is set to Swiss German.
 - **Tells you why when it can't type.** If a dictation can't be typed into the window, TuxTalk says why and what fixes it.
 - **Private.** Everything runs on your computer, and what you dictate is never written to a log unless you turn that on for troubleshooting.
-- **GNOME extension.** A native panel menu on GNOME, and a tray icon everywhere else.
+- **GNOME extension.** A native panel menu on GNOME that also draws the recording indicator, sharp on a scaled screen, and a tray icon everywhere else.
 - **Updates the right way.** Through your package manager for the .deb and .rpm, in place for the AppImage, or through your AUR helper on Arch.
 
 ---

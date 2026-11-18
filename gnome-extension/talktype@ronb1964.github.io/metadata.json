@@ -1,6 +1,6 @@
 {
   "name": "TuxTalk",
-  "description": "TuxTalk (formerly TalkType): hold a key, talk, and your words are typed for you. Menu and hotkey integration for GNOME.",
+  "description": "TuxTalk (formerly TalkType): hold a key, talk, and your words are typed for you. Its menu, hotkeys and recording indicator for GNOME.",
   "uuid": "talktype@ronb1964.github.io",
   "shell-version": [
     "45",

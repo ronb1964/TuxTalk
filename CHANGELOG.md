@@ -12,6 +12,8 @@ before 0.15.0, so older entries use that name.
   (version 32), and GNOME loads it after you log out and back in. Without
   the extension, or with an older one, the indicator is its own window as
   before. Contributed by Bernát Gábor (#37).
+- The Frequency bars style of the recording indicator shows bars again at
+  the Small size; it drew thin slivers.
 - An email or web address said on its own, for a To: box or an address
   bar, no longer gets a period after it, and neither does a snippet that
   types your address. A longer name is said with its marks, in a sentence
@@ -94,7 +96,8 @@ before 0.15.0, so older entries use that name.
   the cursor: no capital in the middle of a sentence, a space in front
   where one is missing, and no closing period or doubled space when more
   text follows. It works in apps that tell the desktop's accessibility
-  system that text: GTK apps always, and KDE apps, Firefox, and Chrome and
+  system that text: GTK apps (on GNOME with the TuxTalk extension, which
+  says which app you're in), and KDE apps, Firefox, and Chrome and
   the apps built on it (see their entry above) once accessibility is on. TuxTalk asks once before turning it on (it stays on
   until you turn it off in Preferences → Advanced → Fine-tuning →
   Accessibility), and then says that an app already open may need to be
