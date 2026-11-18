@@ -47,7 +47,7 @@ ENTRY_DIRS = ("~/.local/share/applications", "/usr/local/share/applications",
               "/var/lib/snapd/desktop/applications")
 
 
-def _a11y_on(run):
+def a11y_on(run):
     """Whether the session's accessibility switch is on."""
     answer = run.vm.session(*A11Y_SWITCH, "org.freedesktop.DBus.Properties.Get",
                             "org.a11y.Status", "IsEnabled", check=False).stdout
@@ -68,7 +68,7 @@ def apps_seen(run):
     the switch come in at once, before a check lists the apps it has, so they
     don't look newly opened. Off again afterwards: with the desktop's shell in
     the tree, a button another check looks for by name could be the shell's."""
-    was_on = _a11y_on(run)
+    was_on = a11y_on(run)
     if not was_on:
         _set_a11y(run, True)
         time.sleep(2)

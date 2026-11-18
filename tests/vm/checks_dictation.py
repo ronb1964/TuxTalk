@@ -7,7 +7,7 @@ import time
 import wave
 
 import numpy as np
-from checks_firstrun import a11y_switch_on, set_a11y_switch
+from checks_open_apps import apps_seen
 from harness import CONFIG, FINISHED, Abort, Outcome, check, heard_in
 from vmlib import REMOTE
 
@@ -493,7 +493,8 @@ FIT_CASES = (
 def _said_into(run, editor, text, column, phrase_id):
     """Open *text* in *editor*, put the cursor *column* characters in with
     the arrow keys, dictate *phrase_id* there and save; (the file after,
-    what the engine heard, a screenshot)."""
+    what the engine heard, a screenshot). The editor is closed whatever
+    happens: left open it would sit in front of the checks after."""
     path = f"{run.vm.home}/{REMOTE}/fit.txt"
     run.vm.ssh(f"printf '%s' '{text}' > {path}")
     # An empty data folder of its own: GNOME's Text Editor restores unsaved
@@ -503,20 +504,22 @@ def _said_into(run, editor, text, column, phrase_id):
     run.vm.ssh(f"rm -rf {data} && mkdir -p {data}")
     run.vm.session_background("editor", "env", f"XDG_DATA_HOME={data}", editor,
                               *FIT_EDITOR_ARGS.get(editor, ()), path)
-    time.sleep(6)       # Qt and GTK 4 editors aren't in the tree to wait on
-    run.vm.click_centre()
-    run.vm.tap("ctrl", "home")
-    for _ in range(column):
-        run.vm.tap("right")
-    time.sleep(0.5)
-    _typed, _heard, mark = run.say(phrase_id, wait=False)
-    log = run.wait_log(mark, *FINISHED)
-    time.sleep(1)
-    run.vm.tap("ctrl", "s")
-    time.sleep(1.5)
-    shot = run.shot(f"fit-{phrase_id}")
-    run.vm.ssh(f"pkill -x {editor[:15]}", check=False)    # the kernel keeps 15 characters
-    time.sleep(1)
+    try:
+        time.sleep(6)       # Qt and GTK 4 editors aren't in the tree to wait on
+        run.vm.click_centre()
+        run.vm.tap("ctrl", "home")
+        for _ in range(column):
+            run.vm.tap("right")
+        time.sleep(0.5)
+        _typed, _heard, mark = run.say(phrase_id, wait=False)
+        log = run.wait_log(mark, *FINISHED)
+        time.sleep(1)
+        run.vm.tap("ctrl", "s")
+        time.sleep(1.5)
+        shot = run.shot(f"fit-{phrase_id}")
+    finally:
+        run.vm.ssh(f"pkill -x {editor[:15]}", check=False)    # the kernel keeps 15 characters
+        time.sleep(1)
     return run.vm.read(path).rstrip(), heard_in(log or ""), shot
 
 
@@ -535,26 +538,27 @@ def fits_the_sentence(run):
     if blind:
         return Outcome("skip", blind)
     editor = found.rsplit("/", 1)[-1]
-    was_on = a11y_switch_on(run)
-    set_a11y_switch(run, True)
-    try:
-        results = [(expected, *_said_into(run, editor, text, column, phrase))
-                   for text, column, phrase, expected in FIT_CASES]
-    finally:
-        if not was_on:
-            set_a11y_switch(run, False)
-    wrong = [(expected, typed, heard) for expected, typed, heard, _shot in results
-             if typed != expected]
-    typed = " | ".join(r[1] for r in results)
-    shot = results[0][3]
+    # It's closed by name afterwards: one already open (a VM used by hand,
+    # --as-is) would go with it, unsaved work and all.
+    if run.vm.ssh(f"pgrep -x {editor[:15]}", check=False).returncode == 0:
+        return Outcome("skip", f"{editor} is already open in the VM: close it first")
+    with apps_seen(run):
+        said = [(phrase, expected, *_said_into(run, editor, text, column, phrase))
+                for text, column, phrase, expected in FIT_CASES]
+    outcomes = []
+    for phrase, expected, typed, heard, shot in said:
+        outcome = run.expect_typed(phrase, expected, typed, heard)
+        outcome.screenshot = shot
+        outcomes.append(outcome)
+    wrong = [o for o in outcomes if o.status != "pass"]
     if not wrong:
-        return Outcome("pass", f"In {editor}", expected=" | ".join(e for e, *_ in results),
-                       typed=typed, screenshot=shot)
-    expected, got, heard = wrong[0]
-    said = re.sub(r"[^a-z ]", "", expected.lower())
-    status = "misheard" if heard and re.sub(r"[^a-z ]", "", heard.lower()) not in said else "fail"
-    return Outcome(status, f"In {editor}", expected=expected, typed=got, heard=heard,
-                   screenshot=shot)
+        return Outcome("pass", f"In {editor}", expected=" | ".join(o.expected for o in outcomes),
+                       typed=" | ".join(o.typed for o in outcomes),
+                       screenshot=outcomes[0].screenshot)
+    # A real fail outranks a mishearing in the other case.
+    worst = next((o for o in wrong if o.status == "fail"), wrong[0])
+    worst.detail = f"In {editor}" + (f": {worst.detail}" if worst.detail else "")
+    return worst
 
 
 @check("Words and numbers", "qmark_words", "Talking about a question mark keeps the words")
