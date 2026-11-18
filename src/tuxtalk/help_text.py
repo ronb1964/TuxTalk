@@ -284,8 +284,9 @@ the start.
 • When TuxTalk can't tell where the window is, the indicator uses its usual
   position from <b>Preferences → Audio → Customize…</b>.
 • Works on KDE, on GNOME with the TuxTalk extension, on Sway and Hyprland,
-  and on X11 desktops like Cinnamon and XFCE. On a scaled screen it may sit
-  a little off.
+  and on X11 desktops like Cinnamon and XFCE. On GNOME the extension draws
+  the indicator itself, sharp on a scaled screen too; elsewhere a scaled
+  screen can put it a little off.
 
 ### Music, videos and calls
 While you talk, TuxTalk pauses music and videos and plays them again after.

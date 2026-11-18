@@ -5,6 +5,13 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- On GNOME, the TuxTalk extension now draws the recording indicator itself,
+  at your screen's own scale: it's sharp on a fractionally scaled screen
+  (150%, say) instead of blurry, it sits where Preferences puts it, and the
+  live text box lines up with it. Check for Updates offers the new extension
+  (version 32), and GNOME loads it after you log out and back in. Without
+  the extension, or with an older one, the indicator is its own window as
+  before. Contributed by Bernát Gábor (#37).
 - An email or web address said on its own, for a To: box or an address
   bar, no longer gets a period after it, and neither does a snippet that
   types your address. A longer name is said with its marks, in a sentence
