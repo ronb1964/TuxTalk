@@ -673,6 +673,21 @@ def test_shell_indicator_tracks_window_moves_and_resizes():
     ]]
 
 
+def test_shell_indicator_centres_on_the_screen_over_a_window_bigger_than_it():
+    # Ubuntu's desktop icons layer keeps the screen's unscaled size at 150 %.
+    position, _logs = run("""
+        await t.enable();
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
+        const window = new t.Window('Desktop Icons', 1);
+        window.frame = {x: 0, y: 0, width: 2880, height: 1620};
+        t.focus(window);
+        indicator.Show({position: t.variant('center'), follow: t.variant(true)});
+        t.report(t.shell.uiGroup[0].position);
+    """)
+    assert position == [860, 450]
+
+
 def test_shell_indicator_rejects_unbounded_dbus_values():
     result, _logs = run("""
         await t.enable();

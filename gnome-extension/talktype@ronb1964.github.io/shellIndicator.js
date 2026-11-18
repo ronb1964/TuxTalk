@@ -78,7 +78,22 @@ function vertical(position, top, bottom, centre) {
     return centre;
 }
 
-function followPosition(win, width, height, monitor, position) {
+// The part of the window on its monitor, so a window partly off the screen, or
+// bigger than it, gets the indicator over what can be seen. Ubuntu's desktop
+// icons layer is one: it keeps the screen's unscaled size under fractional
+// scaling. A window wholly off the monitor stays as it is.
+function shownPart(win, monitor) {
+    const left = Math.max(win.x, monitor.x);
+    const top = Math.max(win.y, monitor.y);
+    const right = Math.min(win.x + win.width, monitor.x + monitor.width);
+    const bottom = Math.min(win.y + win.height, monitor.y + monitor.height);
+    if (right <= left || bottom <= top)
+        return win;
+    return {x: left, y: top, width: right - left, height: bottom - top};
+}
+
+function followPosition(frame, width, height, monitor, position) {
+    const win = shownPart(frame, monitor);
     const x = horizontal(position, win.x + FOLLOW_SIDE, win.x + win.width - width - FOLLOW_SIDE,
         win.x + (win.width - width) / 2);
     const bottomGap = Math.max(FOLLOW_MARGIN, win.height * FOLLOW_BOTTOM_SHARE);

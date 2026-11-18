@@ -43,7 +43,18 @@ def test_a_short_window_keeps_the_minimum_gap_at_the_bottom():
 
 def test_kept_on_the_monitor():
     pos = ri.follow_position(Rect(3300, 1300, 300, 300), 200, 80, Rect(0, 0, 3440, 1440))
-    assert pos == (3240, 1360)
+    assert pos == (3240, 1320)
+
+
+def test_a_window_bigger_than_its_screen_centres_it_on_the_screen():
+    # Ubuntu's desktop icons layer keeps the screen's unscaled size at 150 %.
+    pos = ri.follow_position(Rect(0, 0, 1920, 1200), 200, 180, Rect(0, 0, 1280, 800), "center")
+    assert pos == (540, 310)
+
+
+def test_a_window_partly_off_the_screen_centres_it_on_the_part_shown():
+    pos = ri.follow_position(Rect(-400, 100, 800, 600), 200, 80, Rect(0, 0, 1920, 1080), "center")
+    assert pos == (100, 360)
 
 
 def test_a_tiny_window_still_gets_the_indicator_inside_its_monitor():
