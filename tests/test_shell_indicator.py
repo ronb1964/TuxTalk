@@ -1,3 +1,4 @@
+import logging
 import threading
 
 import numpy as np
@@ -8,7 +9,7 @@ from gi.repository import Gio, GLib, Gtk  # noqa: E402
 
 from tuxtalk import shell_indicator as si  # noqa: E402
 from tuxtalk import live_text_window, recording  # noqa: E402
-from tuxtalk.indicator_dsp import SpectrumProcessor
+from tuxtalk.indicator_dsp import SpectrumProcessor  # noqa: E402
 from tuxtalk.recording_indicator import RecordingIndicator  # noqa: E402
 from tuxtalk.window_geometry import Rect  # noqa: E402
 
@@ -49,6 +50,7 @@ def bus():
 @pytest.fixture
 def shell(bus):
     """Calls the extension's indicator received, as (method, arguments)."""
+
     class Calls(list):
         disconnected = False
         defer_show = False
@@ -75,8 +77,9 @@ def shell(bus):
     info = Gio.DBusNodeInfo.new_for_xml(INTERFACE_XML).interfaces[0]
     registration = bus.register_object(si.OBJECT_PATH, info, on_call, None, None)
     owned = []
-    owner = Gio.bus_own_name_on_connection(bus, si.BUS_NAME, Gio.BusNameOwnerFlags.NONE,
-                                           lambda *_: owned.append(True), None)
+    owner = Gio.bus_own_name_on_connection(
+        bus, si.BUS_NAME, Gio.BusNameOwnerFlags.NONE, lambda *_: owned.append(True), None
+    )
     assert _wait_for(lambda: owned)
     yield calls
     # Let a test's queued hide run, so its updates stop before the next test.
@@ -115,14 +118,20 @@ def test_with_the_extension_the_shell_draws_the_indicator(shell, monkeypatch):
 
 
 def test_showing_tells_the_shell_where_and_how_to_draw(shell):
-    ind = si.ShellIndicator(position="Bottom-Center", size="large", custom_color="#ff0000",
-                            follow_window=True)
+    ind = si.ShellIndicator(
+        position="Bottom-Center", size="large", custom_color="#ff0000", follow_window=True
+    )
     ind.show_at_position()
     assert _wait_for(lambda: "Show" in _methods(shell))
     (settings,) = dict(shell)["Show"]
     assert settings == {
-        "style": "orb", "rgb": [1.0, 0.0, 0.0], "scale": 1.4,
-        "position": "bottom-center", "follow": True, "offset_x": 0, "offset_y": 0,
+        "style": "orb",
+        "rgb": [1.0, 0.0, 0.0],
+        "scale": 1.4,
+        "position": "bottom-center",
+        "follow": True,
+        "offset_x": 0,
+        "offset_y": 0,
     }
     ind.hide_indicator()
 
@@ -166,8 +175,13 @@ def test_live_text_maps_shell_bounds_to_xwayland(shell, bus, monkeypatch):
     ind = si.ShellIndicator()
     ind.show_at_position()
     assert _wait_for(lambda: "Show" in _methods(shell))
-    bus.emit_signal(None, si.OBJECT_PATH, si.INTERFACE, "GeometryChanged",
-                    GLib.Variant("((iiii)(iiii))", ((220, 120, 200, 180), (1280, 0, 1280, 720))))
+    bus.emit_signal(
+        None,
+        si.OBJECT_PATH,
+        si.INTERFACE,
+        "GeometryChanged",
+        GLib.Variant("((iiii)(iiii))", ((220, 120, 200, 180), (1280, 0, 1280, 720))),
+    )
     assert _wait_for(lambda: (ind.get_position(), ind.get_size()) == ((440, 240), (400, 360)))
     ind.hide_indicator()
 
@@ -190,9 +204,14 @@ def test_extension_disabling_mid_recording_shows_the_x11_indicator(shell, caplog
     ind.start_recording()
     assert _wait_for(lambda: "Update" in _methods(shell))
     shell.disconnect()
-    assert _wait_for(lambda: any(isinstance(window, RecordingIndicator) and
-                                 window not in existing and window.get_visible()
-                                 for window in Gtk.Window.list_toplevels()))
+    assert _wait_for(
+        lambda: any(
+            isinstance(window, RecordingIndicator)
+            and window not in existing
+            and window.get_visible()
+            for window in Gtk.Window.list_toplevels()
+        )
+    )
     assert "indicator Update failed" in caplog.text
     assert "UnknownMethod" in caplog.text
     ind.hide_indicator()
@@ -204,16 +223,22 @@ def test_extension_enabled_after_startup_takes_over_the_next_dictation(shell, mo
     existing = set(Gtk.Window.list_toplevels())
     ind = si.create_recording_indicator(style="bars")
     ind.show_at_position()
-    windows = lambda: set(Gtk.Window.list_toplevels()) - existing
+
+    def windows():
+        return set(Gtk.Window.list_toplevels()) - existing
+
     assert _wait_for(lambda: any(window.get_visible() for window in windows()))
-    fallback, = windows()
+    (fallback,) = windows()
     ind.start_recording()
     assert _wait_for(lambda: fallback.is_recording)
     ind.set_audio_level(0.75)
     ind.set_spectrum([0.4, 0.7])
     ind.set_waveform([0.1, 0.2])
-    assert (fallback.audio_level, fallback.spectrum, fallback.waveform) == (0.75, [0.4, 0.7],
-                                                                           [0.1, 0.2])
+    assert (fallback.audio_level, fallback.spectrum, fallback.waveform) == (
+        0.75,
+        [0.4, 0.7],
+        [0.1, 0.2],
+    )
     assert (ind.get_position(), ind.get_size()) == (fallback.get_position(), fallback.get_size())
     ind.hide_indicator()
     assert _wait_for(lambda: not fallback.get_visible())
@@ -286,8 +311,9 @@ def test_style_and_geometry_changes_wait_until_the_next_show(shell, monkeypatch)
     ind.apply_settings("top-left", "large", 8, 12, style="radial", sensitivity=2)
     audio = (np.sin(np.linspace(0, 40, 512)) * 8000).astype(np.int16)
     recording.feed_indicator(ind, audio, SpectrumProcessor(bins=20))
-    assert _wait_for(lambda: any(m == "Update" and len(args[1]) == 20 and max(args[1]) > 0
-                                 for m, args in shell))
+    assert _wait_for(
+        lambda: any(m == "Update" and len(args[1]) == 20 and max(args[1]) > 0 for m, args in shell)
+    )
     assert (ind.get_position(), ind.get_size()) == ((860, 880), (200, 180))
     ind.hide_indicator()
     assert _wait_for(lambda: "Hide" in _methods(shell))
@@ -339,4 +365,90 @@ def test_failure_to_show_x11_hides_the_window(shell, monkeypatch, caplog):
     GLib.idle_add(lambda: idle.append(True), priority=GLib.PRIORITY_LOW)
     assert _wait_for(lambda: idle)
     assert not windows[0].get_visible()
+    ind.hide_indicator()
+
+
+def test_repeated_show_removes_the_previous_timer(shell, monkeypatch):
+    timers = []
+    timeout_add = GLib.timeout_add
+
+    def track_timer(interval, callback, *args):
+        timer = timeout_add(interval, callback, *args)
+        if interval == si.UPDATE_MS:
+            timers.append(timer)
+        return timer
+
+    monkeypatch.setattr(GLib, "timeout_add", track_timer)
+    ind = si.ShellIndicator()
+    ind.show_at_position()
+    assert _wait_for(lambda: "Update" in _methods(shell))
+    timer = timers[0]
+    ind.show_at_position()
+    assert _wait_for(lambda: _methods(shell).count("Show") == 2)
+    assert GLib.MainContext.default().find_source_by_id(timer) is None
+    ind.hide_indicator()
+
+
+def test_unavailable_shell_warns_once_then_logs_at_debug(shell, caplog):
+    caplog.set_level(logging.DEBUG, logger=si.__name__)
+    shell.disconnect()
+    existing = set(Gtk.Window.list_toplevels())
+    ind = si.ShellIndicator()
+    ind.show_at_position()
+    assert _wait_for(
+        lambda: (
+            ind.get_visible()
+            and any("Switching to X11" in record.message for record in caplog.records)
+        )
+    )
+    assert _wait_for(
+        lambda: any(window.get_visible() for window in set(Gtk.Window.list_toplevels()) - existing)
+    )
+    (fallback,) = set(Gtk.Window.list_toplevels()) - existing
+    ind.hide_indicator()
+    assert _wait_for(lambda: not fallback.get_visible())
+    ind.show_at_position()
+    assert _wait_for(
+        lambda: sum("Switching to X11" in record.message for record in caplog.records) == 2
+    )
+    assert [
+        record.levelno for record in caplog.records if "Switching to X11" in record.message
+    ] == [
+        logging.WARNING,
+        logging.DEBUG,
+    ]
+    ind.hide_indicator()
+
+
+def test_x11_owns_the_radial_history_after_fallback(shell, monkeypatch):
+    gains = []
+    gain_class = si.RadialGain
+
+    class CountedGain(gain_class):
+        def __init__(self):
+            super().__init__()
+            self.blocks = []
+            gains.append(self)
+
+        def update(self, samples, now):
+            self.blocks.append(list(samples))
+            super().update(samples, now)
+
+    monkeypatch.setattr(si, "RadialGain", CountedGain)
+    ind = si.ShellIndicator(style="radial")
+    ind.show_at_position()
+    ind.set_waveform([0.1, 0.2])
+    assert _wait_for(lambda: "Update" in _methods(shell))
+    existing = set(Gtk.Window.list_toplevels())
+    shell.disconnect()
+    assert _wait_for(
+        lambda: any(
+            window not in existing and window.get_visible()
+            for window in Gtk.Window.list_toplevels()
+        )
+    )
+    ind.set_waveform([0.3, 0.4])
+    assert gains[0].blocks == [[0.1, 0.2]]
+    (fallback,) = set(Gtk.Window.list_toplevels()) - existing
+    assert fallback.waveform == [0.1, 0.2, 0.3, 0.4]
     ind.hide_indicator()

@@ -1,5 +1,9 @@
 """Recording indicator for GNOME Shell, with an X11 fallback."""
 
+# Mutter scales XWayland windows from their X11 resolution, blurring the indicator on fractional
+# monitors. Shell draws at the monitor's own scale. The service sends Show with appearance settings,
+# then Update with audio-driven shapes about 30 times a second.
+
 import time
 from dataclasses import asdict, dataclass, replace
 
@@ -94,6 +98,7 @@ class ShellIndicator:
         self._session = 0
         self._visible = False
         self._recording = False
+        self._fallback_warned = False
         self._update_id = None
         self._level = 0.0
         self._wave_history = []
@@ -137,6 +142,7 @@ class ShellIndicator:
         """Each dictation tries Shell, including the first one after the extension returns."""
         if session != self._session:
             return False
+        self._stop_updates()
         shown = self._shown
         accent = desktop_accent_rgb() if shown.color_mode == "system" else None
         rgb = indicator_styles.resolve_color(shown.color_mode, shown.custom_color, accent)
@@ -190,9 +196,9 @@ class ShellIndicator:
             bus.call_finish(result)
         except GLib.Error as error:
             if method != "Hide" and session == self._session and self._fallback is None:
-                logger.warning(
-                    "Switching to X11 after Shell indicator %s failed: %s", method, error.message
-                )
+                log = logger.debug if self._fallback_warned else logger.warning
+                log("Switching to X11 after Shell indicator %s failed: %s", method, error.message)
+                self._fallback_warned = True
                 self._activate_fallback()
 
     def _activate_fallback(self):
@@ -212,6 +218,9 @@ class ShellIndicator:
             if self._recording:
                 self._x11.start_recording()
             self._fallback = self._x11
+            self._wave_history = []
+            if self.style == "radial" and (line := self._radial_gain.summary()):
+                logger.info(line)
         except Exception:
             # Keep a GTK failure from interrupting dictation.
             logger.exception("Could not show the X11 recording indicator")
@@ -293,12 +302,13 @@ class ShellIndicator:
             fallback.set_audio_level(level)
 
     def set_waveform(self, samples):
+        if (fallback := self._fallback) is not None:
+            fallback.set_waveform(samples)
+            return
         if self.style == "radial":
             self._radial_gain.update(samples, time.monotonic())
         self._wave_history.extend(samples)
         del self._wave_history[:-1024]
-        if (fallback := self._fallback) is not None:
-            fallback.set_waveform(samples)
 
     def set_spectrum(self, bands):
         self._spectrum = [float(v) for v in bands]
