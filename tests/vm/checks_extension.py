@@ -117,7 +117,8 @@ def ext_send_switch(run):
 AGAIN = ("open_again_focuses", "close_asks_to_save", "close_this_window", "switch_to",
          "minimize_maximize", "go_to_in_browser", "web_search", "snap_and_centre",
          "show_desktop_toggles", "switch_desktops", "move_window_to_desktop", "one_screen_note",
-         "overview", "restore_by_name", "firefox_go_back", "firefox_new_tab")
+         "overview", "restore_by_name", "firefox_go_back", "firefox_new_tab",
+         "fits_the_sentence")
 for _chk in [c for c in CHECKS if c.id in AGAIN]:
     check(SECTION, f"ext_{_chk.id}", f"{_chk.name} (with the extension)",
           desktops=("gnome",))(_chk.func)

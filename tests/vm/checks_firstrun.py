@@ -216,14 +216,23 @@ def setup_complete(run):
                    "and no model picker", screenshot=shot)
 
 
-def _a11y_switch_on(run):
+_A11Y_BUS = ("gdbus", "call", "--session", "--dest", "org.a11y.Bus",
+             "--object-path", "/org/a11y/bus", "--method")
+
+
+def a11y_switch_on(run):
     """Whether the desktop's accessibility switch is on in the VM, as the
     accessibility bus says (org.a11y.Status IsEnabled)."""
-    result = run.vm.session("gdbus", "call", "--session", "--dest", "org.a11y.Bus",
-                            "--object-path", "/org/a11y/bus", "--method",
-                            "org.freedesktop.DBus.Properties.Get", "org.a11y.Status",
-                            "IsEnabled", check=False)
+    result = run.vm.session(*_A11Y_BUS, "org.freedesktop.DBus.Properties.Get",
+                            "org.a11y.Status", "IsEnabled", check=False)
     return "true" in (getattr(result, "stdout", "") or str(result)).lower()
+
+
+def set_a11y_switch(run, on):
+    """Turn the desktop's accessibility switch on or off, as TuxTalk's
+    Preferences does (a11y_switch._set)."""
+    run.vm.session(*_A11Y_BUS, "org.freedesktop.DBus.Properties.Set", "org.a11y.Status",
+                   "IsEnabled", "<true>" if on else "<false>", check=False)
 
 
 @check("First run", "ready", "Start Using TuxTalk, then the menu window (no tray)")
@@ -242,7 +251,7 @@ def ready(run):
                       timeout=30) is not None
     if asked:
         run.vm.ui("click", "button", "Not Now", check=True)
-    elif not _a11y_switch_on(run):
+    elif not a11y_switch_on(run):
         return Outcome("fail", "the accessibility question never came, with the desktop's "
                        "switch off", screenshot=run.shot("no-a11y-question"))
     question = ("ready with the accessibility question unanswered, then Not Now" if asked

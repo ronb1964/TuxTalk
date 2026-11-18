@@ -7,6 +7,7 @@ import time
 import wave
 
 import numpy as np
+from checks_firstrun import a11y_switch_on, set_a11y_switch
 from harness import CONFIG, FINISHED, Abort, Outcome, check, heard_in
 from vmlib import REMOTE
 
@@ -472,6 +473,88 @@ def kwrite_new_line(run):
         return Outcome("pass", expected="$45.\n$25.", typed=typed, heard=heard, screenshot=shot)
     status = "misheard" if heard and "$25" not in heard else "fail"
     return Outcome(status, expected="$45.\n$25.", typed=typed, heard=heard, screenshot=shot)
+
+
+# The editors the sentence-fitting check opens, the first one installed. Qt's
+# (KWrite) tell the accessibility bus their text only with the desktop's
+# accessibility switch on, which the check turns on as Preferences would.
+FIT_EDITORS = ("kwrite", "gnome-text-editor", "gedit", "xed", "mousepad")
+# GNOME's Text Editor joins one already running unless standalone.
+FIT_EDITOR_ARGS = {"gnome-text-editor": ("--standalone",)}
+# (the file's text, where the cursor goes, the phrase said, the file after).
+FIT_CASES = (
+    ("Yesterday and then we left", len("Yesterday "), "cat_couch",
+     "Yesterday the cat clawed the couch and then we left"),
+    ("It rained.", len("It rained."), "basic",
+     "It rained. This is a test of the dictation system."),
+)
+
+
+def _said_into(run, editor, text, column, phrase_id):
+    """Open *text* in *editor*, put the cursor *column* characters in with
+    the arrow keys, dictate *phrase_id* there and save; (the file after,
+    what the engine heard, a screenshot)."""
+    path = f"{run.vm.home}/{REMOTE}/fit.txt"
+    run.vm.ssh(f"printf '%s' '{text}' > {path}")
+    # An empty data folder of its own: GNOME's Text Editor restores unsaved
+    # drafts in a window of their own in front, whatever --ignore-session
+    # says, and one left in a VM's snapshot took the words.
+    data = f"{run.vm.home}/{REMOTE}/editor-data"
+    run.vm.ssh(f"rm -rf {data} && mkdir -p {data}")
+    run.vm.session_background("editor", "env", f"XDG_DATA_HOME={data}", editor,
+                              *FIT_EDITOR_ARGS.get(editor, ()), path)
+    time.sleep(6)       # Qt and GTK 4 editors aren't in the tree to wait on
+    run.vm.click_centre()
+    run.vm.tap("ctrl", "home")
+    for _ in range(column):
+        run.vm.tap("right")
+    time.sleep(0.5)
+    _typed, _heard, mark = run.say(phrase_id, wait=False)
+    log = run.wait_log(mark, *FINISHED)
+    time.sleep(1)
+    run.vm.tap("ctrl", "s")
+    time.sleep(1.5)
+    shot = run.shot(f"fit-{phrase_id}")
+    run.vm.ssh(f"pkill -x {editor[:15]}", check=False)    # the kernel keeps 15 characters
+    time.sleep(1)
+    return run.vm.read(path).rstrip(), heard_in(log or ""), shot
+
+
+@check("Words and numbers", "fits_the_sentence",
+       "Said into a sentence in a real editor, the words join it; after one, they start anew")
+def fits_the_sentence(run):
+    """Sentence fitting (0.24) reads the editor's own text beside the cursor:
+    said after "Yesterday " and before "and then we left", the words come
+    with a small first letter, no period and a space on each side; said
+    after "It rained." they start a sentence of their own."""
+    found = run.vm.ssh(f"for e in {' '.join(FIT_EDITORS)}; do command -v $e && break; done",
+                       check=False).stdout.strip()
+    if not found:
+        return Outcome("skip", f"none of {', '.join(FIT_EDITORS)} is installed")
+    blind = run.window_blind()     # the text is read only from the app with the focus
+    if blind:
+        return Outcome("skip", blind)
+    editor = found.rsplit("/", 1)[-1]
+    was_on = a11y_switch_on(run)
+    set_a11y_switch(run, True)
+    try:
+        results = [(expected, *_said_into(run, editor, text, column, phrase))
+                   for text, column, phrase, expected in FIT_CASES]
+    finally:
+        if not was_on:
+            set_a11y_switch(run, False)
+    wrong = [(expected, typed, heard) for expected, typed, heard, _shot in results
+             if typed != expected]
+    typed = " | ".join(r[1] for r in results)
+    shot = results[0][3]
+    if not wrong:
+        return Outcome("pass", f"In {editor}", expected=" | ".join(e for e, *_ in results),
+                       typed=typed, screenshot=shot)
+    expected, got, heard = wrong[0]
+    said = re.sub(r"[^a-z ]", "", expected.lower())
+    status = "misheard" if heard and re.sub(r"[^a-z ]", "", heard.lower()) not in said else "fail"
+    return Outcome(status, f"In {editor}", expected=expected, typed=got, heard=heard,
+                   screenshot=shot)
 
 
 @check("Words and numbers", "qmark_words", "Talking about a question mark keeps the words")
