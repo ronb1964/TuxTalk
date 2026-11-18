@@ -173,20 +173,19 @@ def active_window_rect(report=_ASK):
 
 
 def _shown_part(rect, monitors):
-    """The part of *rect* on the monitor holding its centre, so a window
-    partly off the screen, or bigger than it, gets the indicator and messages
-    over what can be seen. Ubuntu's desktop icons layer is one: it keeps the
-    screen's unscaled size under fractional scaling. *rect* as it is when
-    its centre is on no monitor of *monitors* ([(name, Rect)])."""
-    cx, cy = rect.x + rect.w // 2, rect.y + rect.h // 2
-    for _name, mon in monitors:
-        if mon.x <= cx < mon.x + mon.w and mon.y <= cy < mon.y + mon.h:
-            return overlap(rect, mon) or rect
-    return rect
+    """The part of *rect* on the monitor it overlaps most, as Mutter picks a
+    window's monitor, so a window partly off the screen, or bigger than it,
+    gets the indicator and messages over what can be seen. Ubuntu's desktop
+    icons layer is one: it keeps the screen's unscaled size under fractional
+    scaling. *rect* as it is when it is on no monitor of *monitors*
+    ([(name, Rect)])."""
+    parts = [part for _name, mon in monitors if (part := overlap(rect, mon))]
+    return max(parts, key=lambda part: part.w * part.h, default=rect)
 
 
 def active_window_center(report=_ASK):
-    """The middle of the active window where TuxTalk's own windows are drawn,
-    or None when nothing could say. GTK thread only, as active_window_rect."""
+    """The middle of the active window's part on its monitor, where TuxTalk's
+    own windows are drawn, or None when nothing could say. GTK thread only,
+    as active_window_rect."""
     rect = active_window_rect(report)
     return (round(rect.x + rect.w / 2), round(rect.y + rect.h / 2)) if rect else None

@@ -14,10 +14,11 @@ before 0.15.0, so older entries use that name.
   before. Contributed by Bernát Gábor (#37).
 - The Frequency bars style of the recording indicator shows bars again at
   the Small size; it drew thin slivers.
-- When the recording indicator follows the window you're in, it goes over
-  the part of the window you can see: a window partly off the screen no
-  longer pushes it to the screen's edge, and on Ubuntu with fractional
-  scaling it's in the middle of the desktop, not low and to the right.
+- The recording indicator, when it follows the window you're in, and the
+  messages TuxTalk shows over that window go over the part of it you can
+  see: a window partly off the screen no longer pushes them to the
+  screen's edge, and on Ubuntu with fractional scaling they're in the
+  middle of the desktop, not low and to the right.
 - An email or web address said on its own, for a To: box or an address
   bar, no longer gets a period after it, and neither does a snippet that
   types your address. A longer name is said with its marks, in a sentence

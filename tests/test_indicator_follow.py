@@ -43,8 +43,13 @@ def test_a_window_partly_off_the_screen_counts_only_the_part_shown(monkeypatch):
     assert wg.active_window_rect() == Rect(0, 100, 400, 600)
 
 
-def test_a_window_across_two_screens_counts_its_part_on_the_one_holding_its_middle(
-        monkeypatch):
+def test_a_window_mostly_off_the_screen_counts_only_the_part_shown(monkeypatch):
+    monkeypatch.setattr(wg, "screen_monitors", lambda: [("DP-1", Rect(0, 0, 1920, 1080))])
+    monkeypatch.setattr(wg, "_reported", lambda: "-500,100,800,600|DP-1|0,0,1920,1080")
+    assert wg.active_window_rect() == Rect(0, 100, 300, 600)
+
+
+def test_a_window_across_two_screens_counts_its_part_on_the_one_it_covers_most(monkeypatch):
     monkeypatch.setattr(wg, "screen_monitors", lambda: [
         ("DP-1", Rect(0, 0, 1920, 1080)), ("DP-2", Rect(1920, 0, 1920, 1080))])
     monkeypatch.setattr(wg, "_reported", lambda: "1800,100,800,600|DP-2|1920,0,1920,1080")
