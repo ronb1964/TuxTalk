@@ -613,6 +613,26 @@ def test_a_password_field_left_in_a_background_app_doesnt_refuse_the_dictation(b
     assert atspi_helper.focused_is_password(focused_app=focus_on("org.kde.kwrite")) is False
 
 
+def test_gnome_text_editors_no_clears_a_background_browsers_password_field(bus):
+    """GNOME Text Editor is "gnome-text-editor" on the bus and
+    org.gnome.TextEditor as a window: its own no counts, so a login box
+    left focused in a browser behind it doesn't refuse the dictation."""
+    bus.app("Firefox", PASSWORD)
+    bus.app("gnome-text-editor", TEXT)
+    focused = focus_on("org.gnome.TextEditor")
+    assert atspi_helper.focused_is_password(focused_app=focused) is False
+
+
+def test_a_longer_app_id_ending_like_gnomes_isnt_gnomes_text_editor(bus):
+    """io.github.<user>.TextEditor from a user called gnome is another app:
+    the real editor's no behind it doesn't clear the password field of the
+    app in front, which goes by another name on the bus."""
+    bus.app("gnome-text-editor", TEXT)
+    bus.app("other-editor", PASSWORD)
+    focused = focus_on("io.github.gnome.TextEditor")
+    assert atspi_helper.focused_is_password(focused_app=focused) is True
+
+
 def test_the_focused_apps_own_password_field_still_counts(bus):
     bus.app("kwrite", TEXT)
     bus.app("Firefox", PASSWORD)

@@ -618,8 +618,8 @@ def _look(focused_app, answer, done):
         done.set()
 
 
-# Apps whose name on the accessibility bus is in neither their window class
-# nor its last part: the class and the name, as _plain has them. Brave
+# Apps whose name on the accessibility bus _names_the_app's rules don't
+# find in their window class: the class and the name, as _plain has them. Brave
 # names itself "Brave" there, and its windows "brave-browser" (Fedora's
 # Chromium "Chromium" and "chromium-browser", Claude Desktop
 # "claude-desktop" and "com.anthropic.Claude"); GNOME
@@ -646,15 +646,17 @@ def _plain(text: str) -> str:
 
 
 def _names_the_app(name: str, wm_class: str) -> bool:
-    """Whether the accessibility bus's app *name* ("kwrite", "Text Editor",
+    """Whether the accessibility bus's app *name* ("kwrite", "gnome-text-editor",
     "Brave") is the app of the window class *wm_class* ("org.kde.kwrite",
     "org.gnome.TextEditor", "brave-browser"): the same letters and digits,
-    ignoring case, as the whole class, its last part or its last two (GNOME
-    apps go by "gnome-text-editor" on the bus and "org.gnome.TextEditor" as
-    a window), or a known pair (_BUS_NAMES)."""
+    ignoring case, as the whole class, its last part, a three-part app id's
+    last two (GNOME apps go by "gnome-text-editor" on the bus), or a known
+    pair (_BUS_NAMES). Only three parts: in a longer id the second-to-last
+    is a project's owner (io.github.<user>.App), who could be called gnome."""
     said, whole = _plain(name), _plain(wm_class)
     parts = wm_class.split(".")
-    return bool(said) and said in {whole, _plain(parts[-1]), _plain("".join(parts[-2:])),
+    vendor_and_app = _plain("".join(parts[-2:])) if len(parts) == 3 else None
+    return bool(said) and said in {whole, _plain(parts[-1]), vendor_and_app,
                                    _BUS_NAMES.get(whole)}
 
 

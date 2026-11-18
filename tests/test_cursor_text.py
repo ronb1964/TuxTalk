@@ -372,6 +372,11 @@ def test_another_gnome_app_in_front_isnt_taken_for_the_text_editor(bus):
     assert around(focus=("org.gnome.Nautilus", None)) is None
 
 
+def test_a_longer_app_id_ending_like_gnomes_isnt_read_as_the_text_editor(bus):
+    bus.app("gnome-text-editor", "secret draft", caret=6)
+    assert around(focus=("io.github.gnome.TextEditor", None)) is None
+
+
 def test_two_windows_each_with_a_focused_box_say_nothing(bus):
     """Either may be the one in front."""
     bus.app("Google Chrome", "the big dog", caret=7, active=False, toolkit="Chromium")
