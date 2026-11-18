@@ -9,7 +9,8 @@ from tuxtalk import app_focus
 
 ENABLED = """
 const {extension} = await t.enable();
-const served = t.shell.exported.at(-1);
+const served = t.shell.exported.find(item =>
+    item.path === '/io/github/ronb1964/TuxTalk/Extension');
 """
 
 

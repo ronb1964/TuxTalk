@@ -25,7 +25,7 @@ if [ ! -d "$EXTENSION_DIR" ]; then
 fi
 
 # Verify required files exist
-REQUIRED_FILES=("extension.js" "metadata.json")
+REQUIRED_FILES=("extension.js" "metadata.json" "stylesheet.css" "shellIndicator.js")
 for file in "${REQUIRED_FILES[@]}"; do
     if [ ! -f "$EXTENSION_DIR/$file" ]; then
         echo "❌ Error: Required file not found: $file"
@@ -65,14 +65,13 @@ zip -r tuxtalk-gnome-extension.zip talktype@ronb1964.github.io \
     -x "*~" \
     -x "*.swp"
 
-# The zip must contain exactly the three extension files plus its UUID directory.
-# A silently under-filled archive installs as a broken extension, so fail loudly.
-PACKAGED_COUNT=$(unzip -l tuxtalk-gnome-extension.zip | grep -c "talktype@ronb1964.github.io/.\+")
-if [ "$PACKAGED_COUNT" -lt 3 ]; then
-    echo "❌ Error: only $PACKAGED_COUNT file(s) packaged; expected extension.js,"
-    echo "   metadata.json and stylesheet.css. Check the -x exclude patterns."
-    exit 1
-fi
+# A missing imported module installs as a broken extension.
+for file in "${REQUIRED_FILES[@]}"; do
+    if ! unzip -Z1 tuxtalk-gnome-extension.zip | grep -Fxq "talktype@ronb1964.github.io/$file"; then
+        echo "❌ Error: $file missing from extension zip. Check the -x exclude patterns."
+        exit 1
+    fi
+done
 
 # Move to project root
 mv tuxtalk-gnome-extension.zip "$OUTPUT_ZIP"

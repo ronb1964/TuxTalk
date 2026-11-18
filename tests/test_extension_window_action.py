@@ -8,7 +8,8 @@ from gnome_extension_js import run
 
 ENABLED = """
 const {extension} = await t.enable();
-const served = t.shell.exported.at(-1);
+const served = t.shell.exported.find(item =>
+    item.path === '/io/github/ronb1964/TuxTalk/Extension');
 """
 
 # Firefox with two windows (8 the most recent) and a splash screen that is
