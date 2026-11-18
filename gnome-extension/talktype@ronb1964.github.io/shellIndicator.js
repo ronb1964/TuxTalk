@@ -388,9 +388,9 @@ export class ShellIndicator {
             return;
         const iw = w * 0.52;
         const x0 = (w - iw) / 2;
-        // A share of the width, as indicator_styles.draw_bars: a fixed
-        // 4 pixels left the bars at Small narrower than nothing.
-        const gap = w * 0.02;
+        // As indicator_styles.draw_bars: at most 4 pixels, and a share of
+        // the width below Medium's, so 20 bands keep a positive width at Small.
+        const gap = Math.min(4, w * 0.02);
         const bw = (iw - gap * (bands.length - 1)) / bands.length;
         const ch = h * 0.40;
         const baseline = h / 2 + ch / 2;

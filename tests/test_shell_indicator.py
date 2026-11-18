@@ -478,7 +478,7 @@ def test_after_the_shell_drew_again_a_switch_to_x11_warns_again(shell, caplog):
     shell.disconnect()
     dictate(lambda: len(switched()) == 1)
     shell.reconnect()
-    dictate(lambda: ind._on_shell)
+    dictate(lambda: not ind._fallback_warned)
     shell.disconnect()
     dictate(lambda: len(switched()) == 2)
     assert switched() == [logging.WARNING, logging.WARNING]
@@ -488,7 +488,7 @@ def test_a_hide_the_shell_refused_is_logged(shell, caplog):
     """The indicator would stay up until its watchdog, with nothing saying why."""
     ind = si.ShellIndicator()
     ind.show_at_position()
-    assert _wait_for(lambda: ind._on_shell)
+    assert _wait_for(lambda: "Show" in _methods(shell))
     shell.fail_hide = True
     ind.hide_indicator()
     assert _wait_for(lambda: "didn't hide the recording indicator" in caplog.text)
@@ -503,4 +503,19 @@ def test_no_hide_line_on_the_way_to_x11(shell, caplog):
     ind.hide_indicator()
     _wait_for(lambda: False, seconds=0.2)
     assert "didn't hide" not in caplog.text
+
+
+def test_a_hide_refused_before_the_shows_reply_is_logged_too(shell, caplog):
+    """A quick tap lets go before the Shell answers Show: its Hide counts
+    the same, and a Show that worked late still clears the warned flag."""
+    caplog.set_level(logging.DEBUG, logger=si.__name__)
+    ind = si.ShellIndicator()
+    ind._fallback_warned = True
+    shell.defer_show = shell.fail_hide = True
+    ind.show_at_position()
+    assert _wait_for(lambda: shell.pending is not None)
+    ind.hide_indicator()
+    assert _wait_for(lambda: "didn't hide the recording indicator" in caplog.text)
+    shell.pending.return_value(None)
+    assert _wait_for(lambda: not ind._fallback_warned)
 

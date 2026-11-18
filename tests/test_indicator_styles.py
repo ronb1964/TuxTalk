@@ -114,6 +114,15 @@ def test_bars_at_the_small_size_are_real_bars():
     assert len(cr.rectangles) >= 20 and min(widths) > 0
 
 
+def test_bars_at_medium_and_large_keep_their_4_pixel_gaps():
+    cairo = pytest.importorskip("cairo")
+    for width in (200, 280):
+        cr = _Recording(cairo.Context(cairo.ImageSurface(cairo.FORMAT_ARGB32, width, 120)))
+        S.draw_bars(cr, width, 120, [0.5] * 20, (0.3, 0.7, 0.96))
+        (x0, _y, w0, _h), (x1, *_rest) = cr.rectangles[-20:-18]
+        assert x1 - (x0 + w0) == pytest.approx(4)
+
+
 def test_animation_response_moves_the_bars():
     """The slider changed the waveform and the ring, never the bars."""
     spec = np.full(20, 0.3, dtype=np.float32)

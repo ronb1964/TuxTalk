@@ -156,9 +156,9 @@ def draw_bars(cr, w, h, spectrum, color_rgb, sensitivity=1.0):
         return
     iw = w * 0.52
     x0 = (w - iw) / 2
-    # 4 pixels at Medium's 200: a fixed 4 left the bars at Small (120 wide,
-    # 20 bands) narrower than nothing.
-    gap = w * 0.02
+    # At most 4 pixels, and a share of the width below Medium's 200, so the
+    # 20 bands keep a positive width at Small.
+    gap = min(4, w * 0.02)
     bw = (iw - gap * (n - 1)) / n
     ch = h * 0.40
     baseline = h / 2 + ch / 2
