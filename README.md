@@ -21,7 +21,7 @@
 <p align="center">
   <a href="https://tuxtalk.app/"><b>Website</b></a> &nbsp;&bull;&nbsp;
   <a href="#installation">Install</a> &nbsp;&bull;&nbsp;
-  <a href="#new-in-023">New in 0.23</a> &nbsp;&bull;&nbsp;
+  <a href="#new-in-024">New in 0.24</a> &nbsp;&bull;&nbsp;
   <a href="#what-it-does">What it does</a> &nbsp;&bull;&nbsp;
   <a href="#all-the-features">All the features</a> &nbsp;&bull;&nbsp;
   <a href="#how-its-made">How it's made</a> &nbsp;&bull;&nbsp;
@@ -44,21 +44,19 @@ Claude, Anthropic's AI, writes the code. I test it and use it every day, and I h
 
 ---
 
-## New in 0.23
+## New in 0.24
 
-**0.23.1: downloads on Fedora 45.** Fedora 45 doesn't come with OpenSSL 3 any more and TuxTalk needed it, so on Fedora 45 every download failed, the speech model included. TuxTalk carries its own copy now and only uses it when your computer doesn't have one. This one also has Bernát Gábor's fix for a microphone that stops answering, which used to freeze dictation, and a fix for dictating into GNOME Terminal or LibreOffice with a browser's login box still selected in the background ([#40](https://github.com/ronb1964/TuxTalk/issues/40)). And the recording indicator sits a bit higher in tall windows, from Bernát Gábor too ([#36](https://github.com/ronb1964/TuxTalk/pull/36)).
+**It fits into the sentence you're in.** Click into the middle of a sentence and dictate, and TuxTalk looks at the text on both sides of the cursor. So no capital in the middle of a sentence, a space in front if one's missing, and no period stuck in front of the next word. It works in GTK apps, KDE apps, Firefox, and Chrome and the apps built on it, like Claude Desktop. For most of those it needs your desktop's accessibility turned on, and TuxTalk asks you once before it does that. Chrome and the apps built on it have to be closed and opened again after it goes on, they only check when they start. Where an app doesn't share its text, and in terminals, it types like it always did.
 
-**See the words while you talk.** This is the one the poll in [Discussions](https://github.com/ronb1964/TuxTalk/discussions/24) asked about. In Preferences, Advanced, TuxTalk Labs, pick "Show the words in a box" under While you talk. While you dictate, a box by the recording indicator shows what you've said so far and grows with it, so on a long paragraph you can read back what it heard before you let go. What gets typed is still the final read when you let go, nothing gets typed and then fixed. It needs the speech model on a graphics card. On the processor it's too slow, and TuxTalk tells you so instead of just doing nothing.
+**Help has a search box.** Type in it, press Ctrl+F, or just start typing, and you get the cards that match. Help's sorted by situation, so a feature you only knew by its name was hard to find before. Every card and every voice command is in there, with your own keys.
 
-Type at pause is the other choice in that same spot, so it's one or the other now. I had both on the first time I tried it and it was a mess.
+**A sharp indicator on GNOME.** Bernát Gábor rewrote it so the TuxTalk extension draws the recording indicator itself ([#37](https://github.com/ronb1964/TuxTalk/pull/37)). On a screen scaled to 150% it isn't blurry any more, and it sits where Preferences says. Check for Updates offers the new extension, and GNOME picks it up after you log out and back in. I'm on KDE now, so that one I tested in VMs.
 
-**Pick your graphics card.** If you've got more than one, there's a Graphics card setting under Device in Preferences, General, Change model, device or language. It only shows up when there's a choice to make, with Device on CUDA or Vulkan. Somebody running five NVIDIA cards asked for it in [Discussions](https://github.com/ronb1964/TuxTalk/discussions/32). I've only got one card, so that part I tested with fake ones.
+**Email addresses said on their own.** For a To: box or an address bar, an address doesn't get a period after it any more, and "john dot doe at gmail dot com" types john.doe@gmail.com. Jim Orcheson found that one ([#44](https://github.com/ronb1964/TuxTalk/issues/44)).
 
-**Num Lock stays on.** On some KDE setups Num Lock went off after every dictation and the number pad stopped typing numbers ([#34](https://github.com/ronb1964/TuxTalk/issues/34)). The hotkey helper now puts the lock lights back the way they were. On KDE, TuxTalk asks to update the helper when it starts, one password and no restart.
+**Kate's terminal panel is a terminal.** In Kate, KDevelop or Dolphin it gets plain text pasted with Shift+Ctrl+V and never an Enter. It used to show "^V". And in KWrite and Kate, Shift with the dictation key doesn't throw the cursor to the start of the line any more once accessibility's on. That was the known issue in 0.23.
 
-**Claude Desktop gets pasted into now.** It used to get typed a letter at a time, which on a long message took a few seconds. Now it lands all at once like everywhere else.
-
-Plus a fix for Transcribe a File, where a damaged list of earlier transcripts could get saved over and lose them. The [changelog](CHANGELOG.md) has the rest.
+Plus a rare crash on KDE that stopped dictation with nothing in the log, and the other person's password prompt on a shared computer no longer stops your dictation on Cinnamon or COSMIC. The [changelog](CHANGELOG.md) has the rest.
 
 ---
 

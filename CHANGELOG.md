@@ -3,7 +3,7 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [Unreleased]
+## [0.24.0] - 2026-11-19
 
 - On GNOME, the TuxTalk extension now draws the recording indicator itself,
   at your screen's own scale: it's sharp on a fractionally scaled screen
