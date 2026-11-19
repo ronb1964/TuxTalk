@@ -30,6 +30,7 @@ big ways. Roughly in order:
 - [~] Some kind of signal when a dictation heard nothing at all. A silent microphone already says "No sound from the microphone", and hands-free mode beeps and stops when you say nothing, but a hold-to-talk that heard sound and no words just types nothing.
 - [ ] Spoken templates, like "compose email" putting in an email layout.
 
+- [ ] Voice commands in other languages, German first ([#45](https://github.com/ronb1964/TuxTalk/discussions/45), [#46](https://github.com/ronb1964/TuxTalk/discussions/46)). Today every command is English whatever language you dictate in. The command language gets its own setting, so you can give commands in German while dictating in Spanish. Volunteers have offered German, Spanish and French.
 - [ ] Start and stop dictation with spoken words ("wake up", "go to sleep"), for people who can't press a key ([#45](https://github.com/ronb1964/TuxTalk/discussions/45)). The microphone would stay on, all on your own computer, so it has to never wake up from a TV or other voices and never miss you in noise. Off unless you turn it on, in TuxTalk Labs first.
 
 ## Audio
