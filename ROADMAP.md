@@ -71,7 +71,6 @@ big ways. Roughly in order:
 ## Decided against
 
 - The Snap Store. It won't connect the keyboard permission TuxTalk types with by itself, so everyone would have to type a command after installing before dictation worked. The AppImage works after setup with no commands. Same for a Fedora COPR build for now: the AppImage bundles libraries Fedora's rules don't allow, and a clean build is days of work.
-- Live text while you talk, words showing up as you speak. I tried it, and seeing the words appear while I was still talking pulled me out of what I was saying. Not planned unless a lot of people ask for it.
 
 ## Known limitations
 
