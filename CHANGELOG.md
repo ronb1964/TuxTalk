@@ -5,6 +5,15 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- Pick any dictation key you like: the hold and toggle lists in
+  Preferences → General end in "Other key or combination…", where you
+  press the keys, such as Alt+D or Ctrl+Shift+K. TuxTalk refuses keys
+  that would type (a letter on its own) and reminds you that apps may use
+  the same shortcut. A combination with one of Ctrl, Alt or the Windows
+  key needs the hotkey helper 1.17: TuxTalk offers the update, and asks
+  for your password once. A letter written into config.toml by hand as
+  the dictation key, which started a dictation with every one typed, is
+  now refused.
 - "No space" joins an email name however the speech model writes it:
   "john Nospace doe at gmail dot com" and "no-space" type johndoe@gmail.com
   too. Thanks to Jim Orcheson (#48).
