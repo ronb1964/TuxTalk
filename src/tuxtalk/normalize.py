@@ -309,9 +309,11 @@ _EMAIL_TLDS_SAFE = "com|org|net|edu|gov|io"
 _EMAIL_TLDS_ALL = (_EMAIL_TLDS_SAFE + "|co|uk|ca|de|fr|us|au|jp|cn|in|br|mx|ru|kr|es|it|nl|se|"
                    "no|fi|pl|cz|hu|ro|gr|pt|ie|nz|za|ae|il|tr|th|vn|ph|id|my|sg|hk|tw")
 # A name may be said with its marks between two of its words: "john dot doe",
-# "jane underscore smith", "john no space doe" (as in Dragon).
-_SPOKEN_NAME_MARKS = {"dot": ".", "underscore": "_", "dash": "-", "hyphen": "-", "no space": ""}
-_NAME_MARK = r"\s+(?i:dot|underscore|dash|hyphen|no\s+space)\s+"
+# "jane underscore smith", "john no space doe" (as in Dragon). The speech
+# model writes "no space" as one word as often ("Nospace", "no-space"), so
+# the marks are looked up with spaces and hyphens taken out.
+_SPOKEN_NAME_MARKS = {"dot": ".", "underscore": "_", "dash": "-", "hyphen": "-", "nospace": ""}
+_NAME_MARK = r"\s+(?i:dot|underscore|dash|hyphen|no[\s-]*space)\s+"
 _RE_NAME_MARK = re.compile(_NAME_MARK)
 _EMAIL_NAME = r"(?<![\w'’])((?:[a-zA-Z0-9._-]+" + _NAME_MARK + r")*[a-zA-Z0-9._-]+)"
 # Case-sensitive: endings are lowercase, and "three.No" is a missed space.
@@ -410,7 +412,7 @@ def _email_or_said(said, name, domain):
 def _spoken_name(name):
     """A mailbox name as said, written out: "john dot doe" -> "john.doe"."""
     return _RE_NAME_MARK.sub(
-        lambda m: _SPOKEN_NAME_MARKS[" ".join(m.group().lower().split())], name)
+        lambda m: _SPOKEN_NAME_MARKS[re.sub(r"[\s-]", "", m.group().lower())], name)
 
 
 # A dictation that is only an address goes into a To: box or an address bar

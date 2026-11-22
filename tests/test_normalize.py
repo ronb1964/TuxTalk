@@ -834,6 +834,20 @@ def test_an_address_said_alone_is_the_address_and_nothing_else(said, expected):
     assert _whole(said) == expected + " "
 
 
+@pytest.mark.parametrize("said", ["John Nospace doe at gmail dot com.",
+                                  "john nospace doe at gmail dot com",
+                                  "John no-space doe at gmail dot com.",
+                                  "John No Space doe at gmail dot com."])
+def test_no_space_joins_the_name_however_the_engine_wrote_it(said):
+    """Issue #48: Parakeet often writes "no space" as one word, and the name
+    came out "John Nospace doe@gmail.com"."""
+    assert _whole(said) == "johndoe@gmail.com "
+
+
+def test_nospace_outside_an_address_stays_a_word():
+    assert normalize_text("there is nospace left") == "There is nospace left."
+
+
 @pytest.mark.parametrize("said, expected", [
     ("John doe at gmail dot com.", "John doe@gmail.com. "),
     ("It's john at gmail dot com.", "It's john@gmail.com. "),
