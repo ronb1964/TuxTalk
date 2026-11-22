@@ -88,7 +88,7 @@ KEYBOARD_OPTIONS = {
 }
 
 # GNOME's shortcut schemas that could hold Ctrl+Space.
-_GNOME_SCHEMAS = (
+GNOME_SCHEMAS = (
     "org.gnome.desktop.wm.keybindings",
     "org.gnome.shell.keybindings",
     "org.gnome.settings-daemon.plugins.media-keys",
@@ -97,7 +97,7 @@ _GNOME_SCHEMAS = (
 
 GSETTINGS_TIMEOUT_S = 2
 # The longest clashes() can take: IBus's one lookup and one per GNOME schema.
-LOOKUP_BUDGET_S = GSETTINGS_TIMEOUT_S * (1 + len(_GNOME_SCHEMAS))
+LOOKUP_BUDGET_S = GSETTINGS_TIMEOUT_S * (1 + len(GNOME_SCHEMAS))
 
 # Ctrl+Space as GTK accelerators write it, and no other key with it.
 _CTRL_SPACE_ACCEL = re.compile(r"'<(?:Control|Primary|Ctrl)>space'", re.IGNORECASE)
@@ -161,7 +161,7 @@ def _running(name: str, proc: str = "/proc") -> bool:
     return False
 
 
-def _gsettings(*args: str) -> str:
+def gsettings(*args: str) -> str:
     """What `gsettings` prints for *args*; "" when it can't say (no gsettings,
     an unknown schema, too slow)."""
     try:
@@ -196,12 +196,12 @@ def clashes() -> list[Clash]:
     """Everything running or set that also takes Ctrl+Space."""
     found = []
     if _running("ibus-daemon") and ibus_triggers_ctrl_space(
-            _gsettings("get", "org.freedesktop.ibus.general.hotkey", "triggers")):
+            gsettings("get", "org.freedesktop.ibus.general.hotkey", "triggers")):
         found.append(IBUS)
     if _running("fcitx5") and fcitx5_triggers_ctrl_space(_fcitx5_config()):
         found.append(FCITX5)
     if desktop_detect.get_desktop_environment() == "gnome" and gnome_bindings_ctrl_space(
-            "\n".join(_gsettings("list-recursively", schema) for schema in _GNOME_SCHEMAS)):
+            "\n".join(gsettings("list-recursively", schema) for schema in GNOME_SCHEMAS)):
         found.append(GNOME)
     options = keyboard_options_clash(_xkb_options())
     if options:

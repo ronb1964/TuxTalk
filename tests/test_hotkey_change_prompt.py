@@ -8,6 +8,16 @@ from tuxtalk.ctrl_space_clashes import GNOME, IBUS, KEYBOARD_OPTIONS
 from tuxtalk.hotkey_labels import hands_free_label, hotkey_label
 from tuxtalk.prefs_general import hotkey_change_message
 
+
+
+@pytest.fixture(autouse=True)
+def _no_desktop_shortcuts(monkeypatch):
+    """The desktop's own shortcuts are looked up for real only in
+    test_desktop_shortcut_clashes.py."""
+    from tuxtalk import desktop_shortcut_clashes
+    monkeypatch.setattr(desktop_shortcut_clashes, "clashes", lambda keys: [])
+
+
 CFG = {"hotkey": "F7", "toggle_hotkey": "F9", "voice_commands_hotkey": "Ctrl+Alt+V"}
 
 
@@ -257,7 +267,7 @@ def test_the_dropdown_mentions_the_password_only_with_an_older_helper(
 def test_picking_left_ctrl_space_where_ibus_uses_it_says_so():
     cfg = {**CFG, "hotkey": CTRL_SPACE}
     title, text, _offer_test, clash = hotkey_change_message(cfg, {"hotkey"}, [],
-                                                            ctrl_space=[IBUS])
+                                                            others=[IBUS])
     assert title == "IBus already uses Ctrl+Space" and clash
     assert text.startswith("IBus already uses Ctrl+Space to switch input methods, so pressing "
                            "Left Ctrl+Space may do that instead of dictating. Pick another key, "
@@ -267,7 +277,7 @@ def test_picking_left_ctrl_space_where_ibus_uses_it_says_so():
 def test_the_keyboard_options_clash_says_what_they_do_to_left_ctrl():
     cfg = {**CFG, "hotkey": CTRL_SPACE}
     swapcaps = KEYBOARD_OPTIONS["ctrl:swapcaps"]
-    title, text, _, _ = hotkey_change_message(cfg, {"hotkey"}, [], ctrl_space=[swapcaps])
+    title, text, _, _ = hotkey_change_message(cfg, {"hotkey"}, [], others=[swapcaps])
     assert title == "Your keyboard options change Left Ctrl"
     assert text.startswith(
         "Your keyboard options make Left Ctrl act as Caps Lock, so pressing "
@@ -289,7 +299,7 @@ def test_with_no_helper_running_the_dropdown_has_no_password_words(monkeypatch):
 def test_kde_clash_comes_first_and_the_update_after_it():
     cfg = {**CFG, "hotkey": CTRL_SPACE}
     title, text, _, clash = hotkey_change_message(
-        cfg, {"hotkey"}, ["Ctrl+Space"], unheard=[CTRL_SPACE], ctrl_space=[IBUS])
+        cfg, {"hotkey"}, ["Ctrl+Space"], unheard=[CTRL_SPACE], others=[IBUS])
     assert title == "KDE already uses Left Ctrl+Space" and clash
     kde, ibus, update = (text.index(s) for s in (
         "KDE already uses", "IBus already uses", "older than this TuxTalk"))
@@ -298,7 +308,7 @@ def test_kde_clash_comes_first_and_the_update_after_it():
 
 def test_two_input_methods_are_both_named():
     cfg = {**CFG, "hotkey": CTRL_SPACE}
-    title, text, _, _ = hotkey_change_message(cfg, {"hotkey"}, [], ctrl_space=[IBUS, GNOME])
+    title, text, _, _ = hotkey_change_message(cfg, {"hotkey"}, [], others=[IBUS, GNOME])
     assert title == "IBus already uses Ctrl+Space"
     assert "IBus already uses" in text and "GNOME already uses" in text
 
@@ -316,9 +326,9 @@ def test_a_lookup_that_fails_is_logged_and_preferences_doesnt_wait_it_out(prefs_
     tab = prefs_window(hotkey=CTRL_SPACE).general_tab
     began = time.monotonic()
     with caplog.at_level(logging.INFO):
-        assert tab._ctrl_space_clashes({CTRL_SPACE}) == []
+        assert tab._other_clashes({CTRL_SPACE}) == []
     assert time.monotonic() - began < 2
-    assert "Couldn't look for who else uses Ctrl+Space" in caplog.text
+    assert "Couldn't look for who else uses the new keys" in caplog.text
 
 
 def test_after_apply_the_clashes_are_looked_for_only_when_left_ctrl_space_was_picked(

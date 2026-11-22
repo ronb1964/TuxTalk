@@ -183,6 +183,18 @@ class _Unreadable(Exception):
     pass
 
 
+def others_bindings(current=None) -> set:
+    """{(frozenset of modifiers, key)} COSMIC binds that aren't TuxTalk's:
+    the custom shortcuts (*current*, read from custom_path when None) and
+    the built-in ones."""
+    if current is None:
+        current = _OURS.sub("", _read(custom_path()) or "")
+    taken = _taken(current)
+    for default in _default_paths():
+        taken |= _taken(_read(default) or "")
+    return taken
+
+
 def claim(cfg) -> bool:
     """Make *cfg*'s hotkeys COSMIC shortcuts. True if any are held.
 
@@ -198,9 +210,7 @@ def claim(cfg) -> bool:
         the hotkeys wanted now, skipping any key COSMIC already uses. Raises
         _Unreadable when the text can't be edited safely."""
         theirs = _OURS.sub("", current) if current else current
-        taken = _taken(theirs or "")
-        for default in _default_paths():
-            taken |= _taken(_read(default) or "")
+        taken = others_bindings(theirs or "")
         entries = []
         held.clear()
         for _role, _what, key in keys_to_claim(cfg):

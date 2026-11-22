@@ -17,7 +17,7 @@ def desktop(monkeypatch):
     def set_up(running=(), gsettings=None, fcitx5=None, gnome=False, xkb=None):
         answers = gsettings or {}
         monkeypatch.setattr(csc, "_running", lambda name: name in running)
-        monkeypatch.setattr(csc, "_gsettings", lambda *args: answers.get(args[1], ""))
+        monkeypatch.setattr(csc, "gsettings", lambda *args: answers.get(args[1], ""))
         monkeypatch.setattr(csc, "_fcitx5_config", lambda: fcitx5)
         monkeypatch.setattr(csc, "_xkb_options", lambda: xkb)
         monkeypatch.setattr(desktop_detect, "get_desktop_environment",
