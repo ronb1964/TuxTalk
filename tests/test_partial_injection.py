@@ -93,6 +93,22 @@ def test_wtype_isnt_run_into_a_password_field(monkeypatch, quiet):
     assert ran == []
 
 
+def test_wtype_isnt_run_into_another_window(monkeypatch, quiet):
+    """A voice edit's rewrite, a held mark or an owed space may only go into
+    the window it belongs to; wtype typed into whatever had the focus."""
+    from tuxtalk import virtual_keyboard
+    ran = []
+    monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
+    monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype" and "/usr/bin/wtype")
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: ran.append(a) or 1 / 0)
+    monkeypatch.setattr("tuxtalk.keyboard_layout.layout_key_events", lambda t: [(30, 1), (30, 0)])
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
+    looks = iter([("org.kde.kwrite", None)])
+    monkeypatch.setattr(focused_window, "look", lambda: next(looks, ("firefox", None)))
+    assert delivery.inject_text("hello", "type", into=("org.kde.kwrite", None)) == "moved"
+    assert ran == []
+
+
 # --- a terminal's paste falling back to typing --------------------------------
 
 def test_terminal_remainder_never_presses_a_plain_enter(monkeypatch, quiet):

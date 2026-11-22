@@ -485,35 +485,51 @@ def type_text_raw(text: str) -> bool:
                         f"({delay} ms a key event)")
             return True
     if which("wtype"):
-        if this_thread.no_password_field:
-            refuse_password_field()     # no claim of send_keys's asks it here
-        if this_thread.cancel_with is not None:
-            refuse_cancelled(this_thread.cancel_with)
-        # The real exit code, so the undo buffer tracks only typed text; a
-        # bounded wait, so a stalled compositor can't freeze dictation; the
-        # text on stdin ("-"), as every user can read a command line. wtype
-        # reads stdin in its locale's encoding, and under a C locale stops at
-        # the first letter outside ASCII, dropping the rest without an error.
-        proc = subprocess.Popen(["wtype", "-"], stdin=subprocess.PIPE,
-                                env=dict(os.environ, LC_ALL="C.UTF-8"))
-        try:
-            proc.communicate(text.encode("utf-8"), timeout=WTYPE_TIMEOUT_S)
-        except subprocess.TimeoutExpired:
-            # Kill and reap, so it cannot come back to life and type into
-            # whatever the user has focused by then.
-            proc.kill()
-            proc.communicate()
-            logger.error(f"wtype timed out after {WTYPE_TIMEOUT_S}s; killed the process")
-            return False
-        if proc.returncode != 0:
-            return False
-        this_thread.sends += 1      # as send_keys counts: a stop after it is partway
-        return True
+        return _type_with_wtype(text)
     # Not put on the clipboard instead: that would replace what the user
     # copied, unmarked for clipboard managers to keep. The failure notice
     # points to Recent Dictations, which holds it.
     logger.error("Could not type text: no virtual keyboard or wtype")
     return False
+
+
+def _type_with_wtype(text: str) -> bool:
+    """type_text_raw without TuxTalk's keyboard: wtype types *text*, after
+    the checks the keyboard's claim makes (only into the delivery's window,
+    never a password field, not after Esc, and the delivery's last check).
+    False when wtype couldn't start typing; StoppedPartway once it typed
+    some and failed or stalled: typing it all again would double that part."""
+    check = checks_before_keys()
+    if check is not None:
+        check()
+    if this_thread.last_check is not None:
+        this_thread.last_check()
+    # The real exit code, so the undo buffer tracks only typed text; a
+    # bounded wait, so a stalled compositor can't freeze dictation; the
+    # text on stdin ("-"), as every user can read a command line. wtype
+    # reads stdin in its locale's encoding, and under a C locale stops at
+    # the first letter outside ASCII, dropping the rest without an error.
+    proc = subprocess.Popen(["wtype", "-"], stdin=subprocess.PIPE, stderr=subprocess.PIPE,
+                            env=dict(os.environ, LC_ALL="C.UTF-8"))
+    try:
+        _out, err = proc.communicate(text.encode("utf-8"), timeout=WTYPE_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        # Kill and reap, so it cannot come back to life and type into
+        # whatever the user has focused by then.
+        proc.kill()
+        proc.communicate()
+        logger.error(f"wtype timed out after {WTYPE_TIMEOUT_S}s; killed the process")
+        raise virtual_keyboard.StoppedPartway("wtype timed out") from None
+    if proc.returncode != 0:
+        message = (err or b"").decode("utf-8", "replace").strip()
+        logger.error(f"wtype exited with {proc.returncode}: {message}")
+        # A desktop without the virtual-keyboard protocol (GNOME) refuses
+        # before the first key; any other failure may come after some.
+        if "does not support" in message.lower():
+            return False
+        raise virtual_keyboard.StoppedPartway(f"wtype exited with {proc.returncode}")
+    this_thread.sends += 1      # as send_keys counts: a stop after it is partway
+    return True
 
 
 def send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = False,

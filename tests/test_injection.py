@@ -450,5 +450,29 @@ def test_a_stalled_wtype_is_killed_and_reported(monkeypatch):
 
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: HungProc())
 
-    assert keyboard_output.type_text_raw("hello") is False
+    with pytest.raises(virtual_keyboard.StoppedPartway):
+        keyboard_output.type_text_raw("hello")      # some may be typed: never again
     assert killed, "a hung wtype must be killed, not left typing later"
+
+
+@pytest.mark.parametrize("stderr, partway", [
+    (b"Compositor does not support the virtual keyboard protocol", False),
+    (b"Connection to the compositor lost", True)])
+def test_a_failed_wtype_says_whether_it_may_have_typed(monkeypatch, stderr, partway):
+    """A wtype that typed part and then failed said nothing went in, and the
+    user typed it all again; one the desktop refuses outright typed nothing."""
+    from tuxtalk import virtual_keyboard
+    monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype")
+    monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
+
+    class Failed:
+        returncode = 1
+
+        def communicate(self, input=None, timeout=None):
+            return b"", stderr
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: Failed())
+    if partway:
+        with pytest.raises(virtual_keyboard.StoppedPartway):
+            keyboard_output.type_text_raw("hello")
+    else:
+        assert keyboard_output.type_text_raw("hello") is False
