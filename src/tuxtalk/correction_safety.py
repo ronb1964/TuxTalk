@@ -93,7 +93,7 @@ def _drops_a_sign(dropped, restated):
     """True if *dropped*, the words a correction takes out, holds a value
     sign the *restated* words don't say again: "Set x < 5, no wait, 6" is
     not "Set x 6", and "Pay $50, no wait, 60" may not lose the dollar."""
-    return any(not w[0].isalnum() and w not in restated for w in dropped)
+    return any(not (w[0].isalnum() or w[0] == "'") and w not in restated for w in dropped)
 
 
 def _deleted_runs(src, out):

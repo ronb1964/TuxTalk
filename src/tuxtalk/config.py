@@ -550,21 +550,52 @@ def _recover_damaged_config() -> Settings:
     saved it since it was read, and writing the backup's settings over that
     would undo the save (transcript logging turned off, say).
     """
-    with locked():
-        try:
-            data = load_toml_file(CONFIG_PATH)
-        except Exception as e:
-            logger.info(f"Settings file still damaged with the lock held ({e}); recovering")
-            data = None
-        if data:
-            fresh = Settings()
-            apply_toml(fresh, data)
-            return fresh
+    try:
+        with locked():
+            return _recover_if_still_damaged()
+    except OSError as e:
+        # No lock (a read-only folder) or no reading the file now: nothing
+        # is set aside or written, which could land on a good save.
+        logger.warning(f"Settings recovered in memory only, the file left alone: {e}")
+        return _backup_settings()[0]
+
+
+def _recover_if_still_damaged() -> Settings:
+    """Under the lock: the file's settings if it reads well now, else the
+    recovery. A read error (OSError) is the caller's: that's no damage."""
+    try:
+        data = load_toml_file(CONFIG_PATH)
+    except OSError:
+        raise
+    except Exception as e:
+        logger.info(f"Settings file still damaged with the lock held ({e}); recovering")
         return _recover_from_backup()
+    if not data:
+        return _recover_from_backup()
+    fresh = Settings()
+    apply_toml(fresh, data)
+    return fresh
+
+
+def _backup_settings():
+    """(the settings in config.toml.bak, or the defaults, whether they came
+    from it)."""
+    recovered = Settings()
+    backup = f"{CONFIG_PATH}.bak"
+    if os.path.exists(backup):
+        try:
+            data = load_toml_file(backup)
+            if data:
+                apply_toml(recovered, data)
+                logger.info(f"Recovered settings from {backup}")
+                return recovered, True
+        except Exception as restore_error:
+            logger.error(f"Backup at {backup} is also unreadable: {restore_error}")
+    return recovered, False
 
 
 def _recover_from_backup() -> Settings:
-    """_recover_damaged_config's work, under the lock."""
+    """_recover_damaged_config's work, under the lock, the file damaged."""
     stamp = time.strftime("%Y%m%d-%H%M%S")
     quarantine = f"{CONFIG_PATH}.corrupt-{stamp}"
     quarantined = False
@@ -575,19 +606,7 @@ def _recover_from_backup() -> Settings:
     except OSError as copy_error:
         logger.error(f"Could not preserve damaged config: {copy_error}")
 
-    recovered = Settings()
-    restored_from_backup = False
-    backup = f"{CONFIG_PATH}.bak"
-    if os.path.exists(backup):
-        try:
-            data = load_toml_file(backup)
-            if data:
-                apply_toml(recovered, data)
-                restored_from_backup = True
-                logger.info(f"Recovered settings from {backup}")
-        except Exception as restore_error:
-            logger.error(f"Backup at {backup} is also unreadable: {restore_error}")
-
+    recovered, restored_from_backup = _backup_settings()
     if not restored_from_backup:
         logger.warning("Settings have been reset to defaults")
     # Also on stderr: started from a terminal, that's where the user looks.
@@ -907,7 +926,9 @@ def save_changes(**changes) -> Settings:
     """Change the settings named in *changes* and nothing else, keys this
     version doesn't know kept too: read afresh, changed and written under
     the lock, so another process's save meanwhile stays. The settings now.
-    Raises as rewrite_config does."""
+    Raises as rewrite_config does. A damaged or emptied file is repaired
+    from its backup first (load_config), not saved over with one setting."""
+    load_config()
     rewrite_config(lambda on_disk: {**on_disk, **changes})
     return load_config()
 

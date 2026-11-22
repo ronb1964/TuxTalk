@@ -503,6 +503,43 @@ def test_a_file_repaired_meanwhile_is_not_recovered_over(config_path, monkeypatc
     assert not list(config_path.parent.glob("config.toml.corrupt-*"))
 
 
+def test_an_emptied_file_is_restored_before_a_small_save(config_path):
+    """The update check's save read an emptied file as no settings and wrote
+    its one key: the hold key was blank and dictation stopped, the backup
+    with F6 never used."""
+    config.save_config(config.Settings(hotkey="F6"))
+    config.save_config(config.Settings(hotkey="F6"))     # F6 in the .bak too
+    config_path.write_text("")
+    config.record_update_check("2026-11-22")
+    assert config.load_config().hotkey == "F6"
+
+
+def test_a_read_error_while_recovering_leaves_the_file_alone(config_path, monkeypatch):
+    """Damaged at the first read, then a moment's read error with the lock
+    held: recovering then would write the backup over a save made meanwhile."""
+    config_path.write_text('model = "medium"\n')
+    reads = []
+
+    def damaged_then_unreadable(path):
+        reads.append(path)
+        raise ValueError("Invalid statement") if len(reads) == 1 else OSError(5, "I/O error")
+    monkeypatch.setattr(config, "load_toml_file", damaged_then_unreadable)
+    config.load_config()
+    assert config_path.read_text() == 'model = "medium"\n'
+    assert not list(config_path.parent.glob("config.toml.corrupt-*"))
+
+
+def test_a_damaged_file_in_a_read_only_folder_still_loads(config_path, monkeypatch):
+    """No lock can be made there: loading raised instead of recovering."""
+    config_path.write_text("this is = = not toml")
+
+    def no_lock(*a, **k):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(config.os, "open", no_lock)
+    assert config.load_config().model == config.Settings().model
+    assert config_path.read_text() == "this is = = not toml"
+
+
 def test_no_temp_files_are_left_behind(tmp_path):
     path = str(tmp_path / "config.toml")
     config.write_text_atomic(path, "model = \"tiny\"\n")

@@ -274,8 +274,7 @@ def _pick_fallback_model(wanted, downloaded, has_cuda):
     """The downloaded model closest in quality to *wanted*, or None.
 
     Ties go to the faster model. large-v3 is skipped unless it would run on
-    CUDA (*has_cuda*): on the processor it is too slow to use (main()
-    refuses it there for the same reason).
+    CUDA (*has_cuda*): on the processor it is too slow to use.
     """
     rank = {m: i for i, m in enumerate(_QUALITY_ORDER)}
     target = rank.get(wanted, rank["small"])
