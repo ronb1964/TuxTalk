@@ -468,7 +468,8 @@ def _change_selection(get_instruction, beeps_on, injection_mode, where, t0, mess
         return _UNCHANGED
     logger.info(f"Voice edit result: {live.loggable(result)} "
                 f"(took {time.time() - t0:.2f}s)")
-    return _rewrite_over_selection(result, injection_mode, message, beeps_on, where, went_in)
+    return _rewrite_over_selection(result, selected, injection_mode, message, beeps_on, where,
+                                   went_in)
 
 
 def _copy_selection(where, beeps_on, message, ask=True):
@@ -623,9 +624,11 @@ def _right_to_left(text):
     return False
 
 
-def _rewrite_over_selection(result, injection_mode, message, beeps_on, where, went_in):
+def _rewrite_over_selection(result, selected, injection_mode, message, beeps_on, where,
+                            went_in):
     """Type *result* over the selection in *where*, the window the edit
-    started in, as _change_selection's last step, and answer as it does.
+    started in, as _change_selection's last step, and answer as it does:
+    only while *selected*, the text it rewrites, is still what's selected.
     *went_in* gets *result* once some or all of it went in."""
     from . import history
     history.add_entry(result)
@@ -639,6 +642,11 @@ def _rewrite_over_selection(result, injection_mode, message, beeps_on, where, we
     elif focus_moved(focused_class, window):
         # Typing now would put the rewrite into whatever window has focus.
         notices.edit_problem("window_changed", beeps_on)
+        return _UNCHANGED
+    if not _still_selected(selected, where):
+        # Other text selected while the AI worked would be replaced by it.
+        logger.info("Voice edit: the selection changed while the AI worked; not typed")
+        notices.edit_problem("selection_changed", beeps_on)
         return _UNCHANGED
     outcome = _type_rewrite(result, injection_mode, message, beeps_on, into)
     if outcome in delivery.GAVE_UP_UNTYPED:

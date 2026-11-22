@@ -21,6 +21,8 @@ NOTICES = {
                     "was changed.",
     "window_changed": "You switched windows while the AI was working, so the rewrite "
                       "wasn't typed. It's in Recent Dictations in the TuxTalk menu.",
+    "selection_changed": "The selection changed while the AI was working, so the rewrite "
+                         "wasn't typed. It's in Recent Dictations in the TuxTalk menu.",
     "focus_moved": "You switched windows before the edit was done, so nothing was changed.",
     "cant_check_window": "TuxTalk couldn't tell which window has the focus, so it didn't "
                          "press Delete. Press it yourself to delete the selection.",
@@ -63,6 +65,7 @@ LABELS = {
     "needs_wayland": "Voice editing needs Wayland",
     "no_clipboard": "Couldn't read the selection",
     "window_changed": "Window changed, see Recent Dictations",
+    "selection_changed": "Selection changed, see Recent Dictations",
     "focus_moved": "Window changed, nothing done",
     "cant_check_window": "Couldn't check the window, nothing deleted",
     "no_shortcuts": "No bold or italics in this app",
