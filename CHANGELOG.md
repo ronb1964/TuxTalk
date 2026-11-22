@@ -28,11 +28,11 @@ before 0.15.0, so older entries use that name.
 - `tuxtalk --uninstall` of a .deb, .rpm or Arch package on KDE clears
   TuxTalk's entries in KDE's Shortcuts settings again.
 - A dictation recorded while the computer stalled, so that some of the
-  sound was lost, is typed but not sent automatically: a word may be
-  missing.
-- ".NET", ".env" and ".5" keep their dot instead of ending a sentence
-  there, an email address said inside spoken quotes keeps the full stop
-  outside the quotes, and "I’m" with a curly apostrophe keeps its capital.
+  sound was lost, is typed but not sent: "Not sent: some of the sound was
+  lost, so a word may be missing."
+- ".NET", ".env", ".5" and "~/.config" keep their dot instead of ending a
+  sentence there, an email or web address said inside spoken quotes keeps
+  the full stop outside the quotes, and "I’m" with a curly apostrophe keeps its capital.
 - On Sway, Hyprland and other desktops where TuxTalk types with wtype, a
   dictation that stopped partway says so instead of saying nothing went
   in, and text meant for one window never goes into another.
