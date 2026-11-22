@@ -192,7 +192,7 @@ def test_the_switch_saves_only_the_model_and_device(nvidia, monkeypatch):
     assert nvidia.happened == ["Download CUDA Libraries?", "CUDA downloaded", "restart"]
     assert _end_state(section) == ("small", "cuda", "small", "cuda")
     saved = toml.load(config.CONFIG_PATH)
-    assert saved.get("hotkey") != "F6" and saved.get("auto_period") == period
+    assert saved.get("hotkey") != "F6" and saved.get("auto_period", period) == period
     assert win._changed_since_open() == {"hotkey", "auto_period"}
     assert (win.config["hotkey"], win.config["auto_period"]) == ("F6", not period)
 

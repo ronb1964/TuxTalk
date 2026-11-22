@@ -175,8 +175,9 @@ words: list[str] = []
 
 _last_words_mtime = None
 
-# mtime of the config file as of the last check. None means "not yet seen".
-_last_config_mtime = None
+# config.file_stamp of the config file as of the last check. None means
+# "not yet seen".
+_last_config_stamp = None
 
 # Same, for custom_commands.toml. It is a separate file, so it needs its own
 # mtime — config.toml's says nothing about whether the commands changed.
@@ -184,22 +185,17 @@ _last_commands_mtime = None
 
 
 def config_file_changed() -> bool:
-    """Whether config.toml's mtime has moved since the last check.
+    """Whether config.toml has changed since the last check (config.file_stamp).
 
     Returns True on the very first call once the file exists, so a service that
     starts before the file is written still picks it up. A missing or unreadable
     file is not a change — there is nothing new to apply.
     """
-    global _last_config_mtime
-    try:
-        mtime = os.path.getmtime(config_module.CONFIG_PATH)
-    except OSError:
+    global _last_config_stamp
+    stamp = config_module.file_stamp(config_module.CONFIG_PATH)
+    if stamp is None or stamp == _last_config_stamp:
         return False
-
-    if mtime == _last_config_mtime:
-        return False
-
-    _last_config_mtime = mtime
+    _last_config_stamp = stamp
     return True
 
 

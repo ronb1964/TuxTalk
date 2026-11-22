@@ -169,9 +169,9 @@ def _remember_speed_result(processor_won):
     """Save whether the processor won (vulkan_slower), so recommend.py stops
     proposing a graphics chip that lost."""
     try:
-        from .config import load_config, update_config
+        from .config import load_config, save_changes
         if load_config().vulkan_slower != processor_won:
-            update_config(vulkan_slower=processor_won)
+            save_changes(vulkan_slower=processor_won)
     except Exception as e:
         # Only the advice suffers: the graphics chip may be proposed again.
         logger.warning(f"Couldn't save the speed check's result: {e}")

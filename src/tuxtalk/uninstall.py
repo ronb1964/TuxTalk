@@ -71,6 +71,7 @@ DOWNLOADED_DATA = ("cuda", "ai-engine", "parakeet-ultra", "whisper-vulkan", "kwi
 ENGINE_FOLDERS = ("whisper-vulkan", "ai-engine", "parakeet-ultra", "cuda")
 # What TuxTalk keeps in its settings folder (tests/test_uninstall.py again).
 CONFIG_NAMES = ("config.toml", "custom_commands.toml", custom_words.FILE_NAME, "backups",
+                "config.toml.lock",
                 "kde-hotkeys.json", "explained.json", ".launchers-renamed",
                 rename_migration.NOTICE_FILE, LOG_FILE_NAME, "talktype.log",
                 a11y_switch.FILE_NAME)
@@ -968,7 +969,7 @@ def done_text(plan, delete_personal, delete_shared, result):
 def _remove_as_root(plan, leave_group):
     """The root script's Result, or None when it didn't run (cancelled,
     failed or timed out; the user has been told)."""
-    ok, message = _wait_for(lambda: secure_input._run_as_root(
+    ok, message = _wait_for(lambda: secure_input.run_as_root(
         root_script(plan, leave_group), "removed (uninstalling TuxTalk)"))
     if ok:
         return root_result(message, leave_group, plan.package is not None)

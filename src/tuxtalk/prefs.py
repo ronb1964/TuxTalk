@@ -28,7 +28,7 @@ import dbus.mainloop.glib
 from dataclasses import asdict
 from . import prefs_ipc
 from . import config
-from .config import changed_keys, merge_changed_keys, rewrite_config
+from .config import ConfigNotLoadedError, changed_keys, merge_changed_keys, rewrite_config
 
 logger = setup_logger(__name__)
 
@@ -273,31 +273,17 @@ class PreferencesWindow:
         # What this window last put in force, not what's on disk: after a
         # failed attempt the disk already holds the new value.
         autostart_before = self._config_at_open.get("launch_at_login")
-        bases = []
+        saved_before = {}
 
         def merge(on_disk):
             # Base: window-open snapshot (has every key incl. defaults),
             # updated with whatever is on disk now.
             base = {**self._config_at_open, **on_disk}
-            bases.append(dict(base))        # merge_changed_keys fills in base
+            saved_before.update(base)       # merge_changed_keys fills in base
             return merge_changed_keys(self._config_at_open, self.config, base)
         try:
             merged = rewrite_config(merge)
-            # Future saves in this window diff against what we just wrote;
-            # what it replaced is what a failed download goes back to.
-            self._saved_before = bases[0]
-            self.config = dict(merged)
-            self._config_at_open = dict(merged)
-            # Settings that live outside the config file only now that the
-            # save has happened, so Cancel never has anything to undo.
-            if autostart_changed:
-                self._apply_launch_at_login(autostart_before)
-            return True
-        except Exception as e:
-            if bases:
-                logger.error(f"Could not save the config: {e}")
-                self._save_error = str(e)
-                return False
+        except ConfigNotLoadedError as e:
             # The file exists but cannot be read. Everything this window is
             # showing is therefore defaults, not the user's settings, and
             # writing them would both persist those defaults (blank hotkey
@@ -308,6 +294,20 @@ class PreferencesWindow:
             logger.warning(f"Refusing to save over an unreadable config: {e}")
             self._save_error = f"Your settings file could not be read: {e}"
             return False
+        except Exception as e:
+            logger.error(f"Could not save the config: {e}")
+            self._save_error = str(e)
+            return False
+        # Future saves in this window diff against what we just wrote;
+        # what it replaced is what a failed download goes back to.
+        self._saved_before = saved_before
+        self.config = dict(merged)
+        self._config_at_open = dict(merged)
+        # Settings that live outside the config file only now that the save
+        # has happened, so Cancel never has anything to undo.
+        if autostart_changed:
+            self._apply_launch_at_login(autostart_before)
+        return True
 
     def create_ui(self):
         """The title, the tabs, the version and the button row."""
@@ -509,10 +509,10 @@ class PreferencesWindow:
         download), which Cancel can't undo. The window's other changes stay
         unsaved. True when written; if they can't be, they stay changes for
         Apply to save."""
-        from .config import ConfigNotLoadedError, update_config
+        from .config import ConfigNotLoadedError, save_changes
         self.config.update(settings)
         try:
-            update_config(**settings)
+            save_changes(**settings)
         except (OSError, ConfigNotLoadedError) as e:
             logger.warning(f"Could not save {sorted(settings)}: {e}")
             return False

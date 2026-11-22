@@ -14,7 +14,8 @@ def env(monkeypatch):
                                 recommend_notice_shown=False)
     calls = []
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
-    monkeypatch.setattr("tuxtalk.config.save_config", lambda c: calls.append(("save", c.model, c.device)))
+    monkeypatch.setattr("tuxtalk.config.save_changes", lambda **c: vars(cfg).update(c) or calls.append(
+        ("save", cfg.model, cfg.device)) or cfg)
     monkeypatch.setattr(fr, "_download_vulkan_model_first_run",
                         lambda m: calls.append(("vk", m)) or (True, False))
     monkeypatch.setattr(fr, "_vulkan_speed_check_first_run", lambda m: calls.append(("speed", m)) or True)
@@ -60,12 +61,13 @@ def test_no_first_run_screen_picks_a_model_after_the_welcome(welcome_window, set
 @pytest.fixture
 def settings(monkeypatch):
     """Like the real config: every load is a fresh copy and every save writes
-    all of it back, so a lost write shows (the shared-object fixture above
-    would hide one)."""
+    its changes to the file, so a lost write shows (the shared-object fixture
+    above would hide one)."""
     saved = {"model": "parakeet-v3", "device": "cpu", "dictation_language": "",
              "recommend_notice_shown": False, "vulkan_slower": False}
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: types.SimpleNamespace(**saved))
-    monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.update(vars(c)))
+    monkeypatch.setattr("tuxtalk.config.save_changes",
+                        lambda **c: saved.update(c) or types.SimpleNamespace(**saved))
     return saved
 
 
@@ -86,13 +88,11 @@ def store(settings, monkeypatch):
 
 
 def _processor_wins(monkeypatch):
-    """The real speed check records the loss in its own load/save."""
-    from tuxtalk.config import load_config, save_config
+    """The real speed check records the loss in its own save."""
+    from tuxtalk.config import save_changes
 
     def check(model):
-        cfg = load_config()
-        cfg.vulkan_slower = True
-        save_config(cfg)
+        save_changes(vulkan_slower=True)
         return False
     monkeypatch.setattr(fr, "_vulkan_speed_check_first_run", check)
 

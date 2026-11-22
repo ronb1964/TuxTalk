@@ -102,9 +102,9 @@ def test_an_off_that_cant_be_saved_at_once_is_left_for_apply(prefs_window, monke
     from tuxtalk import config
     window = prefs_window(ai_corrections=True)
 
-    def read_only(cfg):
+    def read_only(**changes):
         raise PermissionError(13, "Permission denied")
-    monkeypatch.setattr(config, "save_config", read_only)
+    monkeypatch.setattr(config, "save_changes", read_only)
     window.save_now({"ai_corrections": False})
     assert "ai_corrections" in window._changed_since_open()      # Apply saves it
 

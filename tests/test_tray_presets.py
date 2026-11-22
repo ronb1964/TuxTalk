@@ -53,7 +53,8 @@ def env(monkeypatch):
                                 language_mode="auto", language="", vulkan_slower=False)
     saved = []
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
-    monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.append((c.model, c.device)))
+    monkeypatch.setattr("tuxtalk.config.save_changes", lambda **c: vars(cfg).update(c) or saved.append(
+        (cfg.model, cfg.device)) or cfg)
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: NVIDIA)
     monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: True)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda t, b: None)

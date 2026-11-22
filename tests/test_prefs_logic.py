@@ -49,7 +49,7 @@ def opened(tmp_path, monkeypatch):
     from tuxtalk import config as C
     path = tmp_path / "config.toml"
     for name, value in (("CONFIG_PATH", str(path)), ("_config_cache", None),
-                        ("_config_mtime", 0.0), ("_repair_attempted", False),
+                        ("_config_stamp", None), ("_repair_attempted", False),
                         ("_config_read_failed", False)):
         monkeypatch.setattr(C, name, value)
 
@@ -196,7 +196,7 @@ def test_save_config_roundtrips_through_config_loader(tmp_path, monkeypatch):
 
     monkeypatch.setattr(C, "CONFIG_PATH", str(tmp_path / "config.toml"))
     monkeypatch.setattr(C, "_config_cache", None)
-    monkeypatch.setattr(C, "_config_mtime", None)
+    monkeypatch.setattr(C, "_config_stamp", None)
     s = C.load_config()
     assert s.mic == 'Blue Yeti "Nano" USB'
     assert s.hotkey == "F8"          # not reset to the blank default

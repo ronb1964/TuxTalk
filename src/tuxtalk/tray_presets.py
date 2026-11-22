@@ -139,7 +139,7 @@ class Presets:
         Leaving Battery saver puts back the settings it changed (the 2-minute
         auto-stop) to their defaults, unless the user has since chosen their
         own in Preferences."""
-        from .config import Settings, load_config, update_config
+        from .config import Settings, load_config, save_changes
         changes = {"model": model, "device": device, **dict(preset.extras)}
         if not preset.extras:
             cfg = load_config()
@@ -149,4 +149,4 @@ class Presets:
                 # for this computer (the timeout is on only with a battery).
                 defaults = Settings()
                 changes.update((key, getattr(defaults, key)) for key, _ in battery.extras)
-        return update_config(**changes)
+        return save_changes(**changes)

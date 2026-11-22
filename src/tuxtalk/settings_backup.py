@@ -57,7 +57,7 @@ def _parse_toml(text):
     """config's TOML reader: tomllib from Python 3.11, the toml package on
     3.10, which the AppImage runs, so importing tomllib directly here would
     crash the AppImage at startup."""
-    return config._parse_toml_text(text)
+    return config.parse_toml_text(text)
 
 
 class BackupError(Exception):
@@ -387,6 +387,14 @@ def _write_all_or_none(writes):
     raise BackupError (_HalfRestored when a file couldn't be put back
     either). Every original is read first, as it is, so one that can't be
     read changes nothing."""
+    # Under config.toml's lock, as every other save of it: a save by
+    # another process meanwhile would be half under the backup's.
+    with config.locked():
+        _write_each(writes)
+
+
+def _write_each(writes):
+    """_write_all_or_none's work, under the settings' lock."""
     try:
         before = {path: _read_bytes(path) for path, _ in writes}
     except OSError as e:

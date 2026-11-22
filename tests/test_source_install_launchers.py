@@ -53,7 +53,7 @@ def source_home_with_space(tmp_path, monkeypatch):
 
 
 def test_the_tuxtalk_command_starts_the_tray():
-    pyproject = config._parse_toml_text((ROOT / "pyproject.toml").read_text())
+    pyproject = config.parse_toml_text((ROOT / "pyproject.toml").read_text())
     scripts = pyproject["tool"]["poetry"]["scripts"]
     assert scripts == {"tuxtalk": "tuxtalk.tray:main"}
 

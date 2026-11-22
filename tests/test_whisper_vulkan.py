@@ -821,7 +821,8 @@ def test_speed_check_remembers_which_won(monkeypatch, times, slower):
     monkeypatch.setattr(vsd.wv, "speed_check", lambda model, dev, cancel: times)
     monkeypatch.setattr(vsd, "message", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
-    monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.update(slower=c.vulkan_slower))
+    monkeypatch.setattr("tuxtalk.config.save_changes",
+                        lambda **c: saved.update(slower=c["vulkan_slower"]))
     monkeypatch.setattr(vsd, "_wait_dialog", lambda parent, work: work())
     vsd.run_speed_check(None, "small")
     assert saved == {"slower": slower}

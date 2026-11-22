@@ -15,7 +15,8 @@ def env(monkeypatch):
     cfg = types.SimpleNamespace(model="parakeet-v3", device="vulkan", parakeet_update_offered=False)
     asked, saved, restarts = [], [], []
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
-    monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.append(c.parakeet_update_offered))
+    monkeypatch.setattr("tuxtalk.config.save_changes", lambda **c: vars(cfg).update(c) or saved.append(
+        cfg.parakeet_update_offered) or cfg)
     monkeypatch.setattr("tuxtalk.first_run_marker.is_first_run", lambda: False)
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
     monkeypatch.setattr("tuxtalk.model_helper.parakeet_update_needed", lambda c: "vulkan")

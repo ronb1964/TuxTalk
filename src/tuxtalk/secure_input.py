@@ -250,7 +250,7 @@ exit 0
 
 def leave_input_group_with_pkexec():
     """(ok, message): out of the input group; takes effect after a restart."""
-    return _run_as_root(leave_input_group_script(), "left the input group")
+    return run_as_root(leave_input_group_script(), "left the input group")
 
 
 def can_install():
@@ -443,7 +443,7 @@ def unheard_keys(keys):
     return [k for k in keys if not hears_key(running, k)]
 
 
-def _run_as_root(script, what):
+def run_as_root(script, what):
     """(ok, message) after running *script* through pkexec. (Tests replace
     this, so a test can never open a password prompt; _pkexec is the work.)"""
     return _pkexec(script, what)
@@ -533,7 +533,7 @@ def install_with_pkexec(leave_group=False):
     *leave_group* leave the input group too. (ok, message). When the time
     ran out after the password, it worked only if this TuxTalk's helper is
     the one running now."""
-    ok, message = _run_as_root(install_script(leave_group), "installed")
+    ok, message = run_as_root(install_script(leave_group), "installed")
     if ok and message == RAN_TOO_LONG:
         from .hotkey_helper import VERSION
         if not (is_installed() and running_version() == VERSION):

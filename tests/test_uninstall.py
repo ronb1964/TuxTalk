@@ -269,7 +269,7 @@ def test_every_file_tuxtalk_writes_in_its_folders_goes_with_them(home):
                  "backups/backup-folder", "backups/restore-pending",
                  "backups/.talktype-backup-x1y2z3w4.tmp", "backups/restore-pending.ab12cd34.tmp",
                  "custom_commands.toml.bak", "custom_words.txt.bak",
-                 "custom_commands.toml.a1b2c3d4.tmp"):
+                 "custom_commands.toml.a1b2c3d4.tmp", "config.toml.lock"):
         (config / name).write_text("")
     for name in ("stats.json.bak", ".stats-ab12cd34", "recent-transcripts.json.tmp",
                  "recent-transcripts.json.corrupt-20261111-093000",
@@ -618,7 +618,7 @@ def test_a_time_out_after_the_password_carries_on_unsure(monkeypatch):
 
 def test_a_password_prompt_left_open_removes_nothing(home, monkeypatch):
     told = []
-    monkeypatch.setattr(uninstall.secure_input, "_run_as_root",
+    monkeypatch.setattr(uninstall.secure_input, "run_as_root",
                         lambda script, what: (False, secure_input.TIMED_OUT))
     monkeypatch.setattr(uninstall, "_tell", lambda kind, heading, body, **k: told.append(body))
     assert uninstall._remove_as_root(_find(home), leave_group=False) is None

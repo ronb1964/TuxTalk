@@ -20,7 +20,7 @@ def config_path(tmp_path, monkeypatch):
     path = tmp_path / "config.toml"
     monkeypatch.setattr(config, "CONFIG_PATH", str(path))
     monkeypatch.setattr(config, "_config_cache", None)
-    monkeypatch.setattr(config, "_config_mtime", 0.0)
+    monkeypatch.setattr(config, "_config_stamp", None)
     # Per-process latches: real processes start fresh, tests must too.
     monkeypatch.setattr(config, "_repair_attempted", False)
     monkeypatch.setattr(config, "_config_read_failed", False)
@@ -89,7 +89,7 @@ def test_a_corrupt_config_is_moved_aside_not_silently_reset(config_path):
 
     config_path.write_text("this is not valid toml {{{")
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
 
     config.load_config()
 
@@ -109,7 +109,7 @@ def test_a_corrupt_config_is_restored_from_backup(config_path):
 
     config_path.write_text("garbage {{{")
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
 
     loaded = config.load_config()
 
@@ -128,7 +128,7 @@ def test_an_empty_config_is_treated_as_damaged(config_path):
 
     config_path.write_text("")
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
 
     loaded = config.load_config()
 
@@ -174,7 +174,7 @@ def test_loading_a_config_with_one_bad_value_falls_back_for_that_key(config_path
     than taking the whole process down."""
     config_path.write_text('model = "small"\ninjection_mode = "nonsense"\n')
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
 
     loaded = config.load_config()
 
@@ -306,7 +306,7 @@ def test_recovered_settings_are_written_back_to_disk(config_path):
 
     config_path.write_text("garbage {{{")
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
 
     config.load_config()
 
@@ -335,7 +335,7 @@ def test_a_damaged_config_is_quarantined_once_not_every_launch(config_path, monk
 
     for _ in range(3):  # three process starts
         config._config_cache = None
-        config._config_mtime = 0.0
+        config._config_stamp = None
         loaded = config.load_config()
 
     assert loaded.model == "tiny"
@@ -356,7 +356,7 @@ def test_repairing_a_damaged_config_does_not_destroy_the_good_backup(config_path
 
     config_path.write_text("garbage {{{")
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
     config.load_config()
 
     backup = config_path.with_suffix(config_path.suffix + ".bak")
@@ -373,7 +373,7 @@ def test_a_later_save_still_refreshes_the_backup_normally(config_path):
 
     config_path.write_text("garbage {{{")
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
     config.load_config()
 
     for model in ("medium", "small"):
@@ -382,7 +382,7 @@ def test_a_later_save_still_refreshes_the_backup_normally(config_path):
         config.save_config(later)
 
     backup = config_path.with_suffix(config_path.suffix + ".bak")
-    assert config._parse_toml_text(backup.read_text())["model"] == "medium"
+    assert config.parse_toml_text(backup.read_text())["model"] == "medium"
 
 
 def test_repair_failure_does_not_crash_the_app(config_path, monkeypatch):
@@ -395,7 +395,7 @@ def test_repair_failure_does_not_crash_the_app(config_path, monkeypatch):
     config.save_config(second)
     config_path.write_text("garbage {{{")
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
 
     def refuse(*args, **kwargs):
         raise OSError(30, "Read-only file system")
@@ -459,7 +459,7 @@ def test_two_saves_at_once_keep_each_others_change(config_path):
     apply = threading.Thread(target=config.rewrite_config, args=(apply_beeps_off,))
     apply.start()
     preferences_has_read.wait(5)
-    config.update_config(log_transcripts=False)
+    config.save_changes(log_transcripts=False)
     apply.join()
     saved = config.load_toml_file(str(config_path))
     assert saved["beeps"] is False and saved["log_transcripts"] is False
@@ -473,6 +473,34 @@ def test_a_quoted_key_written_by_hand_survives_a_save(config_path):
     config.rewrite_config(lambda on_disk: {**on_disk, "beeps": False})
     saved = config.load_toml_file(str(config_path))
     assert saved == {"hotkey": "F6", "my note": "hello", "list": [1, "a"], "beeps": False}
+
+
+def test_a_small_change_keeps_keys_this_version_doesnt_know(config_path):
+    """The daily update check went through Settings, so a key written by hand
+    (or by a newer TuxTalk) was dropped at its next save."""
+    config_path.write_text('"my note" = "hello"\nmodel = "small"\n')
+    config.record_update_check("2026-11-22")
+    saved = config.load_toml_file(str(config_path))
+    assert saved["my note"] == "hello" and saved["model"] == "small"
+    assert saved["last_update_check"] == "2026-11-22"
+
+
+def test_a_file_repaired_meanwhile_is_not_recovered_over(config_path, monkeypatch):
+    """Read damaged, then repaired or saved by another process before this
+    one took the lock: writing the backup's settings over it undid that save."""
+    config_path.write_text('model = "medium"\nlog_transcripts = false\n')
+    real, reads = config.load_toml_file, []
+
+    def damaged_first(path):
+        reads.append(path)
+        if len(reads) == 1:
+            raise ValueError("Invalid statement (at line 1, column 1)")
+        return real(path)
+    monkeypatch.setattr(config, "load_toml_file", damaged_first)
+    loaded = config.load_config()
+    assert loaded.model == "medium" and loaded.log_transcripts is False
+    assert config_path.read_text() == 'model = "medium"\nlog_transcripts = false\n'
+    assert not list(config_path.parent.glob("config.toml.corrupt-*"))
 
 
 def test_no_temp_files_are_left_behind(tmp_path):
@@ -505,7 +533,7 @@ def test_an_unreadable_config_is_never_overwritten(config_path):
 
     os.chmod(config_path, 0o000)
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
     try:
         config.load_config()  # must not raise
     finally:
@@ -529,7 +557,7 @@ def test_repair_is_skipped_when_the_damaged_file_cannot_be_quarantined(config_pa
 
     monkeypatch.setattr(config.shutil, "copy2", cannot_copy)
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
     config.load_config()
 
     assert config_path.read_text() == "garbage {{{", \
@@ -546,7 +574,7 @@ def test_a_setting_containing_a_quote_survives_a_save(config_path):
     config.save_config(s)
 
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
     assert config.load_config().mic == 'Blue Yeti "Nano" USB'
 
 
@@ -556,7 +584,7 @@ def test_a_setting_containing_a_backslash_survives_a_save(config_path):
     config.save_config(s)
 
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
     assert config.load_config().mic == r"Mic\Device"
 
 
@@ -580,7 +608,7 @@ def test_repair_never_leaves_the_file_unparseable(config_path):
     try:
         for _ in range(25):
             config._config_cache = None
-            config._config_mtime = 0.0
+            config._config_stamp = None
             config.load_config()
     finally:
         config.write_text_atomic = real_write
@@ -599,7 +627,7 @@ def test_repair_happens_once_even_without_a_cache_reset(config_path):
     config.save_config(second)
     config_path.write_text("garbage {{{")
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
 
     writes = []
     original = config.write_text_atomic
@@ -627,7 +655,7 @@ def test_a_transient_read_error_does_not_pin_the_process_to_defaults(config_path
     settings.model = "large-v3"
     config.save_config(settings)
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
 
     real = config.load_toml_file
     calls = {"n": 0}
@@ -659,7 +687,7 @@ def test_an_unreadable_config_is_not_overwritten_with_defaults(config_path,
     config.save_config(settings)
     good = config_path.read_text()
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
 
     def unreadable(path):
         raise OSError(13, "Permission denied")
@@ -684,7 +712,7 @@ def test_saving_still_works_once_the_config_can_be_read_again(config_path,
     settings.model = "large-v3"
     config.save_config(settings)
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
 
     real = config.load_toml_file
     broken = {"yes": True}
@@ -710,7 +738,7 @@ def test_saving_a_fresh_install_is_never_blocked(config_path):
     """No file on disk yet is not a read failure — first save must work."""
     assert not config_path.exists()
     config._config_cache = None
-    config._config_mtime = 0.0
+    config._config_stamp = None
     loaded = config.load_config()
     loaded.model = "medium"
     config.save_config(loaded)
@@ -825,7 +853,7 @@ def test_a_terminal_user_is_told_their_settings_were_replaced(config_path, capsy
     config.save_config(config.Settings())
     config.save_config(config.Settings())           # the first save becomes the backup
     config_path.write_text("garbage {{{")
-    config._config_cache, config._config_mtime = None, 0.0
+    config._config_cache, config._config_stamp = None, 0.0
     config.load_config()
     told = capsys.readouterr().err
     assert "config.toml.corrupt-" in told and "restored from the backup" in told

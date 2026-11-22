@@ -406,7 +406,7 @@ def test_an_install_that_ran_too_long_is_judged_by_the_helper_running(monkeypatc
     """The time ran out after the password: the root script was waited for,
     but with its pipes closed it can die part way. "Hotkey helper updated"
     is said only if this TuxTalk's helper is the one running."""
-    monkeypatch.setattr(si, "_run_as_root", lambda script, what: (True, si.RAN_TOO_LONG))
+    monkeypatch.setattr(si, "run_as_root", lambda script, what: (True, si.RAN_TOO_LONG))
     monkeypatch.setattr(si, "is_installed", lambda: True)
     monkeypatch.setattr(si, "running_version", lambda: running)
     assert si.install_with_pkexec() == result

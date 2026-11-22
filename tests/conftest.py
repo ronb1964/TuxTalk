@@ -620,7 +620,7 @@ def _no_real_hotkey_helper_or_pkexec(monkeypatch, tmp_path):
 
     def refuse(*_a, **_k):
         pytest.fail("a test tried to run something as root through pkexec")
-    monkeypatch.setattr(secure_input, "_run_as_root", refuse)
+    monkeypatch.setattr(secure_input, "run_as_root", refuse)
 
     # And pkexec itself, however it's reached: subprocess.run, or Popen as
     # the package updater uses. A test that mocks either on purpose replaces
@@ -713,7 +713,7 @@ def _no_real_settings(monkeypatch, tmp_path_factory, request):
     monkeypatch.setattr(config, "CONFIG_PATH", str(folder / "tuxtalk" / "config.toml"))
     monkeypatch.setattr(config, "get_data_dir", lambda: str(folder / "TuxTalk"))
     monkeypatch.setattr(config, "_config_cache", None)
-    monkeypatch.setattr(config, "_config_mtime", 0.0)
+    monkeypatch.setattr(config, "_config_stamp", None)
     monkeypatch.setattr(config, "_config_read_failed", False)
 
 

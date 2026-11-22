@@ -199,7 +199,7 @@ class TestConfigChangeDetection:
         cfg_file = tmp_path / "config.toml"
         cfg_file.write_text("model = 'small'\n")
         monkeypatch.setattr(config, "CONFIG_PATH", str(cfg_file))
-        monkeypatch.setattr(live, "_last_config_mtime", None, raising=False)
+        monkeypatch.setattr(live, "_last_config_stamp", None, raising=False)
 
         assert live.config_file_changed() is True, "first call establishes a baseline"
         assert live.config_file_changed() is False, "unchanged file must not re-trigger"
@@ -212,6 +212,6 @@ class TestConfigChangeDetection:
 
     def test_missing_config_is_not_a_change(self, app, monkeypatch, tmp_path):
         monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "gone.toml"))
-        monkeypatch.setattr(live, "_last_config_mtime", None, raising=False)
+        monkeypatch.setattr(live, "_last_config_stamp", None, raising=False)
 
         assert live.config_file_changed() is False

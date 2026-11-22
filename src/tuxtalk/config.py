@@ -320,7 +320,7 @@ def load_toml_file(path: str) -> dict:
         return tomllib.load(f)
 
 
-def _parse_toml_text(text: str) -> dict:
+def parse_toml_text(text: str) -> dict:
     """Parse TOML from a string (tomllib, or the toml fallback's loads() on
     Python 3.10). Raises if *text* is not valid TOML."""
     return tomllib.loads(text)
@@ -533,7 +533,7 @@ def apply_toml(s: Settings, data: dict) -> list[str]:
 # Config cache — avoids re-reading TOML from disk when file hasn't changed.
 # The tray polls load_config() every 1 second; this reduces disk I/O to near zero.
 _config_cache = None
-_config_mtime = 0.0
+_config_stamp = None
 
 # True when the last load_config() could not READ an existing settings file.
 # Guards save_config() so the defaults handed out during the failure are never
@@ -545,8 +545,26 @@ def _recover_damaged_config() -> Settings:
     write them back so the file is actually repaired.
 
     Returns the recovered Settings — from the .bak written by the previous
-    successful save when one exists, otherwise defaults.
+    successful save when one exists, otherwise defaults. Under the lock, and
+    only if the file is still damaged: another process may have repaired or
+    saved it since it was read, and writing the backup's settings over that
+    would undo the save (transcript logging turned off, say).
     """
+    with locked():
+        try:
+            data = load_toml_file(CONFIG_PATH)
+        except Exception as e:
+            logger.info(f"Settings file still damaged with the lock held ({e}); recovering")
+            data = None
+        if data:
+            fresh = Settings()
+            apply_toml(fresh, data)
+            return fresh
+        return _recover_from_backup()
+
+
+def _recover_from_backup() -> Settings:
+    """_recover_damaged_config's work, under the lock."""
     stamp = time.strftime("%Y%m%d-%H%M%S")
     quarantine = f"{CONFIG_PATH}.corrupt-{stamp}"
     quarantined = False
@@ -616,10 +634,9 @@ def _persist_recovered_config(recovered: Settings) -> None:
         # Never replace a damaged file with another damaged file. Writing
         # something that does not parse turns recovery into a livelock: the
         # next poll sees damage again, quarantines again, and rewrites again.
-        _parse_toml_text(text)
+        parse_toml_text(text)
 
-        with locked():
-            write_text_atomic(CONFIG_PATH, text, keep_backup=False)
+        write_text_atomic(CONFIG_PATH, text, keep_backup=False)
         logger.info("Damaged config replaced with recovered settings")
     except Exception as e:
         # A read-only home, a full disk, or settings that will not serialise
@@ -627,27 +644,34 @@ def _persist_recovered_config(recovered: Settings) -> None:
         logger.error(f"Could not write recovered settings back: {e}")
 
 
+def file_stamp(path):
+    """What tells one version of the file at *path* from the next, or None
+    when it can't be seen: its time to the nanosecond, its inode (each atomic
+    save is a new file) and its size. Seconds alone missed a second save in
+    the same tick on a coarse clock."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return st.st_mtime_ns, st.st_ino, st.st_size
+
+
 def load_config() -> Settings:
     """The current settings, read from disk only when the file has changed."""
-    global _config_cache, _config_mtime, _config_read_failed
+    global _config_cache, _config_stamp, _config_read_failed
 
     # Return cached config if the file hasn't been modified.
-    # The mtime is recorded only AFTER a successful read (see the end of this
+    # The stamp is recorded only AFTER a successful read (see the end of this
     # function), so a transient read error can't cache the defaults under the
     # real file's mtime and hide the good file for good.
     #
     # Every caller gets its own copy. Callers change the object they are given
     # before saving it; on the shared cached object an unsaved or failed change
     # would show in the tray and be written by the next unrelated save.
-    current_mtime = None
-    try:
-        current_mtime = os.path.getmtime(CONFIG_PATH)
-        if _config_cache is not None and current_mtime == _config_mtime:
-            return dataclasses.replace(_config_cache)
-    except OSError:
-        # File doesn't exist yet — return cache if we have one
-        if _config_cache is not None:
-            return dataclasses.replace(_config_cache)
+    current_stamp = file_stamp(CONFIG_PATH)
+    # No file yet: the cache if there is one.
+    if _config_cache is not None and current_stamp in (None, _config_stamp):
+        return dataclasses.replace(_config_cache)
 
     _config_read_failed = False
 
@@ -676,7 +700,7 @@ def load_config() -> Settings:
             # check's, say) would turn a chmod problem into the loss of every
             # setting.
             _config_read_failed = True
-            current_mtime = None
+            current_stamp = None
         except Exception as e:
             # Genuinely unparseable content. Preserve the damaged file and fall
             # back to the last known good settings. Silently resetting to
@@ -688,9 +712,9 @@ def load_config() -> Settings:
     s = repaired(s)
     _config_cache = s
     # Only now is the cache known to reflect the file. On a failed read
-    # current_mtime is None, so the next call re-reads instead of serving
+    # current_stamp is None, so the next call re-reads instead of serving
     # defaults from a cache that looks up to date.
-    _config_mtime = current_mtime
+    _config_stamp = current_stamp
     return dataclasses.replace(s)
 
 
@@ -737,8 +761,8 @@ def _toml_key(key) -> str:
 
 
 def settings_text(values: dict) -> str:
-    """config.toml's text for *values* ({key: value}): the one way the file
-    is written, by every process."""
+    """config.toml's text for *values* ({key: value}), as every process
+    writes it (a backup's restore puts back the file it saved)."""
     lines = ["# TuxTalk config"]
     lines += [f"{_toml_key(key)} = {_toml_value(value)}" for key, value in values.items()]
     return "\n".join(lines) + "\n"
@@ -861,8 +885,9 @@ def locked():
 
 
 def save_config(s: Settings) -> None:
-    """Write every setting in *s* to config.toml. A change of a few settings
-    goes through update_config instead, which reads the file afresh first.
+    """Write every setting in *s* to config.toml: the whole settings, as a
+    repair or a test sets them. A change of a few goes through save_changes,
+    which reads the file afresh and keeps what it doesn't change.
 
     Refuses to write when the last load_config() could not read an existing
     settings file: what it returned were defaults, and writing those back
@@ -878,25 +903,26 @@ def save_config(s: Settings) -> None:
         write_text_atomic(CONFIG_PATH, settings_text(dataclasses.asdict(s)))
 
 
-def update_config(**changes) -> Settings:
-    """Change the settings named in *changes* and nothing else: read afresh,
-    changed and written under the lock, so a save by another process
-    meanwhile is kept. The settings as written. Raises as save_config does."""
-    with locked():
-        fresh = load_config()
-        for key, value in changes.items():
-            setattr(fresh, key, value)
-        save_config(fresh)
-    return fresh
+def save_changes(**changes) -> Settings:
+    """Change the settings named in *changes* and nothing else, keys this
+    version doesn't know kept too: read afresh, changed and written under
+    the lock, so another process's save meanwhile stays. The settings now.
+    Raises as rewrite_config does."""
+    rewrite_config(lambda on_disk: {**on_disk, **changes})
+    return load_config()
 
 
 def rewrite_config(merge) -> dict:
     """Write what *merge* makes of the file's raw contents ({key: value}, {}
     when there's no file yet), under the lock, keeping keys this version
-    doesn't know: Preferences' merge-on-save. What was written. An
-    unreadable file raises and is left alone."""
+    doesn't know: Preferences' merge-on-save. What was written. A file that
+    can't be read or parsed is left alone: ConfigNotLoadedError (the next
+    load_config repairs a damaged one)."""
     with locked():
-        on_disk = load_toml_file(CONFIG_PATH) if os.path.exists(CONFIG_PATH) else {}
+        try:
+            on_disk = load_toml_file(CONFIG_PATH) if os.path.exists(CONFIG_PATH) else {}
+        except (OSError, ValueError) as e:      # a TOML error is a ValueError
+            raise ConfigNotLoadedError(f"{CONFIG_PATH} could not be read: {e}") from e
         values = merge(on_disk)
         write_text_atomic(CONFIG_PATH, settings_text(values))
     return values
@@ -921,12 +947,12 @@ def record_update_check(timestamp: str) -> None:
 
     The update check spends up to ~30 s on the network, so the settings are
     re-read right before the write: a change made in Preferences meanwhile is
-    kept, and only the timestamp is carried across. save_config refuses to
-    write when that read failed, so a damaged config is never overwritten with
-    defaults. The caller's own settings are never what gets written.
+    kept, and only the timestamp is carried across. A file that can't be
+    read is left alone, never overwritten with defaults. The caller's own
+    settings are never what gets written.
     """
     try:
-        update_config(last_update_check=timestamp)
+        save_changes(last_update_check=timestamp)
     except Exception as e:
         logger.warning(f"Could not save the update-check time: {e}")
 

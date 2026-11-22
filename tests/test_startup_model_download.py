@@ -86,7 +86,7 @@ def test_a_real_cuda_failure_still_falls_back_to_cpu(monkeypatch):
         return object()
 
     monkeypatch.setattr(model_helper, "download_model_with_progress", load)
-    monkeypatch.setattr("tuxtalk.config.save_config", lambda cfg: None)
+    monkeypatch.setattr("tuxtalk.config.save_changes", lambda **c: None)
     assert engine.build(_settings(device="cuda")) is not None
     assert calls == ["cuda", "cpu"]
 
@@ -148,7 +148,7 @@ def test_cuda_files_alone_never_make_large_v3_the_fallback(monkeypatch):
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
     monkeypatch.setattr(cuda_helper, "ctranslate2_has_cuda", lambda: False)
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: SimpleNamespace(model="parakeet-v3"))
-    monkeypatch.setattr("tuxtalk.config.save_config", lambda cfg: None)
+    monkeypatch.setattr("tuxtalk.config.save_changes", lambda **c: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: None)
     assert engine.build_or_exit(_settings(model="parakeet-v3", device="cpu")) == "model:small"
 
@@ -163,7 +163,7 @@ def test_large_v3_is_never_the_fallback_on_the_processor(monkeypatch):
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
     monkeypatch.setattr(cuda_helper, "ctranslate2_has_cuda", lambda: True)
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: SimpleNamespace(model="parakeet-v3"))
-    monkeypatch.setattr("tuxtalk.config.save_config", lambda cfg: None)
+    monkeypatch.setattr("tuxtalk.config.save_changes", lambda **c: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: None)
     assert engine.build_or_exit(_settings(model="parakeet-v3", device="cpu")) == "model:small"
 
@@ -200,7 +200,7 @@ def test_cancel_falls_back_to_a_downloaded_model_and_saves_it(monkeypatch):
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: m in ("small", "large-v3"))
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)
     monkeypatch.setattr(config, "load_config", lambda: SimpleNamespace(model="parakeet-v3"))
-    monkeypatch.setattr(config, "save_config", lambda cfg: saved.append(cfg.model))
+    monkeypatch.setattr(config, "save_changes", lambda **c: saved.append(c["model"]))
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(f"{title}\n{body}"))
 
     settings = _settings(model="parakeet-v3", device="cpu")
@@ -340,7 +340,7 @@ def test_a_model_that_wont_load_falls_back_without_replacing_the_choice(monkeypa
     monkeypatch.setattr(model_helper, "download_model_with_progress", load)
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: m in ("small", "medium"))
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)
-    monkeypatch.setattr(config, "save_config", lambda cfg: saved.append(cfg.model))
+    monkeypatch.setattr(config, "save_changes", lambda **c: saved.append(c["model"]))
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(f"{title}\n{body}"))
 
     settings = _settings(model="medium", device="cpu")

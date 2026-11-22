@@ -19,7 +19,7 @@ def test_no_module_imports_tomllib_without_a_fallback():
                  if re.search(r"^(import tomllib|from tomllib)", p.read_text(), re.M)]
     assert not offenders, (
         f"{offenders} import tomllib, which Python 3.10 (the AppImage's) doesn't "
-        f"have. Use config._parse_toml_text or config.load_toml_file.")
+        f"have. Use config.parse_toml_text or config.load_toml_file.")
 
 
 def test_no_test_file_imports_tomllib_without_a_fallback():
@@ -29,4 +29,4 @@ def test_no_test_file_imports_tomllib_without_a_fallback():
                  if re.search(r"^(import tomllib|from tomllib)", p.read_text(), re.M)]
     assert not offenders, (
         f"{offenders} import tomllib, which Python 3.10 doesn't have. Use "
-        f"config._parse_toml_text, or import it in a try with toml as the fallback.")
+        f"config.parse_toml_text, or import it in a try with toml as the fallback.")

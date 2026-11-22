@@ -529,14 +529,14 @@ class HotkeyTestDialog:
         """Save the keys the test ended with. Whatever closed the dialog, the
         settings never end up without a hotkey: the service then watches no
         key at all."""
-        from tuxtalk.config import update_config
+        from tuxtalk.config import save_changes
         hold, toggle = hotkeys_to_save(self.config, self.keys["hold"],
                                        self.keys["toggle"], confirmed)
         if (hold, toggle) == (self.config.hotkey, self.config.toggle_hotkey):
             return
         self.config.hotkey, self.config.toggle_hotkey = hold, toggle
         try:
-            update_config(hotkey=hold, toggle_hotkey=toggle)
+            save_changes(hotkey=hold, toggle_hotkey=toggle)
         except Exception as e:
             # save_config refuses to write when the settings file could
             # not be read; onboarding still moves on.

@@ -21,7 +21,7 @@ TUXTALK = ROOT / "aur/tuxtalk"
 
 
 def _pyproject() -> dict:
-    return config._parse_toml_text((ROOT / "pyproject.toml").read_text())
+    return config.parse_toml_text((ROOT / "pyproject.toml").read_text())
 
 
 PYPROJECT_VERSION = _pyproject()["tool"]["poetry"]["version"]
@@ -163,7 +163,7 @@ def removed_paths(script: str) -> set[str]:
 
 def lock_version(name: str) -> str:
     """The version poetry.lock pins for a package."""
-    lock = config._parse_toml_text((ROOT / "poetry.lock").read_text())
+    lock = config.parse_toml_text((ROOT / "poetry.lock").read_text())
     return next(p["version"] for p in lock["package"] if p["name"] == name)
 
 

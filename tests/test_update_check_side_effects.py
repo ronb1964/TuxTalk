@@ -17,42 +17,41 @@ or wait forever.
 import io
 import subprocess
 
+import pathlib
+
 import pytest
 
 from tuxtalk import config as config_module
 
 
 class TestRecordingTheUpdateCheck:
-    def test_it_does_not_carry_other_settings_along(self, monkeypatch):
+    def test_it_does_not_carry_other_settings_along(self):
         """A setting changed during the network call must not be reverted."""
-        saved = {}
-
-        # The tray held model="small" before its ~30s network call; this is
-        # what the user changed to in Preferences while it was running.
-        on_disk = config_module.Settings(model="large-v3", auto_period=False)
-
-        monkeypatch.setattr(config_module, "load_config", lambda: on_disk)
-        monkeypatch.setattr(config_module, "save_config",
-                            lambda s: saved.update(model=s.model,
-                                                   auto_period=s.auto_period,
-                                                   last_update_check=s.last_update_check))
+        # What the user changed to in Preferences while the tray's ~30 s
+        # network call ran, with the tray holding model="small".
+        path = pathlib.Path(config_module.CONFIG_PATH)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('model = "large-v3"\nauto_period = false\n')
 
         config_module.record_update_check("2026-09-05")
 
+        saved = config_module.load_toml_file(str(path))
         assert saved["model"] == "large-v3", "the user's model choice was reverted"
         assert saved["auto_period"] is False
         assert saved["last_update_check"] == "2026-09-05"
 
     def test_a_failed_read_does_not_write(self, monkeypatch):
         """Losing a timestamp beats overwriting real settings with defaults."""
-        def unreadable():
-            raise OSError("config unreadable")
+        path = pathlib.Path(config_module.CONFIG_PATH)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('model = "large-v3"\n')
 
-        monkeypatch.setattr(config_module, "load_config", unreadable)
-        monkeypatch.setattr(config_module, "save_config",
-                            lambda s: pytest.fail("must not save after a failed read"))
+        def unreadable(path):
+            raise OSError("config unreadable")
+        monkeypatch.setattr(config_module, "load_toml_file", unreadable)
 
         config_module.record_update_check("2026-09-05")  # must not raise
+        assert path.read_text() == 'model = "large-v3"\n'
 
 
 class TestPackageInstallIsBounded:
