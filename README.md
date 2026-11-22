@@ -385,7 +385,7 @@ remapper, for instance). Log out and back in afterwards.
 | **Ctrl+Alt+P** | Types your last dictation again, wherever your cursor is |
 | **Shift+F8** | Voice editing: hold it and say how to change the selected text (turn it on in TuxTalk Labs first) |
 
-No easy F-keys on your keyboard? Preferences → General also lets you pick Right Ctrl, Right Alt, Scroll Lock or Left Ctrl+Space. Right Ctrl and Right Alt then stop working as Ctrl and Alt, and Left Ctrl+Space keeps Ctrl+Space from your apps while dictation's on.
+No easy F-keys on your keyboard? Preferences → General also lets you pick Right Ctrl, Right Alt, Scroll Lock or Left Ctrl+Space. Right Ctrl and Right Alt then stop working as Ctrl and Alt, and Left Ctrl+Space keeps Ctrl+Space from your apps while dictation's on. Or pick **Other key or combination…** and press any combination you like, Alt+D or Ctrl+Shift+K. TuxTalk says if the keys can't work (a key that types on its own) and reminds you that apps may use that shortcut too.
 
 Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--stop`). For the AppImage, use the AppImage file, by its full path, e.g. `/home/you/AppImages/TuxTalk.AppImage --toggle` (GNOME runs a shortcut without a shell, so `~` doesn't work there; Help shows yours). It starts TuxTalk if it isn't running and waits for the speech model to load, so the toggle is never lost.
 
@@ -624,10 +624,13 @@ Scroll Lock, Right Ctrl and Right Alt and shortcuts with Ctrl, Alt or Super,
 and only to whoever's at the screen.
 `systemd-analyze security tuxtalk-hotkeys` rates it 0.6, "SAFE".
 
-A shortcut that isn't an F-key needs two of Ctrl, Alt and Super (the one
-exception is Space with Left Ctrl, for Left Ctrl+Space), and while
-those stay held the helper reports two different keys at most, so a stuck
-Ctrl+Alt can't turn your typing into "shortcuts". The check is per user, so
+A shortcut that isn't an F-key needs Ctrl, Left Alt or Super with it (since
+helper 1.17, so a dictation key can be Alt+D; before, two of them), and
+while that stays held the helper reports two different keys at most, so a
+stuck Ctrl can't turn your typing into "shortcuts". What that costs: a
+program you run could ask the helper when you press shortcuts like Ctrl+C,
+never what you type, unless a keyboard option makes Left Alt or Super type
+characters (then it could learn when two such characters were typed). The check is per user, so
 two logins of the same user both count as the person at the screen.
 
 To type, TuxTalk still needs `/dev/uinput`, so whoever's at the screen gets

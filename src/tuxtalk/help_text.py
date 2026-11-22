@@ -94,7 +94,8 @@ def _no_hotkey_tips(is_flatpak, keys_where):
         "  it with Test Hotkeys.\n"
         "• On many laptops and small keyboards the F-keys work only with Fn held. Hold Fn\n"
         "  with your key, or pick Right Ctrl, Right Alt, Scroll Lock or Left Ctrl+Space in\n"
-        "  Preferences → General: where a laptop has them, they need no Fn.")
+        "  Preferences → General: where a laptop has them, they need no Fn. Or pick Other key\n"
+        "  or combination… there and press two keys you like, such as Alt+D.")
 
 
 def _uninstall_text(is_flatpak):
@@ -117,6 +118,18 @@ def _uninstall_text(is_flatpak):
             "installing again picks up where you left off.\n"
             f"If TuxTalk won't open, <tt>{command} --uninstall</tt>\n"
             "in a terminal does the same.")
+
+
+def _key_choice_tip(is_flatpak, keys_where):
+    """The tip on picking a dictation key without Fn, or anywhere on the
+    Flatpak, whose keys are set in *keys_where* (the desktop's settings)."""
+    if is_flatpak:
+        return f"Pick a dictation key that's easy to reach in\n    {keys_where}."
+    return ("Pick <b>Right Alt</b>, <b>Right Ctrl</b>, <b>Scroll Lock</b> or <b>Left "
+            "Ctrl+Space</b> as your key in <b>Preferences →\n    General</b>: on a laptop "
+            "they need no Fn, where it has them. Where Right Alt is AltGr,\n    the list "
+            "says which characters you'd lose, like @ or €. Or pick <b>Other key or\n    "
+            "combination…</b> and press the keys you want, such as <b>Alt+D</b>.")
 
 
 def _ctrl_space_line(keys):
@@ -217,14 +230,7 @@ def _values():
                  "typed again. " if paste_key else "")
     paste_line = (f"<b>{paste_key}</b> types your last dictation again, and\n    "
                   if paste_key else "")
-    if is_flatpak:
-        key_choice_tip = f"Pick a dictation key that's easy to reach in\n    {keys_where}."
-    else:
-        key_choice_tip = (
-            "Pick <b>Right Alt</b>, <b>Right Ctrl</b>, <b>Scroll Lock</b> or <b>Left "
-            "Ctrl+Space</b> as your key in <b>Preferences →\n    General</b>: on a laptop "
-            "they need no Fn, where it has them. Where Right Alt is AltGr,\n    the list "
-            "says which characters you'd lose, like @ or €.")
+    key_choice_tip = _key_choice_tip(is_flatpak, keys_where)
 
     # The Flatpak's shortcuts portal never hears Esc.
     esc_tip = "" if is_flatpak else (
