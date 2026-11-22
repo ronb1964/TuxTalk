@@ -230,6 +230,12 @@ def _after_a_label(word: str, prev: str, prev2: str, ends: bool) -> bool:
     return not (prev == "number" and word == "one" and prev2 in _POINTERS)
 
 
+def _looks_past(word: str) -> bool:
+    """Whether *word* reads as a verb's past ("wanted", "learned"), not a
+    short word or one in -eed ("red", "bed", "speed")."""
+    return word.endswith("ed") and len(word) >= 5 and not word.endswith("eed")
+
+
 def _counts(word: str, nxt: str) -> bool:
     """Whether this "one" or "two" counts *nxt*, the word after it ("two
     cats"), rather than starting an idiom ("one of", "one day") or standing
@@ -237,7 +243,7 @@ def _counts(word: str, nxt: str) -> bool:
     never plural, so "one" before a word in -s is a person or thing doing
     it ("if one breaks", "one says yes"), and so it is before a past form
     ("one knew", "what one wanted")."""
-    if word == "one" and (nxt in _PAST_VERBS or nxt.endswith("ed")
+    if word == "one" and (nxt in _PAST_VERBS or _looks_past(nxt)
                           or (nxt.endswith("s") and not nxt.endswith(("ss", "us", "is")))):
         return False
     return (nxt not in _IDIOMS_AFTER[word] and nxt not in _FUNCTION_WORDS
