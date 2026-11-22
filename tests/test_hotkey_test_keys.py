@@ -193,8 +193,8 @@ MODS_CTRL = {29, 97, 56, 100, 125, 126}     # the dialog's modifier_codes
 
 def _pair_keys():
     """evdev_key_action as the dialog's reader calls it, with one Presses."""
-    from tuxtalk import ctrl_space
-    pair, held = ctrl_space.Presses(), set()
+    from tuxtalk import combo_keys
+    pair, held = combo_keys.Presses(), set()
 
     def act(code, value):
         return htk.evdev_key_action(_event(code, value), held, MODS_CTRL,

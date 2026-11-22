@@ -69,11 +69,14 @@ def socket_path():
     return os.environ.get("TUXTALK_HOTKEYS_SOCKET", SOCKET_PATH)
 
 
-def watch_specs(hold_key, toggle_key, esc_key, combos):
+def watch_specs(hold_key, toggle_key, esc_key, combos, dictation_letters=None):
     """The WATCH line's specs: the dictation keys and Esc on their own, and
-    each (modifier names, key) combo as "CA:25". Space is Left Ctrl+Space,
-    asked for as "L:57" so the helper reports it only under Left Ctrl."""
-    specs = [f"{LEFT_CTRL}:{code}" if code == KEY_SPACE else str(code)
+    each (modifier names, key) combo as "CA:25". A dictation key that is a
+    combo goes with its modifiers' letters from *dictation_letters* (code ->
+    letters, combo_keys): Alt+D as "A:32"; Space is Left Ctrl+Space, asked
+    for as "L:57" so the helper reports it only under Left Ctrl."""
+    letters = {KEY_SPACE: LEFT_CTRL} if dictation_letters is None else dictation_letters
+    specs = [f"{letters[code]}:{code}" if code in letters else str(code)
              for code in (hold_key, toggle_key, esc_key) if code]
     for combo in combos:
         if combo:

@@ -95,7 +95,7 @@ def evdev_key_action(event, held_modifiers, modifier_codes, code_to_name, pair=N
     Tracks Alt, Ctrl and Super in *held_modifiers*, so Alt+F8 doesn't count as
     F8, as on the GTK side. Auto-repeat (value 2) is ignored. Right Ctrl and
     Right Alt are keys of their own too (HOTKEY_CHOICES), when pressed alone.
-    With *pair* (a ctrl_space.Presses kept across events), Space counts only
+    With *pair* (a combo_keys.Presses kept across events), Space counts only
     under Left Ctrl, as Left Ctrl+Space, and letting go of Left Ctrl first is
     its release, as the dictation service reads them.
     """
@@ -106,10 +106,11 @@ def evdev_key_action(event, held_modifiers, modifier_codes, code_to_name, pair=N
             held_modifiers.discard(event.code)
     if pair is None:
         return _key_action(event, held_modifiers, code_to_name)
-    from . import ctrl_space
-    actions = [_pair_action(each, held_modifiers, pair) if each.code == ctrl_space.KEY
+    from .combo_keys import LEFT_CTRL_SPACE
+    space = LEFT_CTRL_SPACE.code
+    actions = [_pair_action(each, held_modifiers, pair) if each.code == space
                else _key_action(each, held_modifiers, code_to_name)
-               for each in pair.events(event, held_modifiers, (ctrl_space.KEY,))]
+               for each in pair.events(event, held_modifiers, (space,))]
     return next((action for action in actions if action), None)
 
 
@@ -117,10 +118,10 @@ def _pair_action(event, held_modifiers, pair):
     """Left Ctrl+Space's press or release, from a Space *pair* passed on:
     not with another modifier held too (Ctrl+Alt+Space), which the service
     wouldn't take either, nor that press's release."""
-    from . import ctrl_space
+    from evdev import ecodes
     if event.value not in (0, 1):
         return None
-    if held_modifiers - {ctrl_space.MODIFIER}:
+    if held_modifiers - {ecodes.KEY_LEFTCTRL}:
         pair.forget()
         return None
     return CTRL_SPACE, ("press" if event.value == 1 else "release")

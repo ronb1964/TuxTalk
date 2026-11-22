@@ -48,6 +48,14 @@ def keycode_from_name(name: str) -> int | None:
     return None  # Unknown key name - don't activate
 
 
+def dictation_keycode(name: str) -> int | None:
+    """The code the hotkey loop listens for, for dictation key *name*: the
+    key itself (F8), or a combo's last key (D for Alt+D, combo_keys)."""
+    from .combo_keys import parse
+    combo = parse(name) if name else None
+    return combo.code if combo else keycode_from_name(name)
+
+
 def parse_hotkey_combo(combo_str: str) -> tuple[set[str], int | None] | None:
     """Parse a hotkey combo string like 'Ctrl+Shift+H' into (modifier_names, keycode).
 
@@ -116,19 +124,24 @@ class Hotkeys(NamedTuple):
     voice_cmds_combo: tuple | None
     voice_cmds_main_key: int | None
     paste_last_combo: tuple | None = None
+    # The dictation keys that are combos (Alt+D), as combo_keys.ComboKey.
+    combos: tuple = ()
 
     @classmethod
     def from_settings(cls, cfg) -> "Hotkeys":
         """The hotkeys *cfg* names."""
+        from .combo_keys import parse
         vc_hotkey_str = getattr(cfg, "voice_commands_hotkey", "")
         voice_cmds_combo = parse_hotkey_combo(vc_hotkey_str)
+        names = (cfg.hotkey, cfg.toggle_hotkey)
         return cls(
-            hold_key=keycode_from_name(cfg.hotkey),
-            toggle_key=keycode_from_name(cfg.toggle_hotkey) if cfg.toggle_hotkey else None,
+            hold_key=dictation_keycode(cfg.hotkey),
+            toggle_key=dictation_keycode(cfg.toggle_hotkey) if cfg.toggle_hotkey else None,
             vc_hotkey_str=vc_hotkey_str,
             voice_cmds_combo=voice_cmds_combo,
             voice_cmds_main_key=voice_cmds_combo[1] if voice_cmds_combo else None,
             paste_last_combo=parse_hotkey_combo(getattr(cfg, "paste_last_hotkey", "")),
+            combos=tuple(combo for combo in map(parse, filter(None, names)) if combo),
         )
 
     def watched(self) -> tuple:

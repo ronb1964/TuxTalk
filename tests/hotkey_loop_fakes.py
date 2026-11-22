@@ -1,5 +1,5 @@
 """What the hotkey loop's tests share (test_more_hotkey_choices.py and
-test_left_ctrl_space.py): the key handler with recording, grabs and typing
+test_left_combo_keys.py): the key handler with recording, grabs and typing
 recorded rather than done, and keyboards that say which keys are down."""
 import pytest
 from evdev import ecodes

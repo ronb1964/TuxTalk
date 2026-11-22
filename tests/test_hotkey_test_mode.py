@@ -129,9 +129,9 @@ def test_left_ctrl_space_in_the_test_lights_the_hold_row(keys, monkeypatch):
     """Test Hotkeys hears a Left Ctrl+Space hold key as hold, and a space
     typed alone as nothing."""
     from types import SimpleNamespace
-    from tuxtalk import ctrl_space, ctrl_space_clashes
+    from tuxtalk import combo_keys, ctrl_space_clashes
     from tuxtalk.hotkey_keys import Hotkeys
-    monkeypatch.setattr(hotkeys, "_ctrl_space", ctrl_space.Presses())
+    monkeypatch.setattr(hotkeys, "_combo_presses", combo_keys.Presses())
     monkeypatch.setattr(ctrl_space_clashes, "clashes", lambda: [])
     reported, started = keys
     open(flag_path(), "w").close()

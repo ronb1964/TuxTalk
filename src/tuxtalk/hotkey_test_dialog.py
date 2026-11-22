@@ -482,7 +482,7 @@ class HotkeyTestDialog:
         key to _on_key on GTK's thread; this hears keys the desktop grabs
         before GTK sees them. A keyboard plugged in meanwhile is read too,
         as the service would. Closes the keyboards when done."""
-        from tuxtalk import ctrl_space
+        from tuxtalk import combo_keys
         ecodes = self._evdev[1]
         reading = list(self.keyboards)  # its own; GTK's thread hears of it (_show_reading)
         logger.info(f"Hotkey test: reading {len(reading)} keyboard(s)")
@@ -493,7 +493,7 @@ class HotkeyTestDialog:
                           ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL,
                           ecodes.KEY_LEFTMETA, ecodes.KEY_RIGHTMETA}
         held_modifiers = set()
-        pair = ctrl_space.Presses()     # whether Left Ctrl+Space is down, across events
+        pair = combo_keys.Presses()     # whether Left Ctrl+Space is down, across events
         on_gone = functools.partial(self._keyboard_gone, reading, held_modifiers, pair)
         last_error = None
         next_scan = time.monotonic() + RESCAN_SECONDS

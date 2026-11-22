@@ -14,8 +14,8 @@ from evdev import InputDevice, ecodes, list_devices
 
 from . import (
     beeps,
+    combo_keys,
     ctrl_kept,
-    ctrl_space,
     ctrl_space_clashes,
     delivery,
     delivery_notices,
@@ -54,8 +54,8 @@ _hotkey_test_flag = None    # the flag's path, worked out on first use
 
 _hotkey_test_was_on = False  # for logging when test mode starts and ends
 
-# Whether Left Ctrl+Space, as a dictation key, is down (ctrl_space).
-_ctrl_space = ctrl_space.Presses()
+# Which combo dictation keys (Left Ctrl+Space, Alt+D) are down (combo_keys).
+_combo_presses = combo_keys.Presses()
 # The (hold, toggle) keys last looked at for others using Ctrl+Space.
 _clash_lookup_for = None
 
@@ -166,8 +166,7 @@ def _forget_lost_presses(devices, keys) -> None:
     dictation key now, since their release won't be read. Otherwise a space
     they held back waited until that key was pressed again."""
     down = keys_down(devices) & {keys.hold_key, keys.toggle_key}   # read outside the lock
-    if ctrl_space.KEY not in down:
-        _ctrl_space.forget()
+    _combo_presses.forget(down)
     ctrl_kept.let_go(devices)           # its release won't be read either
     if send_countdown.forget_presses(down) and send_countdown.owes_space():
         dictation_worker.submit(send_countdown.give_back_space)
@@ -193,8 +192,17 @@ def _someone_elses_shortcut(held_modifiers, key) -> bool:
     Space, and Shift with it when voice editing is on). Such a press reaches
     the app (Alt+F8 resizes the window on KDE and GNOME), so it mustn't
     start a dictation as well."""
-    allowed = {key, *ctrl_space.held_with(key), *(SHIFT_CODES if live.voice_editing else ())}
+    allowed = {key, *combo_keys.held_with(key), *(SHIFT_CODES if live.voice_editing else ())}
     return bool(set(held_modifiers) - allowed)
+
+
+def _alt_combo_press(event, dictation_keys, held_modifiers) -> bool:
+    """Whether *event* is a combo dictation key with Left Alt (Alt+D) going
+    down. To the app Left Alt went down and up with nothing between (the
+    desktop took the D, and a hold hides Alt), which opens the menu bar:
+    modifier_hotkeys.guard_alt_tap keeps that from happening."""
+    return (event.value == 1 and event.code in dictation_keys
+            and ecodes.KEY_LEFTALT in combo_keys.held_with(event.code) & set(held_modifiers))
 
 
 def _paste_last_dictation(cfg) -> None:
@@ -270,12 +278,14 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
     send_countdown.key_pressed(hold_key)
     held = send_countdown.hold(announce=False)
     shift = _held_shift(held_modifiers) if live.voice_editing else set()
-    pair = ctrl_space.held_with(hold_key)
-    if pair:
+    # A combo's modifiers held with it (Left Ctrl of Left Ctrl+Space, Alt of
+    # Alt+D) are hidden too, so what Type at pause types isn't shortcuts.
+    pair = combo_keys.held_with(hold_key) & set(held_modifiers)
+    if ecodes.KEY_LEFTCTRL in pair:
         ctrl_kept.let_go()      # a Ctrl given back after the last hold is hidden too
     keyboard_grab.grab_keyboards_hiding(devices, {hold_key, *pair, *shift})
-    if pair and modifier_hotkeys.hidden_by_own_grab(ctrl_space.MODIFIER):
-        _ctrl_space.modifier_hidden()
+    _combo_presses.modifier_hidden(
+        {code for code in pair if modifier_hotkeys.hidden_by_own_grab(code)})
     rec = recording.start_recording(cfg.beeps, cfg.notify, input_device_idx,
                                     edit_mode=bool(shift), held_send=held)
     if rec is not None and rec.held_send:
@@ -298,7 +308,8 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
     returned, so that every way recording can end — release, toggle, ESC, or an
     exception inside start_recording — releases the keyboard.
     """
-    if modifier_hotkeys.right_alt_alone(event, (hold_key, toggle_key), held_modifiers):
+    if (modifier_hotkeys.right_alt_alone(event, (hold_key, toggle_key), held_modifiers)
+            or _alt_combo_press(event, (hold_key, toggle_key), held_modifiers)):
         modifier_hotkeys.guard_alt_tap()
     modifier_hotkeys.note_compose_key(event, (hold_key, toggle_key), held_modifiers)
 
@@ -516,8 +527,10 @@ def _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_co
                 if why:
                     logger.warning(f"The {what} shortcut won't work with the hotkey helper "
                                    f"({why}). Pick one with Ctrl+Alt, Ctrl+Super or Alt+Super.")
+            letters = {code: combo_keys.combo_for(code).letters
+                       for code in (hold_key, toggle_key) if combo_keys.combo_for(code)}
             dev.watch(watch_specs(hold_key, toggle_key, ecodes.KEY_ESC,
-                                  (voice_cmds_combo, paste_last_combo)))
+                                  (voice_cmds_combo, paste_last_combo), letters))
 
 
 def run(cfg: Settings, input_device_idx, keyboards=None):
@@ -679,7 +692,7 @@ def _log_ctrl_space_clashes(keys: "hotkey_keys.Hotkeys") -> None:
     if pair == _clash_lookup_for:
         return
     _clash_lookup_for = pair
-    if ctrl_space.KEY in pair:
+    if ecodes.KEY_SPACE in pair:
         threading.Thread(target=ctrl_space_clashes.log_clashes, daemon=True).start()
 
 
@@ -688,12 +701,13 @@ def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys") -> None:
     _claim_desktop_hotkeys), and tell the hotkey helper and the modifier-key
     check which keys to look for, and which of them the keyboard options
     make Compose (read now, not on each press: the desktop can be slow)."""
+    combo_keys.use(keys.combos)
     _claim_desktop_hotkeys(cfg)
     _helper_watch(devices, keys.hold_key, keys.toggle_key, keys.voice_cmds_combo,
                   keys.paste_last_combo)
     modifier_hotkeys.note(devices, keys.hold_key, keys.toggle_key,
-                          *ctrl_space.held_with(keys.hold_key),
-                          *ctrl_space.held_with(keys.toggle_key))
+                          *combo_keys.held_with(keys.hold_key),
+                          *combo_keys.held_with(keys.toggle_key))
     modifier_hotkeys.read_compose_keys()
     _log_ctrl_space_clashes(keys)
 
@@ -702,12 +716,13 @@ def _on_key_event(event, keys: "hotkey_keys.Hotkeys", held_modifiers, devices, c
                   svc, now: float) -> None:
     """Act on one key event read from a keyboard, TuxTalk's own aside."""
     track_modifier(held_modifiers, event)
-    if event.code == ctrl_space.MODIFIER and event.value == 0:
+    if event.value == 0 and event.code in (combo_keys.held_with(keys.hold_key)
+                                           | combo_keys.held_with(keys.toggle_key)):
         # As for a Right Ctrl dictation key (_hide_modifier_hotkey): typing
         # that found it stuck waits for it again.
         modifier_hotkeys.note_released(event.code)
         ctrl_kept.let_go(devices)       # once no keyboard holds the real one
-    for key_event in _ctrl_space.events(event, held_modifiers, (keys.hold_key, keys.toggle_key)):
+    for key_event in _combo_presses.events(event, held_modifiers, (keys.hold_key, keys.toggle_key)):
         # Any hotkey counts as activity, whether or not the auto-timeout is
         # on now: it can be switched on later, and must then count from the
         # last real use.

@@ -14,7 +14,7 @@ from evdev import ecodes
 from conftest import KeyEvent
 from hotkey_helper_fakes import FakeKeyboard, ready_client
 from hotkey_loop_fakes import Cfg, Grabbable, Keyboard
-from tuxtalk import (atspi_helper, cosmic_hotkeys, ctrl_kept, ctrl_space, ctrl_space_clashes,
+from tuxtalk import (atspi_helper, cosmic_hotkeys, ctrl_kept, combo_keys, ctrl_space_clashes,
                      focused_window, gnome_hotkeys, hotkey_claims, hotkeys, keyboard_grab,
                      keyboard_layout, keyboard_output, modifier_hotkeys, pipeline, recording,
                      x11_hotkeys)
@@ -32,7 +32,7 @@ A_KEY = [(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)]
 @pytest.fixture(autouse=True)
 def _no_pair_down(monkeypatch):
     """Each test starts with the pair up, as the service does."""
-    monkeypatch.setattr(hotkeys, "_ctrl_space", ctrl_space.Presses())
+    monkeypatch.setattr(hotkeys, "_combo_presses", combo_keys.Presses())
 
 
 @pytest.fixture(autouse=True)

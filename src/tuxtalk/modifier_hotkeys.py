@@ -83,7 +83,7 @@ def note(devices, *keys) -> None:
     """Remember the hotkey loop's *devices* and which of its dictation *keys*
     are modifiers, for wait_while_held and wait_until_let_go: Right Ctrl or Right Alt, and the
     Left Ctrl a Left Ctrl+Space dictation key is held with, which the hotkey
-    loop names among *keys* (ctrl_space.held_with)."""
+    loop names among *keys* (combo_keys.held_with)."""
     global _noted
     _noted = (devices, frozenset(k for k in keys if k in MODIFIER_CODES))
 
@@ -320,7 +320,8 @@ def wait_while_held(destination=None,
 
 
 def guard_alt_tap() -> None:
-    """Press Ctrl while a Right Alt dictation key is down. To the desktop and
+    """Press Ctrl while a Right Alt dictation key, or Left Alt of a combo
+    one (Alt+D), is down. To the desktop and
     apps a lone tap of Alt opens the menu bar (Firefox, LibreOffice), and what
     TuxTalk types next would go into the menu. Any key between Alt's press and
     release makes it a shortcut instead; Ctrl+Alt alone does nothing. keyd
@@ -328,7 +329,7 @@ def guard_alt_tap() -> None:
     that typing waits for."""
     try:
         if not virtual_keyboard.send([(ecodes.KEY_LEFTCTRL, 1), (ecodes.KEY_LEFTCTRL, 0)]):
-            logger.error("Couldn't press Ctrl to keep Right Alt from opening a menu")
+            logger.error("Couldn't press Ctrl to keep Alt from opening a menu")
     except virtual_keyboard.StoppedPartway:
         pass            # logged by send, which let go of the Ctrl
 
