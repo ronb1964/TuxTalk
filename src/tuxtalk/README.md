@@ -36,8 +36,10 @@ is for.
   `help_pages.py` and `cards.py` (the card look), and
   `problem_report_window.py` (Report a Problem).
 - **The portable brain:** the text rules (`normalize.py`, `spoken_numbers.py`,
-  `spoken_quotes.py`, `cleanup.py`, `word_spelling.py` for Your Words), the AI
-  correction check (`correction_safety.py`) and silence and voice detection
+  `spoken_quotes.py`, `cleanup.py`, `word_spelling.py` for Your Words,
+  `custom_commands.py` for snippets), the AI correction check
+  (`correction_safety.py`), voice editing's exact rules (`voice_edit_rules.py`),
+  Parakeet's lean toward Your Words (`parakeet_bias.py`) and silence and voice detection
   (`silence.py`, `chunking.py`, `voice_detector.py`). `tests/test_brain_wall.py`
   keeps each free of GTK, D-Bus and other Linux-only imports, so a Windows or
   Mac app could run it; new dictation logic goes there, its screens elsewhere.
