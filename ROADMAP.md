@@ -4,6 +4,19 @@ Things I'd like to add or fix, roughly grouped. Nothing here has a date on it. W
 
 `[ ]` not started, `[~]` partly done (the note says what's left).
 
+## Coming next
+
+From 0.25 on, each release gets one bigger feature, plus fixes and a few small things. This is the order I'm planning, and it can still change:
+
+1. Voice commands in German, then other languages (see Dictation below).
+2. AI styles: say "make it friendlier" or "turn that into an email", and a style that fits the app you're in. All on the local AI, and off unless you turn it on.
+3. Learning from your corrections: when you fix a word, TuxTalk offers to remember it, and asks first.
+4. A history you can search, kept on disk, only if you turn it on.
+5. Live text out of TuxTalk Labs.
+6. Wake words (see Dictation).
+
+Small ones that can ride along with any release: translating what you say into English, help for quiet or whispered speech, and choosing your own dictation keys.
+
 ## Road to 1.0
 
 1.0 means TuxTalk does its main job reliably and won't change under you in
