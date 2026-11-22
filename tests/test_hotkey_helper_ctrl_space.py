@@ -34,9 +34,6 @@ def test_space_under_left_ctrl_can_be_watched(spec):
 
 @pytest.mark.parametrize("spec", [
     "57",       # Space alone is typing
-    "C:57",     # either Ctrl: Right Ctrl can be made a third-level key
-    "A:57",
-    "M:57",
     "S:57",
     "L:30",     # a letter under Left Ctrl
     "L:28",     # Enter

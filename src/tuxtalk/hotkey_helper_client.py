@@ -429,7 +429,7 @@ def refused_shortcut(text):
 
 def refused_combo(mods, key):
     """Why the helper won't report this (modifier names, key) combo, or None.
-    It reports a key only with two of Ctrl, Alt and Super held."""
+    It reports a key only with Ctrl, Left Alt or Super held."""
     from .hotkey_helper import parse_spec
     spec = watch_specs(None, None, None, [(mods, key)])
     if not spec:

@@ -213,12 +213,13 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False, read_
 def test_only_an_older_helper_needs_an_update():
     """1.9, installed by test builds, and 1.10 are older than 1.11: the
     numbers after the dot are compared as numbers, not as text."""
-    assert hotkey_helper.VERSION == "1.16" and si.NEEDED_HELPER_VERSION == "1.11"
+    assert hotkey_helper.VERSION == "1.17" and si.NEEDED_HELPER_VERSION == "1.11"
     for running, older, needed in (("1.0", True, True), ("1.3", True, True),
                                    ("garbled", True, True), ("1.9", True, True),
                                    ("1.10", True, True), ("1.11", True, False),
                                    ("1.12", True, False), ("1.13", True, False),
-                                   ("1.15", True, False), (hotkey_helper.VERSION, False, False),
+                                   ("1.15", True, False), ("1.16", True, False),
+                                   (hotkey_helper.VERSION, False, False),
                                    ("9.0", False, False), (None, False, False)):
         assert si.is_older(running) is older, running
         assert si.needs_update(running) is needed, running
@@ -241,7 +242,7 @@ def test_a_helper_before_1_16_is_offered_the_update_quietly(monkeypatch, running
     """1.14 came only with test builds; 1.15 turns the lock lights off at
     each dictation (issue #34), which only some KDE versions follow."""
     _P, prefs = _typing_prefs(monkeypatch, running=running)
-    assert f"({running} → 1.16)" in prefs.typing_status_label.markup
+    assert f"({running} → {hotkey_helper.VERSION})" in prefs.typing_status_label.markup
     assert "✓ Ready" in prefs.typing_status_label.markup
     assert "Num Lock" not in prefs.typing_status_label.markup
 
@@ -342,8 +343,8 @@ def test_switching_leaves_the_input_group_in_the_same_password_prompt():
 
 
 @pytest.mark.parametrize("shortcut, refused", [
-    ("Ctrl+Alt+P", False), ("Ctrl+Super+V", False), ("Ctrl+Shift+H", True),
-    ("Alt+P", True), ("Super+V", True), ("Shift+F8", False), ("", False),
+    ("Ctrl+Alt+P", False), ("Ctrl+Super+V", False), ("Ctrl+Shift+H", False),
+    ("Alt+P", False), ("Super+V", False), ("Shift+H", True), ("Shift+F8", False), ("", False),
     # The helper reports these keys on their own, whatever is held with them.
     ("Ctrl+Scroll Lock", False), ("Ctrl+Right Ctrl", False),
 ])
@@ -360,9 +361,9 @@ def test_a_hand_edited_shortcut_that_cant_work_is_warned_about(monkeypatch):
     monkeypatch.setattr(si, "helper_hello", lambda: (hotkey_helper.VERSION, None))
     prefs = P.SystemCheck(SimpleNamespace(config={}))
     prefs.typing_status_label, prefs.fix_typing_button = ShownWidget(), ShownWidget()
-    prefs.win.config = {"voice_commands_hotkey": "Ctrl+Shift+H", "paste_last_hotkey": "Ctrl+Alt+P"}
+    prefs.win.config = {"voice_commands_hotkey": "Shift+H", "paste_last_hotkey": "Ctrl+Alt+P"}
     prefs._show_typing_status()
-    assert "Ctrl+Shift+H won't work" in prefs.typing_status_label.markup
+    assert "Shift+H won't work" in prefs.typing_status_label.markup
     assert "Ctrl+Alt+P" not in prefs.typing_status_label.markup
 
 

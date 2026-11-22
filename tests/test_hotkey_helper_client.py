@@ -47,7 +47,8 @@ def test_left_ctrl_space_is_watched_as_space_under_left_ctrl():
 def test_a_combo_the_helper_wont_report_is_named():
     from tuxtalk.hotkey_helper_client import refused_combo
     assert refused_combo({"CTRL", "ALT"}, 25) is None
-    assert "two of Ctrl, Alt and Super" in refused_combo({"CTRL", "SHIFT"}, 35)
+    assert refused_combo({"CTRL", "SHIFT"}, 35) is None          # one of them is enough
+    assert "Ctrl, Alt or Super" in refused_combo({"SHIFT"}, 35)
 
 
 @pytest.fixture

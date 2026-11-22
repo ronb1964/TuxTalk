@@ -125,7 +125,7 @@ def _helper_state(refused_shortcuts):
     if refused_shortcuts:
         bad = ", ".join(refused_shortcuts)
         return (f'<span color="{WARNING_AMBER}">⚠ {GLib.markup_escape_text(bad)} won\'t work: '
-                'with the hotkey helper a shortcut needs two of Ctrl, Alt and Super. '
+                'with the hotkey helper a shortcut needs Ctrl, Alt or the Windows key. '
                 'Pick one from the list in General → More shortcuts</span>', _READY, False, False)
     return ('<span color="#4CAF50">✓ Ready. Only TuxTalk\'s hotkey helper reads the '
             'keyboard, and it tells TuxTalk about its hotkeys, Right Ctrl or Right Alt '

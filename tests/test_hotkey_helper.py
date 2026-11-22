@@ -36,11 +36,7 @@ def test_hotkeys_and_modifier_combos_can_be_watched(spec):
     "14",       # Backspace
     "57",       # Space
     "S:30",     # Shift+letter is a capital letter
-    "C:30",     # one modifier can be made to type (XKB level-3 options)
-    "A:30",
-    "M:20",
-    "CS:30",    # Shift doesn't count as the second one
-    "AS:30",
+    "S:57",     # Shift never unlocks a key
     "42",       # a modifier on its own: Shift types capitals
     "29",       # Left Ctrl and Left Alt: only Right Ctrl and Right Alt are dictation keys
     "56",
@@ -55,6 +51,13 @@ def test_anything_that_reveals_typing_is_refused(spec):
         hh.parse_spec(spec)
 
 
+@pytest.mark.parametrize("spec", ["C:30", "A:32", "M:20", "CS:37", "AS:30", "CA:25"])
+def test_one_of_ctrl_alt_and_super_unlocks_a_key(spec):
+    """Since 1.17, so a dictation key can be two keys (Alt+D): Shift with
+    it is fine, Shift alone never."""
+    assert hh.parse_spec(spec)[0] == "combo"
+
+
 def test_say_hello_first_and_refusals_are_named(setup):
     _helper, _kb, connect, say, heard, _seat = setup
     sock = connect()
@@ -64,7 +67,7 @@ def test_say_hello_first_and_refusals_are_named(setup):
     say(sock, "WATCH 66 30")
     assert heard(sock) == ["ERR say HELLO first", "ERR this helper speaks protocol 1",
                            HELLO,
-                           "ERR key 30 is only reported with two of Ctrl, Alt and Super"]
+                           "ERR key 30 is only reported with Ctrl, Alt or Super"]
 
 
 # --- what is reported ---------------------------------------------------------------------

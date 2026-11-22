@@ -425,19 +425,33 @@ def saved_keys():
 # does. Here, not in hotkey_helper.py: the helper speaks key codes, and
 # nothing in it would use this.
 KEYS_SINCE = {"Right Ctrl": "1.5", "Right Alt": "1.5", CTRL_SPACE: "1.14"}
+# A combo with one of Ctrl, Alt and Super (Alt+D, Ctrl+Shift+K): before it,
+# the helper reported a key only with two of them.
+ONE_MODIFIER_COMBOS_SINCE = "1.17"
+
+
+def key_since(key):
+    """The helper version that first reports dictation key *key*, or None
+    for every one."""
+    if key in KEYS_SINCE:
+        return KEYS_SINCE[key]
+    mods = key.split("+")[:-1]
+    if len([mod for mod in mods if mod in ("Ctrl", "Alt", "Super")]) == 1:
+        return ONE_MODIFIER_COMBOS_SINCE
+    return None
 
 
 def hears_key(running, key):
     """Whether the running helper (version *running*, None when there is
-    none) reports dictation key *key* ("F8", "Right Ctrl")."""
-    return (running is None or key not in KEYS_SINCE
-            or _version(running) >= _version(KEYS_SINCE[key]))
+    none) reports dictation key *key* ("F8", "Right Ctrl", "Alt+D")."""
+    since = key_since(key)
+    return running is None or since is None or _version(running) >= _version(since)
 
 
 def unheard_keys(keys):
     """Those of dictation *keys* the running hotkey helper is too old to
     report; the helper is asked its version only when one could be."""
-    if not set(keys) & set(KEYS_SINCE):
+    if not any(key_since(key) for key in keys):
         return []
     running = running_version()
     return [k for k in keys if not hears_key(running, k)]

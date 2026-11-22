@@ -146,7 +146,7 @@ def service_hears(keyboards, keyname):
     that isn't answering (stopped) hears nothing, though it's in the list."""
     if not keyboards or not all(getattr(k, "connected", True) for k in keyboards):
         return False
-    if keyname not in secure_input.KEYS_SINCE:
+    if secure_input.key_since(keyname) is None:
         return True
     version = next((k.helper_version for k in keyboards if hasattr(k, "helper_version")), None)
     if version is None:

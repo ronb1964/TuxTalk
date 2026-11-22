@@ -23,17 +23,19 @@ as typing:
   Where a layout or an XKB option makes one of them AltGr or Compose, a
   client learns when it went down, so that a character of that kind (€, @)
   was typed then, but never which: the keys pressed with it stay unreported;
-* any other key only while two of Ctrl, Alt and Super are held with it,
-  having gone down while the desktop could see them, on a real keyboard
+* any other key only while Ctrl, Left Alt or Super is held with it,
+  having gone down while the desktop could see it, on a real keyboard
   (any of them, as the desktop counts them) or on the same virtual one;
   and no more than two different such keys while those modifiers stay down;
 * Space while Left Ctrl is held, Left Ctrl counted as those modifiers are
   (not Right Ctrl, never Space alone, no other key with Left Ctrl), and
   Left Ctrl's own press and release, only to a client watching that pair.
 
-"Two of" because any one modifier can be made to type characters: Right Alt
-is AltGr on most layouts (it never counts toward the two), and XKB options turn
-Left Alt, Super or Right Ctrl into a third-level key too. "Seen by the
+One modifier (two before 1.17) so a dictation key can be Alt+D. A program
+could then learn when Ctrl+C and the like are pressed, never what's typed,
+except where XKB options make Left Alt, Super or Right Ctrl a third-level
+key (Right Alt is AltGr and never counts): it learns when two such
+characters at most were typed per hold. "Seen by the
 desktop" and "the same virtual one" because a program can make a virtual
 keyboard: a Ctrl held there, or one the desktop didn't see go down, would
 otherwise make every key typed on the real keyboard look like a shortcut.
@@ -64,11 +66,9 @@ TuxTalk types (Ctrl and a typed "w" close a tab).
 Everything goes only to the user at the screen: logind's active user on
 seat0, checked by user id (two sessions of the same user count as one), and
 only keyboards of seat0 are read. Letters, numbers, Enter or Shift+letter
-are never reported, so even a hostile program that connects learns nothing
-about what is typed beyond when an AltGr, Compose or layout-switch key went
-down (Right Alt, Right Ctrl, and Left Ctrl to a client watching Left
-Ctrl+Space). Each client may ask for four shortcuts at most; TuxTalk asks
-for three at most.
+are never reported, so a hostile program that connects learns no typing,
+only when shortcuts and AltGr, Compose or layout-switch keys were pressed.
+Each client may ask for four shortcuts at most; TuxTalk asks for four.
 
 Hiding a held hotkey
 --------------------
@@ -143,7 +143,7 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.16"
+VERSION = "1.17"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"
@@ -191,6 +191,7 @@ UNLOCKERS = {
 }
 LEFT_CTRL = "L"
 SHORTCUT_LETTERS = frozenset("CAM")
+SHORTCUT_CODES = frozenset().union(*(UNLOCKERS[letter] for letter in SHORTCUT_LETTERS))
 
 # Letter keys tell a keyboard from a power button, a lid switch or a game
 # controller; TuxTalk's own test (keyboard_devices.is_keyboard_device) is the same.
@@ -249,7 +250,7 @@ LISTEN_BACKLOG = 64           # connections waiting to be let in or turned away
 ACCEPTS_PER_PASS = 64
 MAX_LINE = 512
 MAX_SPECS = 32
-MAX_COMBOS = 4                # shortcuts per client; TuxTalk watches three at most
+MAX_COMBOS = 4                # shortcuts per client; TuxTalk watches four at most
 MAX_COMBO_KEYS_PER_HOLD = 2   # different shortcut keys while the modifiers stay down
 MAX_OUTBUF = 64 * 1024
 MAX_KEYBOARDS = 48
@@ -298,8 +299,8 @@ def parse_spec(spec):
         return ("combo", code, letters)
     if code in BARE_KEYS:
         return ("bare", code)
-    if len(letters & SHORTCUT_LETTERS) < 2:
-        raise ValueError(f"key {code} is only reported with two of Ctrl, Alt and Super")
+    if not letters & SHORTCUT_LETTERS:
+        raise ValueError(f"key {code} is only reported with Ctrl, Alt or Super")
     return ("combo", code, letters)
 
 
@@ -309,7 +310,7 @@ def mods_satisfy(letters, held):
 
 
 def shortcut_mods(held):
-    """How many of Ctrl, Alt and Super are among *held*: two make a shortcut."""
+    """How many of Ctrl, Alt and Super are among *held*: one makes a shortcut."""
     return sum(1 for letter in SHORTCUT_LETTERS if UNLOCKERS[letter] & held)
 
 
@@ -875,10 +876,10 @@ class Helper:
                 mods |= k.down & k.trusted
         return mods
 
-    def end_combo_hold(self, group):
-        """Once fewer than two of Ctrl, Alt and Super are down in *group*, a
-        new modifier hold may report shortcut keys again."""
-        if group in self.combo_holds and shortcut_mods(self.group_mods(group)) < 2:
+    def end_combo_hold(self, group, released=False):
+        """Let *group* report shortcut keys again once Ctrl, Alt or Super came
+        up (*released*; not Shift: capitals under a held Ctrl), or none is down."""
+        if group in self.combo_holds and (released or not shortcut_mods(self.group_mods(group))):
             del self.combo_holds[group]
             self.combo_logged.discard(group)
 
@@ -942,7 +943,7 @@ class Helper:
             keyboard.trusted.discard(code)
             self.deliver_up(keyboard, code)
             if code in MODIFIERS:
-                self.end_combo_hold(keyboard.group)
+                self.end_combo_hold(keyboard.group, released=code in SHORTCUT_CODES)
         # value 2 is auto-repeat: never reported
 
     def deliver_up(self, keyboard, code):
@@ -1031,7 +1032,7 @@ class Helper:
     def combo_allowed(self, group, code):
         """Whether shortcut key *code* may be reported in this modifier hold:
         a key already reported in it, or one of the first two different ones.
-        More is typing with Ctrl+Alt held, not a shortcut (see the top)."""
+        More is typing with a modifier held, not a shortcut (see the top)."""
         keys = self.combo_holds.setdefault(group, set())
         if code in keys:
             return True

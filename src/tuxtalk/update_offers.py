@@ -80,7 +80,9 @@ def helper_update_text(running, reason) -> str:
     asked about for *reason* (secure_input.update_reason)."""
     from . import secure_input
     from .hotkey_helper import VERSION
-    keys = [key for key in secure_input.KEYS_SINCE if not secure_input.hears_key(running, key)]
+    # Its own keys too: a combo like Alt+D needs a newer helper than F8 does.
+    keys = [key for key in dict.fromkeys([*secure_input.KEYS_SINCE, *secure_input.saved_keys()])
+            if key and not secure_input.hears_key(running, key)]
     if missed := secure_input.missed_keyboard_reason(running):
         why = f". {missed}, so your dictation keys may not work until it's updated."
     # Num Lock before keys this person doesn't use, when their own keys work:
