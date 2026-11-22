@@ -1039,6 +1039,13 @@ def test_an_abbreviation_keeps_its_period_before_a_spoken_mark():
     ("that comma is wrong", "That comma is wrong."),
     ("No colon here", "No colon here."),
     ("A comma goes here", "A comma goes here."),
+    ("this comma is misplaced", "This comma is misplaced."),
+    ("that question mark is wrong", "That question mark is wrong."),
+    ("no comma here", "No comma here."),
+    ("hello new line The comma is missing", f"Hello.{LINE_BREAK}The comma is missing."),
+    ("he said open quote The comma is missing close quote",
+     "He said \u201cThe comma is missing.\u201d"),
+    ("Subject colon The colon is missing", "Subject: The colon is missing."),
 ])
 def test_a_mark_talked_about_stays_words(said, typed):
     assert normalize_text(said) == typed
@@ -1053,6 +1060,10 @@ def test_a_mark_talked_about_stays_words(said, typed):
     ("first line new line second line", f"First line.{LINE_BREAK}Second line."),
     ("I love that new line next", f"I love that.{LINE_BREAK}Next."),
     ("first do this semicolon", "First do this;"),
+    ("first do this comma then that", "First do this, then that."),
+    ("I'll take that one comma thanks", "I'll take that one, thanks."),
+    ("is it this question mark", "Is it this?"),
+    ("the answer is no full stop", "The answer is no."),
     ("Part A colon introduction", "Part A: introduction."),
     ("I got an A full stop", "I got an A."),
 ])

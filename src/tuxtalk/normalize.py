@@ -95,15 +95,18 @@ _LITERAL_PATTERNS = [
 ] + [(re.compile(r"\b(?:literal|the\s+words?)\s+press,\s+tab\b", re.IGNORECASE),
       LITERAL_REPLACEMENTS["press tab"])]
 
-# An article before a mark word: lower case, or capitalised where a sentence
-# starts. A capital A elsewhere is a letter: "Part A colon introduction" is
-# "Part A: introduction".
-_ARTICLE = r"\b(?:a|an|the|another)|(?:^|(?<=[.!?]\s))(?:A|An|The|Another)"
-# The other words before a mark that make it a thing talked about: "no colon";
-# the oldest mark rules took "this", "that" and "one" too ("that comma is
-# wrong"), in either case.
-_NO = r"\b(?i:no)"
+# An article before a mark word makes it a thing talked about. A capital A
+# counts only where a sentence, a line or a quotation starts: elsewhere it's
+# a letter ("Part A colon introduction" is "Part A: introduction").
+_ARTICLE = (r"\b(?:a|an|the|another|An|The|Another)"
+            r"|(?:^|(?<=[.!?:]\s)|(?<=\n)|(?<=[\u201c\"]))A")
+# "this", "that", "no" or "one" before a mark makes it a thing only when the
+# words after say so ("that comma is wrong", "no comma here"); else it's
+# said for the mark ("first do this comma then that", "is it this question
+# mark").
 _POINTER = r"\b(?i:this|that|no|one)"
+_TALKED_ABOUT = (r"(?=\s+(?i:is|was|isn't|wasn't|goes|should|needs|belongs|looks|at|in|on|"
+                 r"after|before|here|there|between|inside|of)\b)")
 
 # --- _protect_command_words: command words used as English nouns ---
 # Words like "period", "comma", "return" and "dash" are command triggers
@@ -167,18 +170,15 @@ _CONTEXT_PROTECT_PATTERNS = [
     # "ended with a question mark", "add a semicolon", "came to a full stop":
     # with an article the mark is being talked about, not dictated. Nobody
     # dictates "a question mark" to end a sentence (without this, "ended with
-    # a question mark" typed "ended with a?"). The first four kept "this",
-    # "that" and "one" before them as well ("that comma is wrong").
-    *((re.compile(rf"({_ARTICLE}|{pointers})\s+(?i:{spoken})\b"),
-       r"\1 " + LITERAL_REPLACEMENTS[word])
-      for spoken, word, pointers in (
-          (r"question\s+mark", "question mark", _POINTER),
-          (r"exclamation\s+point", "exclamation point", _POINTER),
-          (r"exclamation\s+mark", "exclamation mark", _POINTER),
-          ("comma", "comma", _POINTER),
-          (r"full\s+stop", "full stop", _NO), ("semicolon", "semicolon", _NO),
-          ("colon", "colon", _NO), ("apostrophe", "apostrophe", _NO),
-          ("hyphen", "hyphen", _NO), ("ellipsis", "ellipsis", _NO))),
+    # a question mark" typed "ended with a?").
+    *((re.compile(rf"({_ARTICLE})\s+(?i:{spoken})\b|({_POINTER})\s+(?i:{spoken})\b"
+                  + _TALKED_ABOUT),
+       lambda m, word=word: f"{m.group(1) or m.group(2)} {LITERAL_REPLACEMENTS[word]}")
+      for spoken, word in (
+          (r"question\s+mark", "question mark"), (r"exclamation\s+point", "exclamation point"),
+          (r"exclamation\s+mark", "exclamation mark"), ("comma", "comma"),
+          (r"full\s+stop", "full stop"), ("semicolon", "semicolon"), ("colon", "colon"),
+          ("apostrophe", "apostrophe"), ("hyphen", "hyphen"), ("ellipsis", "ellipsis"))),
     # A line break is a thing too ("we need a new line of products").
     (re.compile(rf"({_ARTICLE})\s+(?i:new\s+line)\b"), r"\1 __LIT_NEW_LINE__"),
     (re.compile(rf"({_ARTICLE})\s+(?i:new\s+paragraph)\b"), r"\1 __LIT_NEWPARA__"),
