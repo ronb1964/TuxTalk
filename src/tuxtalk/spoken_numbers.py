@@ -21,6 +21,7 @@ The English-only fixes run for English alone; the rest is plain digits.
 import logging
 import re
 
+from .language_codes import locale_language
 from .normalize import LINE_BREAK, format_times
 
 logger = logging.getLogger(__name__)
@@ -242,11 +243,6 @@ def _one_and_two(text: str) -> str:
     return "".join(out) + text[pos:]
 
 
-def _language(code: str) -> str:
-    """"en_US", "pt-BR" or "de" -> the bare language code."""
-    return (code or "").replace("-", "_").split("_")[0].lower()
-
-
 def to_digits(text: str, language: str, small_as_words: bool = False) -> str:
     """*text* with its spoken numbers written as digits.
 
@@ -255,7 +251,7 @@ def to_digits(text: str, language: str, small_as_words: bool = False) -> str:
     *small_as_words*, a lone number below 10 stays a word ("three cats",
     "25 chickens"); digits read out one at a time are joined either way.
     """
-    lang = _language(language)
+    lang = locale_language(language)
     if not text or lang not in SUPPORTED_LANGUAGES:
         return text
     try:

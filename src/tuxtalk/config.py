@@ -20,6 +20,7 @@ except ImportError:
     _USE_TOMLLIB = False  # toml library requires text mode ("r")
 from dataclasses import dataclass, field, fields
 
+from .language_codes import locale_language
 from .logger import setup_logger
 from .virtual_keyboard import KEY_DELAY_MS
 
@@ -139,16 +140,6 @@ VALID_COLOR_MODES = {"system", "custom"}
 # exactly as it always has. It also seeds the first swatch
 # in the color picker so the classic color is always one click away.
 CLASSIC_CYAN_HEX = "#4db3ff"
-
-
-def locale_language(value):
-    """"de_DE.UTF-8" or "de-CH" -> "de"; None for "C", "POSIX" or anything
-    unreadable."""
-    value = (value or "").strip()
-    if not value or value == "POSIX" or value.split(".")[0] == "C":
-        return None
-    code = value.split(".")[0].split("@")[0].replace("-", "_").split("_")[0].lower()
-    return code if code.isalpha() and 2 <= len(code) <= 3 else None
 
 
 def display_locale(env=None) -> str:

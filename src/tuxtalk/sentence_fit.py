@@ -7,7 +7,8 @@ characters each side; when the app doesn't say, nothing here runs and the
 dictation is typed as it always was."""
 import re
 
-from . import chunk_text, config
+from . import chunk_text
+from .language_codes import locale_language
 from .normalize import safe_to_lowercase_first_word
 
 # How many characters on each side of the cursor are asked for: enough to
@@ -138,7 +139,7 @@ def capitalised_nouns(language, auto_languages, usual_language: str) -> bool:
     (those auto-detect picks from); else *usual_language*, the one first run
     picked or the desktop's (recommend.effective_language)."""
     if language:
-        return config.locale_language(language) in _NOUN_CAPITALS
+        return locale_language(language) in _NOUN_CAPITALS
     if auto_languages:
-        return any(config.locale_language(code) in _NOUN_CAPITALS for code in auto_languages)
-    return config.locale_language(usual_language) in _NOUN_CAPITALS
+        return any(locale_language(code) in _NOUN_CAPITALS for code in auto_languages)
+    return locale_language(usual_language) in _NOUN_CAPITALS
