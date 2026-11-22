@@ -62,6 +62,10 @@ def test_one_and_two_as_labels_and_counts_are_digits(text, expected):
     "just in case one of them breaks", "every day one of them is late",
     "a question one might ask", "a thing one should know", "the file one of you sent",
     "I took a test one time",
+    # "one" as a person or thing doing something.
+    "in case one breaks", "if one breaks I have a spare", "one says yes the other says no",
+    "one never knows", "whichever one works", "it's two against one", "win one lose one",
+    "at one sharp", "the round one",
 ])
 def test_one_and_two_as_pronouns_and_idioms_stay_words(text):
     assert to_digits(text, "en") == text

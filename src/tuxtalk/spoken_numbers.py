@@ -167,7 +167,9 @@ _FUNCTION_WORDS = frozenset({
     "again", "more", "less", "here", "there", "now", "even", "still", "maybe", "exactly",
     "almost", "least", "most", "very", "really", "each", "not", "today", "tomorrow",
     "yesterday", "tonight", "up", "down", "out", "off", "away", "back", "later", "soon",
-    "please", "either", "ever", "yet", "already", "left", "free",
+    "please", "either", "ever", "yet", "already", "left", "free", "never", "always",
+    "usually", "often", "against", "versus", "vs", "all", "sharp", "nil", "apiece", "win",
+    "lose",
 })
 # After "one", phrases where it isn't a count ("one of", "one day", "one
 # more thing", "one small step"); after "two", the same few ("two of", "my
@@ -208,7 +210,8 @@ def _after_a_label(word: str, prev: str, prev2: str, ends: bool) -> bool:
     if prev2 in _POINTERS and not (ends and prev in _LABELS):
         return False
     if prev in _LABELS_AT_THE_END or prev in _COUNTING_LABELS:
-        return ends
+        # "the round one" is the one that's round.
+        return ends and not (prev in _COUNTING_LABELS and prev2 in _POINTERS)
     if prev not in _LABELS or prev == "no":
         return False
     return not (prev == "number" and word == "one" and prev2 in _POINTERS)
@@ -217,7 +220,11 @@ def _after_a_label(word: str, prev: str, prev2: str, ends: bool) -> bool:
 def _counts(word: str, nxt: str) -> bool:
     """Whether this "one" or "two" counts *nxt*, the word after it ("two
     cats"), rather than starting an idiom ("one of", "one day") or standing
-    before a verb or small word ("one is", "two came")."""
+    before a verb or small word ("one is", "two came"). One of something is
+    never plural, so "one" before a word in -s is a person or thing doing
+    it ("if one breaks", "one says yes")."""
+    if word == "one" and nxt.endswith("s") and not nxt.endswith(("ss", "us", "is")):
+        return False
     return (nxt not in _IDIOMS_AFTER[word] and nxt not in _FUNCTION_WORDS
             and nxt[:1].isalpha())
 

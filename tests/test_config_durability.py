@@ -514,6 +514,17 @@ def test_an_emptied_file_is_restored_before_a_small_save(config_path):
     assert config.load_config().hotkey == "F6"
 
 
+def test_a_file_emptied_again_is_not_saved_over_with_one_key(config_path):
+    """The repair runs once per process, so the service, running for days,
+    saved its one key over a second emptying."""
+    config.save_config(config.Settings(hotkey="F6"))
+    config_path.write_text("")
+    config.load_config()                 # the one repair this process gets
+    config_path.write_text("")
+    config.record_update_check("2026-11-22")
+    assert config_path.read_text() == ""
+
+
 def test_a_read_error_while_recovering_leaves_the_file_alone(config_path, monkeypatch):
     """Damaged at the first read, then a moment's read error with the lock
     held: recovering then would write the backup over a save made meanwhile."""

@@ -927,9 +927,17 @@ def save_changes(**changes) -> Settings:
     version doesn't know kept too: read afresh, changed and written under
     the lock, so another process's save meanwhile stays. The settings now.
     Raises as rewrite_config does. A damaged or emptied file is repaired
-    from its backup first (load_config), not saved over with one setting."""
+    from its backup first (load_config), not saved over with one setting;
+    one still empty (the repair is tried once per process) raises
+    ConfigNotLoadedError and is left alone."""
     load_config()
-    rewrite_config(lambda on_disk: {**on_disk, **changes})
+
+    def merge(on_disk):
+        if not on_disk and os.path.exists(CONFIG_PATH):
+            raise ConfigNotLoadedError(f"{CONFIG_PATH} is empty; one setting won't be "
+                                       "saved as all of them")
+        return {**on_disk, **changes}
+    rewrite_config(merge)
     return load_config()
 
 

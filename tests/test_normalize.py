@@ -1046,6 +1046,10 @@ def test_an_abbreviation_keeps_its_period_before_a_spoken_mark():
     ("he said open quote The comma is missing close quote",
      "He said \u201cThe comma is missing.\u201d"),
     ("Subject colon The colon is missing", "Subject: The colon is missing."),
+    ("remove this comma from the sentence", "Remove this comma from the sentence."),
+    ("move that comma to the left", "Move that comma to the left."),
+    ("no question mark needed", "No question mark needed."),
+    ("one comma two commas", "One comma two commas."),
 ])
 def test_a_mark_talked_about_stays_words(said, typed):
     assert normalize_text(said) == typed

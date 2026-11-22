@@ -100,13 +100,14 @@ _LITERAL_PATTERNS = [
 # a letter ("Part A colon introduction" is "Part A: introduction").
 _ARTICLE = (r"\b(?:a|an|the|another|An|The|Another)"
             r"|(?:^|(?<=[.!?:]\s)|(?<=\n)|(?<=[\u201c\"]))A")
-# "this", "that", "no" or "one" before a mark makes it a thing only when the
-# words after say so ("that comma is wrong", "no comma here"); else it's
-# said for the mark ("first do this comma then that", "is it this question
-# mark").
+# "this", "that", "no" or "one" before a mark makes it a thing talked about
+# when more of the sentence follows ("remove this comma from it", "that comma
+# is wrong"); at the end of a phrase, or before a word that starts a new
+# clause, it's said for the mark ("is it this question mark", "first do this
+# comma then that", "I'll take that one comma thanks").
 _POINTER = r"\b(?i:this|that|no|one)"
-_TALKED_ABOUT = (r"(?=\s+(?i:is|was|isn't|wasn't|goes|should|needs|belongs|looks|at|in|on|"
-                 r"after|before|here|there|between|inside|of)\b)")
+_TALKED_ABOUT = (r"(?=\s+(?!(?i:then|and|but|so|or|thanks|thank|please|i|we|you|he|she|they|"
+                 r"it)\b)\w)")
 
 # --- _protect_command_words: command words used as English nouns ---
 # Words like "period", "comma", "return" and "dash" are command triggers
