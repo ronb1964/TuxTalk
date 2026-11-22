@@ -25,12 +25,16 @@ from tuxtalk.normalize import LINE_BREAK
     ("season two episode one", "season 2 episode 1"),
     ("thing one and thing two", "thing 1 and thing 2"),
     ("I like plan two", "I like plan 2"),
+    ("the page two", "the page 2"),
+    ("page one of two", "page 1 of 2"),
     ("I still use Python two.", "I still use Python 2."),
     # A count before what it counts.
     ("two cats came in", "2 cats came in"),
     ("I have two kids and one dog.", "I have 2 kids and 1 dog."),
     ("one question for you", "1 question for you"),
     ("two or three", "2 or 3"),
+    ("my two cats", "my 2 cats"),
+    ("these two cats", "these 2 cats"),
 ])
 def test_one_and_two_as_labels_and_counts_are_digits(text, expected):
     """With digits on, "number one" stayed words while "number four" became
@@ -48,6 +52,12 @@ def test_one_and_two_as_labels_and_counts_are_digits(text, expected):
     "I want one.", "I'll take two.", "Give me two.", "We need two.", "I have one",
     "call me at one", "tea for two", "one is enough", "two are coming", "it's one",
     "Pick one.", "one and only", "one", "two",
+    # After a verb, at a phrase's end or before what isn't a noun.
+    "I tried one", "We sold two", "I ate one", "Grab one", "I needed two", "I wanted one",
+    "He scored two", "She turned two", "I prefer one", "please select one",
+    "I saw one today", "I'll send two tomorrow", "Pick one up",
+    "Not one person", "On one condition", "in one piece", "Buy one get one free",
+    "one out of two", "two way street", "the one thing", "no one", "no two are alike",
 ])
 def test_one_and_two_as_pronouns_and_idioms_stay_words(text):
     assert to_digits(text, "en") == text

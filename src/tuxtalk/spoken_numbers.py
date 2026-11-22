@@ -80,12 +80,18 @@ _RE_SMALL_DIGIT = re.compile(r"(?<![\w.,:$€£#+\-/])([1-9])(?=\s+([a-z][\w'-]*
 _RE_RANGE_AFTER = re.compile(r"\s+(?:to|and|or|through|out of|x|by)\s+\d")
 _RE_RANGE_BEFORE = re.compile(r"\d\s+(?:to|and|or|through|out of|x|by)$")
 _SMALL_WORDS = ("one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
-# Words that put a number on something rather than count it ("page 3").
+# Words that put a number on something rather than count it ("page 3",
+# "test 1").
 _LABELS = frozenset({
     "page", "pages", "chapter", "step", "version", "level", "number", "no", "room", "row",
     "line", "gate", "track", "season", "episode", "part", "volume", "grade", "floor",
     "platform", "channel", "verse", "figure", "table", "option", "round", "day", "week",
     "slide", "section", "item", "zone", "phase", "stage", "seat", "lane", "bus", "route",
+    "test", "plan", "thing", "team", "player", "act", "scene", "model", "type", "size",
+    "class", "group", "unit", "case", "exhibit", "article", "rule", "question", "problem",
+    "exercise", "lesson", "task", "camera", "server", "account", "file", "folder", "tab",
+    "screen", "monitor", "door", "box", "column", "field", "sheet", "tier", "batch",
+    "sprint", "suite", "building", "block", "terminal", "studio", "court", "ward",
 })
 # Units and clock words a digit stays in front of ("3 pm", "2 kg").
 _UNITS = frozenset({
@@ -132,7 +138,7 @@ _ONE_TWO = ("one", "two")
 _POINTERS = frozenset({
     "the", "a", "an", "this", "that", "these", "those", "which", "each", "every", "no",
     "any", "some", "another", "other", "either", "neither", "my", "your", "his", "her",
-    "its", "our", "their", "both", "all", "only", "same", "last", "first", "next", "top",
+    "its", "our", "their", "both", "all", "only", "same", "last", "first", "next", "top", "not",
     "right", "wrong", "good", "nice", "great", "big", "little", "new", "old", "best",
     "better", "worst", "favorite", "favourite", "lucky", "special",
 })
@@ -151,7 +157,9 @@ _FUNCTION_WORDS = frozenset({
     "as", "and", "or", "but", "so", "if", "then", "between", "after", "before", "around",
     "under", "over", "until", "since", "per", "via", "only", "just", "also", "too",
     "again", "more", "less", "here", "there", "now", "even", "still", "maybe", "exactly",
-    "almost", "least", "most", "very", "really", "each", "not",
+    "almost", "least", "most", "very", "really", "each", "not", "today", "tomorrow",
+    "yesterday", "tonight", "up", "down", "out", "off", "away", "back", "later", "soon",
+    "please", "either", "ever", "yet", "already", "left", "free",
 })
 # After "one", phrases where it isn't a count ("one of", "one day", "one
 # more thing", "one small step"); after "two", the same few ("two of", "my
@@ -161,8 +169,8 @@ _IDIOMS_AFTER = {
         "of", "another", "by", "at", "way", "or", "and", "too", "day", "time", "thing",
         "more", "last", "point", "hand", "side", "sec", "second", "minute", "moment",
         "bit", "kind", "sort", "each", "either", "other", "half", "small", "big",
-        "little", "single", "whole", "such", "short", "after"}),
-    "two": frozenset({"of", "or", "and", "cents", "each", "by", "at"}),
+        "little", "single", "whole", "such", "short", "after", "piece", "condition"}),
+    "two": frozenset({"of", "or", "and", "cents", "each", "by", "at", "way"}),
 }
 
 
@@ -184,36 +192,42 @@ def _neighbours(text: str, words: list, i: int):
     return before, after
 
 
-def _is_label(prev: str, name: bool) -> bool:
-    """Whether *prev* puts a number on something: a label ("page", "test",
-    "plan") or a *name* ("Python", "Apollo"), not a verb, pronoun or small
-    word ("want", "me", "at") or a number."""
-    return (prev in _LABELS or name
-            or (prev not in _FUNCTION_WORDS and "'" not in prev and "’" not in prev
-                and not prev[:1].isdigit() and prev not in _ONE_TWO))
+def _after_a_label(word: str, prev: str, prev2: str) -> bool:
+    """Whether *prev* numbers this "one" or "two" ("test one", "part two
+    of it"); "no one" is nobody, and "my number one" the one liked best."""
+    if prev not in _LABELS or prev == "no":
+        return False
+    return not (prev == "number" and word == "one" and prev2 in _POINTERS)
+
+
+def _counts(word: str, nxt: str) -> bool:
+    """Whether this "one" or "two" counts *nxt*, the word after it ("two
+    cats"), rather than starting an idiom ("one of", "one day") or standing
+    before a verb or small word ("one is", "two came")."""
+    return (nxt not in _IDIOMS_AFTER[word] and nxt not in _FUNCTION_WORDS
+            and nxt[:1].isalpha())
 
 
 def _as_digit(word: str, before: list, after: list, name: bool) -> bool:
     """Whether this "one" or "two" is a label or a count, by the words
-    around it: a label at a phrase's end ("test one"), after a label word
-    anywhere ("part two of it"), or a count before what it counts ("two
-    cats"). A pronoun ("the right one", "which one") and an idiom ("one of
-    them", "one or two") stay words."""
+    around it: after a label word ("test one", "part two of it") or a name
+    at a phrase's end ("Python two"), or a count before what it counts
+    ("two cats", "my two cats"). A pronoun ("the right one", "which one",
+    "the one thing"), an idiom ("one of them", "one or two") and a number
+    after a verb ("I want one", "we sold two") stay words."""
     prev2, prev = before
     nxt, nxt2 = after
-    if prev in _POINTERS or prev2 in _POINTERS:
-        return False
     if prev in ("or", "and", "to") and prev2 in _ONE_TWO:
         return False                                    # "one or two people"
-    if prev in _LABELS:
-        return True                                     # "part two of the series"
+    if _after_a_label(word, prev, prev2):
+        return True
     if nxt in ("or", "and", "to") and nxt2 is not None and nxt2[:1].isdigit():
         return True                                     # "two or 3" -> "2 or 3"
     if nxt is None or nxt in ("and", "or", "but", "then"):
-        # A phrase ends here: "test one", "thing one and thing two".
-        return prev is not None and prev != "square" and _is_label(prev, name)
-    return nxt not in _IDIOMS_AFTER[word] and nxt not in _FUNCTION_WORDS and (
-        nxt[:1].isalpha())
+        return name and prev not in _POINTERS          # "I still use Python two"
+    if prev in _POINTERS or prev2 in _POINTERS:
+        return word == "two" and _counts(word, nxt)     # "my 2 cats", "the one thing"
+    return _counts(word, nxt)
 
 
 def _starts_sentence(text: str, pos: int) -> bool:
@@ -227,7 +241,7 @@ def _one_and_two(text: str) -> str:
     labels or counts ("number 1", "test 2", "2 cats"), words where they are
     pronouns or idioms ("this one", "one of them", "no one")."""
     words = list(_RE_WORD.finditer(text))
-    out, pos = [], 0
+    out, pos, digits = [], 0, set()
     for i, m in enumerate(words):
         word = m.group().lower()
         if word not in _ONE_TWO:
@@ -237,9 +251,12 @@ def _one_and_two(text: str) -> str:
         # word's ("Pick one.").
         name = bool(before[1]) and words[i - 1].group()[:1].isupper() and not (
             _starts_sentence(text, words[i - 1].start()))
-        if _as_digit(word, before, after, name):
+        # "page one of two": the second number goes with the first.
+        of_a_digit = before[1] == "of" and i - 2 in digits
+        if of_a_digit or _as_digit(word, before, after, name):
             out += [text[pos:m.start()], "1" if word == "one" else "2"]
             pos = m.end()
+            digits.add(i)
     return "".join(out) + text[pos:]
 
 
