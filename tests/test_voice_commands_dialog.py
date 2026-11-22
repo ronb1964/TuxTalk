@@ -43,8 +43,8 @@ def test_alternate_wordings_are_listed_and_work(text):
 
 
 def test_literal_names_words_it_really_covers(text):
-    """Not "any punctuation or formatting word": brackets, em dash and full
-    stop are not covered ("literal open parenthesis" types "("). The words it
+    """Not "any punctuation or formatting word": brackets and em dash are
+    not covered ("literal open parenthesis" types "("). The words it
     names as examples must all work with "literal"."""
     assert "any punctuation" not in text
     assert "the word" in text

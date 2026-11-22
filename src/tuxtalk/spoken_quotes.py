@@ -63,6 +63,9 @@ _RE_VERB_WITH_OBJECT = re.compile(
     re.IGNORECASE,
 )
 
+# "quote marks" is the name of the marks, never one of them.
+_RE_MARKS_AFTER = re.compile(r"\s+marks?\b", re.IGNORECASE)
+
 # How strongly the word before or after a bare "quote" points to the word:
 # "to quote", "this quote", "don't quote me", "quote of the day".
 _WORD_BEFORE = {
@@ -179,7 +182,8 @@ def _spoken(text: str) -> list:
         if quoted:
             taken.add(quoted.start(1))
         word = m.lastgroup == "bare" and (m.start() in verbs
-                                          or _RE_NOUN_BEFORE.search(text, 0, m.start()))
+                                          or _RE_NOUN_BEFORE.search(text, 0, m.start())
+                                          or _RE_MARKS_AFTER.match(text, m.end()))
         said.append(_Said(m.lastgroup, m.start(), m.end(), "word" if word else ""))
     return said
 

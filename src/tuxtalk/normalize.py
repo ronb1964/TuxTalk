@@ -79,6 +79,7 @@ LITERAL_REPLACEMENTS = {
     "dash": "__LIT_DASH__",
     "ellipsis": "__LIT_ELLIPSIS__",
     "dot dot dot": "__LIT_DOTDOTDOT__",
+    "full stop": "__LIT_FULLSTOP__",
 }
 
 # Restore mapping: each placeholder → its original spoken word ("press, tab"
@@ -153,18 +154,29 @@ _CONTEXT_PROTECT_PATTERNS = [
     # "dash of [word]"
     (re.compile(r"\bdash(\s+of\b)", re.IGNORECASE), r"__LIT_DASH__\1"),
 
-    # "ended with a question mark", "add a comma": with an article the mark
-    # is being talked about, not dictated. Nobody dictates "a question mark"
-    # to end a sentence (without this, "ended with a question mark" typed
-    # "ended with a?").
-    (re.compile(r"\b(a|an|the|this|that|another|no|one)\s+question\s+mark\b",
-                re.IGNORECASE), r"\1 __LIT_QMARK__"),
-    (re.compile(r"\b(a|an|the|this|that|another|no|one)\s+exclamation\s+point\b",
-                re.IGNORECASE), r"\1 __LIT_EPOINT__"),
-    (re.compile(r"\b(a|an|the|this|that|another|no|one)\s+exclamation\s+mark\b",
-                re.IGNORECASE), r"\1 __LIT_EPOINT2__"),
-    (re.compile(r"\b(a|an|the|this|that|another|no|one)\s+comma\b",
-                re.IGNORECASE), r"\1 __LIT_COMMA__"),
+    # "ended with a question mark", "add a semicolon", "came to a full stop":
+    # with an article the mark is being talked about, not dictated. Nobody
+    # dictates "a question mark" to end a sentence (without this, "ended with
+    # a question mark" typed "ended with a?"). Only words that can't end a
+    # clause: "do this semicolon" and "I'll take that one comma" are marks.
+    *((re.compile(r"\b(a|an|the|another)\s+" + spoken + r"\b",
+                  re.IGNORECASE), r"\1 " + LITERAL_REPLACEMENTS[word])
+      for spoken, word in ((r"question\s+mark", "question mark"),
+                           (r"exclamation\s+point", "exclamation point"),
+                           (r"exclamation\s+mark", "exclamation mark"),
+                           (r"full\s+stop", "full stop"),
+                           ("comma", "comma"), ("semicolon", "semicolon"),
+                           ("colon", "colon"), ("apostrophe", "apostrophe"),
+                           ("hyphen", "hyphen"), ("ellipsis", "ellipsis"))),
+    # A line break is a thing too ("we need a new line of products").
+    (re.compile(r"\b(a|an|the|another)\s+new\s+line\b", re.IGNORECASE),
+     r"\1 __LIT_NEW_LINE__"),
+    (re.compile(r"\b(a|an|the|another)\s+new\s+paragraph\b", re.IGNORECASE),
+     r"\1 __LIT_NEWPARA__"),
+    (re.compile(r"\bnew\s+line(\s+of\b)", re.IGNORECASE), r"__LIT_NEW_LINE__\1"),
+    # The body part: "colon cancer", "colon surgery".
+    (re.compile(r"\bcolon(\s+(?:cancer|surgery|polyps?|health|cleanse|screening|"
+                r"exam|biopsy))\b", re.IGNORECASE), r"__LIT_COLON__\1"),
 
     # "comma operator/splice/key" — programming / writing terminology
     (re.compile(r"\bcomma\s+(operator|splice|key)\b", re.IGNORECASE),

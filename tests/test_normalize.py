@@ -2,7 +2,7 @@
 the same words left alone where they are ordinary English."""
 import pytest
 
-from tuxtalk.normalize import normalize_text
+from tuxtalk.normalize import LINE_BREAK, normalize_text
 
 def test_basic_punct():
     s = "thank you comma this is great exclamation point"
@@ -1008,6 +1008,17 @@ def test_an_abbreviation_keeps_its_period_before_a_spoken_mark():
     ("should it have ended with a question mark", "Should it have ended with a question mark."),
     ("end it with an exclamation point", "End it with an exclamation point."),
     ("add a comma after hello", "Add a comma after hello."),
+    ("the car came to a full stop", "The car came to a full stop."),
+    ("the colon is part of the gut", "The colon is part of the gut."),
+    ("add a semicolon here", "Add a semicolon here."),
+    ("use an apostrophe", "Use an apostrophe."),
+    ("put a hyphen between them", "Put a hyphen between them."),
+    ("it trails off with an ellipsis", "It trails off with an ellipsis."),
+    ("we need a new line of products", "We need a new line of products."),
+    ("their new line of shoes is out", "Their new line of shoes is out."),
+    ("start a new paragraph there", "Start a new paragraph there."),
+    ("I have colon cancer", "I have colon cancer."),
+    ("write it in quote marks", "Write it in quote marks."),
 ])
 def test_a_mark_talked_about_stays_words(said, typed):
     assert normalize_text(said) == typed
@@ -1017,6 +1028,13 @@ def test_a_mark_talked_about_stays_words(said, typed):
     ("is that right question mark", "Is that right?"),
     ("that was great exclamation point", "That was great!"),
     ("hello comma world", "Hello, world."),
+    ("dear sir colon thanks", "Dear sir: thanks."),
+    ("it is done full stop", "It is done."),
+    ("first line new line second line", f"First line.{LINE_BREAK}Second line."),
+    ("I love that new line next", f"I love that.{LINE_BREAK}Next."),
+    ("first do this comma then that", "First do this, then that."),
+    ("I'll take that one comma thanks", "I'll take that one, thanks."),
+    ("is it this question mark", "Is it this?"),
 ])
 def test_a_dictated_mark_is_still_typed(said, typed):
     assert normalize_text(said) == typed
