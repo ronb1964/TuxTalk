@@ -502,6 +502,37 @@ def test_a_selection_changed_while_the_ai_worked_is_left_alone(edit_env, monkeyp
     assert edit_env["notices"] == [edit_notices.NOTICES["selection_changed"]]
 
 
+@pytest.mark.parametrize("meanwhile", ["we finished the electrical today.",
+                                       "    We finished the electrical today."])
+def test_a_case_or_indent_changed_meanwhile_is_left_alone(edit_env, monkeypatch, meanwhile):
+    """Changed only in its capitals or indent while the AI worked, the
+    selection still matched, and the rewrite undid the change."""
+    answer = edit_env["engine"].edit
+
+    def change_meanwhile(text, instruction):
+        edit_env["selection"]["text"] = meanwhile
+        return answer(text, instruction)
+    monkeypatch.setattr(edit_env["engine"], "edit", change_meanwhile)
+    run_edit()
+    assert edit_env["typed"] == []
+
+
+def test_a_selection_that_cant_be_read_again_says_so(edit_env, monkeypatch):
+    """A failed second copy isn't a changed selection."""
+    from tuxtalk import edit_notices
+    answer = edit_env["engine"].edit
+
+    def clipboard_gone(text, instruction):
+        def unavailable(send_copy, **_):
+            raise cb.ClipboardUnavailable("gone")
+        monkeypatch.setattr(cb, "copy_selection", unavailable)
+        return answer(text, instruction)
+    monkeypatch.setattr(edit_env["engine"], "edit", clipboard_gone)
+    run_edit()
+    assert edit_env["typed"] == []
+    assert edit_env["notices"] == [edit_notices.NOTICES["no_clipboard"]]
+
+
 def test_an_edit_replaces_the_selection(edit_env):
     run_edit()
     assert edit_env["engine"].asked == [("We finished the electrical today.", "make it more professional")]

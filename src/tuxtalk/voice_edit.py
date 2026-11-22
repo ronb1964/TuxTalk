@@ -254,21 +254,28 @@ def _let_go_of_selection(expected, where) -> None:
 
 
 def _still_selected(expected, where) -> bool:
-    """Whether *expected* is what's selected in *where* now, copied again
-    with Ctrl+C there (only there). What this copy found on the clipboard
-    (the edit's own copy) goes back at once, no paste being under way;
-    the edit's restore runs after it (edit_selection) and puts back the
+    """Whether *expected* (the words "edit that" selected) is what's
+    selected in *where* now, as _comparable sees it."""
+    now = _selection_now(where)
+    return now is not None and _comparable(now) == _comparable(expected)
+
+
+def _selection_now(where):
+    """What's selected in *where* now, copied again with Ctrl+C there (only
+    there); None when it couldn't be copied. What this copy found on the
+    clipboard (the edit's own copy) goes back at once, no paste being under
+    way; the edit's restore runs after it (edit_selection) and puts back the
     user's clipboard over it."""
     from . import clipboard
     try:
         selected, put_back = _copy_in(
             where, lambda: keyboard_output.send_copy_keystroke(_only_into(*where)))
     except clipboard.ClipboardUnavailable:
-        return False
+        return None
     if selected is None:
-        return False        # copy_selection put the clipboard back itself
+        return None         # copy_selection put the clipboard back itself
     put_back()
-    return _comparable(selected) == _comparable(expected)
+    return selected
 
 
 # _edit_with_keys's answer for an instruction that needs the text rewritten.
@@ -643,10 +650,13 @@ def _rewrite_over_selection(result, selected, injection_mode, message, beeps_on,
         # Typing now would put the rewrite into whatever window has focus.
         notices.edit_problem("window_changed", beeps_on)
         return _UNCHANGED
-    if not _still_selected(selected, where):
-        # Other text selected while the AI worked would be replaced by it.
-        logger.info("Voice edit: the selection changed while the AI worked; not typed")
-        notices.edit_problem("selection_changed", beeps_on)
+    # Exactly the text it rewrites: a case or an indent changed meanwhile
+    # would be lost, and other text selected would be replaced.
+    now = _selection_now(where)
+    if now != selected:
+        logger.info("Voice edit: the selection changed while the AI worked, or couldn't "
+                    "be read again; not typed")
+        notices.edit_problem("no_clipboard" if now is None else "selection_changed", beeps_on)
         return _UNCHANGED
     outcome = _type_rewrite(result, injection_mode, message, beeps_on, into)
     if outcome in delivery.GAVE_UP_UNTYPED:
