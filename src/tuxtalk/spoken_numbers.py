@@ -202,6 +202,14 @@ def _neighbours(text: str, words: list, i: int):
     return before, after
 
 
+# After a number, words that leave it the end of its phrase: "test one and
+# two", "go to room two now", "the version two we installed".
+_PHRASE_GOES_ON = frozenset({
+    "and", "or", "but", "then", "now", "today", "tomorrow", "tonight", "yesterday",
+    "later", "again", "please", "too", "instead", "i", "we", "you", "he", "she", "they",
+})
+
+
 def _after_a_label(word: str, prev: str, prev2: str, ends: bool) -> bool:
     """Whether *prev* numbers this "one" or "two" ("page two of it", "test
     one" where the phrase *ends*). Not after a determiner ("the room two
@@ -240,7 +248,7 @@ def _as_digit(word: str, before: list, after: list, name: bool) -> bool:
     nxt, nxt2 = after
     if prev in ("or", "and", "to") and prev2 in _ONE_TWO:
         return False                                    # "one or two people"
-    ends = nxt is None or nxt in ("and", "or", "but", "then")
+    ends = nxt is None or nxt in _PHRASE_GOES_ON
     if _after_a_label(word, prev, prev2, ends):
         return True
     if nxt in ("or", "and", "to") and nxt2 is not None and nxt2[:1].isdigit():

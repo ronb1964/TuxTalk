@@ -540,24 +540,25 @@ _config_stamp = None
 # written over a file whose contents may be perfectly good.
 _config_read_failed = False
 
-def _recover_damaged_config() -> Settings:
+def _recover_damaged_config() -> tuple:
     """Set a damaged config aside, recover the last known good settings, and
     write them back so the file is actually repaired.
 
-    Returns the recovered Settings — from the .bak written by the previous
-    successful save when one exists, otherwise defaults. Under the lock, and
-    only if the file is still damaged: another process may have repaired or
-    saved it since it was read, and writing the backup's settings over that
-    would undo the save (transcript logging turned off, say).
+    Returns (the recovered Settings, whether the file was looked at under
+    the lock): from the .bak written by the previous successful save when
+    one exists, otherwise defaults. Under the lock, and only if the file is
+    still damaged: another process may have repaired or saved it since it
+    was read, and writing the backup's settings over that would undo the
+    save (transcript logging turned off, say).
     """
     try:
         with locked():
-            return _recover_if_still_damaged()
+            return _recover_if_still_damaged(), True
     except OSError as e:
         # No lock (a read-only folder) or no reading the file now: nothing
         # is set aside or written, which could land on a good save.
         logger.warning(f"Settings recovered in memory only, the file left alone: {e}")
-        return _backup_settings()[0]
+        return _backup_settings()[0], False
 
 
 def _recover_if_still_damaged() -> Settings:
@@ -726,7 +727,12 @@ def load_config() -> Settings:
             # defaults would look like a fresh install, and the next save would
             # overwrite the user's real settings for good.
             logger.error(f"Settings file is damaged: {e}")
-            s = _recover_damaged_config()
+            s, looked = _recover_damaged_config()
+            if not looked:
+                # Recovered in memory only: like a failed read, nothing may
+                # save these over the file, and the next load tries it again.
+                _config_read_failed = True
+                current_stamp = None
 
     s = repaired(s)
     _config_cache = s

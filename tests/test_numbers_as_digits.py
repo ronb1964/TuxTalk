@@ -34,6 +34,9 @@ from tuxtalk.normalize import LINE_BREAK
     ("one question for you", "1 question for you"),
     ("two or three", "2 or 3"),
     ("my two cats", "my 2 cats"),
+    ("Go to room two now", "Go to room 2 now"),
+    ("Use plan two today", "Use plan 2 today"),
+    ("Use the version two we installed", "Use the version 2 we installed"),
     ("these two cats", "these 2 cats"),
 ])
 def test_one_and_two_as_labels_and_counts_are_digits(text, expected):

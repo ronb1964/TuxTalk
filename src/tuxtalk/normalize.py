@@ -107,7 +107,8 @@ _ARTICLE = (r"\b(?:a|an|the|another|An|The|Another)"
 # comma then that", "I'll take that one comma thanks").
 _POINTER = r"\b(?i:this|that|no|one)"
 _TALKED_ABOUT = (r"(?=\s+(?!(?i:then|and|but|so|or|thanks|thank|please|i|we|you|he|she|they|"
-                 r"it)\b)\w)")
+                 r"it|(?:is|was|are|were|do|does|did|can|could|will|would|should)\s+"
+                 r"(?:that|this|it|he|she|they|we|you|i|there))\b)\w)")
 
 # --- _protect_command_words: command words used as English nouns ---
 # Words like "period", "comma", "return" and "dash" are command triggers

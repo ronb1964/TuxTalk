@@ -535,9 +535,14 @@ def test_a_read_error_while_recovering_leaves_the_file_alone(config_path, monkey
         reads.append(path)
         raise ValueError("Invalid statement") if len(reads) == 1 else OSError(5, "I/O error")
     monkeypatch.setattr(config, "load_toml_file", damaged_then_unreadable)
-    config.load_config()
+    recovered = config.load_config()
     assert config_path.read_text() == 'model = "medium"\n'
     assert not list(config_path.parent.glob("config.toml.corrupt-*"))
+    # Nor may a later save write the backup's settings over it.
+    recovered.model = "tiny"
+    with pytest.raises(config.ConfigNotLoadedError):
+        config.save_config(recovered)
+    assert config_path.read_text() == 'model = "medium"\n'
 
 
 def test_a_damaged_file_in_a_read_only_folder_still_loads(config_path, monkeypatch):

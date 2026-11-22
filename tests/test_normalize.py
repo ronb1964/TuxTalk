@@ -1068,6 +1068,7 @@ def test_a_mark_talked_about_stays_words(said, typed):
     ("I'll take that one comma thanks", "I'll take that one, thanks."),
     ("is it this question mark", "Is it this?"),
     ("the answer is no full stop", "The answer is no."),
+    ("I want that one full stop is that okay", "I want that one. Is that okay."),
     ("Part A colon introduction", "Part A: introduction."),
     ("I got an A full stop", "I got an A."),
 ])
