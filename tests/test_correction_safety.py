@@ -179,6 +179,8 @@ def test_unsafe_edits_are_rejected(said, edited):
     ("Pay ₩500, no wait, ₩600.", "Pay $600."),
     ("Set x < 5, no wait, 6.", "Set x > 6."),
     ("The low is - 5, no wait, - 6.", "The low is 6."),
+    ("Set x < 5, no wait, 6.", "Set x 6."),
+    ("Pay $50, no wait, 60.", "Pay 60."),
 ])
 def test_a_changed_or_dropped_sign_is_not_safe(said, edited):
     """Signs and other scripts count as words, so a changed currency or a
@@ -210,6 +212,8 @@ def test_corrections_with_signs_and_accents_are_still_safe(said, edited):
     ("Call it fast, no wait, quick.", "Call it quick \N{SLIGHTLY SMILING FACE}"),
     ("Call it fast, no wait, quick.", "Call it quick!"),
     ("Call it fast, no wait, quick.", "Call it _quick_."),
+    ("Call it *fast*, no wait, quick.", "Call it **quick**."),
+    ("Is it 5, no wait, 6? Send it.", "Is it 6? Send it?"),
 ])
 def test_a_mark_the_speaker_did_not_say_is_not_safe(said, edited):
     """The words match, but the answer types something new: a question mark

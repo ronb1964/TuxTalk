@@ -13,6 +13,7 @@ typed exactly as spoken.
 """
 import re
 import unicodedata
+from collections import Counter
 
 from .cleanup import LEGIT_DOUBLES, NUMBER_WORDS
 
@@ -73,9 +74,26 @@ def words(text):
 
 
 def _adds_a_mark(said, edited):
-    """True if *edited* has a mark or symbol *said* doesn't, other than the
-    ones a fix may add (_FREE_MARKS)."""
-    return bool(set(_RE_MARK.findall(edited)) - set(_RE_MARK.findall(said)) - _FREE_MARKS)
+    """True if *edited* has a mark or symbol more often than *said* does,
+    other than the ones a fix may add (_FREE_MARKS): one "?" said doesn't
+    let a full stop elsewhere become another."""
+    added = Counter(_RE_MARK.findall(edited)) - Counter(_RE_MARK.findall(said))
+    return bool(set(added) - _FREE_MARKS)
+
+
+def _values_survive(kept, dropped, restated):
+    """Whether a correction that keeps *kept*, drops *dropped* and goes on
+    with *restated* still says each value once: no two numbers side by side
+    (_merges_two_numbers), no sign lost (_drops_a_sign)."""
+    return not (_merges_two_numbers(kept, dropped, restated)
+                or _drops_a_sign(dropped, restated))
+
+
+def _drops_a_sign(dropped, restated):
+    """True if *dropped*, the words a correction takes out, holds a value
+    sign the *restated* words don't say again: "Set x < 5, no wait, 6" is
+    not "Set x 6", and "Pay $50, no wait, 60" may not lose the dollar."""
+    return any(not w[0].isalnum() and w not in restated for w in dropped)
 
 
 def _deleted_runs(src, out):
@@ -158,7 +176,7 @@ def _deletion_allowed(run, src, start):
     if wrong == 0:
         return False    # only the phrase went, leaving both values: "5, actually 10" -> "5 10"
     return (wrong <= min(_MAX_REPLACED, following + 1)
-            and not _merges_two_numbers(src[:start], stripped, src[start + len(run):]))
+            and _values_survive(src[:start], stripped, src[start + len(run):]))
 
 
 def _is_number(word):
@@ -222,7 +240,7 @@ def _splices(start, wrong, keep, after, out):
         return False
     if any(_is_negation(w) and w not in after for w in leftover):
         return False
-    if _merges_two_numbers(start, replaced, after):
+    if not _values_survive(start, replaced, after):
         return False
     for split in range(1, len(after) + 1):  # right part is not empty
         right, rest = after[:split], after[split:]
