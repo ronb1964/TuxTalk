@@ -1229,3 +1229,45 @@ def test_an_unreadable_keyboard_unplugged_is_forgotten(setup, monkeypatch, tmp_p
     node.unlink()
     helper.scan()
     assert helper.unreadable == {}
+
+
+# Since 1.17 one modifier unlocks a key (Alt+D as a dictation key): the
+# protections above must hold with a client that asks for one-modifier specs.
+
+def test_one_stuck_ctrl_reports_two_keys_then_nothing(setup):
+    _helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard, specs="C:25 C:30 C:31")
+    kb.press(LCTRL)
+    for code in (P, P, A, 31):
+        kb.press(code)
+        kb.press(code, 0)
+    assert heard(sock) == ["DOWN 25 29", "UP 25", "DOWN 25 29", "UP 25", "DOWN 30 29", "UP 30"]
+
+
+def test_a_virtual_keyboard_cant_lend_one_ctrl_to_the_real_one(setup):
+    helper, kb, connect, say, heard, _seat = setup
+    virtual = FakeKeyboard("/dev/input/event-virtual")
+    helper.keyboards[virtual.path] = virtual
+    sock = _ready(connect, say, heard, "C:25 C:30 A:31")
+    virtual.press(LCTRL)
+    heard(sock)
+    for code in (A, 31, P):
+        kb.press(code)
+        kb.press(code, 0)
+    assert heard(sock) == []
+
+
+@pytest.mark.parametrize("spec, mod", [("C:30", LCTRL), ("A:30", LALT)])
+def test_one_modifier_pressed_while_writable_doesnt_count_once_it_turns_real(setup, spec, mod):
+    helper, kb, connect, say, heard, _seat = setup
+    kb.group = "real"
+    other = FakeKeyboard("/dev/input/event-other")      # own:, writable
+    helper.keyboards[other.path] = other
+    sock = _ready(connect, say, heard, spec)
+    other.press(mod)
+    assert heard(sock) == []             # read while it's writable
+    other.udev_says = "real"
+    helper.next_scan = 0
+    assert heard(sock) == []
+    kb.press(A)
+    assert heard(sock) == []
