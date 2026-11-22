@@ -23,10 +23,20 @@ def test_positioning_available_follows_the_x_display(monkeypatch):
     )
 
     monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.setattr("tuxtalk.desktop_detect.is_gnome", lambda: False)
     assert positioning_available() is False, (
         "With no X display the service falls back to native Wayland, which "
         "ignores gtk_window_move() and centres the indicator."
     )
+
+
+def test_on_gnome_the_shell_places_it_without_an_x_display(monkeypatch):
+    """Extension 32 draws the indicator in the Shell, where Preferences said
+    "XWayland is not available, so the indicator always appears centred"."""
+    from tuxtalk.recording_indicator import positioning_available
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.setattr("tuxtalk.desktop_detect.is_gnome", lambda: True)
+    assert positioning_available() is True
 
 
 def test_positioning_does_not_depend_on_the_gnome_extension(monkeypatch):

@@ -54,9 +54,13 @@ def positioning_available():
 
     Preferences uses this to decide whether to offer the position control, so
     it must describe reality rather than the session type: a KDE Plasma Wayland
-    session with XWayland present positions the indicator correctly.
+    session with XWayland present positions the indicator correctly. On
+    GNOME the TuxTalk extension (32 and newer) places it in the Shell, with
+    no X display needed (shell_indicator); only its X11 fallback, for an
+    older extension, centres it there.
     """
-    return bool(os.environ.get("DISPLAY"))
+    from .desktop_detect import is_gnome
+    return bool(os.environ.get("DISPLAY")) or is_gnome()
 
 
 # The top gap clears the title bar. The 20% bottom gap clears a message box
