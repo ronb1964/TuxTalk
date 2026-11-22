@@ -46,11 +46,11 @@ def _scale_for_size(size):
 def positioning_available():
     """Whether the indicator can actually honour indicator_position.
 
-    Positioning is done with gtk_window_move(), which XWayland honours and
-    native Wayland ignores (it centres the window instead). The tray launches
-    the dictation service with GDK_BACKEND=x11,wayland, so the indicator runs
-    under XWayland whenever an X display exists — on any desktop, and with no
-    GNOME extension involved.
+    The indicator's own window is placed with gtk_window_move(), which
+    XWayland honours and native Wayland ignores (it centres the window
+    instead). The tray launches the dictation service with
+    GDK_BACKEND=x11,wayland, so that window runs under XWayland whenever an
+    X display exists, on any desktop.
 
     Preferences uses this to decide whether to offer the position control, so
     it must describe reality rather than the session type: a KDE Plasma Wayland

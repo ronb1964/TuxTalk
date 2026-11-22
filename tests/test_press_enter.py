@@ -797,6 +797,36 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     assert keyboard.events == []
 
 
+def test_a_type_at_pause_recording_that_lost_audio_sends_nothing(monkeypatch, keyboard):
+    """Its last phrase typed, audio dropped, and the recording ends in a
+    pause: the Enter went out though a word may be missing."""
+    from tuxtalk import history
+    focus = ("brave-browser", ("compositor", 0x3200007))
+    monkeypatch.setattr(focused_window, "look", lambda: focus)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focus[0])
+    monkeypatch.setattr(delivery, "deliver_text",
+                        lambda text, mode, one_block=False, *, where: "ok")
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: "see you at noon")
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
+    monkeypatch.setattr(live, "press_enter_after", True)
+    monkeypatch.setattr(live, "usage_stats", False)
+    monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
+    monkeypatch.setattr(send_countdown, "_delay", 0.0)
+    timers = held_timers(monkeypatch)
+    frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    message = rs.state.current.message
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
+                                   notify_on=False, chunk_role="middle", message=message)
+    message.lost_audio = True
+    pipeline.transcribe_and_inject([], engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
+                                   notify_on=False, chunk_role="last", message=message)
+    for timer in timers:
+        timer.fire()
+    from evdev import ecodes
+    assert (ecodes.KEY_ENTER, 1) not in keyboard.events
+
+
 def _send_caught_mid_press(monkeypatch, meanwhile):
     """A send whose Enter is under way when *meanwhile* runs, as a key press
     or a countdown tick can, and the Enter then doesn't go: what _send said

@@ -288,7 +288,7 @@ _RE_EM_DASH_SPACE = re.compile(r"\s*—\s*")
 _RE_SPACE_BEFORE_NEWLINE = re.compile(r"[ \t]+\n")
 _RE_SPACE_AFTER_NEWLINE = re.compile(r"\n[ ]+")
 # Not a dot that starts a word (".NET is great").
-_RE_LEADING_PUNCT = re.compile(r"^[\s]*[\.,;:!?]+(?![…\w])")
+_RE_LEADING_PUNCT = re.compile(r"^[\s]*(?:[,;:!?]|\.(?!\w))+(?!…)")
 _RE_MULTI_SPACE = re.compile(r"[ ]{2,}")
 
 # --- _capitalize_and_end_lines ---
@@ -821,13 +821,14 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     text = _RE_STANDALONE_I.sub("I", text)
     text = _restore_quoted(text, quoted_sections)
     text = _capitalize_and_end_lines(text, auto_period)
-    text = _RE_PUNCT_OUTSIDE_QUOTE.sub(_mark_inside_quote, text)
     text = _restore_protected_words(text)
     # The capitals ran while a protected word was a placeholder (already a
     # capital), so a line that starts with one ("return to sender") gets
     # its capital now.
     text = LINE_BREAK.join(_cap_first(line) for line in _lines(text))
-    return _finish_addresses(text)
+    # Addresses whole first: the mark after a closing quote stays outside
+    # one ("ron at example. com" is only an address now).
+    return _RE_PUNCT_OUTSIDE_QUOTE.sub(_mark_inside_quote, _finish_addresses(text))
 
 
 def plain_for_app(text: str, kind: str) -> str:

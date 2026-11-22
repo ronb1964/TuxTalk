@@ -40,7 +40,8 @@ def test_on_gnome_the_shell_places_it_without_an_x_display(monkeypatch):
 
 
 def test_positioning_does_not_depend_on_the_gnome_extension(monkeypatch):
-    """The extension never had anything to do with window positioning."""
+    """The indicator's own window is placed through XWayland, extension or
+    not."""
     from tuxtalk.recording_indicator import positioning_available
 
     monkeypatch.setenv("DISPLAY", ":0")

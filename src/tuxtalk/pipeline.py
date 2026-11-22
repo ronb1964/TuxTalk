@@ -426,9 +426,7 @@ def _key_to_press(raw: str, said: str, job: _Job):
     if said or not live.press_enter_after or job.chunk_role == "middle":
         return said, "", ""
     if job.message.lost_audio:
-        logger.warning("Not sent automatically: some of the recording's audio was dropped "
-                       "(the computer stalled), so a word may be missing")
-        return "", "", ""
+        return "", "", ""       # a word may be missing (finish_capture logged it)
     why_not = why_no_automatic_enter(focused_window.acts_as(focused_window.window_class()))
     sending, cut_off = auto_send(raw, why_not)
     # Only where it would have sent does a cut-off say why it wasn't.

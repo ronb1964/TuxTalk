@@ -256,7 +256,7 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
     if not (rs.state.is_recording and rec is rs.state.current):
         return
     if status and status.input_overflow:   # sounddevice's CallbackFlags
-        rec.message.lost_audio = True       # logged by the worker, off this thread
+        rec.message.lost_audio = True       # logged by finish_capture, off this thread
     block = indata.tobytes()
     with type_at_pause.chunk_lock:
         if rec.captured:
@@ -584,6 +584,9 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
         rec.rest_has_speech = _rest_holds_speech(chunker)
     elif chunker is not None:
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
+    if rec.message.lost_audio:
+        logger.warning("Some of this recording's audio was dropped (the computer stalled), "
+                       "so a word may be missing; it won't be sent automatically")
     rs.state.is_recording = False
     stop_stream_safely(rec)
     resume_media_players()
