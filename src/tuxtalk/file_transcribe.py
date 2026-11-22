@@ -148,25 +148,25 @@ class FileEngine:
     def text(self, audio):
         """The text of one piece of the file, from whichever engine is loaded,
         with the user's words steered and spelled as dictation does."""
-        from . import custom_words, language_limit
+        from . import language_limit, word_spelling
         if self.kind == "parakeet":
             from .parakeet_engine import steer
             steer(self.model, self.words)       # as dictation does (engine._transcribe_parakeet)
             text = self.model.recognize(audio)
         elif self.kind == "vulkan":
             text = self.model.transcribe(audio, self.language, timeout=600,
-                                         prompt=custom_words.prompt(self.words) or None,
+                                         prompt=word_spelling.prompt(self.words) or None,
                                          limit_to=self.limit_to)
         else:
             from .engine import REPETITION_GUARDS
             options = dict(beam_size=5, vad_filter=False, **REPETITION_GUARDS,
-                           hotwords=custom_words.prompt(self.words))
+                           hotwords=word_spelling.prompt(self.words))
             segments, _ = language_limit.whisper_held_to(
                 self.model.transcribe, audio, self.language, self.limit_to, **options)
             text = " ".join(s.text.strip() for s in segments)
         text = " ".join((text or "").split())
         if self.words:
-            text = custom_words.fix_spelling(text, self.words)
+            text = word_spelling.fix_spelling(text, self.words)
         return text
 
     def reload_words(self):

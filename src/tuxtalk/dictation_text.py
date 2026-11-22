@@ -85,7 +85,7 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     # Your Words, first pass: before tidying, a hyphen inside a word can only
     # have come from the engine ("Tux-Talk"), so it may join here.
     if live.words:
-        from .custom_words import fix_spelling
+        from .word_spelling import fix_spelling
         processed = fix_spelling(processed, live.words)
     # After the snippets, so "my email" said alone is an address on its own too;
     # a quoted one is typed exactly as written.
@@ -121,7 +121,7 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     # snippets are still placeholders, so a literal one is never touched; and
     # with no hyphen joins, since by now a hyphen means the user said "dash".
     if live.words:
-        from .custom_words import fix_spelling
+        from .word_spelling import fix_spelling
         text = fix_spelling(text, live.words, hyphens=False)
 
     # Spoken numbers as digits. Before the quoted snippets come back, so a

@@ -661,7 +661,7 @@ class VulkanWhisperModel:
 
     def transcribe(self, audio_f32, language=None, timeout=120, prompt=None, limit_to=()):
         """The text of *audio_f32*. *prompt*
-        is Your Words (custom_words.prompt), to steer Whisper's spelling.
+        is Your Words (word_spelling.prompt), to steer Whisper's spelling.
 
         *limit_to* holds auto-detect to those languages (language_limit.py):
         a dictation Whisper hears in another language is run again in the

@@ -17,7 +17,7 @@ import os
 import shlex
 from dataclasses import dataclass
 
-from .custom_words import MIN_SOUND_LETTERS, sound_key
+from .word_spelling import MIN_SOUND_LETTERS, sound_key
 from .voice_navigation import normalize
 
 log = logging.getLogger(__name__)

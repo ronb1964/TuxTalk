@@ -7,7 +7,7 @@ capitals ("tux talk") is written the user's way.
 """
 import pytest
 
-from tuxtalk import config, custom_words as cw
+from tuxtalk import config, custom_words as cw, word_spelling as ws
 
 
 @pytest.fixture
@@ -43,19 +43,19 @@ def test_parse_text_box(words_file):
 # --- telling Whisper ----------------------------------------------------------
 
 def test_prompt_lists_the_words():
-    assert cw.prompt(["TuxTalk", "BambuStudio"]) == "TuxTalk, BambuStudio."
+    assert ws.prompt(["TuxTalk", "BambuStudio"]) == "TuxTalk, BambuStudio."
 
 
 def test_no_words_no_prompt():
-    assert cw.prompt([]) is None
+    assert ws.prompt([]) is None
 
 
 def test_prompt_is_capped_to_fit_whisper():
     """Whisper keeps only about 220 tokens of prompt; a giant list would push
     out the words and slow every dictation."""
     many = [f"Word{i:03d}" for i in range(500)]
-    text = cw.prompt(many)
-    assert len(text) <= cw.PROMPT_MAX_CHARS
+    text = ws.prompt(many)
+    assert len(text) <= ws.PROMPT_MAX_CHARS
     assert text.startswith("Word000, Word001")
 
 
@@ -74,7 +74,7 @@ WORDS = ["TuxTalk", "BambuStudio", "ydotool", "GitHub"]
     ('he said "tux talk"', 'he said "TuxTalk"'),
 ])
 def test_fixes_split_and_miscapitalised_words(heard, typed):
-    assert cw.fix_spelling(heard, WORDS) == typed
+    assert ws.fix_spelling(heard, WORDS) == typed
 
 
 @pytest.mark.parametrize("heard", [
@@ -85,44 +85,44 @@ def test_fixes_split_and_miscapitalised_words(heard, typed):
     "",
 ])
 def test_leaves_everything_else_alone(heard):
-    assert cw.fix_spelling(heard, WORDS) == heard
+    assert ws.fix_spelling(heard, WORDS) == heard
 
 
 def test_plain_capitalised_words_are_not_forced_on_ordinary_speech():
     """'Mark' in the list must not capitalise every 'mark'. Only words with
     unusual capitals (TuxTalk, iPhone) are recapitalised on their own."""
-    assert cw.fix_spelling("mark the date", ["Mark"]) == "mark the date"
-    assert cw.fix_spelling("mark the date", ["Marker"]) == "mark the date"
-    assert cw.fix_spelling("my iphone died", ["iPhone"]) == "my iPhone died"
+    assert ws.fix_spelling("mark the date", ["Mark"]) == "mark the date"
+    assert ws.fix_spelling("mark the date", ["Marker"]) == "mark the date"
+    assert ws.fix_spelling("my iphone died", ["iPhone"]) == "my iPhone died"
 
 
 def test_short_words_are_skipped():
     """Two or three letters join up by accident far too easily ('a i' -> AI)."""
-    assert cw.fix_spelling("a i is here", ["AI"]) == "a i is here"
+    assert ws.fix_spelling("a i is here", ["AI"]) == "a i is here"
 
 
 def test_lowercase_words_in_the_list_still_join():
-    assert cw.fix_spelling("run why do tool", ["ydotool"]) == "run why do tool"
-    assert cw.fix_spelling("run y do tool", ["ydotool"]) == "run ydotool"
+    assert ws.fix_spelling("run why do tool", ["ydotool"]) == "run why do tool"
+    assert ws.fix_spelling("run y do tool", ["ydotool"]) == "run ydotool"
 
 
 def test_already_right_is_unchanged():
-    assert cw.fix_spelling("TuxTalk and GitHub", WORDS) == "TuxTalk and GitHub"
+    assert ws.fix_spelling("TuxTalk and GitHub", WORDS) == "TuxTalk and GitHub"
 
 
 # --- Whisper reading the list back ----------------------------------------------
 
 def test_an_echo_of_the_list_is_recognised():
     """Given a prompt, Whisper sometimes 'hears' it in silence."""
-    assert cw.is_echo("TuxTalk, BambuStudio, ydotool.", WORDS)
-    assert cw.is_echo("TuxTalk, BambuStudio, ydotool, GitHub.", WORDS)
+    assert ws.is_echo("TuxTalk, BambuStudio, ydotool.", WORDS)
+    assert ws.is_echo("TuxTalk, BambuStudio, ydotool, GitHub.", WORDS)
 
 
 def test_real_speech_is_not_an_echo():
-    assert not cw.is_echo("I opened TuxTalk today.", WORDS)
-    assert not cw.is_echo("TuxTalk.", WORDS)              # one word can be real
-    assert not cw.is_echo("TuxTalk GitHub", WORDS)        # two can too
-    assert not cw.is_echo("anything", [])
+    assert not ws.is_echo("I opened TuxTalk today.", WORDS)
+    assert not ws.is_echo("TuxTalk.", WORDS)              # one word can be real
+    assert not ws.is_echo("TuxTalk GitHub", WORDS)        # two can too
+    assert not ws.is_echo("anything", [])
 
 
 # --- wiring into the dictation service -------------------------------------------
@@ -241,11 +241,11 @@ def test_the_vulkan_request_carries_the_prompt_only_when_there_is_one():
     ("see tux.talk", ["TuxTalk"]),
 ])
 def test_contractions_possessives_and_dots_are_never_joined(heard, words):
-    assert cw.fix_spelling(heard, words) == heard
+    assert ws.fix_spelling(heard, words) == heard
 
 
 def test_a_word_with_an_apostrophe_of_its_own_still_matches():
-    assert cw.fix_spelling("visit o'reilly media", ["O'Reilly"]) == "visit O'Reilly media"
+    assert ws.fix_spelling("visit o'reilly media", ["O'Reilly"]) == "visit O'Reilly media"
 
 
 @pytest.mark.parametrize("heard, words", [
@@ -255,11 +255,11 @@ def test_a_word_with_an_apostrophe_of_its_own_still_matches():
     ("ydotool, TuxTalk, BambuStudio.", ["TuxTalk", "BambuStudio", "ydotool"]),  # out of order
 ])
 def test_real_phrases_from_listed_words_are_not_an_echo(heard, words):
-    assert not cw.is_echo(heard, words)
+    assert not ws.is_echo(heard, words)
 
 
 def test_an_echo_of_multi_word_entries_is_recognised():
-    assert cw.is_echo("New York, Bank of America, TuxTalk.", ["New York", "Bank of America", "TuxTalk"])
+    assert ws.is_echo("New York, Bank of America, TuxTalk.", ["New York", "Bank of America", "TuxTalk"])
 
 
 def test_hash_words_are_kept_and_only_hash_space_is_a_comment():
@@ -302,13 +302,13 @@ def test_continuing_mid_sentence_keeps_multi_word_and_possessive_names(raw, firs
 # --- whitespace, hyphens and short entries ----------------------------------------
 
 def test_only_plain_spaces_join_pieces():
-    assert cw.fix_spelling("tux \t talk.", ["TuxTalk"]) == "tux \t talk."
-    assert cw.fix_spelling("tux\ntalk", ["TuxTalk"]) == "tux\ntalk"
+    assert ws.fix_spelling("tux \t talk.", ["TuxTalk"]) == "tux \t talk."
+    assert ws.fix_spelling("tux\ntalk", ["TuxTalk"]) == "tux\ntalk"
 
 
 def test_after_tidying_a_hyphen_is_the_users_own():
-    assert cw.fix_spelling("Tux-talk.", ["TuxTalk"], hyphens=False) == "Tux-talk."
-    assert cw.fix_spelling("tux talk.", ["TuxTalk"], hyphens=False) == "TuxTalk."
+    assert ws.fix_spelling("Tux-talk.", ["TuxTalk"], hyphens=False) == "Tux-talk."
+    assert ws.fix_spelling("tux talk.", ["TuxTalk"], hyphens=False) == "TuxTalk."
 
 
 @pytest.mark.parametrize("spoken", ["I like tux press tab talk", "I like tux dash talk"])
@@ -325,8 +325,8 @@ def test_an_engine_hyphen_still_joins(monkeypatch):
 
 
 def test_short_entries_do_not_hide_an_echo():
-    assert cw.is_echo("TuxTalk, AI, GitHub, ydotool.", ["TuxTalk", "AI", "GitHub", "ydotool"])
-    assert not cw.is_echo("AI, AI, AI.", ["AI"])
+    assert ws.is_echo("TuxTalk, AI, GitHub, ydotool.", ["TuxTalk", "AI", "GitHub", "ydotool"])
+    assert not ws.is_echo("AI, AI, AI.", ["AI"])
 
 
 def test_an_unreadable_words_file_keeps_the_words_in_force(monkeypatch):
@@ -348,8 +348,8 @@ def test_an_unreadable_words_file_keeps_the_words_in_force(monkeypatch):
 
 
 def test_a_possessive_followed_by_punctuation_is_still_the_word():
-    assert cw.starts_with_word("TuxTalk's, menu", ["TuxTalk"])
-    assert cw.starts_with_word("TuxTalk\u2019s.", ["TuxTalk"])
+    assert ws.starts_with_word("TuxTalk's, menu", ["TuxTalk"])
+    assert ws.starts_with_word("TuxTalk\u2019s.", ["TuxTalk"])
 
 
 # --- sound-alikes: Parakeet hears TuxTalk's "x" as "ks" ------------------------------
@@ -360,11 +360,11 @@ def test_a_possessive_followed_by_punctuation_is_still_the_word():
     "I use tucks talk every day.", "I use Tux talk every day.",
 ])
 def test_a_sound_alike_spelling_becomes_the_word(heard):
-    assert cw.fix_spelling(heard, ["TuxTalk"]) == "I use TuxTalk every day."
+    assert ws.fix_spelling(heard, ["TuxTalk"]) == "I use TuxTalk every day."
 
 
 def test_sound_alikes_keep_the_punctuation_around_them():
-    assert cw.fix_spelling("Open Tuckstalk, then dictate.", ["TuxTalk"]) == "Open TuxTalk, then dictate."
+    assert ws.fix_spelling("Open Tuckstalk, then dictate.", ["TuxTalk"]) == "Open TuxTalk, then dictate."
 
 
 @pytest.mark.parametrize("heard, words", [
@@ -374,8 +374,8 @@ def test_sound_alikes_keep_the_punctuation_around_them():
     ("Ducks talk loudly.", ["TuxTalk"]),           # a different sound
 ])
 def test_sound_alikes_need_a_long_word_and_the_same_sound(heard, words):
-    assert cw.fix_spelling(heard, words) == heard
+    assert ws.fix_spelling(heard, words) == heard
 
 
 def test_exact_spellings_still_win_over_sound_alikes():
-    assert cw.fix_spelling("Philips and Filips", ["Filips", "Philips"]) == "Philips and Filips"
+    assert ws.fix_spelling("Philips and Filips", ["Filips", "Philips"]) == "Philips and Filips"

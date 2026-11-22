@@ -111,7 +111,7 @@ def apply(text: str, custom_commands: dict[str, str],
     # with TuxTalk in Your Words, Whisper is steered to hear it joined.
     commands = dict(custom_commands)
     if your_words:
-        from .custom_words import fix_spelling
+        from .word_spelling import fix_spelling
         for phrase, replacement in custom_commands.items():
             commands.setdefault(fix_spelling(phrase, your_words), replacement)
 

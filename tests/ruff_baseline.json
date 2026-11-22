@@ -8,9 +8,6 @@
  "src/tuxtalk/config.py": {
   "B023": 1
  },
- "src/tuxtalk/custom_words.py": {
-  "B905": 1
- },
  "src/tuxtalk/file_transcribe.py": {
   "B905": 1
  },

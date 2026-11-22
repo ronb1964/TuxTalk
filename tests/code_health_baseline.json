@@ -14,7 +14,7 @@
   "correction_safety.py::_is_restated_correction": {
    "decisions": 18
   },
-  "custom_words.py::fix_spelling": {
+  "word_spelling.py::fix_spelling": {
    "decisions": 28
   },
   "kwin_hotkeys.py::_app_shortcut_clashes": {

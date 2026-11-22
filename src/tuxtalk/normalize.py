@@ -863,6 +863,6 @@ def safe_to_lowercase_first_word(text: str, your_words=()) -> bool:
     if len(letters) > 1 and all(c.isupper() for c in letters):
         return False
     if your_words:
-        from .custom_words import starts_with_word
+        from .word_spelling import starts_with_word
         return not starts_with_word(text, your_words)
     return True

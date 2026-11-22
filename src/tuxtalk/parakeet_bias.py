@@ -1,6 +1,6 @@
 """Your Words for Parakeet: let the decoder pick the user's words.
 
-Whisper can be told about names before it listens (custom_words.prompt).
+Whisper can be told about names before it listens (word_spelling.prompt).
 Parakeet can't, but its decoder writes one word piece at a time ("▁T",
 "uck", "St", "ock"), and at a point where one of the user's words could
 start, it can try spelling that word out instead. This is the idea of NVIDIA

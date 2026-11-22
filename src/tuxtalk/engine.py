@@ -49,11 +49,11 @@ def transcribe(audio_f32, language: str | None) -> str | None:
     engine = wake()
     if engine is None:
         return None
-    from . import custom_words, language_limit
+    from . import language_limit, word_spelling
     from .parakeet_engine import ParakeetModel
     from .parakeet_gpu import ParakeetGpuModel
     from .whisper_vulkan import VulkanWhisperModel
-    words_prompt = custom_words.prompt(live.words)
+    words_prompt = word_spelling.prompt(live.words)
     # Parakeet has no language setting, so the list changes nothing there.
     language, limit_to = language_limit.language_and_limit(language, live.auto_languages)
     if isinstance(engine, VulkanWhisperModel):
@@ -65,7 +65,7 @@ def transcribe(audio_f32, language: str | None) -> str | None:
 
 def _transcribe_vulkan(engine, audio_f32, language, limit_to, words_prompt, started):
     """transcribe() on whisper.cpp's Vulkan engine."""
-    from . import custom_words
+    from . import word_spelling
     raw = engine.transcribe(audio_f32, language, prompt=words_prompt or None,
                             limit_to=limit_to)
     logger.info(f"TIMING: Transcription completed in {time.time() - started:.2f}s (Vulkan GPU)")
@@ -74,7 +74,7 @@ def _transcribe_vulkan(engine, audio_f32, language, limit_to, words_prompt, star
     # 0.00 on silence, see whisper_vulkan.parse_result), so the voice
     # detector's verdict on the recording stands in for it. With nobody
     # talking, a lone "Thanks for watching!" is invented; said aloud, it is kept.
-    if custom_words.is_echo(raw, live.words):
+    if word_spelling.is_echo(raw, live.words):
         logger.info("Whisper read your words back with nothing said; dropped")
         return None
     no_speech = 1.0 if silence.has_no_speech(audio_f32, SAMPLE_RATE) else 0.0
@@ -132,7 +132,7 @@ WHISPER_OPTIONS = dict(
 def _transcribe_whisper(engine, audio_f32, language, limit_to, words_prompt, started):
     """transcribe() on faster-whisper (processor or CUDA). Your Words go in
     as hotwords, which faster-whisper puts in every 30-second window's prompt."""
-    from . import custom_words, language_limit
+    from . import language_limit, word_spelling
     options = dict(WHISPER_OPTIONS, hotwords=words_prompt)
     segments, _ = language_limit.whisper_held_to(engine.transcribe, audio_f32, language,
                                                  limit_to, **options)
@@ -148,7 +148,7 @@ def _transcribe_whisper(engine, audio_f32, language, limit_to, words_prompt, sta
     max_no_speech_prob = max((seg.no_speech_prob for seg in seg_list), default=0.0)
     logger.info(f"Raw transcription (before hallucination filter): {live.loggable(raw)}  "
                 f"[no_speech_prob={max_no_speech_prob:.2f}]")
-    if custom_words.is_echo(raw, live.words):
+    if word_spelling.is_echo(raw, live.words):
         logger.info("Whisper read your words back with nothing said; dropped")
         return None
     # Strip common Whisper hallucinations like "thank you" from the end

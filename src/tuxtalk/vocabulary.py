@@ -24,7 +24,7 @@ so the rules can be tested.
 import os
 import re
 
-from . import config
+from . import config, word_spelling
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -193,7 +193,7 @@ def adopt_fixes():
     added = []
     for replacement in commands.values():
         word = replacement.strip()
-        if (custom_words.is_word_like(word) and word.casefold() not in _COMMON_WORDS
+        if (word_spelling.is_word_like(word) and word.casefold() not in _COMMON_WORDS
                 and word.casefold() not in known):
             known.add(word.casefold())
             added.append(word)
@@ -235,7 +235,7 @@ def save_word(word, phrases, old=None):
     config.ConfigNotLoadedError for a snippets file that can't be read."""
     from . import custom_words
     word = word.strip()
-    if not custom_words.is_word_like(word):
+    if not word_spelling.is_word_like(word):
         raise WordProblem("Type the word the way it should be spelled: a name or a "
                           "short term, not a sentence or an address.")
     commands = config.load_custom_commands()
