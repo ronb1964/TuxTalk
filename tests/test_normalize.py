@@ -1121,3 +1121,31 @@ def test_soft_break_is_three_spaces(said, typed):
     """Help and Voice Commands promise three spaces; the space tidy made
     them one."""
     assert normalize_text(said) == typed
+
+
+@pytest.mark.parametrize("said, typed", [
+    ("I use .NET daily", "I use .NET daily."),
+    (".NET is great", ".NET is great."),
+    ("Open the .env file", "Open the .env file."),
+    ("It is .5 mm thick", "It is .5 mm thick."),
+    ("hello period world", "Hello. World."),
+])
+def test_a_word_that_starts_with_a_dot_keeps_it(said, typed):
+    """".NET" was read as a sentence end: "I use. NET daily"."""
+    assert normalize_text(said) == typed
+
+
+def test_a_quoted_address_keeps_the_period_outside():
+    """The full stop went inside the quotes, onto the address: "ron@example.com."."""
+    assert (normalize_text("he said open quote email ron at example dot com close quote")
+            == "He said \u201cemail ron@example.com\u201d.")
+    assert normalize_text("he said open quote hello close quote") == "He said \u201chello.\u201d"
+
+
+@pytest.mark.parametrize("first", ["I\u2019m", "I\u2019ll", "I\u2019d"])
+def test_a_curly_i_contraction_keeps_its_capital(first):
+    """After a mid-sentence fit, "I’m" with the curly apostrophe some engines
+    write became "i’m"."""
+    from tuxtalk.normalize import safe_to_lowercase_first_word
+    assert not safe_to_lowercase_first_word(f"{first} here.")
+

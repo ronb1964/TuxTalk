@@ -262,8 +262,9 @@ _PUNCTUATION_TIDY = [
     (re.compile(r"\s+(\u201d)"), r"\1"),
     (re.compile(r"\u201c\s*,+"), "\u201c"),
     (re.compile(r",+\s*\u201d"), "\u201d"),
-    # No space before a mark.
-    (re.compile(r"\s+([,;:.?!…—])"), r"\1"),
+    # No space before a mark, but before a word that starts with a dot
+    # (".NET", ".env", ".5").
+    (re.compile(r"\s+([,;:?!…—]|\.(?!\w))"), r"\1"),
     # One mark where the engine and the speaker each wrote one.
     (re.compile(r"[,;:]\s*([.?!…])"), r"\1"),
     (re.compile(r"([!?])\s*\."), r"\1"),
@@ -286,7 +287,8 @@ _RE_EM_DASH_SPACE = re.compile(r"\s*—\s*")
 # --- _tidy_line_spaces ---
 _RE_SPACE_BEFORE_NEWLINE = re.compile(r"[ \t]+\n")
 _RE_SPACE_AFTER_NEWLINE = re.compile(r"\n[ ]+")
-_RE_LEADING_PUNCT = re.compile(r"^[\s]*[\.,;:!?]+(?!…)")
+# Not a dot that starts a word (".NET is great").
+_RE_LEADING_PUNCT = re.compile(r"^[\s]*[\.,;:!?]+(?![…\w])")
 _RE_MULTI_SPACE = re.compile(r"[ ]{2,}")
 
 # --- _capitalize_and_end_lines ---
@@ -310,6 +312,18 @@ _RE_STANDALONE_I = re.compile(r"\bi\b(?!\.\s*e\.)")
 
 # --- Sentence punctuation moved inside a closing smart quote ---
 _RE_PUNCT_OUTSIDE_QUOTE = re.compile(r"\u201d( ?)([!?,;:.])")
+# The quotation's last word, to tell an address ("ron@example.com") from words.
+_RE_LAST_WORD = re.compile(r"(\S+)$")
+
+
+def _mark_inside_quote(m: re.Match) -> str:
+    """The mark after a closing quote, moved inside it (American style), but
+    not after an email or web address: \u201cron@example.com.\u201d types the
+    period as part of it."""
+    last = _RE_LAST_WORD.search(m.string, 0, m.start())
+    if last and ("@" in last.group(1) or "://" in last.group(1)):
+        return m.group()
+    return m.group(2) + "\u201d"
 
 # --- _join_spoken_addresses and _finish_addresses ---
 # Country endings (.no .it .my .in .us ...) are also words that start
@@ -598,19 +612,26 @@ def _space_after_ender_repl(m: re.Match) -> str:
     return ch + " "
 
 
+def _dot_between(prev: str, prev2: str, after: str) -> bool:
+    """Whether a period between *prev* (with *prev2* before it) and the two
+    characters *after* it is inside a short token: a decimal, single letters
+    with dots, or a word that starts with one."""
+    nxt, nxt2 = after[:1], after[1:2]
+    if prev.isdigit() and nxt.isdigit():
+        return True     # a decimal, a price, a version
+    if prev.isalpha() and not prev2.isalpha() and nxt.isalpha() and nxt2 == ".":
+        return True     # single letters with dots: e.g., U.S., a.m.
+    return (not prev or prev.isspace()) and nxt.isalnum()   # .NET, .env, .5
+
+
 def _dot_binds(s: str, i: int) -> bool:
     """Whether the period at *i* in *s* is part of a token, not a sentence's
     end: '3.5', '$19.99', 'U.S.', 'e.g.', 'a.m.', 'report.pdf',
     'example.com', 'john.doe@gmail.com' must not be split apart. Split, the
     capitalization pass would then upper-case the rest ("report. Pdf")."""
     prev = s[i - 1] if i > 0 else ""
-    prev2 = s[i - 2] if i > 1 else ""
-    nxt = s[i + 1] if i + 1 < len(s) else ""
-    nxt2 = s[i + 2] if i + 2 < len(s) else ""
-    if prev.isdigit() and nxt.isdigit():
-        return True     # a decimal, a price, a version
-    if prev.isalpha() and not prev2.isalpha() and nxt.isalpha() and nxt2 == ".":
-        return True     # single letters with dots: e.g., U.S., a.m.
+    if _dot_between(prev, s[i - 2:i - 1] if i > 1 else "", s[i + 1:i + 3]):
+        return True
     if not (prev.isalnum() or prev in "_-"):
         return False
     # A file's extension, a domain written joined, an email address's name.
@@ -800,7 +821,7 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     text = _RE_STANDALONE_I.sub("I", text)
     text = _restore_quoted(text, quoted_sections)
     text = _capitalize_and_end_lines(text, auto_period)
-    text = _RE_PUNCT_OUTSIDE_QUOTE.sub(r"\2" + "\u201d", text)
+    text = _RE_PUNCT_OUTSIDE_QUOTE.sub(_mark_inside_quote, text)
     text = _restore_protected_words(text)
     # The capitals ran while a protected word was a placeholder (already a
     # capital), so a line that starts with one ("return to sender") gets
@@ -867,7 +888,7 @@ def safe_to_lowercase_first_word(text: str, your_words=()) -> bool:
         return False
     # The pronoun "I", bare or contracted.
     stripped = first.rstrip(".,;:!?")
-    if stripped == "I" or stripped.startswith("I'"):
+    if stripped == "I" or stripped.startswith(("I'", "I\u2019")):     # I'm, I’ll
         return False
     # Acronyms: more than one capital and no lowercase letters ("NASA", "USA").
     letters = [c for c in stripped if c.isalpha()]
