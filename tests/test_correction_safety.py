@@ -175,6 +175,10 @@ def test_unsafe_edits_are_rejected(said, edited):
     ("Pay €50, no wait, €60.", "Pay $60."),
     ("Set it to -5, no wait, -6.", "Set it to 6."),
     ("Bring 5%, no wait, 6%.", "Bring 6."),
+    ("Pay ₹50, no wait, ₹60.", "Pay 60."),
+    ("Pay ₩500, no wait, ₩600.", "Pay $600."),
+    ("Set x < 5, no wait, 6.", "Set x > 6."),
+    ("The low is - 5, no wait, - 6.", "The low is 6."),
 ])
 def test_a_changed_or_dropped_sign_is_not_safe(said, edited):
     """Signs and other scripts count as words, so a changed currency or a
@@ -187,9 +191,30 @@ def test_a_changed_or_dropped_sign_is_not_safe(said, edited):
     ("Set it to -5, no wait, -6.", "Set it to -6."),
     ("Send it to Müller, no wait, to Jim.", "Send it to Jim."),
     ("A well-known van, no wait, a new van.", "A new van."),
+    ("Pay ₹50, no wait, ₹60.", "Pay ₹60."),
+    ("Set x < 5, no wait, 6.", "Set x < 6."),
+    ("The low is - 5, no wait, - 6.", "The low is - 6."),
+    ("Is it two boxes, no wait, three boxes?", "Is it three boxes?"),
+    ("It's red no wait blue", "It's blue."),
+    ("I'll bring two, no wait, three", "I'll bring three."),
 ])
 def test_corrections_with_signs_and_accents_are_still_safe(said, edited):
     assert edit_is_safe(said, edited) is True
+
+
+@pytest.mark.parametrize("said, edited", [
+    ("Send it Monday, no wait, Tuesday.", "Send it Tuesday?"),
+    ("Call it fast, no wait, quick.", "Call it \u201cquick.\u201d"),
+    ("Call it fast, no wait, quick.", "Call it **quick**."),
+    ("Call it fast, no wait, quick.", "# Call it quick."),
+    ("Call it fast, no wait, quick.", "Call it quick \N{SLIGHTLY SMILING FACE}"),
+    ("Call it fast, no wait, quick.", "Call it quick!"),
+    ("Call it fast, no wait, quick.", "Call it _quick_."),
+])
+def test_a_mark_the_speaker_did_not_say_is_not_safe(said, edited):
+    """The words match, but the answer types something new: a question mark
+    for a full stop, quotes, markdown, an emoji."""
+    assert edit_is_safe(said, edited) is False
 
 
 def test_a_filler_like_may_still_go_with_a_correction():

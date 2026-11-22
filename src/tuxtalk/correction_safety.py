@@ -1,9 +1,10 @@
 """Whether the local AI's fix of a self-correction may replace what was said.
 
 The model is never trusted. Its answer is used only if edit_is_safe() says
-so: every word must be one that was spoken, and the change must have one of
-these shapes: words deleted (fillers, stutters, or the wrong half of a
-correction, ending with the correction phrase), the corrected words put in
+so: every word, and every mark but a full stop or comma, must be one that
+was spoken, and the change must have one of these shapes: words deleted
+(fillers, stutters, or the wrong half of a correction, ending with the
+correction phrase), the corrected words put in
 place of the wrong ones ("two boxes of screws, no wait, three boxes" ->
 "three boxes of screws"), or a restated clause's new value swapped into the
 first wording. Anything else (an answered question, a reworded sentence, a
@@ -11,6 +12,7 @@ dropped detail, the wrong half kept) is thrown away, and the sentence is
 typed exactly as spoken.
 """
 import re
+import unicodedata
 
 from .cleanup import LEGIT_DOUBLES, NUMBER_WORDS
 
@@ -42,9 +44,18 @@ _MAX_SWAPPED = 3
 # a slash or dash ("3 - 4" into "3 / 4"; not a comma or colon, which stand
 # between two numbers as often as inside one: "1, 2", "step 2: 3 cups");
 # words in any script ("café", "Müller", "東京"); and the signs that carry a
-# value as words of their own: a currency, a percent, and a minus or plus
-# before a number (not a hyphen in "well-known").
-_TOKEN = re.compile(r"\d+(?:[.,:]\d+| *[/–-] *\d+)*|[\w']+|[€$£¥%]|(?<!\w)[-−+](?=\d)")
+# value as words of their own: a percent, a comparison ("x < 5" is not
+# "x > 5"), a minus or plus before a number, spaced or not ("- 5"; not a
+# hyphen in "well-known"), and any other single sign, which words() keeps
+# only when it's a currency (Unicode's Sc: "₹50" is not "50").
+_TOKEN = re.compile(r"\d+(?:[.,:]\d+| *[/–-] *\d+)*|[\w']+|[%<>=]|(?<!\w)[-−+](?= ?\d)"
+                    r"|(?P<sign>[^\w\s])")
+# Marks an answer may add or move: the full stop or comma of the sentence it
+# fixed, an apostrophe, a hyphen. Any other mark or symbol it brings in was
+# never said, and types something new: quotes, "?" for ".", markdown's "**"
+# and "#", an emoji.
+_FREE_MARKS = set(".,'’-")
+_RE_MARK = re.compile(r"[^\w\s]|_")
 # Words that turn a statement around. One left over from the wrong part of a
 # correction, when the corrected words don't say it, reverses the sentence:
 # "I will not, I mean I will, go" is not "I will not go".
@@ -56,7 +67,15 @@ _LAYOUT_CHARS = "\n\r\t"
 
 def words(text):
     """The words and value signs of *text*, lower case, as the check compares them."""
-    return [token.replace(" ", "") for token in _TOKEN.findall(text.lower().replace("’", "'"))]
+    return [m.group().replace(" ", "")
+            for m in _TOKEN.finditer(text.lower().replace("’", "'"))
+            if m.group("sign") is None or unicodedata.category(m.group()) == "Sc"]
+
+
+def _adds_a_mark(said, edited):
+    """True if *edited* has a mark or symbol *said* doesn't, other than the
+    ones a fix may add (_FREE_MARKS)."""
+    return bool(set(_RE_MARK.findall(edited)) - set(_RE_MARK.findall(said)) - _FREE_MARKS)
 
 
 def _deleted_runs(src, out):
@@ -302,7 +321,7 @@ def _keeps_a_dropped_negation(src, out):
 
 def edit_is_safe(said: str, edited: str) -> bool:
     """True only if *edited* is *said* with nothing but allowed edits."""
-    if any(c in edited and c not in said for c in _LAYOUT_CHARS):
+    if any(c in edited and c not in said for c in _LAYOUT_CHARS) or _adds_a_mark(said, edited):
         return False
     src, out = words(said), words(edited)
     if not out or _keeps_a_dropped_negation(_without_fillers(src), _without_fillers(out)):
