@@ -80,19 +80,27 @@ _RE_SMALL_DIGIT = re.compile(r"(?<![\w.,:$€£#+\-/])([1-9])(?=\s+([a-z][\w'-]*
 _RE_RANGE_AFTER = re.compile(r"\s+(?:to|and|or|through|out of|x|by)\s+\d")
 _RE_RANGE_BEFORE = re.compile(r"\d\s+(?:to|and|or|through|out of|x|by)$")
 _SMALL_WORDS = ("one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
-# Words that put a number on something rather than count it ("page 3",
-# "test 1").
+# Words that put a number on something rather than count it ("page 3").
 _LABELS = frozenset({
     "page", "pages", "chapter", "step", "version", "level", "number", "no", "room", "row",
     "line", "gate", "track", "season", "episode", "part", "volume", "grade", "floor",
     "platform", "channel", "verse", "figure", "table", "option", "round", "day", "week",
     "slide", "section", "item", "zone", "phase", "stage", "seat", "lane", "bus", "route",
+})
+# Everyday nouns that number something only where the number ends the phrase
+# ("test one", "plan two"): mid-sentence the number starts the next part ("just
+# in case one of them breaks", "a question one might ask").
+_LABELS_AT_THE_END = frozenset({
     "test", "plan", "thing", "team", "player", "act", "scene", "model", "type", "size",
     "class", "group", "unit", "case", "exhibit", "article", "rule", "question", "problem",
     "exercise", "lesson", "task", "camera", "server", "account", "file", "folder", "tab",
     "screen", "monitor", "door", "box", "column", "field", "sheet", "tier", "batch",
     "sprint", "suite", "building", "block", "terminal", "studio", "court", "ward",
 })
+# Of _LABELS, the ones that also count time or places, which a number after
+# them mid-sentence usually begins something new ("every day one of them is
+# late", "in the room two people were talking").
+_COUNTING_LABELS = frozenset({"day", "week", "room", "line", "row", "round", "seat"})
 # Units and clock words a digit stays in front of ("3 pm", "2 kg").
 _UNITS = frozenset({
     "am", "pm", "kg", "km", "cm", "mm", "m", "g", "mg", "lb", "lbs", "oz", "ft", "mph",
@@ -192,9 +200,15 @@ def _neighbours(text: str, words: list, i: int):
     return before, after
 
 
-def _after_a_label(word: str, prev: str, prev2: str) -> bool:
-    """Whether *prev* numbers this "one" or "two" ("test one", "part two
-    of it"); "no one" is nobody, and "my number one" the one liked best."""
+def _after_a_label(word: str, prev: str, prev2: str, ends: bool) -> bool:
+    """Whether *prev* numbers this "one" or "two" ("page two of it", "test
+    one" where the phrase *ends*). Not after a determiner ("the room two
+    people were in"); "no one" is nobody, and "my number one" the one liked
+    best."""
+    if prev2 in _POINTERS and not (ends and prev in _LABELS):
+        return False
+    if prev in _LABELS_AT_THE_END or prev in _COUNTING_LABELS:
+        return ends
     if prev not in _LABELS or prev == "no":
         return False
     return not (prev == "number" and word == "one" and prev2 in _POINTERS)
@@ -219,11 +233,12 @@ def _as_digit(word: str, before: list, after: list, name: bool) -> bool:
     nxt, nxt2 = after
     if prev in ("or", "and", "to") and prev2 in _ONE_TWO:
         return False                                    # "one or two people"
-    if _after_a_label(word, prev, prev2):
+    ends = nxt is None or nxt in ("and", "or", "but", "then")
+    if _after_a_label(word, prev, prev2, ends):
         return True
     if nxt in ("or", "and", "to") and nxt2 is not None and nxt2[:1].isdigit():
         return True                                     # "two or 3" -> "2 or 3"
-    if nxt is None or nxt in ("and", "or", "but", "then"):
+    if ends:
         return name and prev not in _POINTERS          # "I still use Python two"
     if prev in _POINTERS or prev2 in _POINTERS:
         return word == "two" and _counts(word, nxt)     # "my 2 cats", "the one thing"

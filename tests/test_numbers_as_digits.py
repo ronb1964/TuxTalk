@@ -58,6 +58,10 @@ def test_one_and_two_as_labels_and_counts_are_digits(text, expected):
     "I saw one today", "I'll send two tomorrow", "Pick one up",
     "Not one person", "On one condition", "in one piece", "Buy one get one free",
     "one out of two", "two way street", "the one thing", "no one", "no two are alike",
+    # After an everyday noun, the number starts the next part of the sentence.
+    "just in case one of them breaks", "every day one of them is late",
+    "a question one might ask", "a thing one should know", "the file one of you sent",
+    "I took a test one time",
 ])
 def test_one_and_two_as_pronouns_and_idioms_stay_words(text):
     assert to_digits(text, "en") == text
