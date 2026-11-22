@@ -7,12 +7,12 @@ import pytest
 
 from tuxtalk import recommend as r
 from tuxtalk import whisper_vulkan as wv
-from tuxtalk.model_helper import OFFERED_MODELS
+from tuxtalk.config import VALID_MODELS
 
 
 def test_every_offered_model_is_in_the_table_once():
     listed = [m for _, models, *_ in r.COMPATIBILITY for m in models]
-    assert sorted(listed) == sorted(OFFERED_MODELS)
+    assert sorted(listed) == sorted(VALID_MODELS)
 
 
 def test_the_vulkan_column_matches_what_really_runs_on_vulkan():

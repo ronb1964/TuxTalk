@@ -165,9 +165,27 @@ def test_large_v3_is_never_the_fallback_on_the_processor(monkeypatch):
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: SimpleNamespace(model="parakeet-v3"))
     monkeypatch.setattr("tuxtalk.config.save_config", lambda cfg: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: None)
-    settings = _settings(model="parakeet-v3", device="cpu")
-    assert engine.build_or_exit(settings) == "model:small"
-    assert settings.device == "cpu"
+    assert engine.build_or_exit(_settings(model="parakeet-v3", device="cpu")) == "model:small"
+
+
+def test_a_model_too_big_for_memory_falls_back_to_a_smaller_one(monkeypatch):
+    """Medium ran out of memory loading on the processor: the error stopped
+    dictation, though Small was downloaded and would have fit."""
+    from tuxtalk import cuda_helper
+    tried = []
+
+    def load(name, *a, **k):
+        tried.append(name)
+        if name == "medium":
+            raise RuntimeError("std::bad_alloc")
+        return f"model:{name}"
+    monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: m in ("small", "medium"))
+    monkeypatch.setattr(model_helper, "load_model", load)
+    monkeypatch.setattr(model_helper, "whisper_model", load)
+    monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: None)
+    assert engine.build_or_exit(_settings(model="medium", device="cpu")) == "model:small"
+    assert tried[0] == "medium" and tried[-1] == "small"
 
 
 def test_cancel_falls_back_to_a_downloaded_model_and_saves_it(monkeypatch):

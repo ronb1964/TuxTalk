@@ -17,10 +17,9 @@ from tuxtalk.beeps import CANCEL_BEEP
 
 def test_parakeet_is_offered_valid_and_downloadable():
     from tuxtalk.config import VALID_MODELS
-    from tuxtalk.model_helper import MODEL_DISPLAY_SIZES, OFFERED_MODELS
+    from tuxtalk.model_helper import MODEL_DISPLAY_SIZES
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
 
-    assert PARAKEET_MODEL in OFFERED_MODELS
     assert PARAKEET_MODEL in VALID_MODELS
     assert PARAKEET_MODEL in MODEL_DISPLAY_SIZES
 
@@ -28,9 +27,9 @@ def test_parakeet_is_offered_valid_and_downloadable():
 def test_every_offered_model_has_a_label_on_every_picker(prefs_window):
     """The picker indexes a label dict by model id; a missing key crashes the
     screen as it opens. (First run's card has no full picker.)"""
-    from tuxtalk.model_helper import OFFERED_MODELS
+    from tuxtalk.config import VALID_MODELS
     rows = {row[0]: row[1] for row in prefs_window().general_tab.speech.model_combo.get_model()}
-    assert set(rows) == set(OFFERED_MODELS)
+    assert set(rows) == set(VALID_MODELS)
     assert all(label.strip() for label in rows.values()), rows
 
 

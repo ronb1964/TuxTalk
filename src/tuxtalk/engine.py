@@ -302,11 +302,12 @@ def build_or_exit(settings: Settings):
     try:
         return build(settings)
     except ModelUnavailable as e:
-        from .model_helper import OFFERED_MODELS, is_model_cached_fast
+        from .config import VALID_MODELS
+        from .model_helper import is_model_cached_fast
         from .recommend import model_title
         try:
-            # As guard_large_v3_without_cuda: CUDA's files alone don't do when
-            # the speech library was built without CUDA, and neither do they
+            # CUDA's files alone don't do: not when the speech library was
+            # built without CUDA (as guard_large_v3_without_cuda says), nor
             # when the device is the processor, which the fallback keeps.
             from .cuda_helper import ctranslate2_has_cuda, has_cuda_libraries
             has_cuda = (settings.device != "cpu" and has_cuda_libraries()
@@ -315,7 +316,7 @@ def build_or_exit(settings: Settings):
             logger.info(f"Could not check for CUDA's files: {cuda_e}")
             has_cuda = False
         wanted = settings.model
-        downloaded = [m for m in OFFERED_MODELS if is_model_cached_fast(m)]
+        downloaded = [m for m in VALID_MODELS if is_model_cached_fast(m)]
         fallback = _pick_fallback_model(wanted, downloaded, has_cuda)
         if fallback is None:
             logger.warning(f"Dictation service stopping: {e}, and no other model is downloaded")
@@ -457,7 +458,7 @@ def notify_tray():
 def build(settings: Settings):
     """Load the speech model on the configured device, falling back to the
     processor when the graphics card can't be used."""
-    from .model_helper import BrokenModelFiles, download_model_with_progress
+    from .model_helper import BrokenModelFiles, download_model_with_progress, out_of_memory
     from .parakeet_engine import is_parakeet
 
     if settings.device.lower() == "vulkan":
@@ -501,6 +502,10 @@ def build(settings: Settings):
         if on_cuda:
             return _cpu_fallback_after_cuda(settings, e)
         logger.error(f"Model loading failed: {e}")
+        if out_of_memory(e):
+            # The files are fine (nothing is downloaded again); a smaller
+            # model may fit, for this run (build_or_exit).
+            raise ModelWontLoad(f"{settings.model} ran out of memory loading: {e}") from e
         raise
 
 

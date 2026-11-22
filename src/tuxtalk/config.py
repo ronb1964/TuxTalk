@@ -86,13 +86,14 @@ class ConfigError(Exception):
 # Validation constants — defined once, used by validate_config()
 # ---------------------------------------------------------------------------
 
-# The models TuxTalk downloads and offers, smallest first; model_helper's
-# OFFERED_MODELS. Parakeet comes last: it is a different engine
-# (parakeet_engine.py), not part of Whisper's size ladder.
+# The models TuxTalk downloads and offers, smallest first: every screen with a
+# model picker builds from this, so their lists can't drift apart. Parakeet
+# comes last: it is a different engine (parakeet_engine.py), not part of
+# Whisper's size ladder.
 VALID_MODELS = ("tiny", "base", "small", "medium", "large-v3", "parakeet-v3")
-# Names an older config may hold, never offered since, as the model that
-# took their place: kept, no model could be found or downloaded for them
-# (model_helper knows only VALID_MODELS), and dictation stopped.
+# Whisper names TuxTalk neither offers nor downloads, which an older config
+# may hold, as the offered model nearest to each: model_helper can find and
+# fetch only VALID_MODELS.
 OLD_MODEL_NAMES = {"tiny.en": "tiny", "base.en": "base", "small.en": "small",
                    "medium.en": "medium", "large": "large-v3", "large-v1": "large-v3",
                    "large-v2": "large-v3"}
@@ -435,6 +436,7 @@ def _migrate_settings(s: Settings) -> Settings:
     - Live text and Type at pause are one choice in Preferences: with both
       on, Type at pause goes off. Together, the box showed each phrase and
       then emptied as it was typed.
+    - A model name no longer offered becomes its nearest (OLD_MODEL_NAMES).
     """
     for name in _CASE_FREE_CHOICES:
         value = getattr(s, name)
@@ -445,6 +447,9 @@ def _migrate_settings(s: Settings) -> Settings:
         s.indicator_color = CLASSIC_CYAN_HEX
     if s.live_text and s.chunked_dictation:
         s.chunked_dictation = False
+    if s.model in OLD_MODEL_NAMES:
+        logger.info(f"Model {s.model!r} is no longer offered; using {OLD_MODEL_NAMES[s.model]}")
+        s.model = OLD_MODEL_NAMES[s.model]
     return s
 
 
@@ -522,9 +527,6 @@ def apply_toml(s: Settings, data: dict) -> list[str]:
             # int() raises OverflowError, not ValueError, for a TOML `inf`.
             logger.warning(f"Ignoring setting {fld.name!r} = {data[fld.name]!r}: {e}")
             skipped.append(fld.name)
-    if s.model in OLD_MODEL_NAMES:
-        logger.info(f"Model {s.model!r} is no longer offered; using {OLD_MODEL_NAMES[s.model]}")
-        s.model = OLD_MODEL_NAMES[s.model]
     return skipped
 
 

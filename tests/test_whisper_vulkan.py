@@ -102,8 +102,8 @@ def test_offered_with_any_graphics_chip_and_vulkan(monkeypatch):
 
 def test_every_offered_model_has_a_file_in_whisper_cpp_format():
     """Parakeet included: whisper.cpp 1.9.4 runs it too (libparakeet)."""
-    from tuxtalk.model_helper import OFFERED_MODELS
-    for model in OFFERED_MODELS:
+    from tuxtalk.config import VALID_MODELS
+    for model in VALID_MODELS:
         assert wv.supports_model(model), model
 
 

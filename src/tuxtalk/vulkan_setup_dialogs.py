@@ -227,8 +227,7 @@ def set_up(parent, model, confirm=True, card=None):
     """Download and speed-check the Vulkan engine for *model* on *card*
     (run_speed_check). True if TuxTalk should use the graphics chip."""
     if not wv.supports_model(model):
-        # English-only and older Whisper variants (small.en, large-v2, ...) have
-        # no file in whisper.cpp's format here.
+        # A model with no file in whisper.cpp's format can't run through Vulkan.
         message(parent, Gtk.MessageType.INFO, "Pick another model first",
                 f"{model_title(model)} can't run on your graphics chip through Vulkan.\n\n"
                 "To use your graphics chip, choose Parakeet or a Whisper model (Small, Medium "

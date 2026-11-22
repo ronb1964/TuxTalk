@@ -258,10 +258,10 @@ class SpeechSection(Tab):
             "• Better handling of accents and background noise"
         )
         setup.attach(label, 0, row, 1, 1)
-        from .model_helper import OFFERED_MODELS
+        from .config import VALID_MODELS
         # Rows: [model id, what the dropdown says].
         self.model_store = Gtk.ListStore(str, str)
-        for model in OFFERED_MODELS:
+        for model in VALID_MODELS:
             text = self._large_v3_text() if model == "large-v3" else MODEL_TEXT[model]
             self.model_store.append([model, text])
         combo = self.model_combo = Gtk.ComboBox.new_with_model(self.model_store)

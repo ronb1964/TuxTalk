@@ -1,6 +1,6 @@
 """Tests for config module validation logic"""
 import pytest
-from tuxtalk.config import ConfigError, Settings, apply_toml, validate_config
+from tuxtalk.config import ConfigError, Settings, apply_toml, repaired, validate_config
 
 
 def test_valid_config():
@@ -241,7 +241,7 @@ def test_a_model_name_no_longer_offered_becomes_the_one_that_replaced_it(old, no
     disk."""
     s = Settings()
     apply_toml(s, {"model": old})
-    assert s.model == now
+    assert repaired(s).model == now
 
 
 def test_every_model_a_config_may_hold_can_be_found_and_downloaded():
