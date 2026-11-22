@@ -59,6 +59,7 @@ def recorder(monkeypatch):
 def test_wtype_gets_the_dictation_on_stdin(recorder, monkeypatch):
     monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")   # wtype is Wayland's
     monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype")
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     # No access to /dev/uinput: wtype is the way left to type.
     monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
 
@@ -72,6 +73,7 @@ def test_wtype_reads_the_dictation_as_utf8_under_any_locale(recorder, monkeypatc
     from tuxtalk import keyboard_layout
     monkeypatch.setenv("LC_ALL", "C")
     monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype")
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
     # A layout with é on it (French, say), so it isn't pasted instead.
     monkeypatch.setattr(keyboard_layout, "layout_key_events", lambda text: [(30, 1), (30, 0)])

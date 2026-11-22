@@ -321,7 +321,8 @@ def _mark_inside_quote(m: re.Match) -> str:
     not after an email or web address: \u201cron@example.com.\u201d types the
     period as part of it."""
     last = _RE_LAST_WORD.search(m.string, 0, m.start())
-    if last and ("@" in last.group(1) or "://" in last.group(1)):
+    if last and ("@" in last.group(1) or "://" in last.group(1)
+                 or _RE_JOINED_TLD.search(last.group(1))):
         return m.group()
     return m.group(2) + "\u201d"
 
@@ -621,7 +622,8 @@ def _dot_between(prev: str, prev2: str, after: str) -> bool:
         return True     # a decimal, a price, a version
     if prev.isalpha() and not prev2.isalpha() and nxt.isalpha() and nxt2 == ".":
         return True     # single letters with dots: e.g., U.S., a.m.
-    return (not prev or prev.isspace()) and nxt.isalnum()   # .NET, .env, .5
+    # .NET, .env, .5, and in a path or brackets: ~/.config, (.env)
+    return (not prev or prev.isspace() or prev in "/~(") and nxt.isalnum()
 
 
 def _dot_binds(s: str, i: int) -> bool:

@@ -147,6 +147,7 @@ def test_a_line_typed_through_wtype_counts_as_typed(monkeypatch):
             return b"", b""
     monkeypatch.setattr(keyboard_layout, "layout_key_events", no_layout)
     monkeypatch.setattr(keyboard_output, "which", lambda name: "/usr/bin/wtype")
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", Wtype)
     before = keyboard_output.this_thread.sends
     assert keyboard_output.type_text_raw("Meet at noon.") is True

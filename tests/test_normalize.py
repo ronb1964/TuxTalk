@@ -1130,6 +1130,7 @@ def test_soft_break_is_three_spaces(said, typed):
     ("It is .5 mm thick", "It is .5 mm thick."),
     ("hello period world", "Hello. World."),
     (",hello", "Hello."), (":hello", "Hello."), (";hello", "Hello."),
+    ("cd ~/.config", "Cd ~/.config."), ("open the (.env) file", "Open the (.env) file."),
 ])
 def test_a_word_that_starts_with_a_dot_keeps_it(said, typed):
     """".NET" was read as a sentence end: "I use. NET daily"."""
@@ -1140,6 +1141,8 @@ def test_a_quoted_address_keeps_the_period_outside():
     """The full stop went inside the quotes, onto the address: "ron@example.com."."""
     assert (normalize_text("he said open quote email ron at example dot com close quote")
             == "He said \u201cemail ron@example.com\u201d.")
+    assert (normalize_text("he said open quote visit www dot example dot com close quote")
+            == "He said \u201cvisit www.example.com\u201d.")
     assert (normalize_text("he said open quote ron at example. com close quote")
             == "He said \u201cron@example.com\u201d.")
     assert normalize_text("he said open quote hello close quote") == "He said \u201chello.\u201d"
@@ -1151,4 +1154,3 @@ def test_a_curly_i_contraction_keeps_its_capital(first):
     write became "i’m"."""
     from tuxtalk.normalize import safe_to_lowercase_first_word
     assert not safe_to_lowercase_first_word(f"{first} here.")
-

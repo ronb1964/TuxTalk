@@ -484,13 +484,17 @@ def type_text_raw(text: str) -> bool:
             logger.info(f"Typed {len(text)} chars in {time.time() - started:.2f}s "
                         f"({delay} ms a key event)")
             return True
-    if which("wtype"):
+    if which("wtype") and is_wayland_session():     # wtype is Wayland's alone
         return _type_with_wtype(text)
     # Not put on the clipboard instead: that would replace what the user
     # copied, unmarked for clipboard managers to keep. The failure notice
     # points to Recent Dictations, which holds it.
     logger.error("Could not type text: no virtual keyboard or wtype")
     return False
+
+
+# What wtype says when it stops before typing anything (wtype.c).
+_WTYPE_BEFORE_KEYS = ("does not support", "wayland connection failed", "no seat found")
 
 
 def _type_with_wtype(text: str) -> bool:
@@ -523,9 +527,10 @@ def _type_with_wtype(text: str) -> bool:
     if proc.returncode != 0:
         message = (err or b"").decode("utf-8", "replace").strip()
         logger.error(f"wtype exited with {proc.returncode}: {message}")
-        # A desktop without the virtual-keyboard protocol (GNOME) refuses
-        # before the first key; any other failure may come after some.
-        if "does not support" in message.lower():
+        # A desktop without the virtual-keyboard protocol (GNOME), or no
+        # connection or seat, stops it before the first key; any other
+        # failure may come after some.
+        if any(before_keys in message.lower() for before_keys in _WTYPE_BEFORE_KEYS):
             return False
         raise virtual_keyboard.StoppedPartway(f"wtype exited with {proc.returncode}")
     this_thread.sends += 1      # as send_keys counts: a stop after it is partway

@@ -60,6 +60,7 @@ UNKNOWN_WINDOW_NOTICE = ("Not sent: TuxTalk can't tell which window has the focu
 OWN_WINDOW_NOTICE = "Not sent: a TuxTalk window has the focus."
 INCOMPLETE_NOTICE = "Not sent: part of the message didn't go in."
 CANCELLED_NOTICE = "Not sent: you pressed Esc."
+LOST_AUDIO_NOTICE = "Not sent: some of the sound was lost, so a word may be missing."
 
 # Why an Enter wasn't sent: (what the log says after "Not sent: ", the notice).
 _NOT_SENT = {
@@ -69,6 +70,7 @@ _NOT_SENT = {
     "own_window": ("a TuxTalk window has the focus", OWN_WINDOW_NOTICE),
     "incomplete": ("part of the message didn't go in", INCOMPLETE_NOTICE),
     "cancelled": ("Esc cancelled the dictation", CANCELLED_NOTICE),
+    "lost_audio": ("some of the recording's audio was dropped", LOST_AUDIO_NOTICE),
     "typed_meanwhile": ("other keys went out while it was checked", HELD_NOTICE),
     "unknown_window": ("which window has the focus isn't known", UNKNOWN_WINDOW_NOTICE),
     "not_pressed": ("a dictation key stayed down, or the key couldn't be pressed", HELD_NOTICE),
@@ -118,10 +120,13 @@ def configure(cfg) -> None:
 def _not_whole(message: Message) -> str | None:
     """Why nothing may follow *message*'s words whatever the window:
     "cancelled" when Esc cancelled it as its words went in, "incomplete"
-    when part of it didn't go in; else None."""
+    when part of it didn't go in, "lost_audio" when the computer stalled as
+    it recorded and a word may be missing; else None."""
     if message.cancelled:
         return "cancelled"
-    return None if message.complete else "incomplete"
+    if not message.complete:
+        return "incomplete"
+    return "lost_audio" if message.lost_audio else None
 
 
 def landed(before, after):

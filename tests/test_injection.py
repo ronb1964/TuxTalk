@@ -431,6 +431,7 @@ def test_a_stalled_wtype_is_killed_and_reported(monkeypatch):
     limit: a compositor that stalls would otherwise freeze dictation with no
     text and no error."""
     monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype")
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     # No access to /dev/uinput: wtype is the way left to type.
     from tuxtalk import virtual_keyboard
     monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
@@ -457,12 +458,14 @@ def test_a_stalled_wtype_is_killed_and_reported(monkeypatch):
 
 @pytest.mark.parametrize("stderr, partway", [
     (b"Compositor does not support the virtual keyboard protocol", False),
+    (b"Wayland connection failed", False),
     (b"Connection to the compositor lost", True)])
 def test_a_failed_wtype_says_whether_it_may_have_typed(monkeypatch, stderr, partway):
     """A wtype that typed part and then failed said nothing went in, and the
     user typed it all again; one the desktop refuses outright typed nothing."""
     from tuxtalk import virtual_keyboard
     monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype")
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
 
     class Failed:

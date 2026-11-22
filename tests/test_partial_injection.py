@@ -84,6 +84,7 @@ def test_wtype_isnt_run_into_a_password_field(monkeypatch, quiet):
     ran = []
     monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
     monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype" and "/usr/bin/wtype")
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: ran.append(a) or 1 / 0)
     monkeypatch.setattr("tuxtalk.keyboard_layout.layout_key_events", lambda t: [(30, 1), (30, 0)])
     monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", None))
@@ -100,6 +101,7 @@ def test_wtype_isnt_run_into_another_window(monkeypatch, quiet):
     ran = []
     monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
     monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype" and "/usr/bin/wtype")
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: ran.append(a) or 1 / 0)
     monkeypatch.setattr("tuxtalk.keyboard_layout.layout_key_events", lambda t: [(30, 1), (30, 0)])
     monkeypatch.setattr(focused_window, "is_password", lambda **k: False)

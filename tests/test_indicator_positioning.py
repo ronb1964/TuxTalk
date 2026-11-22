@@ -1,10 +1,11 @@
 """The indicator position control must reflect what actually works.
 
-The indicator positions itself with gtk_window_move(). XWayland honours it and
-native Wayland ignores it, and the tray launches the dictation service with
-GDK_BACKEND=x11,wayland — so the indicator gets XWayland whenever an X display
-exists, on any desktop, with no extension involved. On a KDE Plasma Wayland
-session without the extension, top-left lands at (20, 20).
+The indicator's own window positions itself with gtk_window_move(). XWayland
+honours it and native Wayland ignores it, and the tray launches the
+dictation service with GDK_BACKEND=x11,wayland, so the window gets XWayland
+whenever an X display exists, on any desktop. On a KDE Plasma Wayland session
+without the extension, top-left lands at (20, 20). On GNOME the TuxTalk
+extension (32 and newer) places the indicator itself, X display or not.
 
 So Preferences must not grey out the position dropdown on Wayland just because
 the GNOME extension is absent, or tell the user positioning "requires the

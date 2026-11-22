@@ -110,8 +110,12 @@ def test_a_recording_that_lost_audio_is_typed_but_not_sent(monkeypatch):
     recording._sd_callback(rec, np.zeros((320, 1), np.int16), 320, None,
                            types.SimpleNamespace(input_overflow=True))
     monkeypatch.setattr(rs.state, "is_recording", False)
+    told = []
+    monkeypatch.setattr(send_countdown, "_say_not_sent", lambda why, *a, **k: told.append(why))
     events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ")
-    assert events == [("typed", "Hello there. ")]       # no Enter, so its space stays
+    assert events[0] == ("typed", "Hello there.")
+    assert not [e for e in events if e[0] == "enter"]
+    assert told == ["lost_audio"]                       # "Not sent: some of the sound was lost"
 
 
 def test_a_cut_off_dictation_is_typed_but_not_sent(monkeypatch):

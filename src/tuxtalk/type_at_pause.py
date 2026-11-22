@@ -530,10 +530,8 @@ def _may_send(message) -> bool:
     """Whether an automatic Enter is set up after *message*: the setting on,
     and all of it typed where Enter sends (why_no_automatic_enter: not a
     text editor or terminal; send_automatically then checks the window).
-    Not whether it was cut off ("and"). Never after a recording that lost
-    audio (Message.lost_audio)."""
+    Not whether it was cut off ("and")."""
     return (live.press_enter_after and message.has_words and message.complete
-            and not message.lost_audio
             and not why_no_automatic_enter(focused_window.acts_as(focused_window.window_class())))
 
 
