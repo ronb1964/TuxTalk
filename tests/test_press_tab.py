@@ -206,3 +206,25 @@ def test_four_spaces_kept_back_by_a_stuck_key_say_so(monkeypatch):
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append((title, body)))
     pipeline.press_said("TAB", None)
     assert notes == [delivery_notices.key_not_pressed("TAB")]
+
+
+def test_four_spaces_said_alone_are_their_own_undo_record(monkeypatch):
+    """Dictate into Firefox, switch to Claude Desktop and say only "press
+    tab": the spaces joined the Firefox dictation's undo record, and "undo
+    that" in Claude Desktop pressed Backspace 17 times for 4 spaces."""
+    from tuxtalk import focused_window
+    monkeypatch.setattr(rs.state, "last_inserted_text", "Hello world. ")
+    monkeypatch.setattr(rs.state, "last_inserted_window", "firefox")
+    monkeypatch.setattr(focused_window, "window_class", lambda: "com.anthropic.Claude")
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
+
+    def deliver(text, mode, one_block=False, *, where):
+        rs.state.last_inserted_text = text      # as deliver_text keeps it
+        return "ok"
+    monkeypatch.setattr(delivery, "deliver_text", deliver)
+    monkeypatch.setattr(focused_window, "destination",
+                        lambda: focused_window.Destination("com.anthropic.Claude", None, False))
+    monkeypatch.setattr(focused_window, "look", lambda: ("com.anthropic.Claude", None))
+    pipeline.press_said("TAB", None)
+    assert rs.state.last_inserted_text == "    "
+    assert rs.state.last_inserted_window == "com.anthropic.Claude"

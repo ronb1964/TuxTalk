@@ -70,8 +70,10 @@ def press_said(key: str, chunk_role, after_words: bool = False, message=None) ->
             outcome = send_countdown.type_where_sent("    ", key, message,
                                                      delivery.type_onto_dictation)
         else:
+            # Not onto the last dictation's undo record: that may be in
+            # another window, and "undo that" here would count its text.
             with keyboard_output.until_cancelled(message):
-                outcome = delivery.type_onto_dictation("    ", "type")
+                outcome = delivery.inject_text("    ", "type")
         if outcome not in (None, "ok", "cancelled"):
             logger.warning(f"Tab not typed as four spaces ({outcome})")
             if outcome == "key_held":
