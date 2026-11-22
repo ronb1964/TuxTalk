@@ -31,15 +31,16 @@ def flush_pending_events(devices):
             logger.info(f"Could not flush events from {getattr(dev, 'name', dev)}: {e}")
 
 
-def hotkey_test_helper(ecodes, connect=None):
+def hotkey_test_helper(ecodes, connect=None, combos=()):
     """The hotkey helper as a keyboard for the hotkey test, or None when the
     service won't read the keys through it (hotkey_helper_client.connect_helper).
     One installed but not answering is returned too: it keeps trying, and
     until it answers no key counts as working (service_hears). It reports
     only the keys it's asked to watch, so ask for every key the test
     accepts: F1 to F24, Esc, Pause, Scroll Lock, Right Ctrl and Right Alt
-    (helper 1.5 and newer), and Left Ctrl+Space (1.14 and newer), whatever
-    its version: an older helper refuses only the keys it doesn't know and
+    (helper 1.5 and newer), Left Ctrl+Space (1.14 and newer) and the saved
+    *combos* (combo_keys.ComboKey; 1.17 for Alt+D), whatever its version:
+    an older helper refuses only the keys it doesn't know and
     reports the rest, and one that's stopped now is sent the same list when
     it comes back, perhaps updated."""
     try:
@@ -53,7 +54,9 @@ def hotkey_test_helper(ecodes, connect=None):
         codes += [ecodes.KEY_ESC, ecodes.KEY_PAUSE, ecodes.KEY_SCROLLLOCK,
                   ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT]
         helper.watch([str(code) for code in codes]
-                     + watch_specs(ecodes.KEY_SPACE, None, None, ()))
+                     + watch_specs(ecodes.KEY_SPACE, None, None, ())
+                     + [f"{combo.letters}:{combo.code}" for combo in combos
+                        if combo.code != ecodes.KEY_SPACE])
         logger.info("Hotkey test: reading the keys through the hotkey helper")
         return helper
     except Exception as e:

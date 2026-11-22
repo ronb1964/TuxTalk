@@ -320,3 +320,39 @@ def test_a_helper_that_comes_back_updated_reports_the_pair_to_the_test(setup):
         assert htk.service_hears([client], "Left Ctrl+Space")
     finally:
         client.close()
+
+
+def test_closing_the_test_keeps_a_combination_preferences_took():
+    """A config with Alt+D copied to a new computer: closing first run's
+    test turned it into F8."""
+    assert htk.hotkeys_to_save(_config("Alt+D", "Ctrl+Shift+K"), "F8", "F9",
+                               confirmed=False) == ("Alt+D", "Ctrl+Shift+K")
+    assert htk.hotkeys_to_save(_config("Alt+D", "Ctrl+D"), "Alt+D", "Ctrl+D",
+                               confirmed=True) == ("Alt+D", "F9")
+
+
+def test_alt_d_held_lights_the_test_and_d_alone_doesnt():
+    """Preferences offers the test after Alt+D is picked: it could never say
+    working, since the test read only the listed keys."""
+    ecodes = pytest.importorskip("evdev").ecodes
+    from tuxtalk import combo_keys
+    alt_d = combo_keys.ComboKey(ecodes.KEY_D, (frozenset({ecodes.KEY_LEFTALT}),), "A")
+    pair, held = combo_keys.Presses((alt_d,)), set()
+    mods = {ecodes.KEY_LEFTALT, ecodes.KEY_LEFTCTRL}
+
+    def action(code, value):
+        return htk.evdev_key_action(SimpleNamespace(code=code, value=value), held, mods,
+                                    htk.evdev_key_name, pair, {ecodes.KEY_D: "Alt+D"})
+    assert action(ecodes.KEY_D, 1) is None and action(ecodes.KEY_D, 0) is None
+    assert action(ecodes.KEY_LEFTALT, 1) is None
+    assert action(ecodes.KEY_D, 1) == ("Alt+D", "press")
+    assert action(ecodes.KEY_D, 0) == ("Alt+D", "release")
+
+
+def test_the_helper_is_asked_for_a_saved_combination():
+    ecodes = pytest.importorskip("evdev").ecodes
+    from tuxtalk import combo_keys
+    from tuxtalk.hotkey_test_devices import hotkey_test_helper
+    helper = _WatchedHelper("1.17")
+    hotkey_test_helper(ecodes, connect=lambda: helper, combos=[combo_keys.parse("Alt+D")])
+    assert f"A:{ecodes.KEY_D}" in helper.specs

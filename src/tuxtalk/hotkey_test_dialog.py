@@ -417,7 +417,8 @@ class HotkeyTestDialog:
             # the keyboards can't be opened here: hear the keys through the
             # helper, as the dictation service does. Without this the test
             # said the keys wouldn't work until a restart.
-            helper = None if self.keyboards else hotkey_test_helper(ecodes)
+            helper = None if self.keyboards else hotkey_test_helper(
+                ecodes, combos=self._saved_combos().values())
             if helper is not None:
                 self.keyboards.append(helper)
             # Without the helper evdev reads them, from none yet if none is
@@ -477,6 +478,15 @@ class HotkeyTestDialog:
         pair.forget()
         GLib.idle_add(self._show_reading, list(reading))
 
+    def _saved_combos(self):
+        """{name: combo_keys.ComboKey} for Left Ctrl+Space and the saved
+        dictation keys that are combos (Alt+D): Change Key takes only the
+        listed keys, so no other combo comes up during the test."""
+        from tuxtalk import combo_keys
+        names = (CTRL_SPACE, self.config.hotkey, self.config.toggle_hotkey)
+        return {name: combo_keys.parse(name) for name in names
+                if name and combo_keys.parse(name)}
+
     def _reader_loop(self):
         """Read the keyboards through evdev until the test ends, passing each
         key to _on_key on GTK's thread; this hears keys the desktop grabs
@@ -491,9 +501,14 @@ class HotkeyTestDialog:
         flush_pending_events(reading)
         modifier_codes = {ecodes.KEY_LEFTALT, ecodes.KEY_RIGHTALT,
                           ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL,
-                          ecodes.KEY_LEFTMETA, ecodes.KEY_RIGHTMETA}
+                          ecodes.KEY_LEFTMETA, ecodes.KEY_RIGHTMETA,
+                          ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT}
         held_modifiers = set()
-        pair = combo_keys.Presses()     # whether Left Ctrl+Space is down, across events
+        # Which combo dictation key is down, across events: Left Ctrl+Space,
+        # and the saved keys Preferences took pressed (Alt+D).
+        combos = self._saved_combos()
+        pair = combo_keys.Presses(combos.values())
+        names = {combo.code: name for name, combo in combos.items()}
         on_gone = functools.partial(self._keyboard_gone, reading, held_modifiers, pair)
         last_error = None
         next_scan = time.monotonic() + RESCAN_SECONDS
@@ -513,7 +528,7 @@ class HotkeyTestDialog:
                     # Releases count too: they are what marks a key as
                     # working, and GTK never sees a grabbed key.
                     found = evdev_key_action(event, held_modifiers,
-                                             modifier_codes, evdev_key_name, pair)
+                                             modifier_codes, evdev_key_name, pair, names)
                     if found:
                         keyname, action = found
                         GLib.idle_add(self._on_key, keyname, action, True)

@@ -5,7 +5,7 @@ and through GTK for a keyboard evdev can't open, and both must come out with
 the names the settings use ("F8", "Right Ctrl"). Nothing here opens a
 window, so all of it can be tested without one.
 """
-from . import secure_input
+from . import dictation_keys, secure_input
 from .config import CTRL_SPACE, HOTKEY_CHOICES
 
 # The keys the test may write to the log. Without the hotkey helper it reads
@@ -17,6 +17,7 @@ _TEST_KEYS = {f"F{n}" for n in range(1, 25)} | {"Escape", "Pause"} | set(HOTKEY_
 # (AltGr) is Right Alt only from that key (gtk_key_name).
 _GTK_KEY_NAMES = {"Control_R": "Right Ctrl", "Alt_R": "Right Alt", "Scroll_Lock": "Scroll Lock"}
 _RIGHT_ALT_KEYCODE = 100 + 8        # evdev's KEY_RIGHTALT, as X11 and GDK count it
+_SHIFT_CODES = frozenset({42, 54})   # evdev's Left and Right Shift
 
 
 def loggable_key(keyname):
@@ -40,15 +41,17 @@ def hotkeys_to_save(config, hold, toggle, confirmed):
 
     Continue saves what the dialog shows. Closing it any other way keeps keys
     already saved and fills in only blanks: the settings start with no hotkey,
-    and blank keys leave the service watching no key at all.
+    and blank keys leave the service watching no key at all. A key
+    Preferences took pressed (Alt+D) is kept like any other.
     """
     if not confirmed:
         hold = config.hotkey or hold
         toggle = config.toggle_hotkey or toggle
-    if hold not in HOTKEY_CHOICES:
+    if not hold or dictation_keys.problem(hold):
         hold = "F8"
-    if toggle not in HOTKEY_CHOICES or toggle == hold:
-        toggle = "F9" if hold != "F9" else "F8"
+    same = dictation_keys.same_last_key
+    if not toggle or dictation_keys.problem(toggle) or same(hold, toggle):
+        toggle = "F9" if not same(hold, "F9") else "F8"
     return hold, toggle
 
 
@@ -89,15 +92,19 @@ def gtk_key_name(accelerator_name, hardware_keycode=None, ctrl=False):
     return _GTK_KEY_NAMES.get(accelerator_name, accelerator_name)
 
 
-def evdev_key_action(event, held_modifiers, modifier_codes, code_to_name, pair=None):
+def evdev_key_action(event, held_modifiers, modifier_codes, code_to_name, pair=None,
+                     combo_names=None):
     """(keyname, "press" or "release") for one evdev event, or None to ignore it.
 
-    Tracks Alt, Ctrl and Super in *held_modifiers*, so Alt+F8 doesn't count as
-    F8, as on the GTK side. Auto-repeat (value 2) is ignored. Right Ctrl and
-    Right Alt are keys of their own too (HOTKEY_CHOICES), when pressed alone.
-    With *pair* (a combo_keys.Presses kept across events), Space counts only
-    under Left Ctrl, as Left Ctrl+Space, and letting go of Left Ctrl first is
-    its release, as the dictation service reads them.
+    Tracks the *modifier_codes* in *held_modifiers*, so Alt+F8 doesn't count
+    as F8, as on the GTK side; Shift is tracked for combos, and never stops
+    a key on its own. Auto-repeat (value 2) is ignored. Right Ctrl and Right
+    Alt are keys of their own too (HOTKEY_CHOICES), when pressed alone. With
+    *pair* (a combo_keys.Presses kept across events, knowing the combo
+    dictation keys), a combo's key counts only under its modifiers, named
+    as *combo_names* names its code (Left Ctrl+Space for Space when None),
+    and letting go of a modifier first is its release, as the dictation
+    service reads them.
     """
     if event.code in modifier_codes:
         if event.value == 1:
@@ -106,30 +113,32 @@ def evdev_key_action(event, held_modifiers, modifier_codes, code_to_name, pair=N
             held_modifiers.discard(event.code)
     if pair is None:
         return _key_action(event, held_modifiers, code_to_name)
-    from .combo_keys import LEFT_CTRL_SPACE
-    space = LEFT_CTRL_SPACE.code
-    actions = [_pair_action(each, held_modifiers, pair) if each.code == space
+    if combo_names is None:
+        from .combo_keys import LEFT_CTRL_SPACE
+        combo_names = {LEFT_CTRL_SPACE.code: CTRL_SPACE}
+    actions = [_combo_action(each, held_modifiers, pair, combo_names[each.code])
+               if each.code in combo_names
                else _key_action(each, held_modifiers, code_to_name)
-               for each in pair.events(event, held_modifiers, (space,))]
+               for each in pair.events(event, held_modifiers, tuple(combo_names))]
     return next((action for action in actions if action), None)
 
 
-def _pair_action(event, held_modifiers, pair):
-    """Left Ctrl+Space's press or release, from a Space *pair* passed on:
-    not with another modifier held too (Ctrl+Alt+Space), which the service
-    wouldn't take either, nor that press's release."""
-    from evdev import ecodes
+def _combo_action(event, held_modifiers, pair, name):
+    """Combo dictation key *name*'s press or release, from its key that
+    *pair* passed on: not with another modifier held too (Ctrl+Alt+Space
+    for Left Ctrl+Space), which the service wouldn't take either, nor that
+    press's release."""
     if event.value not in (0, 1):
         return None
-    if held_modifiers - {ecodes.KEY_LEFTCTRL}:
+    if held_modifiers - pair.held_with(event.code) - _SHIFT_CODES - {event.code}:
         pair.forget()
         return None
-    return CTRL_SPACE, ("press" if event.value == 1 else "release")
+    return name, ("press" if event.value == 1 else "release")
 
 
 def _key_action(event, held_modifiers, code_to_name):
-    """evdev_key_action for any key but the pair's Space."""
-    if event.value not in (0, 1) or held_modifiers - {event.code}:
+    """evdev_key_action for any key but a combo's."""
+    if event.value not in (0, 1) or held_modifiers - {event.code} - _SHIFT_CODES:
         return None
     keyname = code_to_name(event.code)
     if not keyname:
