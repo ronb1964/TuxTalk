@@ -369,6 +369,56 @@ def ctrl_space_terminal(run):
         return type_in_terminal(run, "terminal-ctrl-space", key=("ctrl", "spc"))
 
 
+# Combination dictation keys (Preferences' "Other key or combination…")
+
+COMBO_DESKTOPS = ("kde", "gnome", "cosmic", "cinnamon")
+
+
+@check(SECTION, "combo_alt_d_hold",
+       "Alt+D as the hold key dictates, and D alone still types",
+       desktops=COMBO_DESKTOPS)
+def combo_alt_d_hold(run):
+    """The dictation is typed whole, with no stray d or Alt shortcut, and D
+    on its own is typing, never the hold key. The sink has no menu bar, so
+    the Alt guard (modifier_hotkeys.guard_alt_tap) is checked by hand, in
+    Kate (RELEASE_CHECKLIST.md)."""
+    with run.settings_put_back("hotkey"):
+        run.set_config(hotkey="Alt+D")
+        run.sink_ready(fresh=True)
+        typed, heard, _log = run.say("basic", key=("alt", "d"))
+        outcome = run.expect_typed("basic", BASIC, typed, heard)
+        outcome.screenshot = run.shot("hold-alt-d")
+        if outcome.status != "pass":
+            return outcome
+        mark = run.log_mark()
+        for _ in range(3):
+            run.vm.tap("d")
+        time.sleep(1.5)
+        text = (run.sink_text() or "").rstrip(" ")
+        if not text.endswith("ddd") or "Recording started" in run.log_since(mark):
+            return Outcome("fail", "D alone didn't type, or started a dictation, with Alt+D "
+                           "as the hold key", expected=BASIC + "ddd", typed=text)
+    return outcome
+
+
+@check(SECTION, "combo_ctrl_shift_k_toggle",
+       "Ctrl+Shift+K as the tap key: one tap starts, the next tap stops",
+       desktops=COMBO_DESKTOPS)
+def combo_ctrl_shift_k_toggle(run):
+    with run.settings_put_back("toggle_hotkey"):
+        run.set_config(toggle_hotkey="Ctrl+Shift+K")
+        run.sink_ready(fresh=True)
+        mark = run.log_mark()
+        run.vm.tap("ctrl", "shift", "k")
+        time.sleep(0.6)
+        run.play("basic")
+        time.sleep(0.3)
+        run.vm.tap("ctrl", "shift", "k")
+        typed = run.wait_dictation(mark)
+        heard = heard_in(run.log_since(mark))
+    return run.expect_typed("basic", BASIC, typed, heard)
+
+
 def _input_method_clash(run):
     """(who, None) for the input method on this VM that takes Ctrl+Space, or
     (None, why there is none)."""
