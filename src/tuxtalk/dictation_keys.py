@@ -62,3 +62,12 @@ def problem(name: str) -> str | None:
     if key not in _COMBO_KEYS:
         return f"{name}: a combination ends in a letter or an F-key."
     return None
+
+
+def same_last_key(first: str, second: str) -> bool:
+    """Whether dictation keys *first* and *second* end in the same key (F8
+    and Ctrl+F8, Alt+D and Ctrl+D), which the hotkey loop can't tell apart."""
+    def last(name):
+        return canonical(name).rpartition("+")[2].upper() if name else ""
+    return bool(first and second) and last(first) == last(second)
+

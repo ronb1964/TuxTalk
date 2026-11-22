@@ -33,3 +33,14 @@ def test_a_letter_written_into_the_settings_by_hand_is_refused():
     reads the keyboards itself."""
     s = Settings(hotkey="d", toggle_hotkey="F9")
     assert repaired(s).hotkey == "" and s.toggle_hotkey == "F9"
+
+
+@pytest.mark.parametrize("hold, toggle", [("Alt+D", "Ctrl+D"), ("F8", "Ctrl+F8")])
+def test_the_toggle_key_cant_end_in_the_hold_keys_key(hold, toggle):
+    s = Settings(hotkey=hold, toggle_hotkey=toggle)
+    assert repaired(s).toggle_hotkey == "" and s.hotkey == hold
+
+
+def test_different_keys_stay():
+    s = Settings(hotkey="Alt+D", toggle_hotkey="Alt+F")
+    assert repaired(s).toggle_hotkey == "Alt+F"

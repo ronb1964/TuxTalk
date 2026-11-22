@@ -20,7 +20,7 @@ except ImportError:
     _USE_TOMLLIB = False  # toml library requires text mode ("r")
 from dataclasses import dataclass, field, fields
 
-from .dictation_keys import CTRL_SPACE, problem as dictation_key_problem
+from .dictation_keys import CTRL_SPACE, same_last_key, problem as dictation_key_problem
 from .language_codes import locale_language
 from .logger import setup_logger
 from .virtual_keyboard import KEY_DELAY_MS
@@ -337,9 +337,14 @@ _repair_attempted = False
 
 def _hotkey_problems(s: Settings) -> list[tuple[str, str]]:
     """The dictation keys that can't be: a key that types ("d" written by
-    hand) would start a dictation with every one typed."""
-    return [(name, why) for name in ("hotkey", "toggle_hotkey")
-            if (why := dictation_key_problem(getattr(s, name)))]
+    hand) would start a dictation with every one typed, and a toggle key
+    ending in the hold key's own key (Alt+D, Ctrl+D) would be read as it."""
+    problems = [(name, why) for name in ("hotkey", "toggle_hotkey")
+                if (why := dictation_key_problem(getattr(s, name)))]
+    if not problems and s.toggle_hotkey and same_last_key(s.hotkey, s.toggle_hotkey):
+        problems.append(("toggle_hotkey", f"{s.toggle_hotkey} ends in the same key as "
+                         f"the hold key {s.hotkey}"))
+    return problems
 
 
 def _validation_problems(s: Settings) -> list[tuple[str, str]]:
