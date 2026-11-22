@@ -59,8 +59,8 @@ class Message:
     # typed is dropped, and nothing is sent after it.
     cancelled: bool = False
     # Audio was dropped while it recorded (the computer stalled and the
-    # microphone's buffer overflowed): a word may be missing, so no Enter
-    # follows it (send_countdown._not_whole says why on screen).
+    # microphone's buffer overflowed): a word may be missing, so no automatic
+    # Enter follows it (send_countdown._not_sent_by_itself says why on screen).
     lost_audio: bool = False
     # Its recording has stopped and the dictation worker hasn't finished its
     # last part yet (pipeline.stop_recording): Esc still cancels it.

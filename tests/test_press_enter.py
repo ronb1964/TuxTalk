@@ -801,6 +801,19 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     assert keyboard.events == []
 
 
+def test_press_enter_said_after_lost_audio_still_presses_it(monkeypatch):
+    """The user chose that Enter; only the automatic one is held back."""
+    import types
+    from tuxtalk import recording
+    monkeypatch.setattr(live, "press_enter_after", False)
+    monkeypatch.setattr(rs.state, "is_recording", True)
+    recording._sd_callback(rs.state.current, np.zeros((320, 1), np.int16), 320, None,
+                           types.SimpleNamespace(input_overflow=True))
+    monkeypatch.setattr(rs.state, "is_recording", False)
+    events = _dictate(monkeypatch, "Hello there press enter", prepared=lambda r: r + ".")
+    assert [e[0] for e in events] == ["typed", "enter"]
+
+
 def test_a_type_at_pause_recording_that_lost_audio_sends_nothing(monkeypatch, keyboard):
     """Its last phrase typed, audio dropped, and the recording ends in a
     pause: the Enter went out though a word may be missing."""

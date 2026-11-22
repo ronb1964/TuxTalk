@@ -586,7 +586,7 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
     if rec.message.lost_audio:
         logger.warning("Some of this recording's audio was dropped (the computer stalled), "
-                       "so a word may be missing; nothing will be sent after it")
+                       "so a word may be missing; it won't be sent automatically")
     rs.state.is_recording = False
     stop_stream_safely(rec)
     resume_media_players()

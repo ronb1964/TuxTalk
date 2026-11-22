@@ -120,13 +120,18 @@ def configure(cfg) -> None:
 def _not_whole(message: Message) -> str | None:
     """Why nothing may follow *message*'s words whatever the window:
     "cancelled" when Esc cancelled it as its words went in, "incomplete"
-    when part of it didn't go in, "lost_audio" when the computer stalled as
-    it recorded and a word may be missing; else None."""
+    when part of it didn't go in; else None."""
     if message.cancelled:
         return "cancelled"
-    if not message.complete:
-        return "incomplete"
-    return "lost_audio" if message.lost_audio else None
+    return None if message.complete else "incomplete"
+
+
+def _not_sent_by_itself(message: Message) -> str | None:
+    """Why no automatic Enter may follow *message*: _not_whole's reasons, or
+    "lost_audio" when the computer stalled as it recorded and a word may be
+    missing. A key the user said ("... press enter") still goes: they chose
+    it, after hearing themselves."""
+    return _not_whole(message) or ("lost_audio" if message.lost_audio else None)
 
 
 def landed(before, after):
@@ -281,7 +286,7 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
     # Nothing to count down to when no Enter could go: part of the message
     # is missing, the delivery saw the focus move, or the window can't be
     # told.
-    if reason := _not_whole(message) or _why_not(message.to, message.to):
+    if reason := _not_sent_by_itself(message) or _why_not(message.to, message.to):
         _say_not_sent(reason)
         if reason == "unknown_window" and space:
             # No Enter could ever follow: the space goes in now, as with
@@ -471,7 +476,7 @@ def say_held_back(word: str, message: Message) -> None:
     (_say_not_sent), or it looks as if sending were off. Where the Enter
     couldn't have gone anyway (part of the message missing, another window
     in front), that reason is the one said."""
-    why = _not_whole(message) or _why_not(message.to, focused_window.destination())
+    why = _not_sent_by_itself(message) or _why_not(message.to, focused_window.destination())
     if why:
         _say_not_sent(why)
         return

@@ -489,7 +489,7 @@ def type_text_raw(text: str) -> bool:
     # Not put on the clipboard instead: that would replace what the user
     # copied, unmarked for clipboard managers to keep. The failure notice
     # points to Recent Dictations, which holds it.
-    logger.error("Could not type text: no virtual keyboard or wtype")
+    logger.error("Could not type text: no virtual keyboard, and wtype works only on Wayland")
     return False
 
 
