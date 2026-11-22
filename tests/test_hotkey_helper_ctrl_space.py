@@ -1,7 +1,7 @@
 """Left Ctrl+Space as a dictation key (hotkey helper 1.14): Space is reported
 while Left Ctrl is held, and Left Ctrl's own press and release to the client
-that watches that pair. No other key is ever reported under Left Ctrl, and
-Space never on its own.
+that watches that pair. The pair's spec unlocks no other key under Left
+Ctrl, and Space is never reported on its own.
 
 Keyboards are pipes, as in test_hotkey_helper.py (hotkey_helper_fakes).
 """

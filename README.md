@@ -619,19 +619,21 @@ windows, so TuxTalk needs a little help to notice F8.
 Older versions put you in the `input` group. That works, but the group lets
 every program you run read every key you press, passwords too. The helper
 fixes that. It runs as a throwaway system user with no network and no access
-to your files, it never reports a letter or a number, only F-keys, Esc,
-Scroll Lock, Right Ctrl and Right Alt and shortcuts with Ctrl, Alt or Super,
-and only to whoever's at the screen.
+to your files, it never reports a letter or a number you type, only F-keys,
+Esc, Scroll Lock, Right Ctrl and Right Alt and shortcuts with Ctrl, Alt or
+Super, and only to whoever's at the screen.
 `systemd-analyze security tuxtalk-hotkeys` rates it 0.6, "SAFE".
 
 A shortcut that isn't an F-key needs Ctrl, Left Alt or Super with it (since
 helper 1.17, so a dictation key can be Alt+D; before, two of them), and
 while that stays held the helper reports two different keys at most, so a
 stuck Ctrl can't turn your typing into "shortcuts". What that costs: a
-program you run could ask the helper when you press shortcuts like Ctrl+C,
-never what you type, unless a keyboard option makes Left Alt or Super type
-characters (then it could learn when two such characters were typed). The check is per user, so
-two logins of the same user both count as the person at the screen.
+program you run could ask the helper which shortcuts you press, like Ctrl+C,
+but not what you type. There's one exception: if a keyboard option makes Left
+Alt, Super or Right Ctrl your AltGr key, for characters like é or €, such a
+program could learn which of those characters you typed with it. Right Alt as
+AltGr, the usual setup, doesn't count. The check is per user, so two logins
+of the same user both count as the person at the screen.
 
 To type, TuxTalk still needs `/dev/uinput`, so whoever's at the screen gets
 it, the same rule Steam uses for game controllers. A program can use it to

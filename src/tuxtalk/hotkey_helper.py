@@ -28,14 +28,14 @@ as typing:
   (any of them, as the desktop counts them) or on the same virtual one;
   and no more than two different such keys while those modifiers stay down;
 * Space while Left Ctrl is held, Left Ctrl counted as those modifiers are
-  (not Right Ctrl, never Space alone, no other key with Left Ctrl), and
-  Left Ctrl's own press and release, only to a client watching that pair.
+  (not Right Ctrl, never Space alone; the pair's spec unlocks no other key),
+  and Left Ctrl's own press and release, only to a client watching that pair.
 
 One modifier (two before 1.17) so a dictation key can be Alt+D. A program
 could then learn when Ctrl+C and the like are pressed, never what's typed,
 except where XKB options make Left Alt, Super or Right Ctrl a third-level
-key (Right Alt is AltGr and never counts): it learns when two such
-characters at most were typed per hold. "Seen by the
+key (Right Alt is AltGr and never counts): then it learns which such
+characters were typed, as each release starts a new hold. "Seen by the
 desktop" and "the same virtual one" because a program can make a virtual
 keyboard: a Ctrl held there, or one the desktop didn't see go down, would
 otherwise make every key typed on the real keyboard look like a shortcut.
@@ -52,22 +52,22 @@ Windows virtual machine, where Ctrl+Alt is AltGr) would otherwise turn
 everything typed into shortcuts; a shortcut is one or two keys, typing is
 many.
 
-Left Ctrl is the one modifier that unlocks a key alone, and only Space. XKB
+The pair is the one spec whose key types: Space under Left Ctrl. XKB
 never makes Left Ctrl a third-level key, but its options can make it Compose,
 a layout switch, Caps Lock, or Alt, Super or Meta: then Left Ctrl+Space may
 type a space, which a client then learns, and Left Ctrl's own press tells
 when a Compose sequence, a layout switch or Caps Lock began, as Right Ctrl's
-does under such options. Even so, only Space, Left Ctrl's own press and
-release, and the release of a modifier held at that press are ever
-reported, never a letter, a number or Enter. A client that watches the pair
+does under such options. Even so, the pair's client is told only of Space,
+Left Ctrl's own press and release, and the release of a modifier held at
+that press, never a letter, a number or Enter. A client that watches the pair
 needs Left Ctrl's press and release to hold it back from the desktop while
 TuxTalk types (Ctrl and a typed "w" close a tab).
 
 Everything goes only to the user at the screen: logind's active user on
 seat0, checked by user id (two sessions of the same user count as one), and
 only keyboards of seat0 are read. Letters, numbers, Enter or Shift+letter
-are never reported, so a hostile program that connects learns no typing,
-only when shortcuts and AltGr, Compose or layout-switch keys were pressed.
+alone are never reported, so a hostile program that connects learns no typing,
+only which shortcuts and when AltGr, Compose or layout-switch keys were pressed.
 Each client may ask for four shortcuts at most; TuxTalk asks for four.
 
 Hiding a held hotkey

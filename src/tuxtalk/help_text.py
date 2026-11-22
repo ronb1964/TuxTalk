@@ -95,7 +95,7 @@ def _no_hotkey_tips(is_flatpak, keys_where):
         "• On many laptops and small keyboards the F-keys work only with Fn held. Hold Fn\n"
         "  with your key, or pick Right Ctrl, Right Alt, Scroll Lock or Left Ctrl+Space in\n"
         "  Preferences → General: where a laptop has them, they need no Fn. Or pick Other key\n"
-        "  or combination… there and press two keys you like, such as Alt+D.")
+        "  or combination… there and press the keys you like, such as Alt+D.")
 
 
 def _uninstall_text(is_flatpak):
