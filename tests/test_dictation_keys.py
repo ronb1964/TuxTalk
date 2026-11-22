@@ -44,3 +44,23 @@ def test_the_toggle_key_cant_end_in_the_hold_keys_key(hold, toggle):
 def test_different_keys_stay():
     s = Settings(hotkey="Alt+D", toggle_hotkey="Alt+F")
     assert repaired(s).toggle_hotkey == "Alt+F"
+
+
+@pytest.mark.parametrize("name, other, voice_editing, left_alt_types, refused", [
+    ("Alt+D", "F9", False, False, False),
+    ("Alt+D", "Ctrl+D", False, False, True),        # the same last key
+    ("Ctrl+Shift+K", "F9", True, False, True),      # Shift is voice editing's
+    ("Ctrl+Shift+K", "F9", False, False, False),
+    ("Alt+D", "F9", False, True, True),             # Left Alt types on this layout
+    ("Ctrl+D", "F9", False, True, False),
+    ("D", "F9", False, False, True),
+])
+def test_what_preferences_refuses(name, other, voice_editing, left_alt_types, refused):
+    assert bool(dictation_keys.refusal(name, other, voice_editing, left_alt_types)) is refused
+
+
+def test_a_combo_warns_that_apps_shortcuts_cant_be_checked():
+    assert "menu" in dictation_keys.warning("Alt+D")
+    assert "can't check" in dictation_keys.warning("Ctrl+D")
+    assert dictation_keys.warning("F8") is None
+    assert dictation_keys.warning("Left Ctrl+Space") is None

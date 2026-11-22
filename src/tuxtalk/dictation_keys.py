@@ -71,3 +71,38 @@ def same_last_key(first: str, second: str) -> bool:
         return canonical(name).rpartition("+")[2].upper() if name else ""
     return bool(first and second) and last(first) == last(second)
 
+
+def refusal(name: str, other: str, voice_editing: bool, left_alt_types: bool) -> str | None:
+    """Why *name* can't be picked as a dictation key in Preferences, beside
+    *other* (the other dictation key): problem's reasons, the other key's
+    own last key, Shift while voice editing (Shift with the dictation key
+    is the edit), or Left Alt where the layout makes it type characters
+    (*left_alt_types*: every one typed would start a dictation)."""
+    why = problem(name)
+    if why:
+        return why
+    name = canonical(name)
+    mods = name.split("+")[:-1]
+    if same_last_key(name, other):
+        return f"Your other dictation key, {other}, ends in the same key."
+    if voice_editing and "Shift" in mods:
+        return ("Voice editing uses Shift with your dictation key, so the key can't have "
+                "Shift in it.")
+    if left_alt_types and "Alt" in mods:
+        return ("On your keyboard layout Left Alt types characters, so it can't be part of a "
+                "dictation key. Use Ctrl or the Windows key instead.")
+    return None
+
+
+def warning(name: str) -> str | None:
+    """What to know before using combo *name*, which works but may take a
+    shortcut over; None for a key on its own."""
+    mods = canonical(name).split("+")[:-1]
+    if not mods or name == CTRL_SPACE:
+        return None
+    if mods == ["Alt"]:
+        return ("Many apps open a menu with Alt and a letter (Alt+F is often File). TuxTalk "
+                "takes this one over, and can't check which apps use it.")
+    return ("Apps may use this shortcut for something of their own. TuxTalk takes it over, "
+            "and can't check which apps use it.")
+

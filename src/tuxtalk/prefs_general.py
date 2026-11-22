@@ -37,6 +37,8 @@ PASTE_LAST_KEYS = [
 
 # What the hold and toggle dropdowns show for a blank key (_apply_hotkey_fallbacks).
 _KEY_SHOWN_WHEN_BLANK = {"hotkey": "F8", "toggle_hotkey": "F9"}
+# The id of the dropdowns' last entry, "Other key or combination…" (_press_a_key).
+_OTHER_KEY = "other"
 
 
 def _needs(keys):
@@ -177,7 +179,8 @@ class GeneralTab(Tab):
             "Recommended: F8 (default). Avoid: F1, F5, F11, F12.\n"
             "F-keys that need Fn held? Right Ctrl, Right Alt, Scroll Lock and\n"
             "Left Ctrl+Space don't.")
-        hotkeys = dropdown_entries()
+        # Last in each list: any other key, or a combination (Alt+D), pressed.
+        hotkeys = [*dropdown_entries(), (_OTHER_KEY, "Other key or combination…")]
         self.hotkey_combo = self._hotkey_combo(self.hotkey_label, hotkeys)
         grid.attach(self.hotkey_label, 0, row, 1, 1)
         grid.attach(self.hotkey_combo, 1, row, 1, 1)
@@ -417,14 +420,14 @@ class GeneralTab(Tab):
         shows F8 or F9 and is recorded in the settings, so what the dropdown
         shows is what OK saves: a blank key doesn't dictate, and picking the
         key already shown emits no 'changed' to correct it. A saved key the
-        list doesn't have (a hand edit) is added to it, as _shortcut_combo
-        does: it's the key in use, never replaced unasked. On the Flatpak the
+        list doesn't have (a combination pressed, or a hand edit) is added to
+        it, as _shortcut_combo does: it's the key in use, never replaced unasked. On the Flatpak the
         desktop holds the keys, so the fallback is shown only."""
         for key, combo in (("hotkey", self.hotkey_combo), ("toggle_hotkey", self.toggle_combo)):
             default = _KEY_SHOWN_WHEN_BLANK[key]
             saved = self.config.get(key) or ""
             if saved and saved not in hotkeys:
-                combo.append(saved, saved)
+                combo.insert(len(combo.get_model()) - 1, saved, saved)     # before "Other…"
             combo.set_active_id(saved or default)
             if not saved and not os.environ.get("FLATPAK_ID"):
                 self.config[key] = default
@@ -439,6 +442,9 @@ class GeneralTab(Tab):
         shown = self.config.get(setting) or _KEY_SHOWN_WHEN_BLANK[setting]
         if key == shown:
             return      # put back after a refusal: nothing new picked
+        if key == _OTHER_KEY:
+            self._press_a_key(combo, setting, other, shown)
+            return
         if key is not None and key == other.get_active_id():
             combo.popdown()     # not left drawn over the message
             role = "toggle" if setting == "hotkey" else "hold"
@@ -448,6 +454,19 @@ class GeneralTab(Tab):
             combo.set_active_id(shown)
             return
         self.update_config(setting, key)
+
+    def _press_a_key(self, combo, setting, other, shown):
+        """"Other key or combination…": ask for the key by pressing it
+        (prefs_key_capture), and pick it in *combo*, added to its list when
+        it isn't there; else *combo* goes back to *shown*."""
+        from .prefs_key_capture import ask
+        combo.popdown()
+        role = "hold" if setting == "hotkey" else "toggle"
+        picked = ask(self.window, role, other.get_active_id() or "",
+                     bool(self.config.get("voice_editing")))
+        if picked and not any(row[1] == picked for row in combo.get_model()):
+            combo.insert(len(combo.get_model()) - 1, picked, picked)    # before "Other…"
+        combo.set_active_id(picked or shown)
 
     def _update_shortcuts_summary(self):
         """The two keys beside the More shortcuts button, as they are now."""

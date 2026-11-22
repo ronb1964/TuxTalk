@@ -240,6 +240,8 @@ class KeyPlanner:
                     and (char not in self._by_char or _cost(entry) < _cost(self._by_char[char]))):
                 self._by_char[char] = entry
         self._altgr = _altgr_key(altgr_keys)
+        # Every key that is AltGr here: an XKB option can make Left Alt one.
+        self.level3_keys = frozenset(altgr_keys)
 
     def _note_level(self, sym, keycode, shifted, altgr_keys):
         """Note a key that types *sym* with no modifier held, or Shift alone
@@ -707,6 +709,21 @@ def altgr_characters():
         return None
     found = planner.altgr_only("@€{}[]\\|~")
     return None if found is None else tuple(found[:2])
+
+
+def left_alt_types() -> bool:
+    """Whether the active keyboard's options make Left Alt a third-level key
+    (lv3:lalt_switch and the like), so that Left Alt with a letter types a
+    character: then it can't be a dictation key's modifier (Alt+D), or every
+    such character typed would start a dictation. False when the layout
+    can't be read."""
+    try:
+        planner = planner_for(active_layout() or US)
+    except (OSError, ValueError) as e:
+        logger.info(f"Could not tell whether Left Alt types characters: {e}")
+        return False
+    from evdev import ecodes
+    return ecodes.KEY_LEFTALT in planner.level3_keys
 
 
 def compose_keys():

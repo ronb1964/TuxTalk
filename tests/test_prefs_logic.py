@@ -327,6 +327,12 @@ class FakeCombo:
     def append(self, key, text):
         self.ids.append(key)
 
+    def insert(self, position, key, text):
+        self.ids.insert(position, key)
+
+    def get_model(self):
+        return [(key, key) for key in self.ids]
+
     def set_active_id(self, value):
         if value not in self.ids:
             return False
