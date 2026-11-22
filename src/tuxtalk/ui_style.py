@@ -175,6 +175,15 @@ def _drop_down_below(combo):
         combo.connect("size-allocate", _match_menu_width)
 
 
+def one_column(combo):
+    """Keep *combo*'s list in one column however long it is, still hanging
+    below the button as _drop_down_below makes it: for lists whose labels
+    are too long to stand three side by side (the dictation keys say what
+    each one costs), which still fit on the screen as one column."""
+    combo.set_wrap_width(1)
+    combo.connect("size-allocate", _match_menu_width)
+
+
 def _on_widget_realize(widget, *_args):
     """Emission hook for every widget's "realize": each ComboBox gets the
     Wayland drop-down before it can be clicked. True keeps the hook installed."""

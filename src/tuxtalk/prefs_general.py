@@ -16,7 +16,7 @@ from .prefs_hotkey_test import run_hotkey_test
 from .prefs_speech import SpeechSection
 from .prefs_system_check import UPDATE_HELPER_LABEL
 from .prefs_tab import Tab, dropdown, fold, scroll_into_view, section_header, tip_label
-from .ui_style import WARNING_AMBER, message_dialog, show_message
+from .ui_style import WARNING_AMBER, message_dialog, one_column, show_message
 
 logger = setup_logger(__name__)
 
@@ -400,6 +400,9 @@ class GeneralTab(Tab):
         combo = dropdown(Gtk.ComboBoxText())
         for key, text in entries:
             combo.append(key, text)
+        # 17 keys and more, with labels like "Right Ctrl (stops working as
+        # Ctrl)": as a grid they were wider than the window.
+        one_column(combo)
         label.set_mnemonic_widget(combo)
         return combo
 

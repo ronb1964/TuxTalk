@@ -216,3 +216,11 @@ def test_every_window_with_dropdowns_applies_the_style(gtk, monkeypatch, request
     build(request)
     assert applied, ("this window builds dropdowns without apply_dropdown_list_style(), "
                      "so its popups open in menu mode covering the row above")
+
+
+def test_the_dictation_key_lists_stay_one_column(prefs_window):
+    """17 keys with labels like "Right Ctrl (stops working as Ctrl)": as a
+    three-column grid the list was far wider than the Preferences window."""
+    tab = prefs_window().general_tab
+    assert tab.hotkey_combo.get_wrap_width() == tab.toggle_combo.get_wrap_width() == 1
+    assert len(tab.hotkey_combo.get_model()) > 15       # long enough to have been a grid
