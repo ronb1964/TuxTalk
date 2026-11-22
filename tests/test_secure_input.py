@@ -517,3 +517,14 @@ def test_an_installed_helper_is_updated_even_when_its_check_fails(monkeypatch):
     monkeypatch.setattr("tuxtalk.uinput_helper.install_udev_rule_with_pkexec",
                         lambda: ran.append("group") or (True, ""))
     assert si.fix_permissions() == (True, "", False) and ran == ["helper"]
+
+
+@pytest.mark.parametrize("key, heard", [
+    ("Alt+D", False), ("alt+d", False),     # 1.16 refuses a letter under one modifier
+    ("Alt+F8", True), ("Ctrl+F13", True),   # every helper reports F-keys whatever is held
+    ("Ctrl+Alt+D", True), ("F8", True),
+])
+def test_an_older_helper_is_updated_only_for_a_key_it_cant_report(key, heard):
+    """A hand-written "alt+d" did nothing with helper 1.16 and nobody offered
+    the update; Alt+F8 asked for a password for nothing."""
+    assert si.hears_key("1.16", key) is heard

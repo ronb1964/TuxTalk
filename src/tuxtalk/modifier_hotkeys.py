@@ -1,4 +1,5 @@
-"""Right Ctrl and Right Alt as dictation keys, and Left Ctrl held with Space.
+"""Right Ctrl and Right Alt as dictation keys, and the modifiers a combo
+dictation key is held with (Left Ctrl of Left Ctrl+Space, Alt of Alt+D).
 
 All are modifiers: a key TuxTalk presses while one is down arrives as a
 shortcut (Ctrl+W closes the tab), and a lone tap of Alt opens an app's menu
@@ -74,16 +75,18 @@ _SETTLE_S = 0.05
 # (Alt+Space opens KRunner). Not Shift: Shift+Space is still a space.
 SHORTCUT_MODIFIERS = frozenset(MODIFIER_CODES - SHIFT_CODES)
 # Key codes to the names Preferences shows ("Right Ctrl"), for the log, and
-# the Left Ctrl that Left Ctrl+Space is held with.
+# the modifiers a combo dictation key is held with.
 _NAMES = {**{ecodes.ecodes[key]: name for name, key in HOTKEY_CHOICES.items()},
-          ecodes.KEY_LEFTCTRL: "Left Ctrl"}
+          ecodes.KEY_LEFTCTRL: "Left Ctrl", ecodes.KEY_LEFTALT: "Left Alt",
+          ecodes.KEY_LEFTMETA: "Left Super", ecodes.KEY_RIGHTMETA: "Right Super",
+          ecodes.KEY_LEFTSHIFT: "Left Shift", ecodes.KEY_RIGHTSHIFT: "Right Shift"}
 
 
 def note(devices, *keys) -> None:
     """Remember the hotkey loop's *devices* and which of its dictation *keys*
-    are modifiers, for wait_while_held and wait_until_let_go: Right Ctrl or Right Alt, and the
-    Left Ctrl a Left Ctrl+Space dictation key is held with, which the hotkey
-    loop names among *keys* (combo_keys.held_with)."""
+    are modifiers, for wait_while_held and wait_until_let_go: Right Ctrl or
+    Right Alt, and the modifiers a combo dictation key is held with, which
+    the hotkey loop names among *keys* (combo_keys.Presses.held_with)."""
     global _noted
     _noted = (devices, frozenset(k for k in keys if k in MODIFIER_CODES))
 

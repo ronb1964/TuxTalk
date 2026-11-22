@@ -54,10 +54,6 @@ class ComboKey(NamedTuple):
 
 LEFT_CTRL_SPACE = ComboKey(ecodes.KEY_SPACE, (frozenset({ecodes.KEY_LEFTCTRL}),), "L")
 
-# The combos among the dictation keys now, by their last key's code (use).
-# Space is always Left Ctrl+Space: it never types as a dictation key.
-_dictation_combos = {LEFT_CTRL_SPACE.code: LEFT_CTRL_SPACE}
-
 
 def parse(name: str) -> ComboKey | None:
     """Dictation key *name* as a ComboKey, or None when it's a key on its
@@ -76,24 +72,11 @@ def parse(name: str) -> ComboKey | None:
                     "".join(sorted(_HELPER_LETTERS[mod] for mod in mods)))
 
 
-def use(combos) -> None:
-    """Make *combos* (ComboKeys) the combo dictation keys the hotkey loop
-    reads (hotkey_keys.Hotkeys.combos)."""
-    global _dictation_combos
-    _dictation_combos = {LEFT_CTRL_SPACE.code: LEFT_CTRL_SPACE,
-                         **{combo.code: combo for combo in combos}}
-
-
-def combo_for(code) -> ComboKey | None:
-    """The combo dictation key whose last key is *code*, or None."""
-    return _dictation_combos.get(code)
-
-
-def held_with(code) -> frozenset:
-    """The modifier keys dictation key *code* may be held with: none for a
-    key on its own, both Ctrls for Ctrl+D."""
-    combo = combo_for(code)
-    return frozenset().union(*combo.mods) if combo else frozenset()
+def typing_modifiers(level3_keys) -> frozenset:
+    """The modifiers a combo may name ("Alt", "Super", "Ctrl") that count a
+    key among *level3_keys* (keyboard_layout.level3_keys): with it a letter
+    types a character on this layout, so it can't make a dictation key."""
+    return frozenset(mod for mod, group in _GROUPS.items() if group & set(level3_keys))
 
 
 def is_held(combo: ComboKey, held_modifiers) -> bool:
@@ -106,15 +89,40 @@ class Presses:
     from those read: a combo's key only as the combo, and one of its
     modifiers let go first as the combo's release too."""
 
-    def __init__(self):
+    def __init__(self, combos=()):
         self._down = set()      # codes whose key went down as the combo and isn't up yet
         self._hidden = set()    # modifiers a hold hid from the desktop (modifier_hidden)
+        self._combos = {}
+        self.use(combos)
+
+    def use(self, combos, level3_keys=frozenset()) -> list:
+        """Make *combos* (ComboKeys, hotkey_keys.Hotkeys.combos) the combo
+        dictation keys. A key among *level3_keys* doesn't count as a
+        modifier: with it a letter types a character (keyboard_layout), and
+        each one would start a dictation. The combos left with a modifier
+        no key can be are returned: they never start one."""
+        stripped = [combo._replace(mods=tuple(group - set(level3_keys) for group in combo.mods))
+                    for combo in combos]
+        # Space is always Left Ctrl+Space: it never types as a dictation key.
+        self._combos = {LEFT_CTRL_SPACE.code: LEFT_CTRL_SPACE,
+                        **{combo.code: combo for combo in stripped}}
+        return [combo for combo in stripped if not all(combo.mods)]
+
+    def combo_for(self, code) -> ComboKey | None:
+        """The combo dictation key whose last key is *code*, or None."""
+        return self._combos.get(code)
+
+    def held_with(self, code) -> frozenset:
+        """The modifier keys dictation key *code* may be held with: none for
+        a key on its own, both Ctrls for Ctrl+D."""
+        combo = self.combo_for(code)
+        return frozenset().union(*combo.mods) if combo else frozenset()
 
     def events(self, event, held_modifiers, dictation_keys) -> list:
         """What *event* is to the dictation keys, with *held_modifiers*
         already counting it: nothing, itself, or with a modifier let go
         first, itself and the combo's key coming up."""
-        combos = {code: combo_for(code) for code in dictation_keys if combo_for(code)}
+        combos = {code: self.combo_for(code) for code in dictation_keys if self.combo_for(code)}
         if not combos:
             return [event]
         if any(event.code in group for combo in combos.values() for group in combo.mods):

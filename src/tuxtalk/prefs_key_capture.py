@@ -2,8 +2,12 @@
 dictation key, beyond the ones the dropdowns list (Alt+D, Ctrl+Shift+K, F13).
 
 What can be picked is dictation_keys' to say (refusal, warning); this window
-only reads the keys pressed and shows the answer.
+only reads the keys pressed and shows the answer. refusal_for gives the
+answer for this computer, so a key picked from a dropdown is held to the
+same rules.
 """
+import os
+
 import gi
 
 gi.require_version("Gtk", "3.0")
@@ -22,12 +26,17 @@ _MODIFIER_NAMES = {"Control_L", "Control_R", "Alt_L", "Alt_R", "Super_L", "Super
 # moves to the buttons, Enter and Space press them, Escape cancels. None of
 # them can be a dictation key.
 _WINDOW_KEYS = {"Tab", "ISO_Left_Tab", "Return", "KP_Enter", "space", "Escape"}
+# xkb keycode = evdev keycode + 8, as GTK reports hardware keycodes.
+_EVDEV_OFFSET = 8
 
 
-def key_name(keyval: int, state: int) -> str | None:
+def key_name(keyval: int, state: int, hardware_keycode: int = 0) -> str | None:
     """The dictation key name for a key press: "Alt+D", "F13", or the key's
     own name for one TuxTalk will refuse ("A"); None for a modifier pressed
-    on its own, which only starts a combo, and for the window's own keys."""
+    on its own, which only starts a combo, and for the window's own keys. A
+    letter of a layout without Latin letters (Russian) is named by the US
+    letter on its key, which is the key the hotkey loop listens for there
+    (keyboard_layout.shortcut_keycode)."""
     name = Gdk.keyval_name(keyval) or ""
     if name in _MODIFIER_NAMES or name in _WINDOW_KEYS:
         return None
@@ -35,15 +44,45 @@ def key_name(keyval: int, state: int) -> str | None:
         name = "Scroll Lock"
     elif len(name) == 1 and name.isalpha():
         name = name.upper()
+    elif Gdk.keyval_to_unicode(keyval) and chr(Gdk.keyval_to_unicode(keyval)).isalpha():
+        from .key_commands import US_LETTER_KEYS
+        by_code = {code: letter.upper() for letter, code in US_LETTER_KEYS.items()}
+        name = by_code.get(hardware_keycode - _EVDEV_OFFSET, name)
     mods = [mod for mod, mask in _MASKS if state & mask]
     return "+".join([*mods, name])
 
 
-def ask(parent, role: str, other: str, voice_editing: bool) -> str | None:
+def refusal_for(name: str, other: str, config) -> str | None:
+    """dictation_keys.refusal for *name* on this computer, beside *other*
+    (the other dictation key): with *config*'s voice editing and shortcuts,
+    and the modifiers that type on the active layout."""
+    from .combo_keys import typing_modifiers
+    from .keyboard_layout import level3_keys
+    shortcuts = (("cheat sheet", config.get("voice_commands_hotkey") or ""),
+                 ("paste last dictation", config.get("paste_last_hotkey") or ""))
+    return dictation_keys.refusal(name, other, bool(config.get("voice_editing")),
+                                  typing_modifiers(level3_keys()), shortcuts)
+
+
+def _desktop_holds_keys() -> bool:
+    """Whether this desktop keeps a dictation key from the focused app
+    (hotkeys._claim_desktop_hotkeys): KDE, COSMIC, X11, GNOME with the
+    TuxTalk extension, and the Flatpak, whose keys the desktop owns."""
+    from . import cosmic_hotkeys, desktop_detect, kwin_hotkeys, x11_hotkeys
+    if (os.environ.get("FLATPAK_ID") or kwin_hotkeys.should_claim()
+            or cosmic_hotkeys.should_claim() or x11_hotkeys.should_claim()):
+        return True
+    if not desktop_detect.is_gnome():
+        return False
+    from .extension_helper import EXTENSION_UUID
+    from .gnome_extensions import is_extension_enabled
+    return is_extension_enabled(EXTENSION_UUID)
+
+
+def ask(parent, role: str, other: str, config) -> str | None:
     """Ask for the *role* dictation key ("hold" or "toggle") by pressing it;
     the name picked, or None when cancelled. *other* is the other dictation
-    key, *voice_editing* whether Shift with the key is a voice edit."""
-    from .keyboard_layout import left_alt_types
+    key, *config* the settings it's checked against (refusal_for)."""
     dialog = Gtk.Dialog(title=f"Your {role} key", transient_for=parent, modal=True)
     dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
     use = dialog.add_button("Use This Key", Gtk.ResponseType.OK)
@@ -62,17 +101,21 @@ def ask(parent, role: str, other: str, voice_editing: bool) -> str | None:
     note.get_style_context().add_class("dim-label")
     box.add(note)
     picked = []
-    alt_types = left_alt_types()
+    held_back = _desktop_holds_keys()
 
     def on_key(_widget, event):
-        name = key_name(event.keyval, event.state)
+        name = key_name(event.keyval, event.state, event.hardware_keycode)
         if name is None:
             return False                # a modifier so far, or the window's own key
         picked[:] = [dictation_keys.canonical(name)]
         shown.set_text(picked[0])
-        why = dictation_keys.refusal(picked[0], other, voice_editing, alt_types)
-        note.set_text(why or dictation_keys.warning(picked[0]) or "")
+        why = refusal_for(picked[0], other, config)
+        said = why or dictation_keys.warning(picked[0], held_back) or ""
+        note.set_text(said)
         use.set_sensitive(why is None)
+        # GTK3 has no live region: the key and the answer go on the window's
+        # description, which a screen reader reads with the focused button.
+        dialog.get_accessible().set_description(f"{picked[0]}. {said}".strip())
         return True                     # the key is only being picked
     dialog.connect("key-press-event", on_key)
     dialog.show_all()

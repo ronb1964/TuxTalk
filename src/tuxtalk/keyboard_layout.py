@@ -711,19 +711,19 @@ def altgr_characters():
     return None if found is None else tuple(found[:2])
 
 
-def left_alt_types() -> bool:
-    """Whether the active keyboard's options make Left Alt a third-level key
-    (lv3:lalt_switch and the like), so that Left Alt with a letter types a
-    character: then it can't be a dictation key's modifier (Alt+D), or every
-    such character typed would start a dictation. False when the layout
-    can't be read."""
+def level3_keys() -> frozenset:
+    """The keys the active keyboard's options make a third-level key
+    (AltGr), as evdev codes: Right Alt on most layouts, Left Alt with
+    lv3:lalt_switch, the Windows key with lv3:lwin_switch, Right Ctrl with
+    lv3:switch. Held with a letter one types a character, so it can't be a
+    dictation key's modifier (combo_keys.typing_modifiers). Empty when the
+    layout can't be read."""
     try:
         planner = planner_for(active_layout() or US)
     except (OSError, ValueError) as e:
-        logger.info(f"Could not tell whether Left Alt types characters: {e}")
-        return False
-    from evdev import ecodes
-    return ecodes.KEY_LEFTALT in planner.level3_keys
+        logger.info(f"Could not tell which keys are AltGr: {e}")
+        return frozenset()
+    return planner.level3_keys
 
 
 def compose_keys():

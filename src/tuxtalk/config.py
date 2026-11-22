@@ -113,7 +113,7 @@ VALID_MODES = {"hold", "toggle"}
 #
 # Left Ctrl+Space is Ctrl+Space as Handy and other dictation apps use it
 # (Discussion #28). The service listens for Space, the key named here, and
-# only counts it while Left Ctrl is held (see ctrl_space).
+# only counts it while Left Ctrl is held (see combo_keys).
 HOTKEY_CHOICES = {
     **{f"F{i}": f"KEY_F{i}" for i in range(1, 13)},
     "Right Ctrl": "KEY_RIGHTCTRL",

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from tuxtalk import keyboard_layout
 from tuxtalk import prefs as P
 from tuxtalk.prefs import PreferencesWindow
 from tuxtalk.prefs_general import GeneralTab
@@ -419,6 +420,8 @@ def _keys_tab(monkeypatch, hold="F8", toggle="F9"):
                         hotkey_combo=FakeCombo(), toggle_combo=FakeCombo(), told=told)
     d.update_config = d.config.__setitem__
     d._on_key_picked = lambda *a: GeneralTab._on_key_picked(d, *a)
+    d._key_refused = lambda *a: GeneralTab._key_refused(d, *a)
+    monkeypatch.setattr(keyboard_layout, "level3_keys", lambda: frozenset())
     GeneralTab._apply_hotkey_fallbacks(d, ["F8", "F9", "F10"])     # as the tab is built
     d.hotkey_combo.connect("changed", d._on_key_picked, "hotkey", d.toggle_combo)
     d.toggle_combo.connect("changed", d._on_key_picked, "toggle_hotkey", d.hotkey_combo)
@@ -458,6 +461,17 @@ def test_on_the_flatpak_a_refused_key_goes_back_to_the_key_shown(monkeypatch):
     assert d.told == ["F8 is already your hold key"]
     assert d.toggle_combo.get_active_id() == "F9"
     assert d.config == {"hotkey": "", "toggle_hotkey": ""}
+
+
+def test_a_listed_key_ending_in_the_other_keys_key_is_refused(monkeypatch):
+    """Toggle Ctrl+F9 (pressed), then F9 picked for the hold: it was saved,
+    and the next start cleared the toggle key without a word."""
+    d = _keys_tab(monkeypatch, toggle="Ctrl+F9")
+
+    d.hotkey_combo.set_active_id("F9")
+
+    assert d.told == ["F9 can't be your hold key"]
+    assert d.config == {"hotkey": "F8", "toggle_hotkey": "Ctrl+F9"}
 
 
 # --- "Launch at login" must follow the save, not the click ------------------

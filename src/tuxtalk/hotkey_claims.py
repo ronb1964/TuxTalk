@@ -17,7 +17,7 @@ reports a key in, for kwin_hotkeys alone.
 
 # TuxTalk's modifier names -> Qt's.
 _QT_MODIFIERS = {"CTRL": "Ctrl", "SHIFT": "Shift", "ALT": "Alt", "SUPER": "Meta"}
-_FKEYS = {f"F{i}" for i in range(1, 13)}
+_FKEYS = {f"F{i}" for i in range(1, 25)}
 # The other dictation keys a desktop can hold back: TuxTalk's name (upper
 # case) -> Qt's name and code. Right Ctrl and Right Alt aren't among them: a
 # modifier on its own can't be a shortcut, and it types nothing into the app.

@@ -27,7 +27,7 @@ import os
 import subprocess
 
 from . import pkexec_runner
-from .config import CTRL_SPACE
+from .dictation_keys import CTRL_SPACE, SINGLE_KEYS, canonical
 from .hotkey_helper import DEFAULT_SOCKET_DIR, SOCKET_PATH
 from .logger import setup_logger
 
@@ -432,10 +432,14 @@ ONE_MODIFIER_COMBOS_SINCE = "1.17"
 
 def key_since(key):
     """The helper version that first reports dictation key *key*, or None
-    for every one."""
+    for every one. A combo ending in an F-key needs none: every helper
+    reports F-keys whatever is held with them."""
+    key = canonical(key or "")
     if key in KEYS_SINCE:
         return KEYS_SINCE[key]
-    mods = key.split("+")[:-1]
+    *mods, last = key.split("+")
+    if last in SINGLE_KEYS:
+        return None
     if len([mod for mod in mods if mod in ("Ctrl", "Alt", "Super")]) == 1:
         return ONE_MODIFIER_COMBOS_SINCE
     return None

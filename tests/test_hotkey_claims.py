@@ -17,7 +17,7 @@ def test_a_hotkey_is_named_as_qt_names_it(name, qt):
     assert hotkey_claims.qt_key_sequence(name) == qt
 
 
-@pytest.mark.parametrize("name", ["", "   ", None, "A", "q", "F13", "Hyper+V",
+@pytest.mark.parametrize("name", ["", "   ", None, "A", "q", "F25", "Hyper+V",
                                   "Ctrl+", "Ctrl+Esc"])
 def test_a_bare_letter_or_an_unknown_key_is_never_claimed(name):
     assert hotkey_claims.qt_key_sequence(name) is None
@@ -27,6 +27,7 @@ def test_a_bare_letter_or_an_unknown_key_is_never_claimed(name):
     ("F6", 0x01000035), ("F1", 0x01000030), ("F12", 0x0100003B),
     ("Shift+F8", 0x02000000 | 0x01000037), ("Ctrl+Alt+V", 0x04000000 | 0x08000000 | 0x56),
     ("Super+F9", 0x10000000 | 0x01000038), ("", None), ("Space", None),
+    ("F13", 0x0100003C), ("Ctrl+F24", 0x04000000 | 0x01000047),
 ])
 def test_kde_reports_a_key_by_its_qt_code(name, code):
     assert hotkey_claims.qt_key_code(hotkey_claims.qt_key_sequence(name)) == code

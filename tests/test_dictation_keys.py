@@ -46,17 +46,37 @@ def test_different_keys_stay():
     assert repaired(s).toggle_hotkey == "Alt+F"
 
 
-@pytest.mark.parametrize("name, other, voice_editing, left_alt_types, refused", [
-    ("Alt+D", "F9", False, False, False),
-    ("Alt+D", "Ctrl+D", False, False, True),        # the same last key
-    ("Ctrl+Shift+K", "F9", True, False, True),      # Shift is voice editing's
-    ("Ctrl+Shift+K", "F9", False, False, False),
-    ("Alt+D", "F9", False, True, True),             # Left Alt types on this layout
-    ("Ctrl+D", "F9", False, True, False),
-    ("D", "F9", False, False, True),
+SHORTCUTS = (("cheat sheet", "Ctrl+Alt+V"), ("paste last dictation", "Ctrl+Alt+P"))
+
+
+@pytest.mark.parametrize("name, other, voice_editing, typing, refused", [
+    ("Alt+D", "F9", False, set(), False),
+    ("Alt+D", "Ctrl+D", False, set(), True),        # the same last key
+    ("Ctrl+Shift+K", "F9", True, set(), True),      # Shift is voice editing's
+    ("Ctrl+Shift+K", "F9", False, set(), False),
+    ("Alt+D", "F9", False, {"Alt"}, True),          # Left Alt types on this layout
+    ("Super+D", "F9", False, {"Super"}, True),      # so does the Windows key
+    ("Ctrl+D", "F9", False, {"Ctrl"}, True),        # and Right Ctrl
+    ("Ctrl+D", "F9", False, {"Alt"}, False),
+    ("Ctrl+D", "Right Ctrl", False, set(), True),   # Right Ctrl would be the combo's Ctrl
+    ("Right Ctrl", "Ctrl+Alt+K", False, set(), True),
+    ("Ctrl+Alt+P", "F9", False, set(), True),       # Paste Last's own shortcut
+    ("Ctrl+Alt+Shift+P", "F9", False, set(), True),  # which it answers to first
+    ("Alt+P", "F9", False, set(), False),
+    ("D", "F9", False, set(), True),
 ])
-def test_what_preferences_refuses(name, other, voice_editing, left_alt_types, refused):
-    assert bool(dictation_keys.refusal(name, other, voice_editing, left_alt_types)) is refused
+def test_what_preferences_refuses(name, other, voice_editing, typing, refused):
+    why = dictation_keys.refusal(name, other, voice_editing, frozenset(typing), SHORTCUTS)
+    assert bool(why) is refused
+
+
+def test_shift_with_an_f_key_says_shift_is_the_problem():
+    assert dictation_keys.problem("Shift+F8").startswith("Shift alone")
+
+
+def test_where_the_desktop_cant_hold_a_combo_back_the_warning_says_the_app_gets_it():
+    assert "gets it as well" in dictation_keys.warning("Alt+D", held_back=False)
+    assert dictation_keys.warning("F8", held_back=False) is None
 
 
 def test_a_combo_warns_that_apps_shortcuts_cant_be_checked():

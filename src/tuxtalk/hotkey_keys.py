@@ -11,8 +11,10 @@ from evdev import ecodes
 
 from .config import HOTKEY_CHOICES
 
-# The dictation keys by upper-case name ("RIGHT CTRL"), as evdev codes.
-_HOTKEY_CODES = {name.upper(): ecodes.ecodes[key] for name, key in HOTKEY_CHOICES.items()}
+# The dictation keys by upper-case name ("RIGHT CTRL"), as evdev codes: the
+# dropdowns' and F13-F24, which Preferences takes pressed (dictation_keys).
+_HOTKEY_CODES = {**{name.upper(): ecodes.ecodes[key] for name, key in HOTKEY_CHOICES.items()},
+                 **{f"F{n}": ecodes.ecodes[f"KEY_F{n}"] for n in range(13, 25)}}
 
 # Modifier key evdev codes for tracking combo hotkeys
 MODIFIER_CODES = {

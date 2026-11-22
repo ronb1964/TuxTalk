@@ -74,6 +74,12 @@ def warn_no_keyboard(why: str):
     notify_module.notify(NO_KEYBOARD_TITLE, why)
 
 
+def warn_dictation_key_types(key: str, why: str):
+    """Dictation key *key* (Alt+D) won't start dictation: a keyboard option
+    makes its modifier type characters (*why*, dictation_keys.types_here)."""
+    notify_module.notify(f"{key} won't start dictation", f"{why} Preferences, General.")
+
+
 def device_name(idx) -> str:
     """The microphone's name for a notice, or "" when it can't be read."""
     try:

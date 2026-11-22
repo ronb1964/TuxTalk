@@ -52,3 +52,10 @@ def test_cancelling_puts_the_key_back(prefs_window, monkeypatch):
     monkeypatch.setattr(prefs_key_capture, "ask", lambda *a: None)
     tab.hotkey_combo.set_active_id("other")
     assert tab.hotkey_combo.get_active_id() == "F8" and tab.config["hotkey"] == "F8"
+
+
+def test_a_letter_of_a_layout_without_latin_letters_is_named_by_its_key():
+    """With Russian active Alt+D came in as Alt+Cyrillic_ve and was refused;
+    the hotkey loop listens for the US D key there."""
+    keyval = _key("Cyrillic_ve")
+    assert prefs_key_capture.key_name(keyval, ALT, 32 + 8) == "Alt+D"

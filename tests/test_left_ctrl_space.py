@@ -14,7 +14,7 @@ from evdev import ecodes
 from conftest import KeyEvent
 from hotkey_helper_fakes import FakeKeyboard, ready_client
 from hotkey_loop_fakes import Cfg, Grabbable, Keyboard
-from tuxtalk import (atspi_helper, cosmic_hotkeys, ctrl_kept, combo_keys, ctrl_space_clashes,
+from tuxtalk import (atspi_helper, combo_keys, cosmic_hotkeys, ctrl_kept, ctrl_space_clashes,
                      focused_window, gnome_hotkeys, hotkey_claims, hotkeys, keyboard_grab,
                      keyboard_layout, keyboard_output, modifier_hotkeys, pipeline, recording,
                      x11_hotkeys)

@@ -1,5 +1,5 @@
-"""What the hotkey loop's tests share (test_more_hotkey_choices.py and
-test_left_combo_keys.py): the key handler with recording, grabs and typing
+"""What the hotkey loop's tests share (test_more_hotkey_choices.py,
+test_left_ctrl_space.py, test_combo_dictation_keys.py): the key handler with recording, grabs and typing
 recorded rather than done, and keyboards that say which keys are down."""
 import pytest
 from evdev import ecodes
@@ -14,6 +14,7 @@ class Cfg:
     language = None
     auto_space = auto_period = True
     injection_mode = "type"
+    hotkey, toggle_hotkey = "F8", ""
 
 
 @pytest.fixture

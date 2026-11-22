@@ -434,9 +434,10 @@ class GeneralTab(Tab):
                 self.config[key] = default
 
     def _on_key_picked(self, combo, setting, other):
-        """A hold or toggle key picked. The one the other dropdown has is
-        refused, and the dropdown goes back: one key can't both hold and
-        toggle, and the hotkey test could light only one of the two. A
+        """A hold or toggle key picked. One _key_refused refuses (the key the
+        other dropdown has, or one ending in the same key) is said, and the
+        dropdown goes back: one key can't both hold and toggle, and the
+        hotkey test could light only one of the two. A
         blank key (kept blank on the Flatpak) goes back to the key shown for
         it, which isn't recorded as picked."""
         key = combo.get_active_id()
@@ -446,15 +447,28 @@ class GeneralTab(Tab):
         if key == _OTHER_KEY:
             self._press_a_key(combo, setting, other, shown)
             return
-        if key is not None and key == other.get_active_id():
+        refused = self._key_refused(key, other.get_active_id() or "", setting)
+        if refused:
             combo.popdown()     # not left drawn over the message
-            role = "toggle" if setting == "hotkey" else "hold"
-            show_message(self.window, Gtk.MessageType.WARNING,
-                         f"{key} is already your {role} key",
-                         f"Pick another key, or give the {role} key another one first.")
+            show_message(self.window, Gtk.MessageType.WARNING, *refused)
             combo.set_active_id(shown)
             return
         self.update_config(setting, key)
+
+    def _key_refused(self, key, other, setting):
+        """(title, why) when dictation key *key* can't be the *setting* key
+        beside *other*, or None: the same key as the other one, or anything
+        the capture window refuses (prefs_key_capture.refusal_for), since a
+        saved key that ends in the other's key is cleared on the next load."""
+        if not key:
+            return None
+        role, other_role = ("hold", "toggle") if setting == "hotkey" else ("toggle", "hold")
+        if key == other:
+            return (f"{key} is already your {other_role} key",
+                    f"Pick another key, or give the {other_role} key another one first.")
+        from .prefs_key_capture import refusal_for
+        why = refusal_for(key, other, self.config)
+        return (f"{key} can't be your {role} key", why) if why else None
 
     def _press_a_key(self, combo, setting, other, shown):
         """"Other key or combination…": ask for the key by pressing it
@@ -463,8 +477,7 @@ class GeneralTab(Tab):
         from .prefs_key_capture import ask
         combo.popdown()
         role = "hold" if setting == "hotkey" else "toggle"
-        picked = ask(self.window, role, other.get_active_id() or "",
-                     bool(self.config.get("voice_editing")))
+        picked = ask(self.window, role, other.get_active_id() or "", self.config)
         if picked and not any(row[1] == picked for row in combo.get_model()):
             combo.insert(len(combo.get_model()) - 1, picked, picked)    # before "Other…"
         combo.set_active_id(picked or shown)
