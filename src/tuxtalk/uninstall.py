@@ -47,6 +47,9 @@ from . import (a11y_switch, ai_download, config, cosmic_hotkeys, custom_words,  
                rename_migration, secure_input, service_launcher, settings_backup,
                single_instance, source_install, transcript_history, uinput_helper,
                update_install, whisper_vulkan, ydotoold_leftovers)
+# kwin_hotkeys imports it only when it forgets KDE's shortcuts, after the
+# package is gone.
+from . import dbus_calls  # noqa: E402, F401
 from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
 from .ui_style import message_dialog, show_message  # noqa: E402
 

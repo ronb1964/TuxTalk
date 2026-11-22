@@ -8,6 +8,7 @@ import pathlib
 import re
 import shutil
 import subprocess
+import sys
 import time
 import types
 
@@ -888,3 +889,40 @@ def test_dictated_text_in_the_runtime_folder_goes_and_the_locks_stay(home, monke
     assert sorted(p.name for p in run.iterdir()) == [
         ".talktype-history-My-Notes", ".talktype-history-ab12cd_8", "talktype.lock"]
     assert (run / ".talktype-history-ab12cd_8" / "kept.txt").exists()
+
+
+# Run in a fresh Python: everything after the root step, with every TuxTalk
+# module that isn't loaded yet unimportable, as after the package is removed.
+_AFTER_THE_PACKAGE_IS_GONE = """
+import sys
+from pathlib import Path
+from tuxtalk import uninstall
+
+class Gone:
+    missed = []
+    def find_spec(self, name, path=None, target=None):
+        if name.startswith("tuxtalk.") and name not in sys.modules:
+            self.missed.append(name)
+            raise ImportError(name + " (the package is gone)")
+
+sys.meta_path.insert(0, Gone())
+plan = uninstall.find(Path.home(), "system")
+uninstall.undo_desktop_changes(plan)
+uninstall.remove_files(plan, True, False)
+uninstall._refresh_menus()
+print(",".join(Gone.missed))
+"""
+
+
+def test_nothing_is_imported_after_the_package_is_removed(tmp_path):
+    """A .deb, .rpm or pacman package's files are gone after the root step,
+    so the rest of the uninstall must find every module it needs already
+    loaded. On KDE it once needed dbus_calls then, and left TuxTalk's
+    entries in KDE's Shortcuts settings ("couldn't remove everything")."""
+    env = {"HOME": str(tmp_path), "PATH": os.environ["PATH"],
+           "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+           "XDG_CURRENT_DESKTOP": "KDE", "DBUS_SESSION_BUS_ADDRESS": "unix:path=/nonexistent"}
+    ran = subprocess.run([sys.executable, "-c", _AFTER_THE_PACKAGE_IS_GONE], env=env,
+                         capture_output=True, text=True, timeout=60, cwd=tmp_path)
+    assert ran.returncode == 0, ran.stderr
+    assert ran.stdout.strip().splitlines()[-1:] in ([], [""]), ran.stdout
