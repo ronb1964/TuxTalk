@@ -205,7 +205,8 @@ def test_a_keyboard_option_set_while_tuxtalk_runs_is_read_again(monkeypatch):
     monkeypatch.setattr(keyboard_layout, "level3_keys", lambda: frozenset({LALT}))
     watch = hotkeys._Level3Watch()
     assert watch.poll(watch.due - 1) is None            # not due yet
-    assert watch.poll(watch.due) == frozenset({LALT})
+    assert watch.poll(watch.due) is None                # said once
+    assert watch.poll(watch.due) == frozenset({LALT})   # and again
 
 
 def test_a_layout_change_read_while_running_tells_the_helper_again(monkeypatch):
@@ -214,14 +215,37 @@ def test_a_layout_change_read_while_running_tells_the_helper_again(monkeypatch):
     once it wasn't."""
     monkeypatch.setattr(hotkeys, "_combo_presses", combo_keys.Presses())
     monkeypatch.setattr(hotkeys, "_said_typing_keys", ())
-    monkeypatch.setattr(hotkeys, "_claim_desktop_hotkeys", lambda cfg: None)
-    monkeypatch.setattr(modifier_hotkeys, "read_compose_keys", lambda: None)
+    monkeypatch.setattr(hotkeys, "_claim_desktop_hotkeys",
+                        lambda cfg: pytest.fail("the desktop's claims made again"))
+    monkeypatch.setattr(modifier_hotkeys, "_noted", ([], frozenset()))
     monkeypatch.setattr(notices, "warn_dictation_key_types", lambda key, why: None)
     cfg = Cfg()
     cfg.hotkey = "Alt+D"
     keys = Hotkeys(D, None, "", None, None, combos=(ALT_D,))
     asked = []
     helper = SimpleNamespace(watch=lambda specs: asked.append(list(specs)))
-    hotkeys._watch(cfg, [helper], keys, frozenset({LALT}))
-    hotkeys._watch(cfg, [helper], keys, frozenset())
+    answers = iter([frozenset({LALT}), frozenset({LALT}), frozenset(), frozenset()])
+    watch = SimpleNamespace(poll=lambda now: next(answers))
+    for _ in range(4):
+        hotkeys._recheck_layout(watch, cfg, [helper], keys, 0.0)
+    assert len(asked) == 2      # once per change, not once per read
     assert f"A:{D}" not in asked[0] and f"A:{D}" in asked[1]
+
+
+def test_the_layout_is_believed_after_two_reads_alike(monkeypatch):
+    """One slow answer gives the system's layout instead of the desktop's,
+    which switched Alt+D on and off with a notice each time."""
+    class NowThread:
+        def __init__(self, target, daemon):
+            self.target = target
+
+        def start(self):
+            self.target()
+    monkeypatch.setattr(hotkeys.threading, "Thread", NowThread)
+    reads = iter([frozenset({LALT}), frozenset(), frozenset()])
+    monkeypatch.setattr(keyboard_layout, "level3_keys", lambda: next(reads))
+    watch = hotkeys._Level3Watch()
+    watch.last = frozenset({LALT})
+    assert watch.poll(watch.due) == frozenset({LALT})
+    assert watch.poll(watch.due) is None                # a different answer, once
+    assert watch.poll(watch.due) == frozenset()

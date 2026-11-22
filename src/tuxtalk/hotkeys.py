@@ -608,11 +608,7 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
             _forget_lost_presses(devices, keys)
             logger.info("Applied settings change without restarting")
 
-        if _letter_combos(keys) and not rs.state.is_recording:
-            level3 = level3_watch.poll(current_time)
-            if level3 is not None and level3 != _combo_presses.level3:
-                # The helper and the modifier-key check follow the combos too.
-                _watch(cfg, devices, keys, level3)
+        _recheck_layout(level3_watch, cfg, devices, keys, current_time)
 
         dead_devices = _read_key_events(devices, keys, held_modifiers, cfg, svc, current_time)
         if dead_devices:
@@ -735,21 +731,45 @@ class _Level3Watch:
     def __init__(self):
         self.due = time.time() + LAYOUT_RECHECK_S     # _watch has just read them
         self.found = None       # set by the reading thread, taken by poll
+        self.last = None        # the read before, which a new answer must match
+        self.failed = False
 
     def poll(self, now) -> frozenset | None:
-        """The keys read since the last call, or None; starts a read when due."""
+        """The keys read since the last call when the read before said the
+        same, or None; starts a read when due. Two in a row: a desktop slow
+        to answer once gives the system's layout instead (active_layout),
+        which would switch a combo on and off with a notice each time."""
         if now >= self.due:
             self.due = now + LAYOUT_RECHECK_S
             threading.Thread(target=self._read, daemon=True).start()
         found, self.found = self.found, None
-        return found
+        if found is None:
+            return None
+        agreed, self.last = found == self.last, found
+        return found if agreed else None
 
     def _read(self) -> None:
         from .keyboard_layout import level3_keys
         try:
             self.found = level3_keys()
+            self.failed = False
         except Exception as e:      # a bug of TuxTalk's own: the hotkeys go on as they are
-            logger.warning(f"Reading the AltGr keys again failed: {e!r}")
+            if not self.failed:
+                logger.warning(f"Reading the AltGr keys again failed: {e!r}")
+            self.failed = True
+
+
+def _recheck_layout(level3_watch, cfg: Settings, devices, keys: "hotkey_keys.Hotkeys",
+                    now: float) -> None:
+    """While idle with a combo dictation key, apply a changed answer of
+    *level3_watch* (_Level3Watch): the combos, the helper's watch list and
+    the modifier-key check follow it. The desktop's claims don't change, so
+    they aren't made again (KDE lets go of the keys while it does)."""
+    if not _letter_combos(keys) or rs.state.is_recording:
+        return
+    level3 = level3_watch.poll(now)
+    if level3 is not None and level3 != _combo_presses.level3:
+        _follow_combos(cfg, devices, keys, level3)
 
 
 def _letter_combos(keys: "hotkey_keys.Hotkeys") -> bool:
@@ -788,16 +808,23 @@ def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys", level3=None) -> 
     """Have the desktop hold *keys* back from the focused app (see
     _claim_desktop_hotkeys), and tell the hotkey helper and the modifier-key
     check which keys to look for, and which of them the keyboard options
-    make Compose (read now, not on each press: the desktop can be slow)."""
-    _use_combos(cfg, keys.combos, level3)
+    make Compose (read now, not on each press: the desktop can be slow).
+    *level3*: the keys the keyboard options make AltGr, read now when None."""
     _claim_desktop_hotkeys(cfg)
+    _follow_combos(cfg, devices, keys, level3)
+    modifier_hotkeys.read_compose_keys()
+    _log_ctrl_space_clashes(keys)
+
+
+def _follow_combos(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys", level3) -> None:
+    """Make *keys*' combos the ones that count with AltGr keys *level3*
+    (_use_combos), and tell the hotkey helper and the modifier-key check."""
+    _use_combos(cfg, keys.combos, level3)
     _helper_watch(devices, keys.hold_key, keys.toggle_key, keys.voice_cmds_combo,
                   keys.paste_last_combo)
     modifier_hotkeys.note(devices, keys.hold_key, keys.toggle_key,
                           *_combo_presses.held_with(keys.hold_key),
                           *_combo_presses.held_with(keys.toggle_key))
-    modifier_hotkeys.read_compose_keys()
-    _log_ctrl_space_clashes(keys)
 
 
 def _on_shortcuts(event, keys: "hotkey_keys.Hotkeys", held_modifiers, devices, cfg) -> None:

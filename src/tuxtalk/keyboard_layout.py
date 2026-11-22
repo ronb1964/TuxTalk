@@ -717,12 +717,16 @@ def level3_keys() -> frozenset:
     lv3:lalt_switch, the Windows key with lv3:lwin_switch, Right Ctrl with
     lv3:switch. Held with a letter one types a character, so it can't be a
     dictation key's modifier (combo_keys.typing_modifiers). Empty when the
-    layout can't be read."""
+    layout can't be read. Asked every LAYOUT_RECHECK_S while a combo is a dictation key
+    (hotkeys._Level3Watch), so a failure is logged once (_failures)."""
     try:
         planner = planner_for(active_layout() or US)
     except (OSError, ValueError) as e:
-        logger.info(f"Could not tell which keys are AltGr: {e}")
+        if _failures.failed("AltGr keys", e):
+            logger.info(f"Could not tell which keys are AltGr: {e}")
         return frozenset()
+    if _failures.worked("AltGr keys"):
+        logger.info("The AltGr keys can be told again")
     return planner.level3_keys
 
 
