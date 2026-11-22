@@ -20,8 +20,8 @@ SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 
 BRAIN = frozenset({
     "audio_windows", "chunk_text", "chunking", "cleanup", "correction_safety",
-    "custom_commands", "hallucinations", "key_commands", "language_codes", "logger",
-    "normalize", "parakeet_bias", "sentence_fit", "silence", "spoken_numbers",
+    "custom_commands", "dictation_keys", "hallucinations", "key_commands", "language_codes",
+    "logger", "normalize", "parakeet_bias", "sentence_fit", "silence", "spoken_numbers",
     "spoken_quotes", "voice_detector", "voice_edit_rules", "word_spelling",
 })
 

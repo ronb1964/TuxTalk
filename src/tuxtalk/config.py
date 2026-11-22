@@ -20,6 +20,7 @@ except ImportError:
     _USE_TOMLLIB = False  # toml library requires text mode ("r")
 from dataclasses import dataclass, field, fields
 
+from .dictation_keys import CTRL_SPACE, problem as dictation_key_problem
 from .language_codes import locale_language
 from .logger import setup_logger
 from .virtual_keyboard import KEY_DELAY_MS
@@ -113,7 +114,6 @@ VALID_MODES = {"hold", "toggle"}
 # Left Ctrl+Space is Ctrl+Space as Handy and other dictation apps use it
 # (Discussion #28). The service listens for Space, the key named here, and
 # only counts it while Left Ctrl is held (see ctrl_space).
-CTRL_SPACE = "Left Ctrl+Space"
 HOTKEY_CHOICES = {
     **{f"F{i}": f"KEY_F{i}" for i in range(1, 13)},
     "Right Ctrl": "KEY_RIGHTCTRL",
@@ -335,6 +335,13 @@ _repair_attempted = False
 # Validation
 # ---------------------------------------------------------------------------
 
+def _hotkey_problems(s: Settings) -> list[tuple[str, str]]:
+    """The dictation keys that can't be: a key that types ("d" written by
+    hand) would start a dictation with every one typed."""
+    return [(name, why) for name in ("hotkey", "toggle_hotkey")
+            if (why := dictation_key_problem(getattr(s, name)))]
+
+
 def _validation_problems(s: Settings) -> list[tuple[str, str]]:
     """Return (field name, message) for every setting holding an unusable value.
 
@@ -342,6 +349,8 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
     setting instead of discarding the whole configuration.
     """
     problems = []
+
+    problems += _hotkey_problems(s)
 
     if s.model not in VALID_MODELS:
         problems.append(("model", f"Invalid model '{s.model}'. "
