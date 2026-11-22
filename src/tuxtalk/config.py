@@ -540,6 +540,11 @@ _config_stamp = None
 # written over a file whose contents may be perfectly good.
 _config_read_failed = False
 
+# Set once a recovery was kept in memory, so its warning isn't logged again
+# at every one of the tray's once-a-second reads.
+_warned_in_memory = False
+
+
 def _recover_damaged_config() -> tuple:
     """Set a damaged config aside, recover the last known good settings, and
     write them back so the file is actually repaired.
@@ -556,8 +561,12 @@ def _recover_damaged_config() -> tuple:
             return _recover_if_still_damaged(), True
     except OSError as e:
         # No lock (a read-only folder) or no reading the file now: nothing
-        # is set aside or written, which could land on a good save.
-        logger.warning(f"Settings recovered in memory only, the file left alone: {e}")
+        # is set aside or written, which could land on a good save. Said
+        # once: the tray tries again every second.
+        global _warned_in_memory
+        if not _warned_in_memory:
+            logger.warning(f"Settings recovered in memory only, the file left alone: {e}")
+            _warned_in_memory = True
         return _backup_settings()[0], False
 
 

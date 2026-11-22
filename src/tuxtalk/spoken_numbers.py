@@ -169,7 +169,12 @@ _FUNCTION_WORDS = frozenset({
     "yesterday", "tonight", "up", "down", "out", "off", "away", "back", "later", "soon",
     "please", "either", "ever", "yet", "already", "left", "free", "never", "always",
     "usually", "often", "against", "versus", "vs", "all", "sharp", "nil", "apiece", "win",
-    "lose",
+    "lose", "without", "ish",
+})
+# Past forms after "one" that make it a person ("if one knew", "one thought so").
+_PAST_VERBS = frozenset({
+    "knew", "thought", "felt", "took", "made", "got", "went", "saw", "found", "kept", "meant",
+    "said", "told", "came", "gave", "left", "ran", "won", "lost", "bought", "brought",
 })
 # After "one", phrases where it isn't a count ("one of", "one day", "one
 # more thing", "one small step"); after "two", the same few ("two of", "my
@@ -230,8 +235,10 @@ def _counts(word: str, nxt: str) -> bool:
     cats"), rather than starting an idiom ("one of", "one day") or standing
     before a verb or small word ("one is", "two came"). One of something is
     never plural, so "one" before a word in -s is a person or thing doing
-    it ("if one breaks", "one says yes")."""
-    if word == "one" and nxt.endswith("s") and not nxt.endswith(("ss", "us", "is")):
+    it ("if one breaks", "one says yes"), and so it is before a past form
+    ("one knew", "what one wanted")."""
+    if word == "one" and (nxt in _PAST_VERBS or nxt.endswith("ed")
+                          or (nxt.endswith("s") and not nxt.endswith(("ss", "us", "is")))):
         return False
     return (nxt not in _IDIOMS_AFTER[word] and nxt not in _FUNCTION_WORDS
             and nxt[:1].isalpha())
