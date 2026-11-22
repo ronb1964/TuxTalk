@@ -27,6 +27,17 @@ before 0.15.0, so older entries use that name.
   hand survives Preferences and the daily update check.
 - `tuxtalk --uninstall` of a .deb, .rpm or Arch package on KDE clears
   TuxTalk's entries in KDE's Shortcuts settings again.
+- A dictation recorded while the computer stalled, so that some of the
+  sound was lost, is typed but not sent automatically: a word may be
+  missing.
+- ".NET", ".env" and ".5" keep their dot instead of ending a sentence
+  there, an email address said inside spoken quotes keeps the full stop
+  outside the quotes, and "I’m" with a curly apostrophe keeps its capital.
+- On Sway, Hyprland and other desktops where TuxTalk types with wtype, a
+  dictation that stopped partway says so instead of saying nothing went
+  in, and text meant for one window never goes into another.
+- On GNOME, Preferences offers the indicator's position even in a session
+  without X, since the TuxTalk extension places it.
 - A model too big for the computer's memory falls back to a smaller
   downloaded one for that run instead of stopping dictation, and is no
   longer downloaded again. Large-v3 is never the fallback on the
