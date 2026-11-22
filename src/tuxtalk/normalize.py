@@ -95,6 +95,16 @@ _LITERAL_PATTERNS = [
 ] + [(re.compile(r"\b(?:literal|the\s+words?)\s+press,\s+tab\b", re.IGNORECASE),
       LITERAL_REPLACEMENTS["press tab"])]
 
+# An article before a mark word: lower case, or capitalised where a sentence
+# starts. A capital A elsewhere is a letter: "Part A colon introduction" is
+# "Part A: introduction".
+_ARTICLE = r"\b(?:a|an|the|another)|(?:^|(?<=[.!?]\s))(?:A|An|The|Another)"
+# The other words before a mark that make it a thing talked about: "no colon";
+# the oldest mark rules took "this", "that" and "one" too ("that comma is
+# wrong"), in either case.
+_NO = r"\b(?i:no)"
+_POINTER = r"\b(?i:this|that|no|one)"
+
 # --- _protect_command_words: command words used as English nouns ---
 # Words like "period", "comma", "return" and "dash" are command triggers
 # in dictation, but they are also normal English nouns in phrases like "period
@@ -157,22 +167,21 @@ _CONTEXT_PROTECT_PATTERNS = [
     # "ended with a question mark", "add a semicolon", "came to a full stop":
     # with an article the mark is being talked about, not dictated. Nobody
     # dictates "a question mark" to end a sentence (without this, "ended with
-    # a question mark" typed "ended with a?"). Only words that can't end a
-    # clause: "do this semicolon" and "I'll take that one comma" are marks.
-    *((re.compile(r"\b(a|an|the|another)\s+" + spoken + r"\b",
-                  re.IGNORECASE), r"\1 " + LITERAL_REPLACEMENTS[word])
-      for spoken, word in ((r"question\s+mark", "question mark"),
-                           (r"exclamation\s+point", "exclamation point"),
-                           (r"exclamation\s+mark", "exclamation mark"),
-                           (r"full\s+stop", "full stop"),
-                           ("comma", "comma"), ("semicolon", "semicolon"),
-                           ("colon", "colon"), ("apostrophe", "apostrophe"),
-                           ("hyphen", "hyphen"), ("ellipsis", "ellipsis"))),
+    # a question mark" typed "ended with a?"). The first four kept "this",
+    # "that" and "one" before them as well ("that comma is wrong").
+    *((re.compile(rf"({_ARTICLE}|{pointers})\s+(?i:{spoken})\b"),
+       r"\1 " + LITERAL_REPLACEMENTS[word])
+      for spoken, word, pointers in (
+          (r"question\s+mark", "question mark", _POINTER),
+          (r"exclamation\s+point", "exclamation point", _POINTER),
+          (r"exclamation\s+mark", "exclamation mark", _POINTER),
+          ("comma", "comma", _POINTER),
+          (r"full\s+stop", "full stop", _NO), ("semicolon", "semicolon", _NO),
+          ("colon", "colon", _NO), ("apostrophe", "apostrophe", _NO),
+          ("hyphen", "hyphen", _NO), ("ellipsis", "ellipsis", _NO))),
     # A line break is a thing too ("we need a new line of products").
-    (re.compile(r"\b(a|an|the|another)\s+new\s+line\b", re.IGNORECASE),
-     r"\1 __LIT_NEW_LINE__"),
-    (re.compile(r"\b(a|an|the|another)\s+new\s+paragraph\b", re.IGNORECASE),
-     r"\1 __LIT_NEWPARA__"),
+    (re.compile(rf"({_ARTICLE})\s+(?i:new\s+line)\b"), r"\1 __LIT_NEW_LINE__"),
+    (re.compile(rf"({_ARTICLE})\s+(?i:new\s+paragraph)\b"), r"\1 __LIT_NEWPARA__"),
     (re.compile(r"\bnew\s+line(\s+of\b)", re.IGNORECASE), r"__LIT_NEW_LINE__\1"),
     # The body part: "colon cancer", "colon surgery".
     (re.compile(r"\bcolon(\s+(?:cancer|surgery|polyps?|health|cleanse|screening|"

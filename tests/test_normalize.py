@@ -1033,6 +1033,12 @@ def test_an_abbreviation_keeps_its_period_before_a_spoken_mark():
     ("start a new paragraph there", "Start a new paragraph there."),
     ("I have colon cancer", "I have colon cancer."),
     ("write it in quote marks", "Write it in quote marks."),
+    ("there is no question mark at the end", "There is no question mark at the end."),
+    ("she wrote quote Mark is here end quote", "She wrote \u201cMark is here.\u201d"),
+    ("no comma is needed", "No comma is needed."),
+    ("that comma is wrong", "That comma is wrong."),
+    ("No colon here", "No colon here."),
+    ("A comma goes here", "A comma goes here."),
 ])
 def test_a_mark_talked_about_stays_words(said, typed):
     assert normalize_text(said) == typed
@@ -1046,9 +1052,9 @@ def test_a_mark_talked_about_stays_words(said, typed):
     ("it is done full stop", "It is done."),
     ("first line new line second line", f"First line.{LINE_BREAK}Second line."),
     ("I love that new line next", f"I love that.{LINE_BREAK}Next."),
-    ("first do this comma then that", "First do this, then that."),
-    ("I'll take that one comma thanks", "I'll take that one, thanks."),
-    ("is it this question mark", "Is it this?"),
+    ("first do this semicolon", "First do this;"),
+    ("Part A colon introduction", "Part A: introduction."),
+    ("I got an A full stop", "I got an A."),
 ])
 def test_a_dictated_mark_is_still_typed(said, typed):
     assert normalize_text(said) == typed

@@ -63,8 +63,9 @@ _RE_VERB_WITH_OBJECT = re.compile(
     re.IGNORECASE,
 )
 
-# "quote marks" is the name of the marks, never one of them.
-_RE_MARKS_AFTER = re.compile(r"\s+marks?\b", re.IGNORECASE)
+# "quote marks" is the name of the marks, never one of them; "quote Mark"
+# can start a quotation about Mark.
+_RE_MARKS_AFTER = re.compile(r"\s+marks\b", re.IGNORECASE)
 
 # How strongly the word before or after a bare "quote" points to the word:
 # "to quote", "this quote", "don't quote me", "quote of the day".
