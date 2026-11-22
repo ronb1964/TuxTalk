@@ -3,6 +3,36 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [Unreleased]
+
+- "No space" joins an email name however the speech model writes it:
+  "john Nospace doe at gmail dot com" and "no-space" type johndoe@gmail.com
+  too. Thanks to Jim Orcheson (#48).
+- With Numbers set to digits, "one" and "two" become digits where they
+  number or count something: "number 1", "test 2", "page 1 of 2", "2 cats".
+  They stay words elsewhere: "this one", "one of them", "I want one".
+- A punctuation word used as an ordinary word stays a word: "came to a
+  full stop", "colon cancer", "add a semicolon", "a new line of products",
+  "quote marks".
+- The AI's fix of a self-correction is typed only if it keeps every
+  symbol you said and adds none: a changed "<", a dropped currency sign or
+  minus, added quotes, markdown or a question mark keep the sentence as
+  you said it.
+- A voice edit no longer replaces text you selected while the AI was
+  working: nothing is typed, and the rewrite is in Recent Dictations.
+- "press tab" said on its own in Claude Desktop is its own undo: "undo
+  that" afterwards deletes just its four spaces.
+- Two settings saved at the same moment (Preferences and the tray, say)
+  no longer undo each other, and a setting you added to config.toml by
+  hand survives Preferences and the daily update check.
+- `tuxtalk --uninstall` of a .deb, .rpm or Arch package on KDE clears
+  TuxTalk's entries in KDE's Shortcuts settings again.
+- A model too big for the computer's memory falls back to a smaller
+  downloaded one for that run instead of stopping dictation, and is no
+  longer downloaded again. Large-v3 is never the fallback on the
+  processor, and a config from an old version naming small.en or
+  large-v2 uses Small or Large-v3.
+
 ## [0.24.0] - 2026-11-19
 
 - On GNOME, the TuxTalk extension now draws the recording indicator itself,
