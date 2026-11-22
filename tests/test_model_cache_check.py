@@ -48,7 +48,7 @@ def test_a_cached_model_is_loaded_once(monkeypatch):
     loads = []
     monkeypatch.setattr(M, "is_model_cached_fast", lambda name: True)
     monkeypatch.setattr(M, "load_model", lambda *a, **k: loads.append(a) or "MODEL")
-    monkeypatch.setattr(M, "_loads_on_cpu", lambda name: pytest.fail("no second load"))
+    monkeypatch.setattr(M, "_files_are_sound", lambda name, error: pytest.fail("no second load"))
     assert M.download_model_with_progress("large-v3", device="cuda",
                                           compute_type="float16") == "MODEL"
     assert len(loads) == 1
@@ -61,7 +61,7 @@ def test_a_broken_cached_model_is_downloaded_again(monkeypatch):
     def broken(*a, **k):
         raise RuntimeError("Unable to open file 'model.bin'")
     monkeypatch.setattr(M, "load_model", broken)
-    monkeypatch.setattr(M, "_loads_on_cpu", lambda name: False)
+    monkeypatch.setattr(M, "_files_are_sound", lambda name, error: False)
 
     reached_download = []
 
@@ -86,9 +86,26 @@ def test_a_device_problem_is_not_mistaken_for_a_broken_download(monkeypatch):
     def cuda_fails(*a, **k):
         raise RuntimeError("CUDA failed with error unknown error")
     monkeypatch.setattr(M, "load_model", cuda_fails)
-    monkeypatch.setattr(M, "_loads_on_cpu", lambda name: True)
+    monkeypatch.setattr(M, "_files_are_sound", lambda name, error: True)
     with pytest.raises(RuntimeError, match="CUDA"):
         M.download_model_with_progress("small", device="cuda", compute_type="float16")
+
+
+@pytest.mark.parametrize("error", [MemoryError(), RuntimeError("std::bad_alloc"),
+                                   RuntimeError("CUDA failed with error out of memory")])
+def test_a_model_too_big_for_memory_is_not_downloaded_again(monkeypatch, error):
+    """Large-v3 on a busy 8 GB computer ran out of memory loading, ran out
+    again on the processor, and its 3.1 GB were downloaded again before it
+    failed the same way."""
+    monkeypatch.setattr(M, "is_model_cached_fast", lambda name: True)
+
+    def short_of_memory(*a, **k):
+        raise error
+    monkeypatch.setattr(M, "load_model", short_of_memory)
+    monkeypatch.setattr(M, "whisper_model", short_of_memory)
+    monkeypatch.setattr(M.Gtk, "Dialog", lambda *a, **k: pytest.fail("downloaded again"))
+    with pytest.raises(type(error)):
+        M.download_model_with_progress("large-v3", show_confirmation=False)
 
 
 def test_models_never_downloaded_are_reported_missing_not_raised():

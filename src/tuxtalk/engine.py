@@ -273,8 +273,9 @@ def guard_large_v3_without_cuda(cfg):
 def _pick_fallback_model(wanted, downloaded, has_cuda):
     """The downloaded model closest in quality to *wanted*, or None.
 
-    Ties go to the faster model. large-v3 is skipped without CUDA, where it
-    is too slow to use (main() refuses it there for the same reason).
+    Ties go to the faster model. large-v3 is skipped unless it would run on
+    CUDA (*has_cuda*): on the processor it is too slow to use (main()
+    refuses it there for the same reason).
     """
     rank = {m: i for i, m in enumerate(_QUALITY_ORDER)}
     target = rank.get(wanted, rank["small"])
@@ -305,9 +306,11 @@ def build_or_exit(settings: Settings):
         from .recommend import model_title
         try:
             # As guard_large_v3_without_cuda: CUDA's files alone don't do when
-            # the speech library was built without CUDA.
+            # the speech library was built without CUDA, and neither do they
+            # when the device is the processor, which the fallback keeps.
             from .cuda_helper import ctranslate2_has_cuda, has_cuda_libraries
-            has_cuda = has_cuda_libraries() and ctranslate2_has_cuda()
+            has_cuda = (settings.device != "cpu" and has_cuda_libraries()
+                        and ctranslate2_has_cuda())
         except Exception as cuda_e:
             logger.info(f"Could not check for CUDA's files: {cuda_e}")
             has_cuda = False

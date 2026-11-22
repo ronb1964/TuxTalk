@@ -10,6 +10,7 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
 from .ui_style import show_message
 from .hub_pins import SHA256 as _HUB_SHA256, revision as _revision
+from .config import VALID_MODELS
 from .logger import setup_logger
 from .recommend import model_title
 from .parakeet_engine import (
@@ -91,13 +92,11 @@ MODEL_REPOS = {
     "large-v3": "Systran/faster-whisper-large-v3",
 }
 
-# The models offered in the UI, smallest first. Every screen with a model picker
-# builds from this so their lists can't drift apart. A model is only offerable
-# if it can be downloaded (tests/test_model_choices.py).
-#
-# Parakeet comes last: it is not part of Whisper's size ladder, it is a
-# different engine (see parakeet_engine.py).
-OFFERED_MODELS = ("tiny", "base", "small", "medium", "large-v3", PARAKEET_MODEL)
+# The models offered in the UI, smallest first: the ones a config may hold.
+# Every screen with a model picker builds from this so their lists can't
+# drift apart. A model is only offerable if it can be downloaded
+# (tests/test_model_choices.py).
+OFFERED_MODELS = VALID_MODELS
 
 # What each model really downloads for the processor (and CUDA), in decimal
 # MB as Hugging Face lists it, not its parameter count (tests/test_model_sizes.py).
@@ -111,9 +110,22 @@ MODEL_DISPLAY_SIZES = {
 }
 
 
-def _loads_on_cpu(model_name):
-    """Whether a cached Whisper model loads on the processor: after a load has
-    failed, this tells broken files from a device or driver problem."""
+def _out_of_memory(error) -> bool:
+    """Whether a model's load failed for want of memory (the 3.1 GB of
+    Large-v3 on a busy 8 GB computer), as the speech library says it on
+    the processor and the graphics card."""
+    text = str(error).lower()
+    return isinstance(error, MemoryError) or any(
+        sign in text for sign in ("out of memory", "bad_alloc", "cannot allocate"))
+
+
+def _files_are_sound(model_name, error):
+    """After a cached Whisper model failed to load with *error*: whether its
+    files are fine, so downloading them again can't help. They are when the
+    load ran out of memory, or when they load on the processor (a device or
+    driver problem)."""
+    if _out_of_memory(error):
+        return True
     try:
         model = whisper_model(model_name, device="cpu", compute_type="int8",
                               local_files_only=True)
@@ -121,7 +133,7 @@ def _loads_on_cpu(model_name):
         return True
     except Exception as e:      # any failure here means it doesn't load
         logger.info(f"{model_name} doesn't load on the processor either: {e}")
-        return False
+        return _out_of_memory(e)
 
 
 def is_model_cached_fast(model_name):
@@ -566,7 +578,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             # files were hash-checked as they arrived, and a download skips
             # files that are there, so fetching again can't mend them: the
             # caller falls back to another model.
-            if not is_parakeet(model_name) and _loads_on_cpu(model_name):
+            if not is_parakeet(model_name) and _files_are_sound(model_name, e):
                 raise
             if not dialogs or is_parakeet(model_name):
                 raise BrokenModelFiles(

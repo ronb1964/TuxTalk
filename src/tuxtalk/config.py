@@ -85,15 +85,16 @@ class ConfigError(Exception):
 # Validation constants — defined once, used by validate_config()
 # ---------------------------------------------------------------------------
 
-VALID_MODELS = {
-    "tiny", "tiny.en",
-    "base", "base.en",
-    "small", "small.en",
-    "medium", "medium.en",
-    "large", "large-v1", "large-v2", "large-v3",
-    # NVIDIA Parakeet, a different engine (see parakeet_engine.py).
-    "parakeet-v3",
-}
+# The models TuxTalk downloads and offers, smallest first; model_helper's
+# OFFERED_MODELS. Parakeet comes last: it is a different engine
+# (parakeet_engine.py), not part of Whisper's size ladder.
+VALID_MODELS = ("tiny", "base", "small", "medium", "large-v3", "parakeet-v3")
+# Names an older config may hold, never offered since, as the model that
+# took their place: kept, no model could be found or downloaded for them
+# (model_helper knows only VALID_MODELS), and dictation stopped.
+OLD_MODEL_NAMES = {"tiny.en": "tiny", "base.en": "base", "small.en": "small",
+                   "medium.en": "medium", "large": "large-v3", "large-v1": "large-v3",
+                   "large-v2": "large-v3"}
 
 # vulkan: any GPU through whisper.cpp (whisper_vulkan.py)
 VALID_DEVICES = {"cpu", "cuda", "vulkan"}
@@ -352,7 +353,7 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
 
     if s.model not in VALID_MODELS:
         problems.append(("model", f"Invalid model '{s.model}'. "
-                                  f"Valid options: {', '.join(sorted(VALID_MODELS))}"))
+                                  f"Valid options: {', '.join(VALID_MODELS)}"))
 
     if s.device.lower() not in VALID_DEVICES:
         problems.append(("device", f"Invalid device '{s.device}'. "
@@ -530,6 +531,9 @@ def apply_toml(s: Settings, data: dict) -> list[str]:
             # int() raises OverflowError, not ValueError, for a TOML `inf`.
             logger.warning(f"Ignoring setting {fld.name!r} = {data[fld.name]!r}: {e}")
             skipped.append(fld.name)
+    if s.model in OLD_MODEL_NAMES:
+        logger.info(f"Model {s.model!r} is no longer offered; using {OLD_MODEL_NAMES[s.model]}")
+        s.model = OLD_MODEL_NAMES[s.model]
     return skipped
 
 

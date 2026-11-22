@@ -130,12 +130,12 @@ def _hub_folder(repo):
 # its folder. Only these: the cache is shared, and another app's models in
 # it are not ours to delete. One folder holds a whole repository, so
 # whisper.cpp's may hold another app's models too: hence the question's
-# "other apps may use them". The Whisper models are every name a config may
-# hold (an older one may say small.en), as faster-whisper downloads them from
-# Systran; to it, "large" is large-v3.
+# "other apps may use them". The Whisper models are every name a config holds
+# or once held (small.en), as faster-whisper downloads them from Systran; to
+# it, "large" is large-v3.
 HF_REPOS = tuple(sorted({_hub_folder(repo) for repo in (
-    *(model_helper.MODEL_REPOS.get(m, f"Systran/faster-whisper-{m}")
-      for m in config.VALID_MODELS - {"large"} if not parakeet_engine.is_parakeet(m)),
+    *model_helper.MODEL_REPOS.values(),
+    *(f"Systran/faster-whisper-{m}" for m in config.OLD_MODEL_NAMES if m != "large"),
     parakeet_engine.V3_REPO, whisper_vulkan.MODEL_REPO,
     *whisper_vulkan.MODEL_REPOS.values(), ai_download.MODEL_REPO)}))
 

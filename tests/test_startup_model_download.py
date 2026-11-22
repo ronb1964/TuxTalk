@@ -153,6 +153,23 @@ def test_cuda_files_alone_never_make_large_v3_the_fallback(monkeypatch):
     assert engine.build_or_exit(_settings(model="parakeet-v3", device="cpu")) == "model:small"
 
 
+def test_large_v3_is_never_the_fallback_on_the_processor(monkeypatch):
+    """CUDA works on this computer, but the device is the processor, and the
+    fallback keeps the device: Large-v3 ran there, far too slowly."""
+    from tuxtalk import cuda_helper
+    monkeypatch.setattr(model_helper, "download_model_with_progress",
+                        lambda name, **k: None if name == "parakeet-v3" else f"model:{name}")
+    monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: m in ("small", "large-v3"))
+    monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
+    monkeypatch.setattr(cuda_helper, "ctranslate2_has_cuda", lambda: True)
+    monkeypatch.setattr("tuxtalk.config.load_config", lambda: SimpleNamespace(model="parakeet-v3"))
+    monkeypatch.setattr("tuxtalk.config.save_config", lambda cfg: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: None)
+    settings = _settings(model="parakeet-v3", device="cpu")
+    assert engine.build_or_exit(settings) == "model:small"
+    assert settings.device == "cpu"
+
+
 def test_cancel_falls_back_to_a_downloaded_model_and_saves_it(monkeypatch):
     import tuxtalk.config as config
     from tuxtalk import cuda_helper
@@ -215,7 +232,7 @@ def test_broken_files_raise_instead_of_opening_dialogs_off_the_gtk_thread(monkey
 
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: True)
     monkeypatch.setattr(model_helper, "load_model", broken)
-    monkeypatch.setattr(model_helper, "_loads_on_cpu", lambda m: False)
+    monkeypatch.setattr(model_helper, "_files_are_sound", lambda m, error: False)
     monkeypatch.setattr(model_helper, "show_message", no_dialogs)
     monkeypatch.setattr(model_helper.Gtk, "Dialog", no_dialogs)
     with pytest.raises(model_helper.BrokenModelFiles):

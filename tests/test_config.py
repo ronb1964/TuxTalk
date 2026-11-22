@@ -82,13 +82,7 @@ def test_empty_toggle_hotkey_in_hold_mode():
 
 def test_all_valid_models():
     """Test that all documented valid models pass validation"""
-    valid_models = [
-        "tiny", "tiny.en",
-        "base", "base.en",
-        "small", "small.en",
-        "medium", "medium.en",
-        "large", "large-v1", "large-v2", "large-v3"
-    ]
+    valid_models = ["tiny", "base", "small", "medium", "large-v3", "parakeet-v3"]
     for model in valid_models:
         s = Settings(model=model)
         validate_config(s)  # Should not raise
@@ -237,3 +231,21 @@ def test_a_quoted_whole_number_is_read_as_preferences_shows_it():
     s = Settings()
     assert apply_toml(s, {"auto_timeout_minutes": "5.0", "key_delay": "3"}) == []
     assert s.auto_timeout_minutes == 5 and s.key_delay == 3
+
+
+@pytest.mark.parametrize("old, now", [("small.en", "small"), ("tiny.en", "tiny"),
+                                      ("large-v2", "large-v3"), ("large", "large-v3")])
+def test_a_model_name_no_longer_offered_becomes_the_one_that_replaced_it(old, now):
+    """The settings accepted small.en and large-v2, but no model could be found
+    or downloaded under those names, and dictation stopped with the files on
+    disk."""
+    s = Settings()
+    apply_toml(s, {"model": old})
+    assert s.model == now
+
+
+def test_every_model_a_config_may_hold_can_be_found_and_downloaded():
+    from tuxtalk.config import VALID_MODELS
+    from tuxtalk.model_helper import MODEL_REPOS
+    from tuxtalk.parakeet_engine import is_parakeet
+    assert {m for m in VALID_MODELS if not is_parakeet(m)} == set(MODEL_REPOS)

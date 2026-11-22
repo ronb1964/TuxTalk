@@ -159,7 +159,7 @@ def test_a_model_that_looked_downloaded_but_wont_load_is_fetched_afresh(monkeypa
             raise RuntimeError("Unable to open file 'model.bin' in model")
         return "model"
     monkeypatch.setattr(M, "is_model_cached_fast", lambda name: True)
-    monkeypatch.setattr(M, "_loads_on_cpu", lambda name: False)
+    monkeypatch.setattr(M, "_files_are_sound", lambda name, error: False)
     monkeypatch.setattr(M, "load_model", load)
     monkeypatch.setattr(M, "_files_to_download", lambda repo: [("model.bin", 10)])
     monkeypatch.setattr(huggingface_hub, "hf_hub_download",
