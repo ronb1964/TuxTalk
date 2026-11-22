@@ -379,7 +379,9 @@ sentence, a space where one is missing, and no period when more text follows.
 <b>Preferences → Advanced → Numbers</b>: as the speech model writes them, as digits
 ("twenty-five chickens" → 25 chickens), or digits from 10 up ("three cats",
 "25 chickens"). With digits, "seven thirty" after at becomes 7:30 and "october
-fifteenth" becomes october 15th; "one of them" and fractions stay words.
+fifteenth" becomes october 15th. "One" and "two" become digits where they
+number or count something ("test 1", "number 2", "2 cats") and stay words
+elsewhere ("this one", "one of them"), and so do fractions.
 
 ### Email and web addresses
 Say them the way you'd say them out loud. Hold <b>{hold}</b>, say "john at gmail dot com",

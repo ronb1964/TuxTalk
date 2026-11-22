@@ -612,7 +612,9 @@ class AdvancedTab(Tab):
             "Numbers",
             "Digits: \"twenty-five chickens\" becomes \"25 chickens\", \"october fifteenth\"\n"
             "becomes \"october 15th\" and \"seven thirty\" after at becomes \"7:30\".\n"
-            "\"One\" and \"two\" on their own stay words (\"one of them\"), and so do fractions.\n"
+            "\"One\" and \"two\" become digits where they number or count something\n"
+            "(\"test 1\", \"2 cats\") and stay words elsewhere (\"this one\", \"one of them\"),\n"
+            "and so do fractions.\n"
             "Many writing styles spell out one to nine and use digits from 10 up.\n"
             "Works in English, German, Spanish, French, Italian, Portuguese, Dutch and Danish.")
         label.set_mnemonic_widget(combo)

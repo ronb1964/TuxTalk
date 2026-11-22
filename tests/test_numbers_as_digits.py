@@ -15,6 +15,45 @@ from tuxtalk.normalize import LINE_BREAK
 
 
 @pytest.mark.parametrize("text, expected", [
+    # A label, at a phrase's end or after a label word.
+    ("That's number one.", "That's number 1."),
+    ("Run test one, then test two.", "Run test 1, then test 2."),
+    ("Read page two of chapter one", "Read page 2 of chapter 1"),
+    ("Version one is out", "Version 1 is out"),
+    ("We're on step two.", "We're on step 2."),
+    ("part two of the series", "part 2 of the series"),
+    ("season two episode one", "season 2 episode 1"),
+    ("thing one and thing two", "thing 1 and thing 2"),
+    ("I like plan two", "I like plan 2"),
+    ("I still use Python two.", "I still use Python 2."),
+    # A count before what it counts.
+    ("two cats came in", "2 cats came in"),
+    ("I have two kids and one dog.", "I have 2 kids and 1 dog."),
+    ("one question for you", "1 question for you"),
+    ("two or three", "2 or 3"),
+])
+def test_one_and_two_as_labels_and_counts_are_digits(text, expected):
+    """With digits on, "number one" stayed words while "number four" became
+    "number 4"; no fixed list holds every noun people number ("test one")."""
+    assert to_digits(text, "en") == expected
+
+
+@pytest.mark.parametrize("text", [
+    "the right one", "this one", "Which one?", "No one came.", "the blue one",
+    "the other one", "another one", "he's my number one", "my two cents",
+    "the two of us", "between the two", "the first two",
+    "one of them", "One day we'll go.", "a two-way street", "one or two people",
+    "one by one", "on one hand", "at one point", "one at a time", "one more thing",
+    "one small step", "wait one minute", "in one go", "back to square one",
+    "I want one.", "I'll take two.", "Give me two.", "We need two.", "I have one",
+    "call me at one", "tea for two", "one is enough", "two are coming", "it's one",
+    "Pick one.", "one and only", "one", "two",
+])
+def test_one_and_two_as_pronouns_and_idioms_stay_words(text):
+    assert to_digits(text, "en") == text
+
+
+@pytest.mark.parametrize("text, expected", [
     # What Parakeet really typed in the 2026-10-14 test.
     ("I have three cats and twenty-five chickens.", "I have 3 cats and 25 chickens."),
     ("The meeting is on october fifteenth.", "The meeting is on october 15th."),
