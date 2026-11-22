@@ -23,7 +23,6 @@ import pytest
 
 from conftest import FakeCombo
 from tuxtalk import config, cuda_helper, engine, installation, prefs_speech, settings_backup
-from tuxtalk import prefs as P
 from tuxtalk.prefs import PreferencesWindow
 from tuxtalk.prefs_speech import SpeechSection
 from tuxtalk.prefs_system_check import SystemCheck

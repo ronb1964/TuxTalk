@@ -12,7 +12,6 @@ except ImportError:
 from types import SimpleNamespace
 
 from conftest import FakeCombo
-from tuxtalk import prefs as P
 from tuxtalk.prefs import PreferencesWindow
 from tuxtalk.prefs_speech import SpeechSection
 
