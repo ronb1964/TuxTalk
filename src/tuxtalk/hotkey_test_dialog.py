@@ -484,8 +484,8 @@ class HotkeyTestDialog:
         listed keys, so no other combo comes up during the test."""
         from tuxtalk import combo_keys
         names = (CTRL_SPACE, self.config.hotkey, self.config.toggle_hotkey)
-        return {name: combo_keys.parse(name) for name in names
-                if name and combo_keys.parse(name)}
+        combos = {name: combo_keys.parse(name) for name in names if name}
+        return {name: combo for name, combo in combos.items() if combo}
 
     def _reader_loop(self):
         """Read the keyboards through evdev until the test ends, passing each

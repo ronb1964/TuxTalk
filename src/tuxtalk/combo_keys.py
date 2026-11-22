@@ -95,6 +95,7 @@ class Presses:
         self._down = set()      # codes whose key went down as the combo and isn't up yet
         self._hidden = set()    # modifiers a hold hid from the desktop (modifier_hidden)
         self._combos = {}
+        self.level3 = frozenset()   # the AltGr keys the combos were last made for
         self.use(combos)
 
     def use(self, combos, level3_keys=frozenset()) -> list:
@@ -103,7 +104,8 @@ class Presses:
         modifier: with it a letter types a character (keyboard_layout), and
         each one would start a dictation. The combos left with a modifier
         no key can be are returned: they never start one."""
-        stripped = [combo._replace(mods=tuple(group - set(level3_keys) for group in combo.mods))
+        self.level3 = frozenset(level3_keys)
+        stripped = [combo._replace(mods=tuple(group - self.level3 for group in combo.mods))
                     for combo in combos]
         # Space is always Left Ctrl+Space: it never types as a dictation key.
         self._combos = {LEFT_CTRL_SPACE.code: LEFT_CTRL_SPACE,

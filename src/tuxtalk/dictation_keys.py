@@ -133,7 +133,7 @@ def warning(name: str, held_back: bool = True) -> str | None:
     if not held_back:
         return (f"On this desktop TuxTalk can't keep {canonical(name)} from your apps, so the "
                 "app you're in gets it as well each time (Alt+D jumps to a browser's address "
-                "bar). An F-key or Scroll Lock does much less there, at most a ~ in a "
+                "bar). F8 or Scroll Lock does much less there, at most a ~ in a "
                 "terminal.")
     if mods == ["Alt"]:
         return ("Many apps open a menu with Alt and a letter (Alt+F is often File). TuxTalk "

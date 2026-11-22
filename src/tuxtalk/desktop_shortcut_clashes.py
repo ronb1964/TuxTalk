@@ -16,6 +16,9 @@ from . import cosmic_hotkeys, desktop_detect
 from .ctrl_space_clashes import GNOME_SCHEMAS, GSETTINGS_TIMEOUT_S, gsettings
 from .dictation_keys import CTRL_SPACE
 from .hotkey_claims import qt_key_sequence
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
 
 # The shortcuts made in GNOME Settings: a list of paths, each one a
 # relocatable schema that list-recursively on the parent doesn't show.
@@ -77,6 +80,9 @@ def gnome_custom_bindings() -> dict:
                                  .removeprefix("@as").strip() or "[]")
     except (ValueError, SyntaxError):
         return {}
+    if len(paths) > MAX_CUSTOM:
+        logger.info(f"Only the first {MAX_CUSTOM} of {len(paths)} GNOME custom shortcuts "
+                    "were checked for the new keys")
     found = {}
     for path in paths[:MAX_CUSTOM]:
         listing = gsettings("list-recursively", f"{_CUSTOM}:{path}")

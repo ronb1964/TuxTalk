@@ -1,6 +1,7 @@
 """What the hotkey loop's tests share (test_more_hotkey_choices.py,
-test_left_ctrl_space.py, test_combo_dictation_keys.py): the key handler with recording, grabs and typing
-recorded rather than done, and keyboards that say which keys are down."""
+test_left_ctrl_space.py, test_combo_dictation_keys.py): the key handler
+with recording, grabs and typing recorded rather than done, and keyboards
+that say which keys are down."""
 import pytest
 from evdev import ecodes
 
@@ -34,7 +35,8 @@ def service(monkeypatch):
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", grab)
     monkeypatch.setattr(keyboard_grab, "release_all", let_go)
     monkeypatch.setattr(modifier_hotkeys, "_hidden", (frozenset(), ()))
-    monkeypatch.setattr(keyboard_output, "send_keys", lambda events, **k: done.append(("keys", events)) or True)
+    monkeypatch.setattr(keyboard_output, "send_keys",
+                        lambda events, **k: done.append(("keys", events)) or True)
     monkeypatch.setattr(modifier_hotkeys, "guard_alt_tap", lambda: done.append("Ctrl guard"))
     monkeypatch.setattr(modifier_hotkeys, "_compose_keys", frozenset())
     # A thread of its own could outlive the test's other replacements.

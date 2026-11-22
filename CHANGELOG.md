@@ -15,9 +15,8 @@ before 0.15.0, so older entries use that name.
   for your password once. Where a keyboard option makes Left Alt, Super or
   Right Ctrl the AltGr key, a program could learn from the helper which
   of those characters you type; the README and privacy page say so. A
-  letter written into config.toml by hand as
-  the dictation key, which started a dictation with every one typed, is
-  now refused.
+  letter written into config.toml by hand as the dictation key, which
+  started a dictation with every one typed, is now refused.
 - "No space" joins an email name however the speech model writes it:
   "john Nospace doe at gmail dot com" and "no-space" type johndoe@gmail.com
   too. Thanks to Jim Orcheson (#48).

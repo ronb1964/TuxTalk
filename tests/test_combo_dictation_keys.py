@@ -206,3 +206,22 @@ def test_a_keyboard_option_set_while_tuxtalk_runs_is_read_again(monkeypatch):
     watch = hotkeys._Level3Watch()
     assert watch.poll(watch.due - 1) is None            # not due yet
     assert watch.poll(watch.due) == frozenset({LALT})
+
+
+def test_a_layout_change_read_while_running_tells_the_helper_again(monkeypatch):
+    """The 20 s re-read changed what counted, but the helper went on being
+    asked for Alt+D where Left Alt had become AltGr, and not asked again
+    once it wasn't."""
+    monkeypatch.setattr(hotkeys, "_combo_presses", combo_keys.Presses())
+    monkeypatch.setattr(hotkeys, "_said_typing_keys", ())
+    monkeypatch.setattr(hotkeys, "_claim_desktop_hotkeys", lambda cfg: None)
+    monkeypatch.setattr(modifier_hotkeys, "read_compose_keys", lambda: None)
+    monkeypatch.setattr(notices, "warn_dictation_key_types", lambda key, why: None)
+    cfg = Cfg()
+    cfg.hotkey = "Alt+D"
+    keys = Hotkeys(D, None, "", None, None, combos=(ALT_D,))
+    asked = []
+    helper = SimpleNamespace(watch=lambda specs: asked.append(list(specs)))
+    hotkeys._watch(cfg, [helper], keys, frozenset({LALT}))
+    hotkeys._watch(cfg, [helper], keys, frozenset())
+    assert f"A:{D}" not in asked[0] and f"A:{D}" in asked[1]

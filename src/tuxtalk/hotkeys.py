@@ -608,10 +608,11 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
             _forget_lost_presses(devices, keys)
             logger.info("Applied settings change without restarting")
 
-        if keys.combos and not rs.state.is_recording:
+        if _letter_combos(keys) and not rs.state.is_recording:
             level3 = level3_watch.poll(current_time)
-            if level3 is not None:
-                _use_combos(cfg, keys.combos, level3)
+            if level3 is not None and level3 != _combo_presses.level3:
+                # The helper and the modifier-key check follow the combos too.
+                _watch(cfg, devices, keys, level3)
 
         dead_devices = _read_key_events(devices, keys, held_modifiers, cfg, svc, current_time)
         if dead_devices:
@@ -745,7 +746,16 @@ class _Level3Watch:
 
     def _read(self) -> None:
         from .keyboard_layout import level3_keys
-        self.found = level3_keys()
+        try:
+            self.found = level3_keys()
+        except Exception as e:      # a bug of TuxTalk's own: the hotkeys go on as they are
+            logger.warning(f"Reading the AltGr keys again failed: {e!r}")
+
+
+def _letter_combos(keys: "hotkey_keys.Hotkeys") -> bool:
+    """Whether a dictation key is a combo a keyboard option can affect: any
+    but Left Ctrl+Space, whose Left Ctrl is never AltGr."""
+    return any(combo != combo_keys.LEFT_CTRL_SPACE for combo in keys.combos)
 
 
 def _use_combos(cfg: Settings, combos, level3=None) -> None:
@@ -774,12 +784,12 @@ def _use_combos(cfg: Settings, combos, level3=None) -> None:
     _said_typing_keys = names
 
 
-def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys") -> None:
+def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys", level3=None) -> None:
     """Have the desktop hold *keys* back from the focused app (see
     _claim_desktop_hotkeys), and tell the hotkey helper and the modifier-key
     check which keys to look for, and which of them the keyboard options
     make Compose (read now, not on each press: the desktop can be slow)."""
-    _use_combos(cfg, keys.combos)
+    _use_combos(cfg, keys.combos, level3)
     _claim_desktop_hotkeys(cfg)
     _helper_watch(devices, keys.hold_key, keys.toggle_key, keys.voice_cmds_combo,
                   keys.paste_last_combo)

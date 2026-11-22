@@ -111,8 +111,14 @@ def ask(parent, role: str, other: str, config) -> str | None:
     note.get_style_context().add_class("dim-label")
     box.add(note)
     picked = []
-    held_back = _desktop_holds_keys()
-    typing_mods = typing_modifiers()        # once, not on every key pressed
+    # Asked of the desktop at the first combination pressed, once: a key
+    # on its own needs neither, and the answers can take seconds.
+    asked = {}
+
+    def about_combos():
+        if not asked:
+            asked.update(typing=typing_modifiers(), held_back=_desktop_holds_keys())
+        return asked
 
     def on_key(_widget, event):
         """Show a finished key or combination pressed, and why it can't be
@@ -122,8 +128,11 @@ def ask(parent, role: str, other: str, config) -> str | None:
             return False                # a modifier so far, or the window's own key
         picked[:] = [dictation_keys.canonical(name)]
         shown.set_text(picked[0])
-        why = refusal_for(picked[0], other, config, typing_mods)
-        said = why or dictation_keys.warning(picked[0], held_back) or ""
+        combo = "+" in picked[0]
+        typing = about_combos()["typing"] if combo else frozenset()
+        why = refusal_for(picked[0], other, config, typing)
+        said = why or (combo and dictation_keys.warning(
+            picked[0], about_combos()["held_back"])) or ""
         note.set_text(said)
         use.set_sensitive(why is None)
         # GTK3 has no live region: the key and the answer go on both buttons'

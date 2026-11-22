@@ -17,7 +17,9 @@ _TEST_KEYS = {f"F{n}" for n in range(1, 25)} | {"Escape", "Pause"} | set(HOTKEY_
 # (AltGr) is Right Alt only from that key (gtk_key_name).
 _GTK_KEY_NAMES = {"Control_R": "Right Ctrl", "Alt_R": "Right Alt", "Scroll_Lock": "Scroll Lock"}
 _RIGHT_ALT_KEYCODE = 100 + 8        # evdev's KEY_RIGHTALT, as X11 and GDK count it
-_SHIFT_CODES = frozenset({42, 54})   # evdev's Left and Right Shift
+# evdev's Left and Right Shift, by number: this module imports evdev only
+# where it reads keys, so a window without it can still use the rest.
+_SHIFT_CODES = frozenset({42, 54})
 
 
 def loggable_key(keyname):

@@ -528,3 +528,14 @@ def test_an_older_helper_is_updated_only_for_a_key_it_cant_report(key, heard):
     """A hand-written "alt+d" did nothing with helper 1.16 and nobody offered
     the update; Alt+F8 asked for a password for nothing."""
     assert si.hears_key("1.16", key) is heard
+
+
+def test_the_screens_name_the_altgr_exception(monkeypatch):
+    """Where a keyboard option makes Left Alt, Super or Right Ctrl AltGr, a
+    program could learn which such characters were typed: the screens that
+    offer the helper say so, not a plain "never what you type"."""
+    from tuxtalk import prefs_system_check, uinput_helper
+    monkeypatch.setattr(si, "can_install", lambda: (True, ""))
+    monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: False)
+    for text in (si.fix_description()[0][0], prefs_system_check._helper_state([])[0]):
+        assert "AltGr" in text
