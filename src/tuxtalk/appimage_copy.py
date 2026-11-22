@@ -66,15 +66,13 @@ def _start_at_login(installed) -> None:
     as on only if its file was written, or the Ready screen would promise
     a start that never happens."""
     from . import autostart
-    from .config import load_config, save_config
+    from .config import load_config, update_config
     try:
         if not autostart.set_autostart(True, prefer_installed_appimage=installed):
             logger.warning("Autostart file could not be written; leaving launch-at-login off")
             return
-        cfg = load_config()
-        if not getattr(cfg, "launch_at_login", False):
-            cfg.launch_at_login = True
-            save_config(cfg)
+        if not load_config().launch_at_login:
+            update_config(launch_at_login=True)
     except Exception as e:
         logger.warning(f"Could not enable launch-at-login during onboarding: {e}")
 

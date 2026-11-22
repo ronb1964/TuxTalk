@@ -184,7 +184,7 @@ def maybe_offer_parakeet_update(restart) -> None:
     original Parakeet v3 the download of Parakeet Ultra (parakeet_ultra.py),
     then *restart* dictation onto it. Their Parakeet works either way."""
     try:
-        from .config import load_config, save_config
+        from .config import load_config, update_config
         cfg = load_config()
         if cfg.parakeet_update_offered:
             return
@@ -195,9 +195,7 @@ def maybe_offer_parakeet_update(restart) -> None:
         updated = _offer_parakeet_update(device)
         if updated is None:
             return
-        cfg = load_config()     # the download took minutes; settings may have changed
-        cfg.parakeet_update_offered = True
-        save_config(cfg)
+        update_config(parakeet_update_offered=True)
         if updated:
             logger.info(f"Parakeet Ultra downloaded ({device}); restarting dictation onto it")
             restart(None)
@@ -255,15 +253,13 @@ def _compare_with_recommendation():
 def _tell_about_recommendation(better):
     """On GTK's thread, where the tray saves its settings: the notice, if
     *better* is a setup, and that it's been given."""
-    from .config import load_config, save_config
+    from .config import update_config
     try:
         if better is not None:
             from .notify import notify as _notify
             _notify("A better setup for this computer", recommend_notice_text(better))
             logger.info(f"Told the user about the recommended setup: {better.title}")
-        cfg = load_config()
-        cfg.recommend_notice_shown = True
-        save_config(cfg)
+        update_config(recommend_notice_shown=True)
     except Exception as e:      # a nicety, as above
         logger.info(f"Recommended-setup notice not recorded: {e}")
     return False

@@ -112,9 +112,9 @@ def _end_state(section):
     """What the user sees and what was saved: (Model dropdown, Device
     dropdown, the model and device on disk)."""
     import toml     # not tomllib: Python 3.10 (Ubuntu 22.04, the AppImage's) lacks it
-    from tuxtalk import prefs
+    from tuxtalk import config
     try:
-        saved = toml.load(prefs.CONFIG_PATH)
+        saved = toml.load(config.CONFIG_PATH)
     except FileNotFoundError:
         saved = {}
     return (section.model_combo.get_active_id(), section.device_combo.get_active_id(),
@@ -180,7 +180,7 @@ def test_the_switch_saves_only_the_model_and_device(nvidia, monkeypatch):
     switch saves and restarts for the model and device alone, asks nothing
     about the hotkey, and leaves the rest for Apply or Cancel."""
     import toml
-    from tuxtalk import prefs
+    from tuxtalk import config
     section = nvidia("small")
     win = section.win
     period = win.config["auto_period"]
@@ -191,7 +191,7 @@ def test_the_switch_saves_only_the_model_and_device(nvidia, monkeypatch):
     _pick_cuda_device(section, monkeypatch)
     assert nvidia.happened == ["Download CUDA Libraries?", "CUDA downloaded", "restart"]
     assert _end_state(section) == ("small", "cuda", "small", "cuda")
-    saved = toml.load(prefs.CONFIG_PATH)
+    saved = toml.load(config.CONFIG_PATH)
     assert saved.get("hotkey") != "F6" and saved.get("auto_period") == period
     assert win._changed_since_open() == {"hotkey", "auto_period"}
     assert (win.config["hotkey"], win.config["auto_period"]) == ("F6", not period)

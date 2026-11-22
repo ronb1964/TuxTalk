@@ -28,8 +28,7 @@ import dbus.mainloop.glib
 from dataclasses import asdict
 from . import prefs_ipc
 from . import config
-from .config import (CONFIG_PATH, changed_keys, merge_changed_keys, write_text_atomic,
-                     _load_toml_file, _toml_value)
+from .config import changed_keys, merge_changed_keys, rewrite_config
 
 logger = setup_logger(__name__)
 
@@ -267,46 +266,26 @@ class PreferencesWindow:
         else:
             self.config["language"] = self.config.get("language") or "en"
 
-        try:
-            on_disk = {}
-            if os.path.exists(CONFIG_PATH):
-                try:
-                    on_disk = _load_toml_file(CONFIG_PATH)
-                except Exception as e:
-                    # The file exists but cannot be read. Everything this
-                    # window is showing is therefore defaults, not the user's
-                    # settings — and writing them would both persist those
-                    # defaults (blank hotkey included) and copy the damaged
-                    # file over config.toml.bak, destroying the last good
-                    # copy. Leave it alone; config.load_config()'s repair
-                    # path is what knows how to recover this safely.
-                    logger.warning(f"Refusing to save over an unreadable config: {e}")
-                    self._save_error = f"Your settings file could not be read: {e}"
-                    return False
+        # Only a change made in this window may touch the autostart entry:
+        # rewriting it on every save would undo the user turning TuxTalk
+        # off in their desktop's own Autostart settings.
+        autostart_changed = "launch_at_login" in changed_keys(self._config_at_open, self.config)
+        # What this window last put in force, not what's on disk: after a
+        # failed attempt the disk already holds the new value.
+        autostart_before = self._config_at_open.get("launch_at_login")
+        bases = []
+
+        def merge(on_disk):
             # Base: window-open snapshot (has every key incl. defaults),
-            # updated with whatever is currently on disk.
-            base = dict(self._config_at_open)
-            base.update(on_disk)
-            saved_before = dict(base)       # merge_changed_keys fills in base
-            # Only a change made in this window may touch the autostart entry:
-            # rewriting it on every save would undo the user turning TuxTalk
-            # off in their desktop's own Autostart settings.
-            autostart_changed = "launch_at_login" in changed_keys(self._config_at_open, self.config)
-            # What this window last put in force, not what's on disk: after a
-            # failed attempt the disk already holds the new value.
-            autostart_before = self._config_at_open.get("launch_at_login")
-            merged = merge_changed_keys(self._config_at_open, self.config, base)
-
-            # Same serialiser and atomic write as config.save_config(): one
-            # escaping rule, and a crash mid-write can't leave an empty file.
-            lines = ["# TuxTalk config"]
-            for key, value in merged.items():
-                lines.append(f"{key} = {_toml_value(value)}")
-            write_text_atomic(CONFIG_PATH, "\n".join(lines) + "\n")
-
+            # updated with whatever is on disk now.
+            base = {**self._config_at_open, **on_disk}
+            bases.append(dict(base))        # merge_changed_keys fills in base
+            return merge_changed_keys(self._config_at_open, self.config, base)
+        try:
+            merged = rewrite_config(merge)
             # Future saves in this window diff against what we just wrote;
             # what it replaced is what a failed download goes back to.
-            self._saved_before = saved_before
+            self._saved_before = bases[0]
             self.config = dict(merged)
             self._config_at_open = dict(merged)
             # Settings that live outside the config file only now that the
@@ -315,8 +294,19 @@ class PreferencesWindow:
                 self._apply_launch_at_login(autostart_before)
             return True
         except Exception as e:
-            logger.error(f"Could not save the config: {e}")
-            self._save_error = str(e)
+            if bases:
+                logger.error(f"Could not save the config: {e}")
+                self._save_error = str(e)
+                return False
+            # The file exists but cannot be read. Everything this window is
+            # showing is therefore defaults, not the user's settings, and
+            # writing them would both persist those defaults (blank hotkey
+            # included) and copy the damaged file over config.toml.bak,
+            # destroying the last good copy. Leave it alone;
+            # config.load_config()'s repair path is what knows how to recover
+            # this safely.
+            logger.warning(f"Refusing to save over an unreadable config: {e}")
+            self._save_error = f"Your settings file could not be read: {e}"
             return False
 
     def create_ui(self):
@@ -519,13 +509,10 @@ class PreferencesWindow:
         download), which Cancel can't undo. The window's other changes stay
         unsaved. True when written; if they can't be, they stay changes for
         Apply to save."""
-        from .config import ConfigNotLoadedError, load_config, save_config
+        from .config import ConfigNotLoadedError, update_config
         self.config.update(settings)
         try:
-            cfg = load_config()
-            for key, value in settings.items():
-                setattr(cfg, key, value)
-            save_config(cfg)
+            update_config(**settings)
         except (OSError, ConfigNotLoadedError) as e:
             logger.warning(f"Could not save {sorted(settings)}: {e}")
             return False

@@ -20,7 +20,7 @@ from tuxtalk.prefs_speech import SpeechSection
 def test_an_unrelated_ok_keeps_the_saved_cuda_choice(tmp_path, monkeypatch):
     cfg = tmp_path / "config.toml"
     cfg.write_text('device = "cuda"\nbeeps = true\n')
-    monkeypatch.setattr(P, "CONFIG_PATH", str(cfg))
+    monkeypatch.setattr("tuxtalk.config.CONFIG_PATH", str(cfg))
     from tuxtalk import whisper_vulkan
     monkeypatch.setattr(whisper_vulkan, "is_offered", lambda: False)
 

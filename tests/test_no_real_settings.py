@@ -3,12 +3,12 @@
 Loading the settings can set aside a damaged config.toml and write a repaired
 one, and a TuxTalk installed on the same computer uses that file. conftest
 points the settings and the data folder at a throwaway folder for every test;
-a module that binds the settings path by name at import (as prefs does) keeps
-the real one unless conftest knows about it too.
+a module that bound the settings path by name at import would keep the real
+one unless conftest knew about it too.
 """
 import sys
 
-from tuxtalk import config, prefs  # noqa: F401  (prefs binds the path by name)
+from tuxtalk import config
 
 
 def test_every_module_reads_the_settings_from_a_throwaway_folder(tmp_path_factory):
@@ -17,7 +17,7 @@ def test_every_module_reads_the_settings_from_a_throwaway_folder(tmp_path_factor
                if name.startswith("tuxtalk")}
     paths = {name: module.CONFIG_PATH for name, module in modules.items()
              if isinstance(getattr(module, "CONFIG_PATH", None), str)}
-    assert {"tuxtalk.config", "tuxtalk.prefs"} <= paths.keys()
+    assert "tuxtalk.config" in paths
     outside = {name: path for name, path in paths.items() if not path.startswith(throwaway)}
     assert outside == {}, f"these modules still have the real settings path: {outside}"
 

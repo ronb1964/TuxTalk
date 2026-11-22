@@ -444,6 +444,37 @@ def test_concurrent_saves_do_not_collide(tmp_path):
     assert len(written) == 40, f"file is truncated: {len(written)} of 40 lines"
 
 
+def test_two_saves_at_once_keep_each_others_change(config_path):
+    """Preferences' Apply read the file, another process saved transcript
+    logging off meanwhile, and Apply's write turned it back on: each read
+    the file before the other wrote."""
+    import threading
+    config_path.write_text("beeps = true\nlog_transcripts = true\n")
+    preferences_has_read = threading.Event()
+
+    def apply_beeps_off(on_disk):
+        preferences_has_read.set()
+        threading.Event().wait(0.3)         # the other save comes in now
+        return {**on_disk, "beeps": False}
+    apply = threading.Thread(target=config.rewrite_config, args=(apply_beeps_off,))
+    apply.start()
+    preferences_has_read.wait(5)
+    config.update_config(log_transcripts=False)
+    apply.join()
+    saved = config.load_toml_file(str(config_path))
+    assert saved["beeps"] is False and saved["log_transcripts"] is False
+
+
+def test_a_quoted_key_written_by_hand_survives_a_save(config_path):
+    """Preferences keeps keys it doesn't know; written back without its
+    quotes, "my note" made the file unreadable, and the next read restored
+    the backup, losing the change just applied."""
+    config_path.write_text('hotkey = "F6"\n"my note" = "hello"\nlist = [1, "a"]\n')
+    config.rewrite_config(lambda on_disk: {**on_disk, "beeps": False})
+    saved = config.load_toml_file(str(config_path))
+    assert saved == {"hotkey": "F6", "my note": "hello", "list": [1, "a"], "beeps": False}
+
+
 def test_no_temp_files_are_left_behind(tmp_path):
     path = str(tmp_path / "config.toml")
     config.write_text_atomic(path, "model = \"tiny\"\n")
@@ -555,7 +586,7 @@ def test_repair_never_leaves_the_file_unparseable(config_path):
         config.write_text_atomic = real_write
 
     assert len(writes) <= 1, f"repair rewrote the file {len(writes)} times — livelock"
-    config._load_toml_file(str(config_path))  # must parse; raises otherwise
+    config.load_toml_file(str(config_path))  # must parse; raises otherwise
 
 
 def test_repair_happens_once_even_without_a_cache_reset(config_path):
@@ -598,7 +629,7 @@ def test_a_transient_read_error_does_not_pin_the_process_to_defaults(config_path
     config._config_cache = None
     config._config_mtime = 0.0
 
-    real = config._load_toml_file
+    real = config.load_toml_file
     calls = {"n": 0}
 
     def flaky(path):
@@ -607,7 +638,7 @@ def test_a_transient_read_error_does_not_pin_the_process_to_defaults(config_path
             raise OSError(13, "Permission denied")
         return real(path)
 
-    monkeypatch.setattr(config, "_load_toml_file", flaky)
+    monkeypatch.setattr(config, "load_toml_file", flaky)
 
     first = config.load_config()
     assert first.model == config.Settings.model   # defaults for this call only
@@ -633,7 +664,7 @@ def test_an_unreadable_config_is_not_overwritten_with_defaults(config_path,
     def unreadable(path):
         raise OSError(13, "Permission denied")
 
-    monkeypatch.setattr(config, "_load_toml_file", unreadable)
+    monkeypatch.setattr(config, "load_toml_file", unreadable)
 
     loaded = config.load_config()
     assert loaded.model == config.Settings.model  # defaults, as designed
@@ -655,7 +686,7 @@ def test_saving_still_works_once_the_config_can_be_read_again(config_path,
     config._config_cache = None
     config._config_mtime = 0.0
 
-    real = config._load_toml_file
+    real = config.load_toml_file
     broken = {"yes": True}
 
     def flaky(path):
@@ -663,7 +694,7 @@ def test_saving_still_works_once_the_config_can_be_read_again(config_path,
             raise OSError(13, "Permission denied")
         return real(path)
 
-    monkeypatch.setattr(config, "_load_toml_file", flaky)
+    monkeypatch.setattr(config, "load_toml_file", flaky)
     config.load_config()
 
     broken["yes"] = False

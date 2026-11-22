@@ -2,11 +2,15 @@
 checking, repairing and saving config.toml, which settings apply live and
 which restart dictation, the data folders and the snippets file."""
 from __future__ import annotations
+import contextlib
 import dataclasses
+import fcntl
 import os
+import re
 import shutil
 import sys
 import tempfile
+import threading
 import time
 try:
     import tomllib  # Python 3.11+
@@ -315,7 +319,7 @@ class Settings:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _load_toml_file(path: str) -> dict:
+def load_toml_file(path: str) -> dict:
     """Load a TOML file and return its data as a dict. Raises OSError if it
     can't be read, or a parse error if the content is not TOML."""
     file_mode = "rb" if _USE_TOMLLIB else "r"
@@ -561,7 +565,7 @@ def _recover_damaged_config() -> Settings:
     backup = f"{CONFIG_PATH}.bak"
     if os.path.exists(backup):
         try:
-            data = _load_toml_file(backup)
+            data = load_toml_file(backup)
             if data:
                 apply_toml(recovered, data)
                 restored_from_backup = True
@@ -610,17 +614,15 @@ def _persist_recovered_config(recovered: Settings) -> None:
     _repair_attempted = True
 
     try:
-        lines = ["# TuxTalk config"]
-        for fld in fields(recovered):
-            lines.append(f"{fld.name} = {_toml_value(getattr(recovered, fld.name))}")
-        text = "\n".join(lines) + "\n"
+        text = settings_text(dataclasses.asdict(recovered))
 
         # Never replace a damaged file with another damaged file. Writing
         # something that does not parse turns recovery into a livelock: the
         # next poll sees damage again, quarantines again, and rewrites again.
         _parse_toml_text(text)
 
-        write_text_atomic(CONFIG_PATH, text, keep_backup=False)
+        with locked():
+            write_text_atomic(CONFIG_PATH, text, keep_backup=False)
         logger.info("Damaged config replaced with recovered settings")
     except Exception as e:
         # A read-only home, a full disk, or settings that will not serialise
@@ -655,7 +657,7 @@ def load_config() -> Settings:
     s = Settings()
     if os.path.exists(CONFIG_PATH):
         try:
-            data = _load_toml_file(CONFIG_PATH)
+            data = load_toml_file(CONFIG_PATH)
             # An existing file with nothing in it is damage, not configuration:
             # empty parses as valid TOML and would silently give all defaults,
             # including a blank hotkey, which stops dictation with no message.
@@ -717,7 +719,32 @@ def _toml_value(val) -> str:
         return str(val)             # bare integer
     if isinstance(val, float):
         return repr(val)            # bare float — else it round-trips as a string
+    # A hand-written key Preferences keeps (settings_text) may hold these.
+    if isinstance(val, (list, tuple)):
+        return "[" + ", ".join(_toml_value(v) for v in val) + "]"
+    if isinstance(val, dict):
+        return "{" + ", ".join(f"{_toml_key(k)} = {_toml_value(v)}"
+                               for k, v in val.items()) + "}"
     return _toml_string(str(val))
+
+
+# A key TOML takes without quotes; any other ("my note") is quoted, or the
+# file no longer parses and the next read restores the backup.
+_BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def _toml_key(key) -> str:
+    """*key* as TOML writes it: bare when it can be, else a quoted string."""
+    key = str(key)
+    return key if _BARE_KEY.fullmatch(key) else _toml_string(key)
+
+
+def settings_text(values: dict) -> str:
+    """config.toml's text for *values* ({key: value}): the one way the file
+    is written, by every process."""
+    lines = ["# TuxTalk config"]
+    lines += [f"{_toml_key(key)} = {_toml_value(value)}" for key, value in values.items()]
+    return "\n".join(lines) + "\n"
 
 
 # Characters with a short TOML escape. Every other control character (except
@@ -803,26 +830,79 @@ def write_text_atomic(path: str, text: str | bytes, keep_backup: bool = True,
         raise
 
 
-def save_config(s: Settings) -> None:
-    """Save Settings to TOML file.
+# Which threads hold config.toml's lock now: a save inside an update (or a
+# repair inside the read an update starts with) mustn't wait on itself.
+_held = threading.local()
 
-    Uses dataclass introspection so new fields are automatically included.
+
+@contextlib.contextmanager
+def locked():
+    """config.toml's lock, held across a fresh read, the change and the
+    write: two saves at once (Preferences' Apply, the tray's model switch,
+    the update check's time) each read the file before the other wrote, and
+    the later one undid the earlier, turning transcript logging back on, say.
+    An flock on config.toml.lock beside it, so every TuxTalk process waits
+    its turn; the kernel lets it go if one is killed holding it."""
+    if getattr(_held, "depth", 0):
+        _held.depth += 1
+        try:
+            yield
+        finally:
+            _held.depth -= 1
+        return
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+    fd = os.open(f"{CONFIG_PATH}.lock", os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        _held.depth = 1
+        try:
+            yield
+        finally:
+            _held.depth = 0
+    finally:
+        os.close(fd)
+
+
+def save_config(s: Settings) -> None:
+    """Write every setting in *s* to config.toml. A change of a few settings
+    goes through update_config instead, which reads the file afresh first.
 
     Refuses to write when the last load_config() could not read an existing
     settings file: what it returned were defaults, and writing those back
     destroys the real settings. Losing an update-check timestamp is a far
     better outcome than losing the user's hotkey, model and device.
     """
-    if _config_read_failed and os.path.exists(CONFIG_PATH):
-        raise ConfigNotLoadedError(
-            f"Refusing to overwrite {CONFIG_PATH}: it could not be read, so the "
-            f"settings in memory are defaults rather than the user's own."
-        )
+    with locked():
+        if _config_read_failed and os.path.exists(CONFIG_PATH):
+            raise ConfigNotLoadedError(
+                f"Refusing to overwrite {CONFIG_PATH}: it could not be read, so the "
+                f"settings in memory are defaults rather than the user's own."
+            )
+        write_text_atomic(CONFIG_PATH, settings_text(dataclasses.asdict(s)))
 
-    lines = ["# TuxTalk config"]
-    for fld in fields(s):
-        lines.append(f"{fld.name} = {_toml_value(getattr(s, fld.name))}")
-    write_text_atomic(CONFIG_PATH, "\n".join(lines) + "\n")
+
+def update_config(**changes) -> Settings:
+    """Change the settings named in *changes* and nothing else: read afresh,
+    changed and written under the lock, so a save by another process
+    meanwhile is kept. The settings as written. Raises as save_config does."""
+    with locked():
+        fresh = load_config()
+        for key, value in changes.items():
+            setattr(fresh, key, value)
+        save_config(fresh)
+    return fresh
+
+
+def rewrite_config(merge) -> dict:
+    """Write what *merge* makes of the file's raw contents ({key: value}, {}
+    when there's no file yet), under the lock, keeping keys this version
+    doesn't know: Preferences' merge-on-save. What was written. An
+    unreadable file raises and is left alone."""
+    with locked():
+        on_disk = load_toml_file(CONFIG_PATH) if os.path.exists(CONFIG_PATH) else {}
+        values = merge(on_disk)
+        write_text_atomic(CONFIG_PATH, settings_text(values))
+    return values
 
 
 def changed_keys(original: dict, current: dict) -> set:
@@ -849,13 +929,7 @@ def record_update_check(timestamp: str) -> None:
     defaults. The caller's own settings are never what gets written.
     """
     try:
-        fresh = load_config()
-    except Exception as e:
-        logger.warning(f"Could not record the update-check time: {e}")
-        return
-    fresh.last_update_check = timestamp
-    try:
-        save_config(fresh)
+        update_config(last_update_check=timestamp)
     except Exception as e:
         logger.warning(f"Could not save the update-check time: {e}")
 
@@ -1037,7 +1111,7 @@ def load_custom_commands() -> dict[str, str]:
     commands = {}
     if os.path.exists(CUSTOM_COMMANDS_PATH):
         try:
-            data = _load_toml_file(CUSTOM_COMMANDS_PATH)
+            data = load_toml_file(CUSTOM_COMMANDS_PATH)
             commands = _text_snippets(data.get("commands", {}))
         except Exception as e:
             logger.warning(f"Could not load the snippets: {e}")

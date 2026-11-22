@@ -52,7 +52,6 @@ def opened(tmp_path, monkeypatch):
                         ("_config_mtime", 0.0), ("_repair_attempted", False),
                         ("_config_read_failed", False)):
         monkeypatch.setattr(C, name, value)
-    monkeypatch.setattr(P, "CONFIG_PATH", str(path))
 
     def open_with(text, backup=None):
         path.write_text(text)
@@ -118,7 +117,7 @@ def test_apply_over_an_emptied_file_keeps_its_backup(tmp_path, monkeypatch):
     cfg, bak = tmp_path / "config.toml", tmp_path / "config.toml.bak"
     cfg.write_text("")
     bak.write_text('hotkey = "F6"\n')
-    monkeypatch.setattr(P, "CONFIG_PATH", str(cfg))
+    monkeypatch.setattr("tuxtalk.config.CONFIG_PATH", str(cfg))
     d = SimpleNamespace(config={"hotkey": "F6", "beeps": False, "language_mode": "auto"},
                         _config_at_open={"hotkey": "F6", "beeps": True, "language_mode": "auto"})
 
@@ -133,7 +132,7 @@ def test_apply_over_an_emptied_file_keeps_its_backup(tmp_path, monkeypatch):
 def _saveable(tmp_path, monkeypatch, config, at_open=None):
     """A stand-in window whose save_config() writes to a throwaway path, and
     whose start-at-login reaches autostart.set_autostart (_autostart)."""
-    monkeypatch.setattr(P, "CONFIG_PATH", str(tmp_path / "config.toml"))
+    monkeypatch.setattr("tuxtalk.config.CONFIG_PATH", str(tmp_path / "config.toml"))
     d = SimpleNamespace(config=dict(config), window=None,
                         _config_at_open=dict(at_open if at_open is not None else {}))
     d._apply_launch_at_login = lambda before: PreferencesWindow._apply_launch_at_login(d, before)
@@ -291,7 +290,7 @@ def test_save_config_refuses_when_the_file_on_disk_is_damaged(tmp_path, monkeypa
     cfg.write_text('# TalkType config\nmic = "Blue Yeti "Nano" USB"\n')
     damaged = cfg.read_text()
 
-    monkeypatch.setattr(P, "CONFIG_PATH", str(cfg))
+    monkeypatch.setattr("tuxtalk.config.CONFIG_PATH", str(cfg))
     d = SimpleNamespace(config={"hotkey": "", "model": "small", "language_mode": "auto"},
                         _config_at_open={"hotkey": "", "model": "small",
                                          "language_mode": "auto"})
@@ -305,7 +304,7 @@ def test_save_config_refuses_when_the_file_on_disk_is_damaged(tmp_path, monkeypa
 def test_save_config_still_writes_when_the_file_is_readable(tmp_path, monkeypatch):
     cfg = tmp_path / "config.toml"
     cfg.write_text('# TalkType config\nmodel = "large-v3"\n')
-    monkeypatch.setattr(P, "CONFIG_PATH", str(cfg))
+    monkeypatch.setattr("tuxtalk.config.CONFIG_PATH", str(cfg))
 
     d = SimpleNamespace(config={"model": "medium", "language_mode": "auto"},
                         _config_at_open={"model": "large-v3", "language_mode": "auto"})
@@ -584,7 +583,7 @@ def test_a_failed_save_says_why(tmp_path, monkeypatch):
     folder looked like a bug in TuxTalk."""
     def full_disk(path, text, keep_backup=True):
         raise OSError(28, "No space left on device")
-    monkeypatch.setattr(P, "write_text_atomic", full_disk)
+    monkeypatch.setattr("tuxtalk.config.write_text_atomic", full_disk)
     d = _saveable(tmp_path, monkeypatch, {"beeps": False, "language_mode": "auto"},
                   {"beeps": True, "language_mode": "auto"})
 

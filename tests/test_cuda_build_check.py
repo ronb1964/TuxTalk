@@ -204,7 +204,7 @@ def prefs_on_nvidia_without_cuda_build(tmp_path, monkeypatch, without_cuda_build
     with the system's CUDA libraries installed and Vulkan offered."""
     cfg = tmp_path / "config.toml"
     cfg.write_text('device = "cuda"\nbeeps = true\n')
-    monkeypatch.setattr(P, "CONFIG_PATH", str(cfg))
+    monkeypatch.setattr("tuxtalk.config.CONFIG_PATH", str(cfg))
     opened = {"device": "cuda", "beeps": True, "model": "small", "language_mode": "auto"}
     win = SimpleNamespace(config=dict(opened), _config_at_open=dict(opened),
                           cuda_files_present=lambda: True, has_nvidia=lambda: True,
@@ -230,7 +230,7 @@ def test_a_saved_cuda_shows_as_cpu_there_and_stays_saved(prefs_on_nvidia_without
 
     section.config["beeps"] = False                 # the user's only change
     assert PreferencesWindow.save_config(section.win) is True
-    with open(P.CONFIG_PATH) as f:
+    with open(config.CONFIG_PATH) as f:
         assert tomllib.loads(f.read())["device"] == "cuda"
 
 

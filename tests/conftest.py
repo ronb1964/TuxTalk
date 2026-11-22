@@ -708,11 +708,9 @@ def _no_real_settings(monkeypatch, tmp_path_factory, request):
     """
     if request.module.__name__.rpartition(".")[2] == "test_flatpak_private_paths":
         return
-    from tuxtalk import config, prefs
+    from tuxtalk import config
     folder = tmp_path_factory.mktemp("settings")
-    path = str(folder / "tuxtalk" / "config.toml")
-    for module in (config, prefs):          # prefs keeps its own name for the path
-        monkeypatch.setattr(module, "CONFIG_PATH", path)
+    monkeypatch.setattr(config, "CONFIG_PATH", str(folder / "tuxtalk" / "config.toml"))
     monkeypatch.setattr(config, "get_data_dir", lambda: str(folder / "TuxTalk"))
     monkeypatch.setattr(config, "_config_cache", None)
     monkeypatch.setattr(config, "_config_mtime", 0.0)

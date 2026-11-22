@@ -96,25 +96,18 @@ def _use(model, device=None):
     afresh each time: the steps before may have saved what they learned (the
     speed check records vulkan_slower), and saving an older copy would
     quietly undo it."""
-    from tuxtalk.config import load_config, save_config
-    config = load_config()
-    config.model = model
-    if device:
-        config.device = device
-    save_config(config)
+    from tuxtalk.config import update_config
+    update_config(model=model, **({"device": device} if device else {}))
 
 
 def _save_choice(result):
     """Save the setup the welcome card showed. The update notice is marked
     shown, since a new install starts on the recommendation already."""
-    from tuxtalk.config import load_config, save_config
+    from tuxtalk.config import update_config
     try:
-        config = load_config()
-        config.model = result["model"]
-        config.device = result["device"]
-        config.dictation_language = result.get("dictation_language", "")
-        config.recommend_notice_shown = True
-        save_config(config)
+        update_config(model=result["model"], device=result["device"],
+                      dictation_language=result.get("dictation_language", ""),
+                      recommend_notice_shown=True)
     except Exception as e:
         logger.warning(f"Could not save the first-run setup: {e}")
 

@@ -8,7 +8,7 @@ import pytest
 
 from gi.repository import Gtk
 
-from tuxtalk import (model_helper, prefs, prefs_speech, recommend,
+from tuxtalk import (config, model_helper, prefs, prefs_speech, recommend,
                      vulkan_setup_dialogs)
 
 
@@ -193,7 +193,7 @@ def test_apply_shows_the_setup_the_tray_switched_to(speech, monkeypatch, tmp_pat
     saved.write_text('model = "parakeet-v3"\ndevice = "vulkan"\n'
                      'language_mode = "manual"\nlanguage = "de"\n'
                      'auto_timeout_enabled = true\nauto_timeout_minutes = 2\n')
-    monkeypatch.setattr(prefs, "CONFIG_PATH", str(saved))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(saved))
     monkeypatch.setattr(section, "download_selected_model", lambda: True)
 
     assert section.win._save_and_download() is not None

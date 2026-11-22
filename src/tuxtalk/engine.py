@@ -332,10 +332,8 @@ def build_or_exit(settings: Settings):
                                  "TuxTalk tries it again the next time dictation starts.")
             return model
         try:
-            from .config import load_config, save_config
-            saved = load_config()
-            saved.model = fallback
-            save_config(saved)
+            from .config import update_config
+            update_config(model=fallback)
         except Exception as save_error:
             logger.warning(f"Could not save the fallback model to settings: {save_error}")
         notify_module.notify(f"Using {model_title(fallback)} for now",
@@ -591,11 +589,9 @@ def _cpu_fallback_after_cuda(settings, error):
     notify_module.notify(*_cuda_failed_notice(_card_tried(settings)))
     # Saved, so future service restarts don't try CUDA again and crash in a loop.
     try:
-        from .config import save_config
-        cfg = load_config()
-        if cfg.device == "cuda":
-            cfg.device = "cpu"
-            save_config(cfg)
+        from .config import update_config
+        if load_config().device == "cuda":
+            update_config(device="cpu")
             logger.info("Updated config: device=cpu (CUDA unavailable, preventing a crash loop)")
     except Exception as e:
         logger.warning(f"Could not persist device=cpu after CUDA fallback: {e}")
