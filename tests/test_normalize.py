@@ -1050,6 +1050,8 @@ def test_an_abbreviation_keeps_its_period_before_a_spoken_mark():
     ("move that comma to the left", "Move that comma to the left."),
     ("no question mark needed", "No question mark needed."),
     ("one comma two commas", "One comma two commas."),
+    ("That comma is there for a reason", "That comma is there for a reason."),
+    ("This full stop was there yesterday", "This full stop was there yesterday."),
 ])
 def test_a_mark_talked_about_stays_words(said, typed):
     assert normalize_text(said) == typed
