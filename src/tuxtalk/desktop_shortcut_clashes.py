@@ -8,15 +8,24 @@ it isn't held back from the app either (cosmic_hotkeys.claim skips it). Only
 the desktop's own settings can be read: apps' shortcuts can't
 (dictation_keys.warning says so).
 """
+import ast
 import re
 from dataclasses import dataclass
 
 from . import cosmic_hotkeys, desktop_detect
 from .ctrl_space_clashes import GNOME_SCHEMAS, GSETTINGS_TIMEOUT_S, gsettings
+from .dictation_keys import CTRL_SPACE
 from .hotkey_claims import qt_key_sequence
 
-# The longest clashes() can take: one gsettings call per GNOME schema.
-LOOKUP_BUDGET_S = GSETTINGS_TIMEOUT_S * len(GNOME_SCHEMAS)
+# The shortcuts made in GNOME Settings: a list of paths, each one a
+# relocatable schema that list-recursively on the parent doesn't show.
+_CUSTOM_LIST = "org.gnome.settings-daemon.plugins.media-keys"
+_CUSTOM = "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding"
+# How many of them are read, so the lookup's time has a bound.
+MAX_CUSTOM = 10
+# The longest clashes() can take: a gsettings call per GNOME schema, one for
+# the list of custom shortcuts and one per custom shortcut read.
+LOOKUP_BUDGET_S = GSETTINGS_TIMEOUT_S * (len(GNOME_SCHEMAS) + 1 + MAX_CUSTOM)
 
 # One quoted accelerator in a gsettings value: '<Primary><Alt>t'.
 _ACCELERATOR = re.compile(r"'((?:<[^<>']+>)*)([^<>']+)'")
@@ -60,6 +69,24 @@ def gnome_bindings(listing: str) -> dict:
     return found
 
 
+def gnome_custom_bindings() -> dict:
+    """gnome_bindings for the shortcuts made in GNOME Settings, each named
+    by the name given it there."""
+    try:
+        paths = ast.literal_eval(gsettings("get", _CUSTOM_LIST, "custom-keybindings")
+                                 .removeprefix("@as").strip() or "[]")
+    except (ValueError, SyntaxError):
+        return {}
+    found = {}
+    for path in paths[:MAX_CUSTOM]:
+        listing = gsettings("list-recursively", f"{_CUSTOM}:{path}")
+        name = re.search(r" name '([^']*)'", listing)
+        bound = "\n".join(line for line in listing.splitlines() if " binding " in line)
+        for binding in gnome_bindings(bound):
+            found.setdefault(binding, name.group(1) if name else "")
+    return found
+
+
 def _binding(name: str):
     """(frozenset of modifiers, key in lower case) for dictation key *name*,
     as both desktops spell it, or None for one no desktop can bind."""
@@ -72,13 +99,17 @@ def _binding(name: str):
 
 def clashes(names) -> list:
     """A ShortcutClash for each dictation key in *names* this desktop binds."""
-    bindings = {_binding(name): name for name in names if name and _binding(name)}
+    # Left Ctrl+Space is ctrl_space_clashes' to look up, GNOME's use included.
+    bindings = {binding: name for binding, name in
+                ((_binding(name), name) for name in names if name and name != CTRL_SPACE)
+                if binding}
     if not bindings:
         return []
     desktop = desktop_detect.get_desktop_environment()
     if desktop == "gnome":
-        taken = gnome_bindings("\n".join(gsettings("list-recursively", schema)
-                                         for schema in GNOME_SCHEMAS))
+        taken = {**gnome_custom_bindings(),
+                 **gnome_bindings("\n".join(gsettings("list-recursively", schema)
+                                            for schema in GNOME_SCHEMAS))}
         return [ShortcutClash("GNOME", name, taken[binding],
                               "Settings, Keyboard, View and Customize Shortcuts")
                 for binding, name in bindings.items() if binding in taken]

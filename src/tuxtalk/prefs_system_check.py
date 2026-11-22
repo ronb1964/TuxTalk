@@ -130,7 +130,8 @@ def _helper_state(refused_shortcuts):
     return ('<span color="#4CAF50">✓ Ready. Only TuxTalk\'s hotkey helper reads the '
             'keyboard, and it tells TuxTalk about its hotkeys, Right Ctrl or Right Alt '
             'going down, and Left Ctrl going down and up while Left Ctrl+Space is a '
-            'dictation key, never what you type</span>', _READY, False, True)
+            'dictation key, never what you type (except AltGr characters where a keyboard '
+            'option puts AltGr on Left Alt, Super or Right Ctrl)</span>', _READY, False, True)
 
 
 def _input_group_state():

@@ -7,11 +7,15 @@ before 0.15.0, so older entries use that name.
 
 - Pick any dictation key you like: the hold and toggle lists in
   Preferences → General end in "Other key or combination…", where you
-  press the keys, such as Alt+D or Ctrl+Shift+K. TuxTalk refuses keys
-  that would type (a letter on its own) and reminds you that apps may use
-  the same shortcut. A combination with one of Ctrl, Alt or the Windows
+  press the keys, such as Alt+D, Ctrl+Shift+K or F13 to F24. TuxTalk
+  refuses keys that would type (a letter on its own), reminds you that
+  apps may use the same shortcut, and says when KDE, GNOME or COSMIC
+  already uses it. A combination with one of Ctrl, Alt or the Windows
   key needs the hotkey helper 1.17: TuxTalk offers the update, and asks
-  for your password once. A letter written into config.toml by hand as
+  for your password once. Where a keyboard option makes Left Alt, Super or
+  Right Ctrl the AltGr key, a program could learn from the helper which
+  of those characters you type; the README and privacy page say so. A
+  letter written into config.toml by hand as
   the dictation key, which started a dictation with every one typed, is
   now refused.
 - "No space" joins an email name however the speech model writes it:

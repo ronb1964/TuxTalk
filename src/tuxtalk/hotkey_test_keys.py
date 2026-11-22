@@ -27,9 +27,10 @@ def loggable_key(keyname):
 
 def captured_key_problem(keyname, other_key):
     """Why *keyname* can't become a hotkey, or None if it can: the hotkey
-    test takes the keys Preferences offers."""
-    if keyname not in HOTKEY_CHOICES:
-        return ("That key can't be used for dictation. Pick F1 to F12, Right Ctrl, "
+    test takes the keys Preferences lists, and F13 to F24 (a combination is
+    Preferences' to take, pressed in its own window)."""
+    if keyname not in HOTKEY_CHOICES and keyname not in dictation_keys.SINGLE_KEYS:
+        return ("That key can't be used for dictation. Pick F1 to F24, Right Ctrl, "
                 "Right Alt, Scroll Lock or Left Ctrl+Space.")
     if keyname == other_key:
         return f"{keyname} is already your other hotkey. Pick a different key."
@@ -64,6 +65,9 @@ def evdev_key_name(code):
     for name, key in HOTKEY_CHOICES.items():
         if name != CTRL_SPACE and code == ecodes.ecodes[key]:
             return name
+    for n in range(13, 25):                 # F13-F24, which no dropdown lists
+        if code == ecodes.ecodes[f"KEY_F{n}"]:
+            return f"F{n}"
     for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
         if code == getattr(ecodes, f"KEY_{c}", None):
             return c.lower()

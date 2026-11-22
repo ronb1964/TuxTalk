@@ -52,16 +52,26 @@ def key_name(keyval: int, state: int, hardware_keycode: int = 0) -> str | None:
     return "+".join([*mods, name])
 
 
-def refusal_for(name: str, other: str, config) -> str | None:
+def refusal_for(name: str, other: str, config, typing_mods=None) -> str | None:
     """dictation_keys.refusal for *name* on this computer, beside *other*
     (the other dictation key): with *config*'s voice editing and shortcuts,
-    and the modifiers that type on the active layout."""
-    from .combo_keys import typing_modifiers
-    from .keyboard_layout import level3_keys
+    and the modifiers that type on the active layout (*typing_mods*, from
+    typing_modifiers; read here when None). The layout is asked only for a
+    combo: the desktop can take seconds to answer, and GTK waits."""
     shortcuts = (("cheat sheet", config.get("voice_commands_hotkey") or ""),
                  ("paste last dictation", config.get("paste_last_hotkey") or ""))
+    if typing_mods is None:
+        typing_mods = typing_modifiers() if "+" in name else frozenset()
     return dictation_keys.refusal(name, other, bool(config.get("voice_editing")),
-                                  typing_modifiers(level3_keys()), shortcuts)
+                                  typing_mods, shortcuts)
+
+
+def typing_modifiers() -> frozenset:
+    """The combo modifiers that type characters on the active layout
+    (combo_keys.typing_modifiers)."""
+    from . import combo_keys
+    from .keyboard_layout import level3_keys
+    return combo_keys.typing_modifiers(level3_keys())
 
 
 def _desktop_holds_keys() -> bool:
@@ -84,7 +94,7 @@ def ask(parent, role: str, other: str, config) -> str | None:
     the name picked, or None when cancelled. *other* is the other dictation
     key, *config* the settings it's checked against (refusal_for)."""
     dialog = Gtk.Dialog(title=f"Your {role} key", transient_for=parent, modal=True)
-    dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+    cancel = dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
     use = dialog.add_button("Use This Key", Gtk.ResponseType.OK)
     use.set_sensitive(False)
     box = dialog.get_content_area()
@@ -102,20 +112,25 @@ def ask(parent, role: str, other: str, config) -> str | None:
     box.add(note)
     picked = []
     held_back = _desktop_holds_keys()
+    typing_mods = typing_modifiers()        # once, not on every key pressed
 
     def on_key(_widget, event):
+        """Show a finished key or combination pressed, and why it can't be
+        used or what to know about it; modifiers alone wait for the key."""
         name = key_name(event.keyval, event.state, event.hardware_keycode)
         if name is None:
             return False                # a modifier so far, or the window's own key
         picked[:] = [dictation_keys.canonical(name)]
         shown.set_text(picked[0])
-        why = refusal_for(picked[0], other, config)
+        why = refusal_for(picked[0], other, config, typing_mods)
         said = why or dictation_keys.warning(picked[0], held_back) or ""
         note.set_text(said)
         use.set_sensitive(why is None)
-        # GTK3 has no live region: the key and the answer go on the window's
-        # description, which a screen reader reads with the focused button.
-        dialog.get_accessible().set_description(f"{picked[0]}. {said}".strip())
+        # GTK3 has no live region: the key and the answer go on both buttons'
+        # descriptions, read with whichever has the focus (Use This Key is
+        # greyed out after a refusal, so Cancel may be the one).
+        for button in (use, cancel):
+            button.get_accessible().set_description(f"{picked[0]}. {said}".strip())
         return True                     # the key is only being picked
     dialog.connect("key-press-event", on_key)
     dialog.show_all()

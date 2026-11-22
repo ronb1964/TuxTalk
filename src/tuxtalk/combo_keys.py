@@ -73,10 +73,12 @@ def parse(name: str) -> ComboKey | None:
 
 
 def typing_modifiers(level3_keys) -> frozenset:
-    """The modifiers a combo may name ("Alt", "Super", "Ctrl") that count a
-    key among *level3_keys* (keyboard_layout.level3_keys): with it a letter
-    types a character on this layout, so it can't make a dictation key."""
-    return frozenset(mod for mod, group in _GROUPS.items() if group & set(level3_keys))
+    """The modifiers a combo may name ("Alt", "Super") whose every key is
+    among *level3_keys* (keyboard_layout.level3_keys): with it a letter
+    types a character on this layout, so it can't make a dictation key.
+    A modifier with another key left (Left Ctrl when Right Ctrl is AltGr)
+    still works with that one, as Presses.use counts it."""
+    return frozenset(mod for mod, group in _GROUPS.items() if group <= set(level3_keys))
 
 
 def is_held(combo: ComboKey, held_modifiers) -> bool:

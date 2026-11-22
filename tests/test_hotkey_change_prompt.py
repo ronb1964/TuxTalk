@@ -9,7 +9,6 @@ from tuxtalk.hotkey_labels import hands_free_label, hotkey_label
 from tuxtalk.prefs_general import hotkey_change_message
 
 
-
 @pytest.fixture(autouse=True)
 def _no_desktop_shortcuts(monkeypatch):
     """The desktop's own shortcuts are looked up for real only in

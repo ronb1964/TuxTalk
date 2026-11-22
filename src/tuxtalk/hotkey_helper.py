@@ -22,7 +22,7 @@ as typing:
 * Right Ctrl and Right Alt on their own, for keyboards whose F-keys need Fn.
   Where a layout or an XKB option makes one of them AltGr or Compose, a
   client learns when it went down, so that a character of that kind (€, @)
-  was typed then, but never which: the keys pressed with it stay unreported;
+  was typed then; which one only for Right Ctrl, through the rule below;
 * any other key only while Ctrl, Left Alt or Super is held with it,
   having gone down while the desktop could see it, on a real keyboard
   (any of them, as the desktop counts them) or on the same virtual one;
@@ -66,9 +66,9 @@ TuxTalk types (Ctrl and a typed "w" close a tab).
 Everything goes only to the user at the screen: logind's active user on
 seat0, checked by user id (two sessions of the same user count as one), and
 only keyboards of seat0 are read. Letters, numbers, Enter or Shift+letter
-alone are never reported, so a hostile program that connects learns no typing,
-only which shortcuts and when AltGr, Compose or layout-switch keys were pressed.
-Each client may ask for four shortcuts at most; TuxTalk asks for four.
+alone are never reported, so a hostile program that connects learns no typing
+but third-level characters as above, and which shortcuts and when AltGr,
+Compose or layout-switch keys were pressed. Each client may ask for four shortcuts at most.
 
 Hiding a held hotkey
 --------------------

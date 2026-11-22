@@ -23,10 +23,10 @@ _UNLOCKING = frozenset({"Ctrl", "Alt", "Super"})
 # user's layout, hotkey_keys.keycode_from_name) or an F-key.
 _COMBO_KEYS = frozenset({*(chr(c) for c in range(ord("A"), ord("Z") + 1)),
                          *(f"F{n}" for n in range(1, 25))})
-# The key a combo's modifier counts that a keyboard option can make a
-# third-level key (AltGr), typing characters (combo_keys.typing_modifiers).
-# Right Alt is AltGr on most layouts already, so Alt is only Left Alt.
-TYPING_MODIFIER_KEYS = {"Alt": "Left Alt", "Super": "the Windows key", "Ctrl": "Right Ctrl"}
+# The keys of a combo's modifier that keyboard options can make third-level
+# keys (AltGr), typing characters (combo_keys.typing_modifiers). Right Alt
+# is AltGr on most layouts already, so Alt is only Left Alt.
+TYPING_MODIFIER_KEYS = {"Alt": "Left Alt", "Super": "the Windows key", "Ctrl": "Ctrl"}
 
 
 def canonical(name: str) -> str:
@@ -133,7 +133,8 @@ def warning(name: str, held_back: bool = True) -> str | None:
     if not held_back:
         return (f"On this desktop TuxTalk can't keep {canonical(name)} from your apps, so the "
                 "app you're in gets it as well each time (Alt+D jumps to a browser's address "
-                "bar). An F-key, Right Ctrl or Scroll Lock doesn't do anything there.")
+                "bar). An F-key or Scroll Lock does much less there, at most a ~ in a "
+                "terminal.")
     if mods == ["Alt"]:
         return ("Many apps open a menu with Alt and a letter (Alt+F is often File). TuxTalk "
                 "takes this one over, and can't check which apps use it.")

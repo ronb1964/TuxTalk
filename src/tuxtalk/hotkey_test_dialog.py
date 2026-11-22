@@ -380,7 +380,7 @@ class HotkeyTestDialog:
             return True
         keyname = _gtk_key(event)
         is_capture = self.capturing is not None
-        if not is_capture and keyname not in HOTKEY_CHOICES:
+        if not is_capture and keyname not in (*HOTKEY_CHOICES, *self.keys.values()):
             return False
         # A press carries no modifier of its own key: Right Ctrl's mask here
         # would let Left Ctrl+Right Ctrl through as Right Ctrl.

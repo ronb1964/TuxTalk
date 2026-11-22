@@ -522,7 +522,8 @@ def fix_description():
             "Installs TuxTalk's hotkey helper, the only program that reads the keyboard. "
             "It tells TuxTalk about its hotkeys, Right Ctrl or Right Alt going down, and "
             "Left Ctrl going down and up while Left Ctrl+Space is a dictation key, "
-            "never what you type",
+            "never what you type (one rare exception: where a keyboard option makes "
+            "Left Alt, Super or Right Ctrl the AltGr key, the AltGr characters)",
             "Lets TuxTalk type with a virtual keyboard, as Steam does for game controllers",
         ], False)
     return ([

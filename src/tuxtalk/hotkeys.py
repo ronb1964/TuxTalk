@@ -61,6 +61,8 @@ _combo_presses = combo_keys.Presses()
 _clash_lookup_for = None
 # The dictation keys the user was last told type on this layout (_use_combos).
 _said_typing_keys = ()
+# How often the idle hotkey loop reads the keyboard options again (_Level3Watch).
+LAYOUT_RECHECK_S = 20
 
 
 def _hotkey_test_active() -> bool:
@@ -544,9 +546,13 @@ def _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_co
                 if why:
                     logger.warning(f"The {what} shortcut won't work with the hotkey helper "
                                    f"({why}). Pick one with Ctrl, Alt or Super.")
-            letters = {code: _combo_presses.combo_for(code).letters
-                       for code in (hold_key, toggle_key) if _combo_presses.combo_for(code)}
-            dev.watch(watch_specs(hold_key, toggle_key, ecodes.KEY_ESC,
+            # A combo whose modifier types on this layout (_use_combos) isn't
+            # asked for: each such character would be reported to TuxTalk.
+            combos = {code: _combo_presses.combo_for(code) for code in (hold_key, toggle_key)}
+            usable = [code if not combos[code] or all(combos[code].mods) else None
+                      for code in (hold_key, toggle_key)]
+            letters = {code: combo.letters for code, combo in combos.items() if combo}
+            dev.watch(watch_specs(*usable, ecodes.KEY_ESC,
                                   (voice_cmds_combo, paste_last_combo), letters))
 
 
@@ -588,6 +594,7 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
 
     # Which modifier keys are held now, for combo detection.
     held_modifiers: set[int] = set()
+    level3_watch = _Level3Watch()
     while True:
         current_time = time.time()
         # Backend-agnostic work: D-Bus/portal start/stop commands, the
@@ -600,6 +607,11 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
             _watch(cfg, devices, keys)
             _forget_lost_presses(devices, keys)
             logger.info("Applied settings change without restarting")
+
+        if keys.combos and not rs.state.is_recording:
+            level3 = level3_watch.poll(current_time)
+            if level3 is not None:
+                _use_combos(cfg, keys.combos, level3)
 
         dead_devices = _read_key_events(devices, keys, held_modifiers, cfg, svc, current_time)
         if dead_devices:
@@ -713,15 +725,39 @@ def _log_ctrl_space_clashes(keys: "hotkey_keys.Hotkeys") -> None:
         threading.Thread(target=ctrl_space_clashes.log_clashes, daemon=True).start()
 
 
-def _use_combos(cfg: Settings, combos) -> None:
+class _Level3Watch:
+    """The keys the keyboard options make AltGr (keyboard_layout.level3_keys),
+    read again beside the hotkey loop every LAYOUT_RECHECK_S while it's
+    idle: an option set while TuxTalk runs can make a combo's modifier type
+    characters, and the desktop can take seconds to answer."""
+
+    def __init__(self):
+        self.due = time.time() + LAYOUT_RECHECK_S     # _watch has just read them
+        self.found = None       # set by the reading thread, taken by poll
+
+    def poll(self, now) -> frozenset | None:
+        """The keys read since the last call, or None; starts a read when due."""
+        if now >= self.due:
+            self.due = now + LAYOUT_RECHECK_S
+            threading.Thread(target=self._read, daemon=True).start()
+        found, self.found = self.found, None
+        return found
+
+    def _read(self) -> None:
+        from .keyboard_layout import level3_keys
+        self.found = level3_keys()
+
+
+def _use_combos(cfg: Settings, combos, level3=None) -> None:
     """Make *combos* the combo dictation keys, a modifier that types on this
-    layout not counting (combo_keys.Presses.use). A key it leaves unusable
-    is said in the log, and to the user once per such key: Preferences
-    refuses it, but a layout option set later or a restored backup can
-    bring one in."""
+    layout (*level3*, read now when None) not counting
+    (combo_keys.Presses.use). A key it leaves unusable is said in the log,
+    and to the user once per such key: Preferences refuses it, but a layout
+    option set later or a restored backup can bring one in."""
     global _said_typing_keys
-    from .keyboard_layout import level3_keys
-    level3 = level3_keys()
+    if level3 is None:
+        from .keyboard_layout import level3_keys
+        level3 = level3_keys()
     dead = {combo.code for combo in _combo_presses.use(combos, level3)}
     if not dead:
         _said_typing_keys = ()
@@ -729,9 +765,10 @@ def _use_combos(cfg: Settings, combos) -> None:
     typing = combo_keys.typing_modifiers(level3)
     names = tuple(name for name in (cfg.hotkey, cfg.toggle_hotkey)
                   if name and dictation_keycode(name) in dead)
-    for name in names:
-        logger.warning(f"{name} won't start dictation: "
-                       f"{dictation_keys.types_here(name, typing)}")
+    if names != _said_typing_keys:
+        for name in names:
+            logger.warning(f"{name} won't start dictation: "
+                           f"{dictation_keys.types_here(name, typing)}")
     if names and names != _said_typing_keys:
         notices.warn_dictation_key_types(names[0], dictation_keys.types_here(names[0], typing))
     _said_typing_keys = names
@@ -753,6 +790,14 @@ def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys") -> None:
     _log_ctrl_space_clashes(keys)
 
 
+def _on_shortcuts(event, keys: "hotkey_keys.Hotkeys", held_modifiers, devices, cfg) -> None:
+    """Paste Last Dictation's and the cheat sheet's combos for *event*, a
+    key the combo dictation keys didn't pass on (combo_keys.Presses)."""
+    if not _on_paste_last(event, keys.paste_last_combo, held_modifiers, devices, cfg,
+                          (keys.hold_key, keys.toggle_key)):
+        _on_voice_commands_combo(event, keys.voice_cmds_combo, held_modifiers, devices)
+
+
 def _on_key_event(event, keys: "hotkey_keys.Hotkeys", held_modifiers, devices, cfg: Settings,
                   svc, now: float) -> None:
     """Act on one key event read from a keyboard, TuxTalk's own aside."""
@@ -763,7 +808,12 @@ def _on_key_event(event, keys: "hotkey_keys.Hotkeys", held_modifiers, devices, c
         # that found it stuck waits for it again.
         modifier_hotkeys.note_released(event.code)
         ctrl_kept.let_go(devices)       # once no keyboard holds the real one
-    for key_event in _combo_presses.events(event, held_modifiers, (keys.hold_key, keys.toggle_key)):
+    passed = _combo_presses.events(event, held_modifiers, (keys.hold_key, keys.toggle_key))
+    if event not in passed:
+        # A combo dictation key's key typed without its modifiers is still
+        # the end of TuxTalk's own shortcuts: Ctrl+Alt+P with Super+P dictating.
+        _on_shortcuts(event, keys, held_modifiers, devices, cfg)
+    for key_event in passed:
         # Any hotkey counts as activity, whether or not the auto-timeout is
         # on now: it can be switched on later, and must then count from the
         # last real use.

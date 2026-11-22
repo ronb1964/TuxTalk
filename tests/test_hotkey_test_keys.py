@@ -19,7 +19,7 @@ import pytest
 from tuxtalk import hotkey_test_keys as htk
 
 
-@pytest.mark.parametrize("key", ["Pause", "space", "a", "Shift_L", "Control_L", "KP_0", "F13"])
+@pytest.mark.parametrize("key", ["Pause", "space", "a", "Shift_L", "Control_L", "KP_0", "F25"])
 def test_keys_the_service_cannot_use_are_refused(key):
     assert htk.captured_key_problem(key, "F9")
 
@@ -43,7 +43,7 @@ def test_the_log_names_scroll_lock_as_the_settings_do():
     assert htk.loggable_key("Scroll_Lock") == "another key"
 
 
-@pytest.mark.parametrize("key", ["F10", "Right Ctrl", "Right Alt", "Scroll Lock"])
+@pytest.mark.parametrize("key", ["F10", "Right Ctrl", "Right Alt", "Scroll Lock", "F13", "F24"])
 def test_the_keys_preferences_offers_are_accepted(key):
     assert htk.captured_key_problem(key, "F9") is None
 
@@ -332,8 +332,8 @@ def test_closing_the_test_keeps_a_combination_preferences_took():
 
 
 def test_alt_d_held_lights_the_test_and_d_alone_doesnt():
-    """Preferences offers the test after Alt+D is picked: it could never say
-    working, since the test read only the listed keys."""
+    """With Alt+D saved, first run's test (a config brought from another
+    computer) could never say working: it read only the listed keys."""
     ecodes = pytest.importorskip("evdev").ecodes
     from tuxtalk import combo_keys
     alt_d = combo_keys.ComboKey(ecodes.KEY_D, (frozenset({ecodes.KEY_LEFTALT}),), "A")
@@ -356,3 +356,10 @@ def test_the_helper_is_asked_for_a_saved_combination():
     helper = _WatchedHelper("1.17")
     hotkey_test_helper(ecodes, connect=lambda: helper, combos=[combo_keys.parse("Alt+D")])
     assert f"A:{ecodes.KEY_D}" in helper.specs
+
+
+def test_the_keyboard_reader_names_f13_to_f24():
+    """A saved F13 could never show as working: the reader named F1-F12 only."""
+    ecodes = pytest.importorskip("evdev").ecodes
+    assert htk.evdev_key_name(ecodes.KEY_F13) == "F13"
+    assert htk.evdev_key_name(ecodes.KEY_F24) == "F24"

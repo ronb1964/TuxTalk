@@ -114,7 +114,7 @@ def test_space_alone_is_never_reported(setup):
     assert heard(sock) == []
 
 
-def test_right_ctrl_space_is_never_reported(setup):
+def test_right_ctrl_space_isnt_reported_to_the_pairs_client(setup):
     """Right Ctrl can be a Compose or third-level key: Space with it may type."""
     _helper, kb, connect, say, heard, _seat = setup
     sock = _ready(connect, say, heard)
@@ -123,7 +123,7 @@ def test_right_ctrl_space_is_never_reported(setup):
     assert heard(sock) == []
 
 
-def test_typing_with_left_ctrl_held_is_never_reported(setup):
+def test_typing_with_left_ctrl_held_isnt_reported_to_the_pairs_client(setup):
     """Every key but Space stays unreported under Left Ctrl, however many."""
     _helper, kb, connect, say, heard, _seat = setup
     sock = _ready(connect, say, heard)

@@ -160,3 +160,49 @@ def test_where_left_alt_types_alt_d_types_too_and_the_user_is_told_once(
 def test_an_f13_key_pressed_in_preferences_is_one_the_loop_listens_for():
     assert hotkey_keys.dictation_keycode("F13") == ecodes.KEY_F13
     assert combo_keys.parse("Ctrl+F24").code == ecodes.KEY_F24
+
+
+def test_paste_last_still_works_beside_a_dictation_combo_on_the_same_key(
+        service, svc, guarded, monkeypatch):
+    """Super+P dictating swallowed every P without Super, Ctrl+Alt+P (Paste
+    Last Dictation) included: it never pasted again."""
+    lmeta = ecodes.KEY_LEFTMETA
+    super_p = combo_keys.ComboKey(ecodes.KEY_P, (frozenset({lmeta, ecodes.KEY_RIGHTMETA}),), "M")
+    monkeypatch.setattr(hotkeys, "_combo_presses", combo_keys.Presses((super_p,)))
+    monkeypatch.setattr(rs.state, "paste_last", None)
+    pasted = []
+    monkeypatch.setattr(hotkeys.dictation_worker, "submit", pasted.append)
+    keys = Hotkeys(ecodes.KEY_P, None, "", None, None,
+                   paste_last_combo=({"CTRL", "ALT"}, ecodes.KEY_P), combos=(super_p,))
+    held = set()
+    for code, value in ((LCTRL, 1), (LALT, 1), (ecodes.KEY_P, 1), (ecodes.KEY_P, 0),
+                        (LALT, 0), (LCTRL, 0)):
+        hotkeys._on_key_event(KeyEvent(code, value), keys, held, [], Cfg(), svc, 1.0)
+    assert len(pasted) == 1 and "start" not in service
+
+
+def test_the_helper_isnt_asked_for_a_combo_that_types_on_this_layout(monkeypatch):
+    """Asked for "A:32" where Left Alt is AltGr, the helper would tell
+    TuxTalk of every such character typed."""
+    presses = combo_keys.Presses()
+    presses.use((ALT_D,), {LALT})
+    monkeypatch.setattr(hotkeys, "_combo_presses", presses)
+    asked = []
+    hotkeys._helper_watch([SimpleNamespace(watch=asked.extend)], D, None, None, None)
+    assert f"A:{D}" not in asked and str(D) not in asked
+
+
+def test_a_keyboard_option_set_while_tuxtalk_runs_is_read_again(monkeypatch):
+    """Only a settings change read the layout again: an option making Left
+    Alt AltGr, set meanwhile, left Alt+D starting dictations."""
+    class NowThread:
+        def __init__(self, target, daemon):
+            self.target = target
+
+        def start(self):
+            self.target()
+    monkeypatch.setattr(hotkeys.threading, "Thread", NowThread)
+    monkeypatch.setattr(keyboard_layout, "level3_keys", lambda: frozenset({LALT}))
+    watch = hotkeys._Level3Watch()
+    assert watch.poll(watch.due - 1) is None            # not due yet
+    assert watch.poll(watch.due) == frozenset({LALT})

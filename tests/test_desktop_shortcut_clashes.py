@@ -29,8 +29,8 @@ def on(monkeypatch):
 
 def test_a_key_gnome_binds_is_named_with_its_setting(on, monkeypatch):
     on("gnome")
-    monkeypatch.setattr(dsc, "gsettings", lambda *args: LISTING if args[1].endswith("wm.keybindings")
-                        or args[1].endswith("media-keys") else "")
+    monkeypatch.setattr(dsc, "gsettings",
+                        lambda *args: LISTING if args[0] == "list-recursively" else "@as []")
     found = dsc.clashes(["Ctrl+Alt+T", "Alt+D"])
     assert [(c.key, c.setting) for c in found] == [("Ctrl+Alt+T", "terminal")]
     assert "GNOME already uses Ctrl+Alt+T" in found[0].paragraph()
@@ -47,3 +47,26 @@ def test_elsewhere_nothing_is_looked_up(on, monkeypatch):
     on("kde")
     monkeypatch.setattr(dsc, "gsettings", lambda *args: pytest.fail("asked gsettings"))
     assert dsc.clashes(["Alt+D"]) == []
+
+
+def test_a_shortcut_made_in_gnome_settings_is_found_by_its_name(on, monkeypatch):
+    """They live in a schema of their own per shortcut, which the lists of
+    GNOME's built-in shortcuts don't show."""
+    on("gnome")
+    custom = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/"
+    answers = {
+        ("get", "org.gnome.settings-daemon.plugins.media-keys", "custom-keybindings"):
+            f"['{custom}']",
+        ("list-recursively",
+         f"org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{custom}"):
+            "x binding '<Alt>d'\nx command 'firefox'\nx name 'Browser'",
+    }
+    monkeypatch.setattr(dsc, "gsettings", lambda *args: answers.get(args, ""))
+    assert [(c.key, c.setting) for c in dsc.clashes(["Alt+D"])] == [("Alt+D", "Browser")]
+
+
+def test_left_ctrl_space_is_left_to_its_own_list(on, monkeypatch):
+    """ctrl_space_clashes already names GNOME's Ctrl+Space: said twice before."""
+    on("gnome")
+    monkeypatch.setattr(dsc, "gsettings", lambda *args: pytest.fail("asked gsettings"))
+    assert dsc.clashes(["Left Ctrl+Space"]) == []

@@ -608,7 +608,8 @@ windows, so TuxTalk needs a little help to notice F8.
   background service, and it's the only thing that reads the keyboard. It
   tells TuxTalk about its hotkeys, Right Ctrl or Right Alt going down, and
   Left Ctrl going down and up while Left Ctrl+Space is a dictation key,
-  never what you type, and no other program you run gets to read your keys.
+  never what you type (with one rare exception, see the next section), and
+  no other program you run gets to read your keys.
   No restart needed. Check it with
   `systemctl status tuxtalk-hotkeys`
 - On a system without systemd it puts you in the `input` group instead. Then
