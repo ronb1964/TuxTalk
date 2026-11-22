@@ -255,6 +255,8 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
     it does stays with *rec*, never the newer recording."""
     if not (rs.state.is_recording and rec is rs.state.current):
         return
+    if status and status.input_overflow:   # sounddevice's CallbackFlags
+        rec.message.lost_audio = True       # logged by the worker, off this thread
     block = indata.tobytes()
     with type_at_pause.chunk_lock:
         if rec.captured:

@@ -58,6 +58,10 @@ class Message:
     # Its recording was cancelled (Esc): a phrase of it still waiting to be
     # typed is dropped, and nothing is sent after it.
     cancelled: bool = False
+    # Audio was dropped while it recorded (the computer stalled and the
+    # microphone's buffer overflowed): a word may be missing, so nothing is
+    # sent automatically after it.
+    lost_audio: bool = False
     # Its recording has stopped and the dictation worker hasn't finished its
     # last part yet (pipeline.stop_recording): Esc still cancels it.
     finishing: bool = False

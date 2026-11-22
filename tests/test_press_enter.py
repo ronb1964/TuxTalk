@@ -99,6 +99,21 @@ def test_press_enter_after_each_dictation(monkeypatch):
                       ("enter", "Send each dictation automatically is on")]
 
 
+def test_a_recording_that_lost_audio_is_typed_but_not_sent(monkeypatch):
+    """The computer stalled while it recorded and the microphone dropped
+    audio: a word may be missing, and a sent message can't be taken back."""
+    import types
+    from tuxtalk import recording
+    monkeypatch.setattr(live, "press_enter_after", True)
+    monkeypatch.setattr(rs.state, "is_recording", True)
+    rec = rs.state.current
+    recording._sd_callback(rec, np.zeros((320, 1), np.int16), 320, None,
+                           types.SimpleNamespace(input_overflow=True))
+    monkeypatch.setattr(rs.state, "is_recording", False)
+    events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ")
+    assert events == [("typed", "Hello there. ")]       # no Enter, so its space stays
+
+
 def test_a_cut_off_dictation_is_typed_but_not_sent(monkeypatch):
     """Letting go of the key after "and" means the sentence wasn't finished;
     sending half a message can't be taken back."""
