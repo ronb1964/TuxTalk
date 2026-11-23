@@ -6,8 +6,8 @@ and the AI's self-corrections when they're on.
 What the user's settings say comes in as *settings*: anything with
 live_settings' names (commands, words, numbers_mode, numbers_language,
 remove_fillers, ai_corrections, ai_engine, swiss_spelling, loggable), and
-live_settings itself in the service. Which window the text goes to is the
-caller's to say, so this stays inside the portable brain."""
+live_settings itself in the service. Whether the dictation carries on the
+last sentence is the caller's to say, since that depends on the window."""
 from . import custom_commands
 from .logger import setup_logger
 from .normalize import (
@@ -53,10 +53,13 @@ def clean_up(text, ai, settings):
     return text
 
 
-def _carry_on_sentence(text, words):
-    """*text* carrying on the sentence the last dictation left unfinished:
-    its first letter small, unless that would spoil a word (I, NASA, Your
+def _carry_on_sentence(text, words, continues):
+    """*text* carrying on the sentence the last dictation left unfinished,
+    when *continues* (asked only now, see prepare_text) says it does: its
+    first letter small, unless that would spoil a word (I, NASA, Your
     Words)."""
+    if not text or continues is None or not continues():
+        return text
     if text[0].isupper() and safe_to_lowercase_first_word(text, words):
         text = text[0].lower() + text[1:]
         logger.info("Lowercased first letter for mid-sentence continuation")
@@ -65,7 +68,7 @@ def _carry_on_sentence(text, words):
 
 def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool,
                  app_kind: str = "", ai: bool = True, whole: bool = True, *,
-                 settings, continues: bool = False) -> str:
+                 settings, continues=None) -> str:
     """Apply voice commands, normalize, handle mid-sentence, add auto-period/space.
 
     *app_kind* ("terminal", "code" or ""): the focused app wants plain text
@@ -75,9 +78,10 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     a phrase together with the one before it instead (type_at_pause.correct_across_pause).
     *whole* False is a Type at pause phrase, which may be part of a sentence:
     only a whole dictation can be an address said on its own (address_alone).
-    *continues*: it carries on the sentence the last dictation left
-    unfinished, in the same window (it ended on "and", or undo took back
-    its end), so its first letter is small (_carry_on_sentence).
+    *continues*: asked, last thing before the capitals are settled (after
+    the AI, which can take seconds: the window may change meanwhile),
+    whether it carries on the sentence the last dictation left unfinished
+    in the same window, so its first letter is small (_carry_on_sentence).
 
     Returns the final text string ready for injection.
     """
@@ -141,8 +145,7 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     if settings.swiss_spelling:
         text = swiss_spelling(text)
 
-    if continues and text:
-        text = _carry_on_sentence(text, settings.words)
+    text = _carry_on_sentence(text, settings.words, continues)
 
     # Auto-period and auto-space. When the utterance ends with a line-break
     # command, the period lands BEFORE the break and no trailing space is

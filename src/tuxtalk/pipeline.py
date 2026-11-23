@@ -433,11 +433,13 @@ def _key_to_press(raw: str, said: str, job: _Job):
 
 def _prepared(raw, job: _Job, auto_period: bool, kind: str, ai: bool) -> str:
     """dictation_text.prepare_text for *raw*, with the live settings and
-    whether it carries on the last sentence; words typed end that sentence."""
+    whether it carries on the last sentence. Text prepared ends that
+    sentence, whether or not it's typed then (Esc, a failed delivery), as
+    before; only no text at all leaves it open."""
     text = dictation_text.prepare_text(raw, job.smart_quotes, auto_period, job.auto_space,
                                        app_kind=kind, ai=ai, whole=job.chunk_role is None,
-                                       settings=live, continues=_continues_sentence())
-    if text.strip():
+                                       settings=live, continues=_continues_sentence)
+    if text:
         rs.state.continue_mid_sentence = False
     return text
 

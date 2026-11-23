@@ -132,7 +132,6 @@ import numpy as np
 from tuxtalk import dictation_text
 from tuxtalk import engine
 from tuxtalk import live_settings as live
-from tuxtalk import recording_state as rs
 from tuxtalk import whisper_vulkan as wv
 
 _load_words = cw.load     # the real one, before service_main replaces it
@@ -219,8 +218,8 @@ def test_a_snippet_still_beats_a_word(with_words, monkeypatch):
 
 
 def test_continuing_mid_sentence_keeps_a_words_capitals(with_words, monkeypatch):
-    monkeypatch.setattr(rs.state, "continue_mid_sentence", True)
-    out = dictation_text.prepare_text("tux talk is running", True, False, False, settings=live)
+    out = dictation_text.prepare_text("tux talk is running", True, False, False, settings=live,
+                                      continues=lambda: True)
     assert out.startswith("TuxTalk")
 
 
@@ -295,8 +294,8 @@ def test_a_snippet_spoken_as_the_joined_word_still_fires(with_words, monkeypatch
 def test_continuing_mid_sentence_keeps_multi_word_and_possessive_names(raw, first, monkeypatch):
     monkeypatch.setattr(live, "words", ["New York", "TuxTalk"])
     monkeypatch.setattr(live, "commands", {})
-    monkeypatch.setattr(rs.state, "continue_mid_sentence", True)
-    assert dictation_text.prepare_text(raw, True, False, False, settings=live).startswith(first)
+    assert dictation_text.prepare_text(raw, True, False, False, settings=live,
+                                       continues=lambda: True).startswith(first)
 
 
 # --- whitespace, hyphens and short entries ----------------------------------------
