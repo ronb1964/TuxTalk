@@ -116,8 +116,9 @@ class Recording:
     # reported dropping audio (recording._sd_callback; logged when it stops).
     samples_heard: int = 0
     overflows: list = field(default_factory=list, repr=False)
-    # How long after its key went down its first block came, when a drop
-    # came with it (recording._came_at_the_start).
+    # When it started (time.monotonic()), and how long after that its first
+    # block came when a drop came with it (recording._came_at_the_start).
+    started_at: float | None = None
     first_block_after: float | None = None
     # finish_capture took its audio (under type_at_pause.chunk_lock): a
     # block still arriving is dropped.

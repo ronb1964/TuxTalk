@@ -121,13 +121,13 @@ def test_a_recording_that_lost_audio_is_typed_but_not_sent(monkeypatch):
 
 def _first_block_dropped(monkeypatch, came):
     """A recording whose stream reported a drop with its first block, which
-    came *came* seconds after the key went down (None: unknown)."""
+    came *came* seconds after it started (None: unknown)."""
     import types
     from tuxtalk import recording
     monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(rs.state, "is_recording", True)
     rec = rs.state.current
-    rec.press_t0 = None if came is None else time.time() - came
+    rec.started_at = None if came is None else time.monotonic() - came
     recording._sd_callback(rec, np.zeros((320, 1), np.int16), 320, None,
                            types.SimpleNamespace(input_overflow=True))
     monkeypatch.setattr(rs.state, "is_recording", False)
@@ -136,20 +136,22 @@ def _first_block_dropped(monkeypatch, came):
 
 def test_a_drop_as_the_stream_starts_doesnt_hold_the_send(monkeypatch):
     """Pausing a video as the recording starts, the sound system reported a
-    drop with the microphone's first block, which began as the stream did:
-    what it lost was from before anyone talks, yet every such message was
-    held. It's still logged."""
-    rec = _first_block_dropped(monkeypatch, came=0.08)
+    drop with the microphone's first block, which came 0.03-0.09 s after the
+    start: every such message was held. It's still logged."""
+    from tuxtalk.recording import FIRST_BLOCK_S
+    rec = _first_block_dropped(monkeypatch, came=FIRST_BLOCK_S - 0.05)
     assert rec.overflows == [0.0] and not rec.message.lost_audio
     events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ")
     assert events[-1] == ("enter", "Send each dictation automatically is on")
 
 
-@pytest.mark.parametrize("came", [0.6, None])
-def test_a_first_block_drop_after_a_stall_still_holds(monkeypatch, came):
-    """A first block that came well after the key means the computer
+@pytest.mark.parametrize("late", [0.05, None])
+def test_a_first_block_drop_after_a_stall_still_holds(monkeypatch, late):
+    """A first block that came after FIRST_BLOCK_S means the computer
     stalled at the start, and a quick first word may be what was lost;
-    with no key time to tell, it counts too."""
+    with no start time to tell, it counts too."""
+    from tuxtalk.recording import FIRST_BLOCK_S
+    came = None if late is None else FIRST_BLOCK_S + late
     assert _first_block_dropped(monkeypatch, came).message.lost_audio
 
 
@@ -167,7 +169,12 @@ def test_each_drop_is_kept_with_how_far_into_the_recording_it_came(monkeypatch):
         input_overflow=True)
     for status in (fine, fine, fine):
         recording._sd_callback(rec, block, len(block), None, status)
-    rec.frames = []                     # a Type at pause cut: the count goes on
+    # A Type at pause cut, the real one: the count goes on across it.
+    from tuxtalk import dictation_worker, type_at_pause
+    monkeypatch.setattr(dictation_worker, "submit", lambda job: None)
+    pause = types.SimpleNamespace(cut_from_end=lambda: (0, 0), last_pause=0.5)
+    with type_at_pause.chunk_lock:
+        type_at_pause.cut_chunk(rec, pause)
     recording._sd_callback(rec, block, len(block), None, dropped)
     assert rec.overflows == [pytest.approx(0.3)] and rec.message.lost_audio
 

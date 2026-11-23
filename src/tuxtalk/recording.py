@@ -248,23 +248,24 @@ started_from_toggle_key = threading.Event()
 
 
 # A drop reported with the stream's first block lost only sound from before
-# that block, so from before it arrived. When it arrives this soon after
-# the key went down (seconds), the lost sound is from before anyone talks:
-# the start beep is still playing. PipeWire reports such a drop as TuxTalk
-# pauses a player or turns other sounds down at the start; it held every
-# message sent with a video playing. (The stream's own clock can't say it:
-# read before the stream starts, it isn't the clock its blocks are timed by.)
-FIRST_BLOCK_S = 0.25
+# that block arrived. PipeWire reports one as TuxTalk pauses a player or
+# turns other sounds down at the start, which held every message dictated
+# with a video playing; measured, that first block came 0.03-0.09 s after
+# the start. Within this (seconds) the lost sound is a few hundredths of a
+# second at the very start, rarely a word; later means the computer stalled
+# and a word may be lost, so the send is held. (The stream's own clock,
+# read before it starts, isn't the clock its blocks are timed by.)
+FIRST_BLOCK_S = 0.15
 
 
 def _came_at_the_start(rec) -> bool:
     """Whether *rec*'s first block, arriving now, came within FIRST_BLOCK_S
-    of its key going down; False when that moment is unknown. How soon is
-    kept for the log (rec.first_block_after)."""
-    if rec.press_t0 is None:
+    of its start (a clock the wall clock's changes don't move); False when
+    that moment is unknown. How soon is kept for the log."""
+    if rec.started_at is None:
         return False
-    rec.first_block_after = time.time() - rec.press_t0
-    return rec.first_block_after <= FIRST_BLOCK_S
+    rec.first_block_after = time.monotonic() - rec.started_at
+    return 0 <= rec.first_block_after <= FIRST_BLOCK_S
 
 
 def _sd_callback(rec, indata, frames_count, time_info, status):
@@ -455,7 +456,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     serial, held = send_countdown.recording_begins()
     rec = rs.state.current = rs.Recording(
         rs.Message(serial=serial), edit_mode=edit_mode,
-        held_send=held or held_send, press_t0=time.time())
+        held_send=held or held_send, press_t0=time.time(), started_at=time.monotonic())
     # Set before the stream starts — _sd_callback drops frames unless it's set.
     rs.state.is_recording = True
     if mic_stream.stuck():
@@ -613,7 +614,7 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
         times = ", ".join(f"{at:.2f}" for at in overflows[:10])
         more = f" (and {len(overflows) - 10} more)" if len(overflows) > 10 else ""
         first = rec.first_block_after
-        began = "" if first is None else f"; the first block came {first:.3f} s after the key"
+        began = "" if first is None else f"; the first block came {first:.3f} s after the start"
         logger.info(f"The microphone dropped audio {len(overflows)} time(s), after "
                     f"{times} s of the recording{more}{began}")
     if rec.message.lost_audio:

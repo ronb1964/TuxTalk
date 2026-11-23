@@ -102,7 +102,7 @@ def busy_worker(monkeypatch):
 @pytest.fixture
 def frozen_clock(monkeypatch):
     """Press and release at the same moment: a tap, however busy the machine."""
-    clock = types.SimpleNamespace(time=lambda: 1000.0)
+    clock = types.SimpleNamespace(time=lambda: 1000.0, monotonic=lambda: 1000.0)
     monkeypatch.setattr(recording, "time", clock)
     monkeypatch.setattr(hotkeys, "time", clock)
 
