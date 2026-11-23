@@ -247,24 +247,23 @@ toggles_asked = 0
 started_from_toggle_key = threading.Event()
 
 
-# A drop reported with the stream's first block lost only sound recorded
-# before that block began. When that block began this soon after the
-# stream started (seconds, by the stream's own clock), the lost sound is
-# from before anyone talks: the key went down a moment before, and the
-# start beep is still playing. PipeWire reports such a drop as TuxTalk
+# A drop reported with the stream's first block lost only sound from before
+# that block, so from before it arrived. When it arrives this soon after
+# the key went down (seconds), the lost sound is from before anyone talks:
+# the start beep is still playing. PipeWire reports such a drop as TuxTalk
 # pauses a player or turns other sounds down at the start; it held every
-# message sent with a video playing.
-FIRST_BLOCK_S = 0.15
+# message sent with a video playing. (The stream's own clock can't say it:
+# read before the stream starts, it isn't the clock its blocks are timed by.)
+FIRST_BLOCK_S = 0.25
 
 
-def _began_at_the_start(rec, time_info) -> bool:
-    """Whether the block *time_info* describes began within FIRST_BLOCK_S of
-    *rec*'s stream starting; False when either time is unknown. How soon it
-    began is kept for the log (rec.first_block_after)."""
-    began = getattr(time_info, "inputBufferAdcTime", None)
-    if not began or rec.stream_started is None:
+def _came_at_the_start(rec) -> bool:
+    """Whether *rec*'s first block, arriving now, came within FIRST_BLOCK_S
+    of its key going down; False when that moment is unknown. How soon is
+    kept for the log (rec.first_block_after)."""
+    if rec.press_t0 is None:
         return False
-    rec.first_block_after = began - rec.stream_started
+    rec.first_block_after = time.time() - rec.press_t0
     return rec.first_block_after <= FIRST_BLOCK_S
 
 
@@ -283,7 +282,7 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
         if status and status.input_overflow:   # sounddevice's CallbackFlags
             # Logged by finish_capture, off this thread.
             rec.overflows.append(rec.samples_heard / rec.samplerate)
-            if rec.samples_heard or not _began_at_the_start(rec, time_info):
+            if rec.samples_heard or not _came_at_the_start(rec):
                 rec.message.lost_audio = True
         rec.samples_heard += frames_count
         rec.frames.append(block)
@@ -350,11 +349,6 @@ def open_input_stream(rec, device_idx) -> None:
     rec.stream = sd.InputStream(callback=functools.partial(_sd_callback, rec), dtype='int16',
                                 device=device_idx, channels=CHANNELS,
                                 samplerate=rec.samplerate)
-    try:
-        # Read before it starts: its first block can come before start returns.
-        rec.stream_started = rec.stream.time     # the stream's own clock
-    except Exception as e:      # PortAudio without a clock for it: drops all count
-        logger.info(f"The microphone's stream has no clock: {e}")
     mic_stream.start(rec.stream)
 
 
@@ -619,7 +613,7 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
         times = ", ".join(f"{at:.2f}" for at in overflows[:10])
         more = f" (and {len(overflows) - 10} more)" if len(overflows) > 10 else ""
         first = rec.first_block_after
-        began = "" if first is None else f"; its first block began {first:.3f} s in"
+        began = "" if first is None else f"; the first block came {first:.3f} s after the key"
         logger.info(f"The microphone dropped audio {len(overflows)} time(s), after "
                     f"{times} s of the recording{more}{began}")
     if rec.message.lost_audio:
