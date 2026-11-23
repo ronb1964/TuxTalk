@@ -25,7 +25,7 @@ def commands(monkeypatch):
 
 
 def _run(text):
-    result, _protected = dictation_text.apply_custom_commands(text)
+    result, _protected = dictation_text.apply_custom_commands(text, live)
     return result
 
 
@@ -88,6 +88,6 @@ class TestItStaysNarrow:
 class TestQuotedReplacementsStillBypassNormalization:
     def test_a_quoted_replacement_is_protected(self, commands):
         commands({"my tag one": '"/btw "'})
-        result, protected = dictation_text.apply_custom_commands("my tag 1")
+        result, protected = dictation_text.apply_custom_commands("my tag 1", live)
         assert result != "my tag 1"
         assert list(protected.values()) == ["/btw "]

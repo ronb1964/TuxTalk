@@ -64,7 +64,7 @@ def _prepare(monkeypatch, on):
     monkeypatch.setattr(live, "remove_fillers", False)
     monkeypatch.setattr(live, "ai_corrections", False)
     return dictation_text.prepare_text("die straße ist groß", smart_quotes=True,
-                             auto_period=True, auto_space=False)
+                             auto_period=True, auto_space=False, settings=live)
 
 
 def test_dictation_uses_ss_when_on(monkeypatch):

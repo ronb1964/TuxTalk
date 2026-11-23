@@ -10,7 +10,7 @@ from tuxtalk import live_settings as live
 
 
 def _prep(text, smart_quotes):
-    return dictation_text.prepare_text(text, smart_quotes, True, False)
+    return dictation_text.prepare_text(text, smart_quotes, True, False, settings=live)
 
 
 def test_lone_open_quote_is_straight_with_smart_quotes_off(monkeypatch):

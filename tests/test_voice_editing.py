@@ -208,7 +208,7 @@ def test_self_corrections_are_skipped_while_only_voice_editing_is_on(no_engine, 
     called = []
     monkeypatch.setattr(ai_cleanup, "fix_self_corrections", lambda t, e: called.append(t) or t)
     monkeypatch.setattr(live, "commands", {})
-    dictation_text.prepare_text("order two boxes, no wait, three boxes", True, True, False)
+    dictation_text.prepare_text("order two boxes, no wait, three boxes", True, True, False, settings=live)
     assert called == []
 
 

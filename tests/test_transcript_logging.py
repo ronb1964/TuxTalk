@@ -70,7 +70,7 @@ def test_custom_command_log_line_redacts_the_text(monkeypatch, caplog):
     monkeypatch.setattr(live, "commands", {"banana": "apple"})
     secret = "my banana passphrase"
     with caplog.at_level(logging.INFO, logger="tuxtalk.app"):
-        dictation_text.apply_custom_commands(secret)
+        dictation_text.apply_custom_commands(secret, live)
     logged = "\n".join(r.getMessage() for r in caplog.records)
     assert "Custom commands applied" in logged   # the line did fire
     assert "banana" not in logged                 # ...but the words are gone

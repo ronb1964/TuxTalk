@@ -318,7 +318,7 @@ def _rewritten(selected, instruction, beeps_on):
     if result and live.swiss_spelling:
         result = swiss_spelling(result)
     if result:
-        result = dictation_text.numbers_to_digits(result)
+        result = dictation_text.numbers_to_digits(result, live)
     # Exact: for an edit done in code, spacing may be the whole change
     # (indenting one line); the AI's spacing-only answers are dropped above.
     if not result or result == selected:

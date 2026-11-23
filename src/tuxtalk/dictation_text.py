@@ -1,10 +1,14 @@
 """What a dictation's words go through before they're typed: the snippets
 and Your Words (custom_commands.py), the spoken-command rules, filler words,
 numbers as digits, punctuation, plain text for terminals and code editors,
-and the AI's self-corrections when they're on."""
-from . import custom_commands, focused_window, keyboard_output
-from . import live_settings as live
-from . import recording_state as rs
+and the AI's self-corrections when they're on.
+
+What the user's settings say comes in as *settings*: anything with
+live_settings' names (commands, words, numbers_mode, numbers_language,
+remove_fillers, ai_corrections, ai_engine, swiss_spelling, loggable), and
+live_settings itself in the service. Which window the text goes to is the
+caller's to say, so this stays inside the portable brain."""
+from . import custom_commands
 from .logger import setup_logger
 from .normalize import (
     address_alone,
@@ -18,52 +22,50 @@ from .normalize import (
 logger = setup_logger(__name__)
 
 
-def apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
+def apply_custom_commands(text: str, settings) -> tuple[str, dict[str, str]]:
     """The user's custom voice commands applied to the transcribed *text*
     (custom_commands.apply), with Your Words."""
-    result, protected = custom_commands.apply(text, live.commands, live.words)
+    result, protected = custom_commands.apply(text, settings.commands, settings.words)
     if result != text:
-        logger.info(f"Custom commands applied: {live.loggable(text)} -> {live.loggable(result)}")
+        logger.info(f"Custom commands applied: {settings.loggable(text)} -> "
+                    f"{settings.loggable(result)}")
     return result, protected
 
 
-def numbers_to_digits(text: str) -> str:
+def numbers_to_digits(text: str, settings) -> str:
     """*text* with spoken numbers as digits, when that option is on."""
-    if not live.numbers_mode:
+    if not settings.numbers_mode:
         return text
     from .spoken_numbers import to_digits
-    return to_digits(text, live.numbers_language,
-                     small_as_words=live.numbers_mode == "small_as_words")
+    return to_digits(text, settings.numbers_language,
+                     small_as_words=settings.numbers_mode == "small_as_words")
 
 
-def clean_up(text, ai):
+def clean_up(text, ai, settings):
     """The cleanup options: the rules first ("um", "the the"), then the AI
     for sentences with a self-correction (unless *ai* is False)."""
-    if live.remove_fillers:
+    if settings.remove_fillers:
         from .cleanup import clean_fillers_and_repeats
         text = clean_fillers_and_repeats(text)
-    if ai and live.ai_corrections and live.ai_engine is not None:
+    if ai and settings.ai_corrections and settings.ai_engine is not None:
         from . import ai_cleanup
-        text = ai_cleanup.fix_self_corrections(text, live.ai_engine)
+        text = ai_cleanup.fix_self_corrections(text, settings.ai_engine)
     return text
 
 
-def _carry_on_sentence(text):
-    """*text* carrying on the sentence the last dictation left unfinished
-    (it ended on "and", or undo took back its end): its first letter small,
-    unless it went to another window, where it's a new sentence (a message
-    after "meet me at noon and" in KWrite mustn't begin with a small letter)."""
-    focused = focused_window.window_class()
-    if (not keyboard_output.not_where_typed(focused) and text[0].isupper()
-            and safe_to_lowercase_first_word(text, live.words)):
+def _carry_on_sentence(text, words):
+    """*text* carrying on the sentence the last dictation left unfinished:
+    its first letter small, unless that would spoil a word (I, NASA, Your
+    Words)."""
+    if text[0].isupper() and safe_to_lowercase_first_word(text, words):
         text = text[0].lower() + text[1:]
         logger.info("Lowercased first letter for mid-sentence continuation")
-    rs.state.continue_mid_sentence = False
     return text
 
 
 def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool,
-                 app_kind: str = "", ai: bool = True, whole: bool = True) -> str:
+                 app_kind: str = "", ai: bool = True, whole: bool = True, *,
+                 settings, continues: bool = False) -> str:
     """Apply voice commands, normalize, handle mid-sentence, add auto-period/space.
 
     *app_kind* ("terminal", "code" or ""): the focused app wants plain text
@@ -73,6 +75,9 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     a phrase together with the one before it instead (type_at_pause.correct_across_pause).
     *whole* False is a Type at pause phrase, which may be part of a sentence:
     only a whole dictation can be an address said on its own (address_alone).
+    *continues*: it carries on the sentence the last dictation left
+    unfinished, in the same window (it ended on "and", or undo took back
+    its end), so its first letter is small (_carry_on_sentence).
 
     Returns the final text string ready for injection.
     """
@@ -81,12 +86,12 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
         auto_period = smart_quotes = False
     # Apply custom voice commands (phrase → replacement)
     # Quoted replacements come back as placeholder tokens in `protected`
-    processed, protected = apply_custom_commands(raw)
+    processed, protected = apply_custom_commands(raw, settings)
     # Your Words, first pass: before tidying, a hyphen inside a word can only
     # have come from the engine ("Tux-Talk"), so it may join here.
-    if live.words:
+    if settings.words:
         from .word_spelling import fix_spelling
-        processed = fix_spelling(processed, live.words)
+        processed = fix_spelling(processed, settings.words)
     # After the snippets, so "my email" said alone is an address on its own too;
     # a quoted one is typed exactly as written.
     literal = custom_commands.restore_protected(processed, protected)
@@ -94,8 +99,7 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     if address and literal != processed:
         address = literal.strip()
     if address:
-        rs.state.continue_mid_sentence = False
-        logger.info(f"Normalized text: {live.loggable(address)} (an address on its own)")
+        logger.info(f"Normalized text: {settings.loggable(address)} (an address on its own)")
         return address + (" " if auto_space else "")
 
     # Normalize text (capitalization, punctuation, etc.). auto_period is passed
@@ -113,20 +117,20 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     # Optional cleanup, while quoted custom-command replacements are still
     # placeholders, so a literal replacement is never "cleaned". Rules first
     # ("um", "the the"), then the AI for sentences with a self-correction.
-    text = clean_up(text, ai)
+    text = clean_up(text, ai, settings)
 
     # Your Words, second pass: "tux talk" -> "TuxTalk" and iPhone's capitals
     # back after a sentence start made it IPhone. After snippets, so a snippet
     # whose phrase contains the split-up word still matches; while quoted
     # snippets are still placeholders, so a literal one is never touched; and
     # with no hyphen joins, since by now a hyphen means the user said "dash".
-    if live.words:
+    if settings.words:
         from .word_spelling import fix_spelling
-        text = fix_spelling(text, live.words, hyphens=False)
+        text = fix_spelling(text, settings.words, hyphens=False)
 
     # Spoken numbers as digits. Before the quoted snippets come back, so a
     # literal snippet is typed exactly as written.
-    text = numbers_to_digits(text)
+    text = numbers_to_digits(text, settings)
 
     # Restore quoted (literal) custom command replacements before any further
     # processing so that auto-period/space checks see the real final text.
@@ -134,11 +138,11 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
 
     # Swiss Standard German writes ss where the engines write ß. Last, so it
     # also covers snippets, Your Words and the AI's corrections.
-    if live.swiss_spelling:
+    if settings.swiss_spelling:
         text = swiss_spelling(text)
 
-    if rs.state.continue_mid_sentence and text:
-        text = _carry_on_sentence(text)
+    if continues and text:
+        text = _carry_on_sentence(text, settings.words)
 
     # Auto-period and auto-space. When the utterance ends with a line-break
     # command, the period lands BEFORE the break and no trailing space is
@@ -146,5 +150,5 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     text = append_auto_punct(text, auto_period, auto_space)
     if app_kind:
         text = plain_for_app(text, app_kind)
-    logger.info(f"Normalized text: {live.loggable(text)}")
+    logger.info(f"Normalized text: {settings.loggable(text)}")
     return text

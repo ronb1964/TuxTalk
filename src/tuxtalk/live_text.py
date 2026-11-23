@@ -400,7 +400,7 @@ def _show(rec, words):
     """Put *words* up, without the fillers when they'd be left out of the
     typed text; nothing heard closes the window, so no old words stay."""
     # The cleanup rules, as the typed text gets them; the AI only runs then.
-    words = dictation_text.clean_up(words, ai=False) if words else words
+    words = dictation_text.clean_up(words, ai=False, settings=live) if words else words
     if not words:
         _close()
         return

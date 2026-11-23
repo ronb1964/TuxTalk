@@ -43,7 +43,7 @@ def _prepare(monkeypatch, raw, kind):
     monkeypatch.setattr(live, "swiss_spelling", False)
     monkeypatch.setattr(live, "numbers_mode", None)
     return dictation_text.prepare_text(raw, smart_quotes=True, auto_period=True, auto_space=True,
-                             app_kind=kind)
+                             app_kind=kind, settings=live)
 
 
 def test_a_terminal_gets_no_capital_and_no_period(monkeypatch):

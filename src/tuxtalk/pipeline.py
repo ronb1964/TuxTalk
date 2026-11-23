@@ -431,6 +431,26 @@ def _key_to_press(raw: str, said: str, job: _Job):
     return ("ENTER" if sending else ""), cut_off, ("" if why_not else cut_off)
 
 
+def _prepared(raw, job: _Job, auto_period: bool, kind: str, ai: bool) -> str:
+    """dictation_text.prepare_text for *raw*, with the live settings and
+    whether it carries on the last sentence; words typed end that sentence."""
+    text = dictation_text.prepare_text(raw, job.smart_quotes, auto_period, job.auto_space,
+                                       app_kind=kind, ai=ai, whole=job.chunk_role is None,
+                                       settings=live, continues=_continues_sentence())
+    if text.strip():
+        rs.state.continue_mid_sentence = False
+    return text
+
+
+def _continues_sentence() -> bool:
+    """Whether this dictation carries on the sentence the last one left
+    unfinished (it ended on "and", or undo took back its end): not when it
+    goes to another window, where it's a new sentence (a message after
+    "meet me at noon and" in KWrite mustn't begin with a small letter)."""
+    return (rs.state.continue_mid_sentence
+            and not keyboard_output.not_where_typed(focused_window.window_class()))
+
+
 def _shape_text(raw: str, said: str, key, job: _Job):
     """The words as they'll be typed (_Words); None when a phrase is only a
     correction cue, held for the next one. *key* is _key_to_press's answer."""
@@ -450,9 +470,7 @@ def _shape_text(raw: str, said: str, key, job: _Job):
     # A correction said after a pause ("meet at three" ... "no wait,
     # four") goes to the AI together with the phrase it corrects.
     across = type_at_pause.corrects_across_pause(raw, job.chunk_role, job.message)
-    text = dictation_text.prepare_text(raw, job.smart_quotes, chunk_period, job.auto_space,
-                                       app_kind=kind, ai=not across,
-                                       whole=job.chunk_role is None)
+    text = _prepared(raw, job, chunk_period, kind, ai=not across)
     if cut_off:
         # The engine may have put its own period after the "and".
         text = re.sub(r"\.(\s*)$", r"\1", text)

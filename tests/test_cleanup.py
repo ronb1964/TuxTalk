@@ -79,9 +79,9 @@ def test_literal_command_placeholders_are_never_collapsed():
 def test_cleanup_runs_in_prepare_text_only_when_enabled(monkeypatch):
     monkeypatch.setattr(live, "ai_engine", None)
     monkeypatch.setattr(live, "remove_fillers", False)
-    assert "um" in dictation_text.prepare_text("um so the the van is ready", False, True, False).lower()
+    assert "um" in dictation_text.prepare_text("um so the the van is ready", False, True, False, settings=live).lower()
     monkeypatch.setattr(live, "remove_fillers", True)
-    assert dictation_text.prepare_text("um so the the van is ready", False, True, False) == "So the van is ready."
+    assert dictation_text.prepare_text("um so the the van is ready", False, True, False, settings=live) == "So the van is ready."
 
 
 # A spoken "press tab" is a real tab character by the time cleanup runs, and

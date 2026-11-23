@@ -112,7 +112,7 @@ def test_saved_fix_is_applied_to_the_next_dictation(commands_file, monkeypatch):
     vocabulary.save_fix("bamboo studio", "BambuStudio")
     monkeypatch.setattr(live, "commands", config.load_custom_commands())
 
-    text, _protected = dictation_text.apply_custom_commands("i opened Bamboo Studio today")
+    text, _protected = dictation_text.apply_custom_commands("i opened Bamboo Studio today", live)
     assert text == "i opened BambuStudio today"
 
 

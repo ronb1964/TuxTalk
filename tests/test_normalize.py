@@ -2,6 +2,7 @@
 the same words left alone where they are ordinary English."""
 import pytest
 
+from tuxtalk import live_settings as live
 from tuxtalk.normalize import LINE_BREAK, normalize_text
 
 def test_basic_punct():
@@ -812,7 +813,7 @@ def test_a_spoken_address_is_lower_case(said, expected):
 # "ssh john at ..." or "it's john at ...", which stay as they were.
 def _whole(said, **kwargs):
     from tuxtalk.dictation_text import prepare_text
-    return prepare_text(said, True, True, True, **kwargs)
+    return prepare_text(said, True, True, True, **kwargs, settings=live)
 
 
 @pytest.mark.parametrize("said, expected", [
@@ -866,18 +867,15 @@ def test_anything_more_than_an_address_stays_a_sentence(said, expected):
 def test_a_snippet_for_your_own_address_gets_no_period(monkeypatch):
     """Help suggests a snippet ("my email") for your own address."""
     from tuxtalk import dictation_text
-    from tuxtalk import recording_state as rs
     monkeypatch.setattr(dictation_text, "apply_custom_commands",
-                        lambda raw: ("ron@example.com", {}))
-    monkeypatch.setattr(rs.state, "continue_mid_sentence", True)
+                        lambda raw, settings: ("ron@example.com", {}))
     assert _whole("My email.") == "ron@example.com "
-    assert rs.state.continue_mid_sentence is False
 
 
 def test_a_quoted_snippet_for_your_address_is_typed_as_written_with_no_period(monkeypatch):
     from tuxtalk import dictation_text
     monkeypatch.setattr(dictation_text, "apply_custom_commands",
-                        lambda raw: ("§CMDLIT_0§", {"§CMDLIT_0§": "Ron@Example.com"}))
+                        lambda raw, settings: ("§CMDLIT_0§", {"§CMDLIT_0§": "Ron@Example.com"}))
     assert _whole("My email.") == "Ron@Example.com "
 
 

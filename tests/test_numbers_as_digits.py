@@ -199,7 +199,7 @@ def _prepare(monkeypatch, mode, raw="i have three cats and twenty five chickens"
     monkeypatch.setattr(live, "remove_fillers", False)
     monkeypatch.setattr(live, "ai_corrections", False)
     monkeypatch.setattr(live, "swiss_spelling", False)
-    return dictation_text.prepare_text(raw, smart_quotes=True, auto_period=True, auto_space=False)
+    return dictation_text.prepare_text(raw, smart_quotes=True, auto_period=True, auto_space=False, settings=live)
 
 
 def test_dictation_uses_digits_when_on(monkeypatch):
