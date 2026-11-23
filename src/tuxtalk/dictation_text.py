@@ -8,6 +8,8 @@ live_settings' names (commands, words, numbers_mode, numbers_language,
 remove_fillers, ai_corrections, ai_engine, swiss_spelling, loggable), and
 live_settings itself in the service. Whether the dictation carries on the
 last sentence is the caller's to say, since that depends on the window."""
+from collections.abc import Callable
+
 from . import custom_commands
 from .logger import setup_logger
 from .normalize import (
@@ -68,7 +70,7 @@ def _carry_on_sentence(text, words, continues):
 
 def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool,
                  app_kind: str = "", ai: bool = True, whole: bool = True, *,
-                 settings, continues=None) -> str:
+                 settings, continues: Callable[[], bool] | None = None) -> str:
     """Apply voice commands, normalize, handle mid-sentence, add auto-period/space.
 
     *app_kind* ("terminal", "code" or ""): the focused app wants plain text

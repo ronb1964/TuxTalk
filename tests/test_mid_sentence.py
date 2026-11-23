@@ -79,3 +79,14 @@ def test_the_window_is_asked_after_the_ai_not_before(monkeypatch):
     dictation_text.prepare_text("The cat sat", False, True, False, settings=live,
                                 continues=lambda: asked.append("window") or False)
     assert asked == ["ai", "window"]
+
+
+def test_a_snippet_of_only_spaces_still_ends_the_sentence(monkeypatch):
+    """Text of spaces was typed, so the next dictation starts afresh."""
+    monkeypatch.setattr(rs.state, "continue_mid_sentence", True)
+    monkeypatch.setattr(dictation_text, "prepare_text", lambda *a, **k: "   ")
+    job = pipeline._Job(beeps_on=False, smart_quotes=False, notify_on=False, language=None,
+                        auto_space=False, auto_period=True, injection_mode="type",
+                        chunk_role=None, message=rs.Message())
+    pipeline._prepared("space space", job, True, "", ai=False)
+    assert rs.state.continue_mid_sentence is False
