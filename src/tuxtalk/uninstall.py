@@ -722,6 +722,7 @@ def confirm_text(plan, size):
     if size >= 1000 ** 2:       # not just the small files it keeps there
         lines.append("the engines, libraries and models it downloaded to its own folder "
                      f"({_size_text(size)})")
+    lines += _other_appimages_line(plan)
     found = {path.parent.name for path in plan.leftovers}
     desktop = [what for what, there in (("starting at login", "autostart" in found),
                                         ("its menu entry", "applications" in found),
@@ -729,6 +730,19 @@ def confirm_text(plan, size):
     if desktop:
         lines.append(_and(desktop))
     return "\n".join(f"•  {line}" for line in lines)
+
+
+def _other_appimages_line(plan):
+    """[the question's line] for TuxTalk AppImages kept in ~/AppImages beside
+    a package or source install, which go too ([] when there are none): one
+    kept to go back to was deleted unsaid. An AppImage install's own line
+    already names them."""
+    folder = plan.home / "AppImages"
+    found = [path for path in plan.leftovers
+             if path.parent == folder and path.suffix == ".AppImage"]
+    if not found or plan.install_type == "appimage":
+        return []
+    return [f"the TuxTalk AppImage{'s' if len(found) > 1 else ''} in ~/AppImages"]
 
 
 def _and(items):

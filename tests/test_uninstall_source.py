@@ -233,3 +233,14 @@ def test_the_package_installs_keep_their_words(home):
         assert f"<tt>{command}</tt>" in _done(plan, package_failed=True)
     assert "Remove the tuxtalk package with your package manager to finish." in \
         _done(uninstall.find(home, "package"))
+
+
+def test_an_appimage_kept_beside_another_install_is_named_before_it_goes(home):
+    """Someone on the source install (or a package) who keeps an AppImage to
+    go back to: it was deleted without the question saying so."""
+    kept = home / "AppImages/TuxTalk-v0.22.0-x86_64.AppImage"
+    kept.parent.mkdir(parents=True)
+    kept.write_text("")
+    plan = _source(home)
+    assert kept in plan.leftovers
+    assert "the TuxTalk AppImage in ~/AppImages" in uninstall.confirm_text(plan, 0)
