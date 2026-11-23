@@ -185,6 +185,7 @@ class Plan:
     input_group: bool = False        # TuxTalk's old setup put the user in it
     ydotoold_unit: Path = None       # the systemd user unit TuxTalk used until 0.18
     extension: bool = False
+    appimage: Optional[Path] = None     # the AppImage this TuxTalk runs from, for one
     system_package: Optional[str] = None    # the pacman package a system install is in
     # A source install's venv other than the README's, or the one the README's
     # is a link to: the user is told how to remove TuxTalk from it, and it is
@@ -370,6 +371,8 @@ def find(home, install_type, environ=os.environ, appimage=None, *,
     *base_prefix* are where this Python runs from and the Python it was made
     from (sys.prefix and sys.base_prefix when None), equal outside a venv."""
     plan = Plan(home=home, install_type=install_type)
+    if appimage and install_type == "appimage":
+        plan.appimage = Path(appimage)
     config_dir = home / ".config" / config.CONFIG_DIR
     data_dir = home / ".local" / "share" / config.DATA_DIR
     _where_program_is(plan, data_dir / source_install.VENV_NAME, owner, prefix, base_prefix)
@@ -733,16 +736,16 @@ def confirm_text(plan, size):
 
 
 def _other_appimages_line(plan):
-    """[the question's line] for TuxTalk AppImages kept in ~/AppImages beside
-    a package or source install, which go too ([] when there are none): one
-    kept to go back to was deleted unsaid. An AppImage install's own line
-    already names them."""
+    """[the question's line] for TuxTalk AppImages in ~/AppImages other than
+    the one this TuxTalk runs from, which go too ([] when there are none):
+    one kept to go back to was deleted unsaid."""
     folder = plan.home / "AppImages"
-    found = [path for path in plan.leftovers
-             if path.parent == folder and path.suffix == ".AppImage"]
-    if not found or plan.install_type == "appimage":
+    found = [path for path in plan.leftovers if path.parent == folder
+             and path.suffix == ".AppImage" and path != plan.appimage]
+    if not found:
         return []
-    return [f"the TuxTalk AppImage{'s' if len(found) > 1 else ''} in ~/AppImages"]
+    other = "other " if plan.install_type == "appimage" else ""
+    return [f"the {other}TuxTalk AppImage{'s' if len(found) > 1 else ''} in ~/AppImages"]
 
 
 def _and(items):

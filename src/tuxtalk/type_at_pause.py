@@ -31,7 +31,7 @@ from . import recording_state as rs
 from .beeps import READY_BEEP
 from .chunk_text import boundary_mark, engine_period, word_count, words_in_context
 from .key_commands import log_held_back, split_key_command
-from .logger import setup_logger
+from .logger import error_without_words, setup_logger
 from .normalize import safe_to_lowercase_first_word
 from .window_classes import app_kind, why_no_automatic_enter
 
@@ -246,8 +246,10 @@ def _type_boundary(message, pending: dict, tail: str, injection_mode: str) -> No
         outcome = delivery.inject_text(tail, injection_mode, into=pending["where"],
                                        message=message)
     except Exception as e:      # a bug in delivery: the next phrase goes on
-        logger.error(f"Typing the mark between two phrases failed: {e!r}")
+        logger.error(f"Typing the mark between two phrases failed: {error_without_words(e)}")
         outcome = "failed"
+        # The message is missing its mark now: nothing sends it by itself.
+        message.add(outcome, None)
     ok = outcome == "ok"
     if not ok:
         logger.warning(f"The mark or space between two phrases wasn't typed ({outcome})")

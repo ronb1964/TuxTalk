@@ -363,7 +363,7 @@ def test_typed_line_breaks_stay_line_breaks_in_other_apps(monkeypatch):
     assert typed == [f"First line.{MARK}Second line."]
 
 
-def test_the_typed_remainder_after_a_failed_paste_has_no_breaks_in_a_terminal(monkeypatch, wayland):
+def test_text_typed_after_a_failed_paste_has_no_breaks_in_a_terminal(monkeypatch, wayland):
     typed = _typing_into(monkeypatch, "org.kde.konsole", mode="paste")
     monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: False)
     delivery.inject_text(f"First line.{MARK}Second line.", "paste")
@@ -371,9 +371,9 @@ def test_the_typed_remainder_after_a_failed_paste_has_no_breaks_in_a_terminal(mo
 
 
 def test_undo_counts_what_was_typed_after_a_failed_paste_in_a_terminal(monkeypatch, wayland):
-    """The typed rest joins the lines with one space, spaces around the break
-    and all, but undo kept the text as dictated: three characters longer
-    here, so "undo that" deleted three of the user's own."""
+    """The lines are joined with one space, spaces around the break and all,
+    and undo must count that text, not the text as dictated: three
+    characters longer here, so "undo that" deleted three of the user's own."""
     typed = _typing_into(monkeypatch, "org.kde.konsole", mode="paste")
     monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: False)
     assert delivery.inject_text(f"First line. {MARK} Second line.", "paste") == "ok"

@@ -759,7 +759,7 @@ runs before you've read it: end with <b>press enter</b> when you want it to run.
 Snippets: say a short phrase and TuxTalk types the full text. Add one in
 <b>Preferences → Words → Add Snippet</b>, then hold <b>{hold}</b>, say its phrase, let go.
 Wrap the text in "quotes" to type it exactly as written, without capitals or a
-period.
+period. Its line breaks become spaces in a terminal, so a snippet types one line.
 
 ### What's different in a terminal
   • <b>new line</b> types a space there: a line break would run what's on the line.

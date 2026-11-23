@@ -138,11 +138,6 @@ def is_offered() -> bool:
     return bool(vendors & {AMD_VENDOR, INTEL_VENDOR, NVIDIA_VENDOR}) and vulkan_available()
 
 
-def has_nvidia() -> bool:
-    """Whether the kernel drives an NVIDIA graphics chip."""
-    return NVIDIA_VENDOR in graphics_vendors()
-
-
 # --- Where things live ---------------------------------------------------------
 
 def _build_folder(build=None):
@@ -194,9 +189,9 @@ def engine_dir():
 
 def update_waiting() -> bool:
     """Whether an earlier build is what runs (engine_dir) because this one
-    hasn't downloaded: with checking for updates at start off, it never
-    does by itself, and build 1 has the keyless /load route (CODE_HEALTH
-    71), so System check offers it."""
+    hasn't downloaded. With checking for updates at start off it never does
+    by itself, and build 1's whisper-server has the keyless /load route
+    (CODE_HEALTH 71), so System check offers it (prefs_system_check)."""
     return engine_dir() != _engine_dir()
 
 
@@ -278,10 +273,13 @@ def make_engine_download_func(model_name=None):
                     # build replaces this one: another TuxTalk process may
                     # have chosen it (engine_dir) and not started it yet.
                     previous = os.path.basename(os.path.dirname(engine_dir()))
-                    if not _can_run(target, model_name):    # or another download did it
+                    # Only by the download that put it in place: to one that
+                    # lost the race, this build is already "previous", and
+                    # the earlier one, maybe still running, would go.
+                    if not _can_run(target, model_name):
                         replace_folder(os.path.join(folder, ENGINE_NAME), target, old)
-                    engine_process.remove_other_versions(os.path.dirname(parent),
-                                                         _build_folder(), previous)
+                        engine_process.remove_other_versions(os.path.dirname(parent),
+                                                             _build_folder(), previous)
             except Exception as e:
                 logger.error(f"Could not unpack the graphics engine: {e}")
                 progress_callback("Could not unpack the download", 0)

@@ -30,7 +30,7 @@ from tuxtalk import keyboard_output
 class TestDeliveryPlan:
     """The decision, isolated from the injection machinery."""
 
-    def test_a_terminal_gets_one_paste_with_a_real_newline(self):
+    def test_a_kde_editor_gets_one_paste_with_a_real_newline(self):
         plan = delivery.plan_line_breaks("first\xa7SHIFT_ENTER\xa7second", one_paste=True)
         assert plan == ["first\nsecond"]
 
@@ -38,7 +38,7 @@ class TestDeliveryPlan:
         plan = delivery.plan_line_breaks("first\xa7SHIFT_ENTER\xa7second", one_paste=False)
         assert plan == ["first", "second"]
 
-    def test_a_blank_line_survives_in_a_terminal(self):
+    def test_a_blank_line_survives_in_one_paste(self):
         """"new paragraph" is two markers in a row."""
         text = "a\xa7SHIFT_ENTER\xa7\xa7SHIFT_ENTER\xa7b"
         assert delivery.plan_line_breaks(text, one_paste=True) == ["a\n\nb"]
@@ -51,7 +51,7 @@ class TestDeliveryPlan:
         assert delivery.plan_line_breaks("hello", one_paste=True) == ["hello"]
         assert delivery.plan_line_breaks("hello", one_paste=False) == ["hello"]
 
-    def test_an_existing_newline_is_kept_as_a_newline_in_a_terminal(self):
+    def test_an_existing_newline_is_kept_in_one_paste(self):
         assert delivery.plan_line_breaks("a\nb", one_paste=True) == ["a\nb"]
 
     def test_an_existing_newline_still_splits_for_a_chat_app(self):
@@ -124,3 +124,19 @@ def test_a_paste_with_line_breaks_asks_which_window_only_before_and_after(monkey
     monkeypatch.setattr(keyboard_output, "paste_text", lambda t: True)
     assert delivery.inject_text("$45.\xa7SHIFT_ENTER\xa7$25. ", "auto") == "ok"
     assert len(looks) == 2
+
+
+@pytest.mark.parametrize("text", ["echo first\r\necho second", "echo first\recho second",
+                                  "echo first\necho second",
+                                  "echo first\xa7SHIFT_ENTER\xa7echo second"])
+def test_no_kind_of_line_break_reaches_a_terminal(text, monkeypatch):
+    """A snippet saved with Windows line endings kept its carriage return,
+    which a terminal without bracketed paste takes as Enter."""
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.konsole", None))
+    pasted = []
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda t: pasted.append(t) or True)
+    assert delivery.inject_text(text, "auto") == "ok"
+    assert pasted == ["echo first echo second"]

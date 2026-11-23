@@ -367,3 +367,5 @@ def test_a_failure_typing_the_mark_between_phrases_doesnt_lose_the_next_one(
     type_chunk(frames_of(speech(1.0)), "middle")
     type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     assert typed[-1].rstrip() == "so people can pick more."
+    # Missing its mark, the message isn't sent by itself.
+    assert not rs.state.current.message.complete

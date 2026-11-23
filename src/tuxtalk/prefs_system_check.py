@@ -344,7 +344,7 @@ class SystemCheck(Tab):
         return crow
 
     def report(self, part, ok):
-        """Note whether *part* ("typing", "extension") is fine, and say beside
+        """Note whether *part* ("typing", "extension", "engine") is fine, and say beside
         the System check button whether anything needs fixing. The fold
         opens by itself when a problem first shows up."""
         if part is not None:
@@ -368,9 +368,16 @@ class SystemCheck(Tab):
         return False  # Don't repeat
 
     def _check_engine_update(self):
-        """Show the graphics engine update while an older build is what runs."""
+        """Show the graphics engine update while an older build is what runs
+        whisper-server, the part with the security fix: Vulkan with a
+        Whisper model (Parakeet talks to its engine over pipes), and update
+        checks off (on, the service downloads it by itself)."""
         from . import whisper_vulkan
-        waiting = whisper_vulkan.is_offered() and whisper_vulkan.update_waiting()
+        model = self.config.get("model", "")
+        waiting = (self.config.get("device") == "vulkan" and model != whisper_vulkan.PARAKEET_MODEL
+                   and whisper_vulkan.supports_model(model)
+                   and not self.config.get("auto_check_updates", True)
+                   and self.win.vulkan_offered() and whisper_vulkan.update_waiting())
         for widget in (self.engine_update_label, self.engine_update_button):
             widget.set_visible(waiting)
             widget.set_no_show_all(not waiting)
@@ -387,19 +394,26 @@ class SystemCheck(Tab):
         from . import whisper_vulkan
         button.set_sensitive(False)
 
+        reports = []
+
         def work(progress):
-            return whisper_vulkan.make_engine_download_func()(progress, None)
+            def report(message, percent):
+                reports.append((message, percent))
+                progress(message, percent)
+            return whisper_vulkan.make_engine_download_func()(report, None)
 
         def finish(done):
+            from .download_utils import failure_reason
             button.set_sensitive(True)
             if done:
                 show_message(self.window, Gtk.MessageType.INFO, "Graphics engine updated",
-                             "It's used from the next time dictation starts. Restart Service "
-                             "in the TuxTalk menu uses it now.")
+                             "It's used once dictation restarts: Restart Service in the "
+                             "TuxTalk menu does that now.")
             else:
+                why = failure_reason(*reports[-1]) if reports else None
                 show_message(self.window, Gtk.MessageType.WARNING,
                              "The graphics engine didn't update",
-                             "Check your internet connection and try again.")
+                             f"{why or 'The download stopped'}. Try again later.")
             self._check_engine_update()
         run_with_progress(self.window, "Updating Graphics Engine", "Starting download...",
                           work, finish)

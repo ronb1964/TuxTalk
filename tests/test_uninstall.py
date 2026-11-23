@@ -367,6 +367,8 @@ def test_the_downloaded_appimage_in_appimages_goes_after_a_login_start(home):
                  "BambuStudio.AppImage"):
         (apps / name).write_text("program")
     plan = _find(home, appimage=str(apps / "TuxTalk.AppImage"))
+    # Kept to go back to, maybe: the question says they go.
+    assert "the other TuxTalk AppImages in ~/AppImages" in uninstall.confirm_text(plan, 0)
     uninstall.remove_files(plan, delete_personal=False, delete_shared=False)
     assert sorted(p.name for p in apps.iterdir()) == ["BambuStudio.AppImage"]
 

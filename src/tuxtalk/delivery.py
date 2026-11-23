@@ -26,14 +26,16 @@ from .window_classes import KDE_EDITOR_CLASSES_LOWER, is_terminal_class, tab_may
 logger = setup_logger(__name__)
 
 
-def typed_breaks_for(text: str, window_class) -> str:
+def line_breaks_for(text: str, window_class) -> str:
     """*text* ready to go into *window_class*. In a terminal every line
     break becomes a space, typed or pasted: typed, Shift+Enter is Enter
     there, and pasted, a newline is text only to programs that ask for
     bracketed paste. Either way the half-dictated command would run."""
     if not is_terminal_class(window_class):
         return text
-    joined = re.sub(r"[ \t]*(?:" + re.escape(LINE_BREAK) + r"|\n)+[ \t]*", " ", text)
+    # \r too: a snippet saved with Windows line endings, and a terminal
+    # without bracketed paste takes a pasted carriage return as Enter.
+    joined = re.sub(r"[ \t]*(?:" + re.escape(LINE_BREAK) + r"|\r\n|\r|\n)+[ \t]*", " ", text)
     if joined != text:
         logger.info("Into a terminal: line breaks become spaces")
     return joined
@@ -82,7 +84,7 @@ def plan_line_breaks(text: str, one_paste: bool) -> list[str]:
     symbols the line above starts with, and a pasted newline copies nothing
     (in a code mode Kate still indents it, as any paste). Not a plain Enter:
     Kate's terminal panel would run it. A terminal gets no line breaks at all
-    (typed_breaks_for).
+    (line_breaks_for).
 
     Everywhere else keeps the keystroke, because in a chat input like Claude
     Desktop a literal newline SUBMITS the message instead of breaking the line.
@@ -192,7 +194,7 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
     # program there asks for bracketed paste (modern bash and zsh); an older
     # one over ssh, dash or Python's prompt runs the half-said command.
     acting = focused_window.acts_as(focused_class)
-    text = typed_breaks_for(text, acting)
+    text = line_breaks_for(text, acting)
     # Determine injection method (auto mode does smart detection)
     detection_start = time.time()
     actual_mode, reason = determine_injection_method(injection_mode)
@@ -358,7 +360,7 @@ def _paste_in_parts(text, focused_class):
     None when the paste put all of it in, else the outcome of typing the rest
     or where it stopped."""
     # KDE's editors get one chunk carrying real newlines (plan_line_breaks);
-    # a terminal's text has none left (typed_breaks_for).
+    # a terminal's text has none left (line_breaks_for).
     parts = plan_line_breaks(text, (focused_class or "").lower() in KDE_EDITOR_CLASSES_LOWER)
     logger.info(f"Smart hybrid mode: {len(parts)} part(s)")
     delivered = keyboard_output.deliver_lines(parts, _paste_part, 0, 0.05)
@@ -383,8 +385,8 @@ def _type_rest(parts, delivered):
                  + LINE_BREAK.join(parts[delivered.parts:]))
     # A KDE editor's single chunk carries real newlines, typed as line
     # breaks again. The window is asked anew: if a terminal has the focus
-    # by now, typed_breaks_for turns them into spaces there.
-    remainder = typed_breaks_for(remainder.replace("\n", LINE_BREAK),
+    # by now, line_breaks_for turns them into spaces there.
+    remainder = line_breaks_for(remainder.replace("\n", LINE_BREAK),
                                  focused_window.acts_as(focused_window.window_class()))
     if not keyboard_output.output_backend().type_text(remainder):
         # The chunks before the failure reached the document, and so did
@@ -408,7 +410,7 @@ def _type_all(text, injection_start):
     # Typed, a real newline is a plain Enter, which sends a chat message or
     # runs a terminal's half-typed command. A snippet's line breaks are real
     # newlines, so they go in as Shift+Enter like a spoken "new line".
-    text = typed_breaks_for(text.replace("\n", LINE_BREAK),
+    text = line_breaks_for(text.replace("\n", LINE_BREAK),
                             focused_window.acts_as(focused_window.window_class()))
     backend = keyboard_output.output_backend()
     # The Flatpak's keyboard path types "…" as "..." and "café" as "cafe";

@@ -98,8 +98,10 @@ SECTIONS = (
         _inline("close brace", result="}"),
     )),
     Section("Formatting", DICTATION, commands=(
-        _inline("new line", "newline", "return", "line break", result="line break"),
-        _inline("new paragraph", "paragraph break", result="double line break"),
+        _inline("new line", "newline", "return", "line break", result="line break",
+                note="a space in a terminal, where a line break would run the line"),
+        _inline("new paragraph", "paragraph break", result="double line break",
+                note="a space in a terminal"),
         _inline("press tab", result="tab character (just <b>tab</b> is the word)"),
         Command(("press tab", "press the tab key"),
                 "at the end: presses the Tab key, to the next box in a form (in Claude "

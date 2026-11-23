@@ -114,9 +114,10 @@ def test_wtype_isnt_run_into_another_window(monkeypatch, quiet):
 # --- a terminal's paste falling back to typing --------------------------------
 
 def test_terminal_remainder_never_presses_a_plain_enter(monkeypatch, quiet):
-    """A terminal gets one paste with real newlines. If that paste fails, the
-    remainder is typed with its line breaks as spaces: Enter would run the
-    command, and terminals such as gnome-terminal treat Shift+Enter as Enter."""
+    """A terminal's text has its line breaks as spaces before it's pasted.
+    If that paste fails and it's typed instead, it still has none: Enter
+    would run the command, and terminals such as gnome-terminal treat
+    Shift+Enter as Enter."""
     monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "konsole")
     monkeypatch.setattr(keyboard_output, "paste_text", lambda t: False)

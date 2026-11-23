@@ -882,14 +882,18 @@ def _read_key_events(devices, keys: "hotkey_keys.Hotkeys", held_modifiers, cfg: 
             # polling a dead handle, but keep serving the others.
             logger.warning(f"Input device {getattr(dev, 'name', dev)} failed, dropping it: {e}")
             dead_devices.append(dev)
+        except Exception as e:
+            # Reading, not handling (_act_on): a bug here must not end the
+            # hotkey loop, and so the service, without a word.
+            logger.error(f"Error reading input events: {e}", exc_info=True)
     return dead_devices
 
 
 def _act_on(event, keys: "hotkey_keys.Hotkeys", held_modifiers, devices, cfg: Settings, svc,
             now: float) -> None:
     """_on_key_event for one event, whatever goes wrong in it: the events
-    read with it still count, a hold key's release among them (lost, the
-    recording ran on with every keyboard grabbed). An error here is
+    read with it still count, a hold key's release among them, or the
+    recording would run on with every keyboard grabbed. An error here is
     TuxTalk's, not the keyboard's, so the device stays."""
     try:
         _on_key_event(event, keys, held_modifiers, devices, cfg, svc, now)
