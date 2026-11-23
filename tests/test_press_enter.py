@@ -107,8 +107,9 @@ def test_a_recording_that_lost_audio_is_typed_but_not_sent(monkeypatch):
     monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(rs.state, "is_recording", True)
     rec = rs.state.current
-    recording._sd_callback(rec, np.zeros((320, 1), np.int16), 320, None,
-                           types.SimpleNamespace(input_overflow=True))
+    for dropped in (False, True):           # after the stream's first block
+        recording._sd_callback(rec, np.zeros((320, 1), np.int16), 320, None,
+                               types.SimpleNamespace(input_overflow=dropped))
     monkeypatch.setattr(rs.state, "is_recording", False)
     told = []
     monkeypatch.setattr(send_countdown, "_say_not_sent", lambda why, *a, **k: told.append(why))
@@ -116,6 +117,24 @@ def test_a_recording_that_lost_audio_is_typed_but_not_sent(monkeypatch):
     assert events[0] == ("typed", "Hello there.")
     assert not [e for e in events if e[0] == "enter"]
     assert told == ["lost_audio"]                       # "Not sent: some of the sound was lost"
+
+
+def test_a_drop_reported_with_the_streams_first_block_doesnt_hold_the_send(monkeypatch):
+    """Pausing a video as the recording starts, the sound system reported a
+    drop with the microphone's very first block, before it had delivered
+    anything and before any word: every such message was held. It's still
+    logged."""
+    import types
+    from tuxtalk import recording
+    monkeypatch.setattr(live, "press_enter_after", True)
+    monkeypatch.setattr(rs.state, "is_recording", True)
+    rec = rs.state.current
+    recording._sd_callback(rec, np.zeros((320, 1), np.int16), 320, None,
+                           types.SimpleNamespace(input_overflow=True))
+    monkeypatch.setattr(rs.state, "is_recording", False)
+    assert rec.overflows == [0.0] and not rec.message.lost_audio
+    events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ")
+    assert events[-1] == ("enter", "Send each dictation automatically is on")
 
 
 def test_each_drop_is_kept_with_how_far_into_the_recording_it_came(monkeypatch):

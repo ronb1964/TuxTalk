@@ -275,7 +275,12 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
         if status and status.input_overflow:   # sounddevice's CallbackFlags
             # Logged by finish_capture, off this thread.
             rec.overflows.append(rec.samples_heard / rec.samplerate)
-            rec.message.lost_audio = True
+            # Not on the stream's first block: what it lost came before the
+            # stream had delivered anything, a few hundredths of a second
+            # after the key went down, before any word. PipeWire reports
+            # one there as TuxTalk pauses a player or turns sounds down.
+            if rec.samples_heard:
+                rec.message.lost_audio = True
         rec.samples_heard += frames_count
         rec.frames.append(block)
         rec.block_arrived.set()
