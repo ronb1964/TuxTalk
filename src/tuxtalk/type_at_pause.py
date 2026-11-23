@@ -240,8 +240,17 @@ def _type_boundary(message, pending: dict, tail: str, injection_mode: str) -> No
         return
     last_dictation.remember_said(tail, True, message)
     # Only into the phrase's window: the context pass before this can take a while.
-    ok = delivery.inject_text(tail, injection_mode, into=pending["where"],
-                              message=message) == "ok"
+    # A failure here costs only the mark or space: the phrase that follows,
+    # not yet in Recent Dictations, must still be typed and kept.
+    try:
+        outcome = delivery.inject_text(tail, injection_mode, into=pending["where"],
+                                       message=message)
+    except Exception as e:      # a bug in delivery: the next phrase goes on
+        logger.error(f"Typing the mark between two phrases failed: {e!r}")
+        outcome = "failed"
+    ok = outcome == "ok"
+    if not ok:
+        logger.warning(f"The mark or space between two phrases wasn't typed ({outcome})")
     last_dictation.remember_shown(tail, True, ok, message)
     if ok:
         # Undo and "delete last sentence" then see the whole chunk.

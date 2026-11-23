@@ -346,3 +346,24 @@ def test_a_key_that_doesnt_end_the_message_leaves_the_phrase_in_the_sentence(
     texts.extend(["don't you think press tab"])
     type_chunk(frames_of(speech(1.0)), "middle")
     assert bool(rs.state.current.message.sentence_audio) is not key_goes
+
+
+def test_a_failure_typing_the_mark_between_phrases_doesnt_lose_the_next_one(
+        pipeline, monkeypatch):
+    """An error delivering the space or mark between two phrases escaped and
+    ended the next phrase's delivery before Recent Dictations kept it."""
+    from tuxtalk import delivery
+    texts, typed = pipeline
+    texts.extend(["we should change the settings", "so people can pick more.",
+                  "we should change the settings so people can pick more",
+                  "We should change the settings so people can pick more."])
+    deliver = delivery.inject_text
+
+    def broken_between(text, *args, **kwargs):
+        if not text.strip(" .,"):
+            raise RuntimeError("delivery bug")
+        return deliver(text, *args, **kwargs)
+    monkeypatch.setattr(delivery, "inject_text", broken_between)
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
+    assert typed[-1].rstrip() == "so people can pick more."
