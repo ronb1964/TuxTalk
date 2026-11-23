@@ -247,6 +247,19 @@ toggles_asked = 0
 started_from_toggle_key = threading.Event()
 
 
+# How much sound the microphone's stream holds for the callback, in seconds.
+# PortAudio's own "high" is 0.035 s on PipeWire, so a hiccup longer than
+# that (PipeWire re-planning its graph as TuxTalk pauses a player or turns
+# other sounds down at the start) dropped audio, which holds the automatic
+# send. Nothing is played back live; measured, blocks still come every
+# 25-40 ms (86 at most), often enough for the indicator and Type at pause's
+# pauses, and a stop waits for the last one (LAST_BLOCK_WAIT_S).
+INPUT_BUFFER_S = 0.25
+# The longest a stop waits for the block with the sound said last; blocks
+# come every 25-40 ms (86 at most, above).
+LAST_BLOCK_WAIT_S = 0.1
+
+
 def _sd_callback(rec, indata, frames_count, time_info, status):
     """sounddevice's audio callback for recording *rec*'s stream: collect
     its frames while it records. A stream that didn't stop in time
@@ -265,6 +278,7 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
             rec.message.lost_audio = True
         rec.samples_heard += frames_count
         rec.frames.append(block)
+        rec.block_arrived.set()
         # Type at pause: at a pause, the phrase so far goes off to be typed.
         # The detector hears the block under the lock too, so a stop never
         # takes a word's audio before its speech is counted: the rest would
@@ -325,13 +339,9 @@ def open_input_stream(rec, device_idx) -> None:
         from .indicator_dsp import SpectrumProcessor
         spectrum_processor = SpectrumProcessor(sample_rate=rec.samplerate,
                                                bins=spectrum_processor.bins)
-    # A buffer of the high latency, not the low: nothing is played back
-    # live, and a short hiccup (PipeWire re-planning its graph as TuxTalk
-    # pauses a player or turns other sounds down at the start) then waits
-    # in it instead of dropping audio, which holds the automatic send.
     rec.stream = sd.InputStream(callback=functools.partial(_sd_callback, rec), dtype='int16',
                                 device=device_idx, channels=CHANNELS,
-                                samplerate=rec.samplerate, latency="high")
+                                samplerate=rec.samplerate, latency=INPUT_BUFFER_S)
     mic_stream.start(rec.stream)
 
 
@@ -579,6 +589,10 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
     audio."""
     if _dropped_as_silent(rec, beeps_on, notify_on) or _dropped_as_a_tap(rec, beeps_on, notify_on):
         return None
+    # The end of the last word may still be in the stream's buffer
+    # (INPUT_BUFFER_S) as the key comes up: the next block brings it.
+    rec.block_arrived.clear()
+    rec.block_arrived.wait(LAST_BLOCK_WAIT_S)
     with type_at_pause.chunk_lock:
         # No more cuts or blocks: from here on the audio is the last chunk,
         # and a callback still under way adds nothing to it.
@@ -594,9 +608,9 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
     if overflows:
         times = ", ".join(f"{at:.2f}" for at in overflows[:10])
-        more = f" and {len(overflows) - 10} more" if len(overflows) > 10 else ""
+        more = f" (and {len(overflows) - 10} more)" if len(overflows) > 10 else ""
         logger.info(f"The microphone dropped audio {len(overflows)} time(s), after "
-                    f"{times}{more} s of the recording")
+                    f"{times} s of the recording{more}")
     if rec.message.lost_audio:
         logger.warning("Some of this recording's audio was dropped (the computer stalled), "
                        "so a word may be missing; it won't be sent automatically")

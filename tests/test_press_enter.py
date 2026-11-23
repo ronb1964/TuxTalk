@@ -130,12 +130,17 @@ def test_each_drop_is_kept_with_how_far_into_the_recording_it_came(monkeypatch):
     block = np.zeros((rec.samplerate // 10, 1), np.int16)         # a tenth of a second
     fine, dropped = types.SimpleNamespace(input_overflow=False), types.SimpleNamespace(
         input_overflow=True)
-    for status in (fine, fine, fine, dropped):
+    for status in (fine, fine, fine):
         recording._sd_callback(rec, block, len(block), None, status)
-    assert rec.overflows == [pytest.approx(0.3)] and rec.message.lost_audio
-    rec.captured = True
+    rec.frames = []                     # a Type at pause cut: the count goes on
     recording._sd_callback(rec, block, len(block), None, dropped)
-    assert rec.overflows == [pytest.approx(0.3)] and len(rec.frames) == 4
+    assert rec.overflows == [pytest.approx(0.3)] and rec.message.lost_audio
+
+    done = rs.Recording(rs.Message(), captured=True)
+    monkeypatch.setattr(rs.state, "current", done)
+    recording._sd_callback(done, block, len(block), None, dropped)
+    assert (done.overflows, done.samples_heard, done.frames) == ([], 0, [])
+    assert not done.message.lost_audio
 
 
 def test_a_cut_off_dictation_is_typed_but_not_sent(monkeypatch):

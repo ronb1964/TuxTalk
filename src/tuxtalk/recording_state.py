@@ -1,6 +1,7 @@
 """What the dictation service remembers between key presses: one Recording
 and one Message per dictation, new each time, and RecordingState, what the
 service keeps across recordings, read as recording_state.state."""
+import threading
 from dataclasses import dataclass, field
 
 from . import focused_window
@@ -19,7 +20,7 @@ class Message:
     its words make: to, has_words, complete and ends_on start over
     (start_over), and so do the held mark, cue and open question, the
     sentence's kept audio, and the screen copy (shown, shown_window). The
-    rest lasts the whole recording: serial, cancelled, the Recent
+    rest lasts the whole recording: serial, cancelled, lost_audio, the Recent
     Dictations entry (said) and the text "edit that" waits to change.
 
     An automatic Enter and a key said after its words go only where they
@@ -116,6 +117,8 @@ class Recording:
     # reported dropping audio (recording._sd_callback; logged when it stops).
     samples_heard: int = 0
     overflows: list = field(default_factory=list, repr=False)
+    # Set by each block taken in, for finish_capture's wait for the last.
+    block_arrived: threading.Event = field(default_factory=threading.Event, repr=False)
     # finish_capture took its audio (under type_at_pause.chunk_lock): a
     # block still arriving is dropped.
     captured: bool = False

@@ -108,11 +108,10 @@ def test_text_without_corrections_never_touches_the_engine():
 
 
 def test_settings_start_and_stop_the_engine(monkeypatch):
-    from tuxtalk.config import Settings
-
     import threading
 
     from tuxtalk import ai_server
+    from tuxtalk.config import Settings
     events, stopped = [], threading.Event()
 
     class Engine:
