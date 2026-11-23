@@ -9,11 +9,12 @@ It is inert in a terminal. Terminals bind no soft-newline key — Enter means "r
 this" — so Konsole simply ignores the keystroke and everything lands on one
 line, even though "Sending Shift+Enter after part 1" is logged.
 
-Terminals accept the line break the other way round: a newline inside pasted text
-is inserted literally, because bracketed paste stops the shell executing at the
-first one. So in a terminal the marker becomes a real newline in one paste, and
-so it does in KDE's editors, where Shift+Enter is Insert Smart Newline. Everywhere
-else the chunk-and-keystroke path is untouched.
+A newline inside pasted text is held as text only by programs that ask for
+bracketed paste (modern bash and zsh); dash, an older shell over ssh or Python's
+prompt runs the half-dictated command at it. So in a terminal every line break
+becomes a space, pasted or typed. KDE's editors, where Shift+Enter is Insert
+Smart Newline, get one paste with real newlines. Everywhere else the
+chunk-and-keystroke path is untouched.
 
 This relies on knowing the focused window (on KDE the KWin script reports it);
 without that a terminal is indistinguishable from anything else.
@@ -57,14 +58,16 @@ class TestDeliveryPlan:
         assert delivery.plan_line_breaks("a\nb", one_paste=False) == ["a", "b"]
 
 
-@pytest.mark.parametrize("window", ["org.kde.kwrite", "org.kde.kate",
-                                    "org.kde.konsole", "kitty"])
-def test_new_line_in_kwrite_or_a_terminal_is_pasted_not_a_shift_enter(window, monkeypatch):
+@pytest.mark.parametrize("window, pasted_as", [
+    ("org.kde.kwrite", "$45.\n$25. "), ("org.kde.kate", "$45.\n$25. "),
+    ("org.kde.konsole", "$45. $25. "), ("kitty", "$45. $25. ")])
+def test_new_line_in_kwrite_is_pasted_and_in_a_terminal_is_a_space(window, pasted_as,
+                                                                    monkeypatch):
     """KWrite and Kate take Shift+Enter as Insert Smart Newline, which copies
     the symbols the line above starts with: "$45", new line, "$25" came out
-    as "$$25". A terminal ignores Shift+Enter, so the lines ran together. A
-    newline inside the paste is a plain one in both. A plain Enter would
-    not do: in a terminal, and Kate's terminal panel, it runs the line."""
+    as "$$25"; a newline inside the paste is a plain one. In a terminal a
+    pasted newline runs the line where the program there doesn't ask for
+    bracketed paste, so it's a space."""
     monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
@@ -74,7 +77,7 @@ def test_new_line_in_kwrite_or_a_terminal_is_pasted_not_a_shift_enter(window, mo
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: keys.append("shift+enter") or True)
 
     assert delivery.inject_text("$45.\xa7SHIFT_ENTER\xa7$25. ", "auto") == "ok"
-    assert pasted == ["$45.\n$25. "]
+    assert pasted == [pasted_as]
     assert keys == []
 
 

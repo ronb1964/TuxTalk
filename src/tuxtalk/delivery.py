@@ -27,16 +27,15 @@ logger = setup_logger(__name__)
 
 
 def typed_breaks_for(text: str, window_class) -> str:
-    """*text* ready to type into *window_class*. Typed line breaks go in as
-    Shift+Enter, but terminals such as gnome-terminal treat Shift+Enter as
-    Enter and would run the half-dictated command, so in a terminal every
-    line break becomes a space. Pasting (Wayland) keeps them: a terminal takes
-    pasted newlines as text."""
+    """*text* ready to go into *window_class*. In a terminal every line
+    break becomes a space, typed or pasted: typed, Shift+Enter is Enter
+    there, and pasted, a newline is text only to programs that ask for
+    bracketed paste. Either way the half-dictated command would run."""
     if not is_terminal_class(window_class):
         return text
     joined = re.sub(r"[ \t]*(?:" + re.escape(LINE_BREAK) + r"|\n)+[ \t]*", " ", text)
     if joined != text:
-        logger.info("Typing into a terminal: line breaks typed as spaces")
+        logger.info("Into a terminal: line breaks become spaces")
     return joined
 
 
@@ -78,14 +77,12 @@ def plan_line_breaks(text: str, one_paste: bool) -> list[str]:
     One chunk means one paste with real newlines in it. More than one means
     paste each and send Shift+Enter between them.
 
-    Terminals bind no soft-newline key — Enter runs the command — so the
-    keystroke is simply ignored there and everything lands on one line. What a
-    terminal does accept is a newline inside pasted text: bracketed paste (on by
-    default in modern bash and zsh) inserts it literally instead of executing at
-    it. So a terminal gets one paste carrying real newlines, and so do KDE's
-    editors (KDE_EDITOR_CLASSES_LOWER), where a pasted newline copies
-    nothing from the line above (in a code mode Kate still indents it, as
-    any paste). Not a plain Enter there: Kate's terminal panel would run it.
+    KDE's editors (KDE_EDITOR_CLASSES_LOWER) get one paste carrying real
+    newlines: Shift+Enter there is Insert Smart Newline, which copies the
+    symbols the line above starts with, and a pasted newline copies nothing
+    (in a code mode Kate still indents it, as any paste). Not a plain Enter:
+    Kate's terminal panel would run it. A terminal gets no line breaks at all
+    (typed_breaks_for).
 
     Everywhere else keeps the keystroke, because in a chat input like Claude
     Desktop a literal newline SUBMITS the message instead of breaking the line.
@@ -191,6 +188,11 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
         # focus from Claude Desktop's box to the Send button, and the next
         # space typed sends the message.
         text = text.replace("\t", "    ")
+    # A line break pasted into a terminal is held as text only where the
+    # program there asks for bracketed paste (modern bash and zsh); an older
+    # one over ssh, dash or Python's prompt runs the half-said command.
+    acting = focused_window.acts_as(focused_class)
+    text = typed_breaks_for(text, acting)
     # Determine injection method (auto mode does smart detection)
     detection_start = time.time()
     actual_mode, reason = determine_injection_method(injection_mode)
@@ -209,7 +211,7 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
     # would backspace characters the user's document never received.
     inject_ok = True
     if use_paste and not one_block and (LINE_BREAK in text or "\n" in text):
-        outcome = _paste_in_parts(text, focused_window.acts_as(focused_class))
+        outcome = _paste_in_parts(text, acting)
         if outcome is not None:
             return outcome
     elif not (use_paste and _paste_whole(text, injection_start)):
@@ -355,11 +357,9 @@ def _paste_in_parts(text, focused_class):
     Shift+Enter between, and whatever a failed paste couldn't deliver typed.
     None when the paste put all of it in, else the outcome of typing the rest
     or where it stopped."""
-    # A terminal honours a newline inside a paste, but treats Shift+Enter
-    # like Enter, so it gets one chunk carrying real newlines and no
-    # keystrokes at all; so do KDE's editors (plan_line_breaks).
-    parts = plan_line_breaks(text, is_terminal_class(focused_class)
-                             or (focused_class or "").lower() in KDE_EDITOR_CLASSES_LOWER)
+    # KDE's editors get one chunk carrying real newlines (plan_line_breaks);
+    # a terminal's text has none left (typed_breaks_for).
+    parts = plan_line_breaks(text, (focused_class or "").lower() in KDE_EDITOR_CLASSES_LOWER)
     logger.info(f"Smart hybrid mode: {len(parts)} part(s)")
     delivered = keyboard_output.deliver_lines(parts, _paste_part, 0, 0.05)
     if not delivered.stopped:
@@ -381,10 +381,9 @@ def _type_rest(parts, delivered):
     went in kept for undo."""
     remainder = ((LINE_BREAK if delivered.stopped == "break" else "")
                  + LINE_BREAK.join(parts[delivered.parts:]))
-    # A terminal's single chunk carries real newlines for bracketed
-    # paste. Typed, a newline is a plain Enter and Shift+Enter is no
-    # safer in a terminal, so typed_breaks_for turns them into spaces
-    # there; other apps get Shift+Enter.
+    # A KDE editor's single chunk carries real newlines, typed as line
+    # breaks again. The window is asked anew: if a terminal has the focus
+    # by now, typed_breaks_for turns them into spaces there.
     remainder = typed_breaks_for(remainder.replace("\n", LINE_BREAK),
                                  focused_window.acts_as(focused_window.window_class()))
     if not keyboard_output.output_backend().type_text(remainder):

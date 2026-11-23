@@ -762,6 +762,7 @@ Wrap the text in "quotes" to type it exactly as written, without capitals or a
 period.
 
 ### What's different in a terminal
+  • <b>new line</b> types a space there: a line break would run what's on the line.
   • <b>delete everything</b> clears the line you're typing (Ctrl+E, Ctrl+U).
   • Select and move and voice editing don't work there: a terminal has no
     selection to change, and those keys mean other things.
