@@ -247,17 +247,25 @@ toggles_asked = 0
 started_from_toggle_key = threading.Event()
 
 
-# How much sound the microphone's stream holds for the callback, in seconds.
-# PortAudio's own "high" is 0.035 s on PipeWire, so a hiccup longer than
-# that (PipeWire re-planning its graph as TuxTalk pauses a player or turns
-# other sounds down at the start) dropped audio, which holds the automatic
-# send. Nothing is played back live; measured, blocks still come every
-# 25-40 ms (86 at most), often enough for the indicator and Type at pause's
-# pauses, and a stop waits for the last one (LAST_BLOCK_WAIT_S).
-INPUT_BUFFER_S = 0.25
-# The longest a stop waits for the block with the sound said last; blocks
-# come every 25-40 ms (86 at most, above).
-LAST_BLOCK_WAIT_S = 0.1
+# A drop reported with the stream's first block lost only sound recorded
+# before that block began. When that block began this soon after the
+# stream started (seconds, by the stream's own clock), the lost sound is
+# from before anyone talks: the key went down a moment before, and the
+# start beep is still playing. PipeWire reports such a drop as TuxTalk
+# pauses a player or turns other sounds down at the start; it held every
+# message sent with a video playing.
+FIRST_BLOCK_S = 0.15
+
+
+def _began_at_the_start(rec, time_info) -> bool:
+    """Whether the block *time_info* describes began within FIRST_BLOCK_S of
+    *rec*'s stream starting; False when either time is unknown. How soon it
+    began is kept for the log (rec.first_block_after)."""
+    began = getattr(time_info, "inputBufferAdcTime", None)
+    if not began or rec.stream_started is None:
+        return False
+    rec.first_block_after = began - rec.stream_started
+    return rec.first_block_after <= FIRST_BLOCK_S
 
 
 def _sd_callback(rec, indata, frames_count, time_info, status):
@@ -275,15 +283,10 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
         if status and status.input_overflow:   # sounddevice's CallbackFlags
             # Logged by finish_capture, off this thread.
             rec.overflows.append(rec.samples_heard / rec.samplerate)
-            # Not on the stream's first block: what it lost came before the
-            # stream had delivered anything, a few hundredths of a second
-            # after the key went down, before any word. PipeWire reports
-            # one there as TuxTalk pauses a player or turns sounds down.
-            if rec.samples_heard:
+            if rec.samples_heard or not _began_at_the_start(rec, time_info):
                 rec.message.lost_audio = True
         rec.samples_heard += frames_count
         rec.frames.append(block)
-        rec.block_arrived.set()
         # Type at pause: at a pause, the phrase so far goes off to be typed.
         # The detector hears the block under the lock too, so a stop never
         # takes a word's audio before its speech is counted: the rest would
@@ -346,7 +349,12 @@ def open_input_stream(rec, device_idx) -> None:
                                                bins=spectrum_processor.bins)
     rec.stream = sd.InputStream(callback=functools.partial(_sd_callback, rec), dtype='int16',
                                 device=device_idx, channels=CHANNELS,
-                                samplerate=rec.samplerate, latency=INPUT_BUFFER_S)
+                                samplerate=rec.samplerate)
+    try:
+        # Read before it starts: its first block can come before start returns.
+        rec.stream_started = rec.stream.time     # the stream's own clock
+    except Exception as e:      # PortAudio without a clock for it: drops all count
+        logger.info(f"The microphone's stream has no clock: {e}")
     mic_stream.start(rec.stream)
 
 
@@ -594,10 +602,6 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
     audio."""
     if _dropped_as_silent(rec, beeps_on, notify_on) or _dropped_as_a_tap(rec, beeps_on, notify_on):
         return None
-    # The end of the last word may still be in the stream's buffer
-    # (INPUT_BUFFER_S) as the key comes up: the next block brings it.
-    rec.block_arrived.clear()
-    rec.block_arrived.wait(LAST_BLOCK_WAIT_S)
     with type_at_pause.chunk_lock:
         # No more cuts or blocks: from here on the audio is the last chunk,
         # and a callback still under way adds nothing to it.
@@ -614,8 +618,10 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
     if overflows:
         times = ", ".join(f"{at:.2f}" for at in overflows[:10])
         more = f" (and {len(overflows) - 10} more)" if len(overflows) > 10 else ""
+        first = rec.first_block_after
+        began = "" if first is None else f"; its first block began {first:.3f} s in"
         logger.info(f"The microphone dropped audio {len(overflows)} time(s), after "
-                    f"{times} s of the recording{more}")
+                    f"{times} s of the recording{more}{began}")
     if rec.message.lost_audio:
         logger.warning("Some of this recording's audio was dropped (the computer stalled), "
                        "so a word may be missing; it won't be sent automatically")

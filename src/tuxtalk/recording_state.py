@@ -1,7 +1,6 @@
 """What the dictation service remembers between key presses: one Recording
 and one Message per dictation, new each time, and RecordingState, what the
 service keeps across recordings, read as recording_state.state."""
-import threading
 from dataclasses import dataclass, field
 
 from . import focused_window
@@ -117,8 +116,10 @@ class Recording:
     # reported dropping audio (recording._sd_callback; logged when it stops).
     samples_heard: int = 0
     overflows: list = field(default_factory=list, repr=False)
-    # Set by each block taken in, for finish_capture's wait for the last.
-    block_arrived: threading.Event = field(default_factory=threading.Event, repr=False)
+    # When its stream started, by the stream's own clock (None: unknown),
+    # and how long after that its first block began, when a drop came with it.
+    stream_started: float | None = None
+    first_block_after: float | None = None
     # finish_capture took its audio (under type_at_pause.chunk_lock): a
     # block still arriving is dropped.
     captured: bool = False

@@ -189,16 +189,3 @@ def test_stop_recording_skips_inject_when_capture_none(monkeypatch):
     pipeline.stop_recording(beeps_on=False, smart_quotes=True, notify_on=False)
     assert got == []
 
-
-def test_the_end_of_the_last_word_still_in_the_buffer_is_kept(streams):
-    """The microphone's stream holds a quarter of a second (INPUT_BUFFER_S)
-    so a hiccup doesn't drop audio: what was said just before the key came
-    up arrives a moment after it, and was thrown away."""
-    assert recording.start_recording(False, False, None)
-    _held_long_enough()
-    streams[0](_block(b"said"), 2, None, None)
-    tail = threading.Timer(0.03, streams[0], args=(_block(b"tail"), 2, None, None))
-    tail.start()
-    frames, _rate = recording.finish_capture(rs.state.current, beeps_on=False, notify_on=False)
-    tail.join(5)
-    assert frames == [b"said", b"tail"]
