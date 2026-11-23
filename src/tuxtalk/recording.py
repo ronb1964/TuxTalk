@@ -247,6 +247,12 @@ toggles_asked = 0
 started_from_toggle_key = threading.Event()
 
 
+# A drop this early in a recording costs no word: nobody has started
+# talking yet (the ready beep is still playing), and the sound system can
+# report one as the microphone opens.
+LOST_AUDIO_GRACE_S = 0.3
+
+
 def _sd_callback(rec, indata, frames_count, time_info, status):
     """sounddevice's audio callback for recording *rec*'s stream: collect
     its frames while it records. A stream that didn't stop in time
@@ -256,7 +262,11 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
     if not (rs.state.is_recording and rec is rs.state.current):
         return
     if status and status.input_overflow:   # sounddevice's CallbackFlags
-        rec.message.lost_audio = True       # logged by finish_capture, off this thread
+        at = rec.samples_heard / rec.samplerate
+        rec.overflows.append(at)            # logged by finish_capture, off this thread
+        if at >= LOST_AUDIO_GRACE_S:
+            rec.message.lost_audio = True
+    rec.samples_heard += frames_count
     block = indata.tobytes()
     with type_at_pause.chunk_lock:
         if rec.captured:
@@ -584,6 +594,10 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
         rec.rest_has_speech = _rest_holds_speech(chunker)
     elif chunker is not None:
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
+    if rec.overflows:
+        times = ", ".join(f"{at:.2f}" for at in rec.overflows[:10])
+        logger.info(f"The microphone dropped audio {len(rec.overflows)} time(s), at {times} s "
+                    f"into the recording (before {LOST_AUDIO_GRACE_S} s doesn't count)")
     if rec.message.lost_audio:
         logger.warning("Some of this recording's audio was dropped (the computer stalled), "
                        "so a word may be missing; it won't be sent automatically")

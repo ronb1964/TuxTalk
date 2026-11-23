@@ -112,6 +112,10 @@ class Recording:
     press_t0: float | None = None
     # Raw int16 blocks since it began, or since Type at pause's last cut.
     frames: list = field(default_factory=list, repr=False)
+    # Samples heard since it began, and where (seconds in) the microphone
+    # reported dropping audio (recording._sd_callback; logged when it stops).
+    samples_heard: int = 0
+    overflows: list = field(default_factory=list, repr=False)
     # finish_capture took its audio (under type_at_pause.chunk_lock): a
     # block still arriving is dropped.
     captured: bool = False
