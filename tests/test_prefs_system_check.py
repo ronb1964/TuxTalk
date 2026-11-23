@@ -42,3 +42,31 @@ def test_two_problems_need_both_fixed():
     w.report("extension", False)
     w.report("typing", True)
     assert "needs your attention" in w.summary()
+
+
+def test_an_older_graphics_engine_is_offered_with_its_security_fix(monkeypatch):
+    """With checking for updates at start off, build 1 of the graphics
+    engine never updated by itself, and its keyless /load route stayed
+    open to other accounts on the computer."""
+    from gi.repository import Gtk
+    from tuxtalk import whisper_vulkan
+    w = _window()
+    w.engine_update_label, w.engine_update_button = Gtk.Label(), Gtk.Button()
+    monkeypatch.setattr(whisper_vulkan, "is_offered", lambda: True)
+    monkeypatch.setattr(whisper_vulkan, "update_waiting", lambda: True)
+    SystemCheck._check_engine_update(w)
+    assert w.engine_update_button.get_visible() and "security" in w.engine_update_label.get_text()
+    assert "needs your attention" in w.summary()
+    monkeypatch.setattr(whisper_vulkan, "update_waiting", lambda: False)
+    SystemCheck._check_engine_update(w)
+    assert not w.engine_update_button.get_visible()
+    assert "everything is set up" in w.summary()
+
+
+def test_the_engine_waits_for_this_build_only_while_an_earlier_one_runs(tmp_path, monkeypatch):
+    from tuxtalk import whisper_vulkan
+    monkeypatch.setattr(whisper_vulkan, "_engines_root", lambda: str(tmp_path))
+    monkeypatch.setattr(whisper_vulkan, "_can_run",
+                        lambda folder, model=None: whisper_vulkan.ENGINE_VERSION + "/" in folder)
+    (tmp_path / whisper_vulkan.ENGINE_VERSION).mkdir()          # build 1, as installed
+    assert whisper_vulkan.update_waiting()

@@ -20,6 +20,7 @@ logger = setup_logger(__name__)
 
 SWITCH_TO_HELPER_LABEL = "Switch to Hotkey Helper"
 UPDATE_HELPER_LABEL = "Update Hotkey Helper"
+UPDATE_ENGINE_LABEL = "Update Graphics Engine"
 LEAVE_GROUP_LABEL = "Leave the 'input' Group"
 
 # What the GNOME extension adds, shared by the install and success dialogs so
@@ -221,6 +222,22 @@ class SystemCheck(Tab):
             check.attach(vulkan_hint, 0, crow, 2, 1)
             crow += 1
 
+        # A newer graphics engine waiting, with a security fix, when the
+        # user turned update checks off (whisper_vulkan.update_waiting).
+        self.engine_update_label = Gtk.Label(xalign=0)
+        self.engine_update_label.set_line_wrap(True)
+        self.engine_update_label.set_margin_start(10)
+        check.attach(self.engine_update_label, 0, crow, 2, 1)
+        crow += 1
+        self.engine_update_button = Gtk.Button(label=UPDATE_ENGINE_LABEL)
+        self.engine_update_button.set_halign(Gtk.Align.START)
+        self.engine_update_button.set_margin_start(10)
+        self.engine_update_button.set_margin_bottom(10)
+        self.engine_update_button.connect("clicked", self._on_update_engine_clicked)
+        check.attach(self.engine_update_button, 0, crow, 2, 1)
+        crow += 1
+        _hide_widgets(self.engine_update_label, self.engine_update_button)
+
         GLib.timeout_add(500, self._initial_gpu_check)
         return crow
 
@@ -347,7 +364,45 @@ class SystemCheck(Tab):
     def _initial_gpu_check(self):
         """Perform initial GPU check when preferences window opens."""
         self.check_gpu_status()
+        self._check_engine_update()
         return False  # Don't repeat
+
+    def _check_engine_update(self):
+        """Show the graphics engine update while an older build is what runs."""
+        from . import whisper_vulkan
+        waiting = whisper_vulkan.is_offered() and whisper_vulkan.update_waiting()
+        for widget in (self.engine_update_label, self.engine_update_button):
+            widget.set_visible(waiting)
+            widget.set_no_show_all(not waiting)
+        if waiting:
+            self.engine_update_label.set_markup(
+                f'<span color="{WARNING_AMBER}">⚠ A graphics engine update with a security '
+                'fix is waiting. Without it, another account on this computer could make the '
+                f'engine unload its model or load a file. It\'s a {ENGINE_SIZE_TEXT} '
+                'download.</span>')
+        self.report("engine", not waiting)
+
+    def _on_update_engine_clicked(self, button):
+        """Download the graphics engine's newer build, with a progress window."""
+        from . import whisper_vulkan
+        button.set_sensitive(False)
+
+        def work(progress):
+            return whisper_vulkan.make_engine_download_func()(progress, None)
+
+        def finish(done):
+            button.set_sensitive(True)
+            if done:
+                show_message(self.window, Gtk.MessageType.INFO, "Graphics engine updated",
+                             "It's used from the next time dictation starts. Restart Service "
+                             "in the TuxTalk menu uses it now.")
+            else:
+                show_message(self.window, Gtk.MessageType.WARNING,
+                             "The graphics engine didn't update",
+                             "Check your internet connection and try again.")
+            self._check_engine_update()
+        run_with_progress(self.window, "Updating Graphics Engine", "Starting download...",
+                          work, finish)
 
     def check_gpu_status(self):
         """Show the NVIDIA card and whether CUDA's files are installed, or

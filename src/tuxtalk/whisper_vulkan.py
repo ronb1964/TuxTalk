@@ -192,6 +192,14 @@ def engine_dir():
     return _engine_dir()
 
 
+def update_waiting() -> bool:
+    """Whether an earlier build is what runs (engine_dir) because this one
+    hasn't downloaded: with checking for updates at start off, it never
+    does by itself, and build 1 has the keyless /load route (CODE_HEALTH
+    71), so System check offers it."""
+    return engine_dir() != _engine_dir()
+
+
 def _binary(name):
     return os.path.join(engine_dir(), name)
 

@@ -17,6 +17,18 @@ before 0.15.0, so older entries use that name.
   of those characters you type; the README and privacy page say so. A
   letter written into config.toml by hand as the dictation key, which
   started a dictation with every one typed, is now refused.
+- In a terminal, "new line" types a space, pasted or typed: a line break
+  could run the half-said command in programs that don't hold pasted
+  lines as text (an older shell over ssh, dash, Python's prompt).
+- A recording no longer runs on when a fault while handling one key press
+  dropped the key's release read with it.
+- With Type at pause (TuxTalk Labs), a failure typing the mark between two
+  phrases no longer loses the phrase after it.
+- Uninstalling a package or source install says it also deletes the
+  TuxTalk AppImages kept in ~/AppImages.
+- With checking for updates at start off, System check offers the graphics
+  engine's newer build, which closes a way another account on the same
+  computer could make the engine unload its model or load a file.
 - "No space" joins an email name however the speech model writes it:
   "john Nospace doe at gmail dot com" and "no-space" type johndoe@gmail.com
   too. Thanks to Jim Orcheson (#48).
