@@ -140,3 +140,18 @@ def test_no_kind_of_line_break_reaches_a_terminal(text, monkeypatch):
     monkeypatch.setattr(keyboard_output, "paste_text", lambda t: pasted.append(t) or True)
     assert delivery.inject_text(text, "auto") == "ok"
     assert pasted == ["echo first echo second"]
+
+
+def test_kates_terminal_panel_gets_a_space_too(monkeypatch):
+    """Kate's terminal panel is Kate's window, told apart only by what has
+    the focus inside it (focused_window.acts_as): pasted there, a line break
+    runs the line like in any terminal."""
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kate", None))
+    monkeypatch.setattr(focused_window, "acts_as", lambda window: "org.kde.konsole")
+    pasted = []
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda t: pasted.append(t) or True)
+    assert delivery.inject_text("ls\xa7SHIFT_ENTER\xa7pwd", "auto") == "ok"
+    assert pasted == ["ls pwd"]

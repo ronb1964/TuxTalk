@@ -248,7 +248,8 @@ def _type_boundary(message, pending: dict, tail: str, injection_mode: str) -> No
     except Exception as e:      # a bug in delivery: the next phrase goes on
         logger.error(f"Typing the mark between two phrases failed: {error_without_words(e)}")
         outcome = "failed"
-        # The message is missing its mark now: nothing sends it by itself.
+        # The message is missing its mark now: it isn't sent, by itself or
+        # by a "press enter" said after it.
         message.add(outcome, None)
     ok = outcome == "ok"
     if not ok:

@@ -387,7 +387,7 @@ def _type_rest(parts, delivered):
     # breaks again. The window is asked anew: if a terminal has the focus
     # by now, line_breaks_for turns them into spaces there.
     remainder = line_breaks_for(remainder.replace("\n", LINE_BREAK),
-                                 focused_window.acts_as(focused_window.window_class()))
+                                focused_window.acts_as(focused_window.window_class()))
     if not keyboard_output.output_backend().type_text(remainder):
         # The chunks before the failure reached the document, and so did
         # the line break after the last of them unless that break is what
@@ -411,7 +411,7 @@ def _type_all(text, injection_start):
     # runs a terminal's half-typed command. A snippet's line breaks are real
     # newlines, so they go in as Shift+Enter like a spoken "new line".
     text = line_breaks_for(text.replace("\n", LINE_BREAK),
-                            focused_window.acts_as(focused_window.window_class()))
+                           focused_window.acts_as(focused_window.window_class()))
     backend = keyboard_output.output_backend()
     # The Flatpak's keyboard path types "…" as "..." and "café" as "cafe";
     # recording that form below keeps undo's backspace count right.

@@ -185,7 +185,7 @@ class Plan:
     input_group: bool = False        # TuxTalk's old setup put the user in it
     ydotoold_unit: Path = None       # the systemd user unit TuxTalk used until 0.18
     extension: bool = False
-    appimage: Optional[Path] = None     # the AppImage this TuxTalk runs from, for one
+    appimage: Optional[Path] = None     # the AppImage running, for an AppImage install
     system_package: Optional[str] = None    # the pacman package a system install is in
     # A source install's venv other than the README's, or the one the README's
     # is a link to: the user is told how to remove TuxTalk from it, and it is
@@ -740,8 +740,9 @@ def _other_appimages_line(plan):
     the one this TuxTalk runs from, which go too ([] when there are none):
     one kept to go back to was deleted unsaid."""
     folder = plan.home / "AppImages"
+    running = plan.appimage.resolve() if plan.appimage else None
     found = [path for path in plan.leftovers if path.parent == folder
-             and path.suffix == ".AppImage" and path != plan.appimage]
+             and path.suffix == ".AppImage" and path.resolve() != running]
     if not found:
         return []
     other = "other " if plan.install_type == "appimage" else ""

@@ -264,6 +264,11 @@ def make_engine_download_func(model_name=None):
             try:
                 progress_callback("Unpacking...", 97)
                 unpack_tar(archive, folder)
+            except Exception as e:
+                logger.error(f"Could not unpack the graphics engine: {e}")
+                progress_callback("Could not unpack the download", 0)
+                return False
+            try:
                 with install_turn("vulkan-engine", "the graphics engine"):
                     # A complete engine at every moment: removed first, a
                     # kill before the move left none.
@@ -280,9 +285,9 @@ def make_engine_download_func(model_name=None):
                         replace_folder(os.path.join(folder, ENGINE_NAME), target, old)
                         engine_process.remove_other_versions(os.path.dirname(parent),
                                                              _build_folder(), previous)
-            except Exception as e:
-                logger.error(f"Could not unpack the graphics engine: {e}")
-                progress_callback("Could not unpack the download", 0)
+            except Exception as e:      # the install turn didn't come, or a move failed
+                logger.error(f"Could not put the graphics engine in place: {e}")
+                progress_callback(f"Could not put it in place: {e}", 0)
                 return False
         progress_callback("Done", 100)
         return True
