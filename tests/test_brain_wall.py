@@ -2,8 +2,9 @@
 
 The brain is the dictation code that turns sound into text and text into
 what gets typed: the text rules, the spoken commands, the AI's requests,
-the correction check, the microphone, silence and voice detection. A Windows or Mac TuxTalk would run it under screens of its own,
-so it stays free of GTK, D-Bus, the Linux keyboard and the other modules
+the correction check, the microphone, silence and voice detection. A
+Windows or Mac TuxTalk would run it under screens of its own, so it stays
+free of GTK, D-Bus, the Linux keyboard and the other modules
 that exist only on Linux. A module joins BRAIN once everything it imports,
 lazily too, is another brain module, Python's portable library or a
 package that runs everywhere; what it needs from the desktop it gets from
@@ -73,10 +74,6 @@ class NotHere:
         if name.split(".")[0] in sys.argv[1].split(","):
             raise ImportError(f"{name} doesn't exist on this system")
 
-# Ones loaded already would be found without a look.
-for name in list(sys.modules):
-    if name.split(".")[0] in sys.argv[1].split(","):
-        del sys.modules[name]
 sys.meta_path.insert(0, NotHere())
 for module in sys.argv[2:]:
     importlib.import_module(f"tuxtalk.{module}")
@@ -100,7 +97,8 @@ def test_the_brain_loads_where_the_linux_modules_dont_exist():
 
 def test_a_module_that_needs_linux_doesnt_load_there():
     """The check itself: config takes its file lock with fcntl."""
-    assert _load_without_linux("config").returncode != 0
+    ran = _load_without_linux("config")
+    assert ran.returncode != 0 and "fcntl doesn't exist on this system" in ran.stderr
 
 
 def test_an_absolute_import_of_a_tuxtalk_module_is_seen(tmp_path, monkeypatch):

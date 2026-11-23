@@ -111,14 +111,20 @@ def test_settings_start_and_stop_the_engine(monkeypatch):
     from tuxtalk.config import Settings
 
     import threading
+
     from tuxtalk import ai_server
     events, stopped = [], threading.Event()
 
     class Engine:
         def __init__(self, server):
             self.server = server
-        def start(self): events.append("start")
-        def stop(self): events.append("stop") or stopped.set()     # on a thread of its own
+
+        def start(self):
+            events.append("start")
+
+        def stop(self):     # on a thread of its own
+            events.append("stop")
+            stopped.set()
 
     monkeypatch.setattr(ai, "CorrectionEngine", Engine)
     monkeypatch.setattr(ai_download, "is_installed", lambda: True)

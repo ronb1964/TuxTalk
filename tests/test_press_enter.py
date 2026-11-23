@@ -107,7 +107,6 @@ def test_a_recording_that_lost_audio_is_typed_but_not_sent(monkeypatch):
     monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(rs.state, "is_recording", True)
     rec = rs.state.current
-    monkeypatch.setattr(rec, "samples_heard", rec.samplerate)    # a second in
     recording._sd_callback(rec, np.zeros((320, 1), np.int16), 320, None,
                            types.SimpleNamespace(input_overflow=True))
     monkeypatch.setattr(rs.state, "is_recording", False)
@@ -119,22 +118,24 @@ def test_a_recording_that_lost_audio_is_typed_but_not_sent(monkeypatch):
     assert told == ["lost_audio"]                       # "Not sent: some of the sound was lost"
 
 
-def test_audio_dropped_as_the_microphone_opens_doesnt_hold_the_send(monkeypatch):
-    """The sound system can report a drop as the stream starts, before
-    anyone talks: every message whose words all came through was held."""
+def test_each_drop_is_kept_with_how_far_into_the_recording_it_came(monkeypatch):
+    """Where the audio dropped tells a hiccup as the microphone opens from
+    one mid-sentence; every drop still holds the automatic send, since a
+    sent message can't be taken back. A block arriving once the recording
+    has handed its audio over changes nothing."""
     import types
     from tuxtalk import recording
-    monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(rs.state, "is_recording", True)
     rec = rs.state.current
-    monkeypatch.setattr(rec, "samples_heard", 0)
-    monkeypatch.setattr(rec, "overflows", [])
-    recording._sd_callback(rec, np.zeros((320, 1), np.int16), 320, None,
-                           types.SimpleNamespace(input_overflow=True))
-    monkeypatch.setattr(rs.state, "is_recording", False)
-    assert rec.overflows == [0.0] and not rec.message.lost_audio
-    events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ")
-    assert events[-1] == ("enter", "Send each dictation automatically is on")
+    block = np.zeros((rec.samplerate // 10, 1), np.int16)         # a tenth of a second
+    fine, dropped = types.SimpleNamespace(input_overflow=False), types.SimpleNamespace(
+        input_overflow=True)
+    for status in (fine, fine, fine, dropped):
+        recording._sd_callback(rec, block, len(block), None, status)
+    assert rec.overflows == [pytest.approx(0.3)] and rec.message.lost_audio
+    rec.captured = True
+    recording._sd_callback(rec, block, len(block), None, dropped)
+    assert rec.overflows == [pytest.approx(0.3)] and len(rec.frames) == 4
 
 
 def test_a_cut_off_dictation_is_typed_but_not_sent(monkeypatch):
@@ -826,7 +827,6 @@ def test_press_enter_said_after_lost_audio_still_presses_it(monkeypatch):
     from tuxtalk import recording
     monkeypatch.setattr(live, "press_enter_after", False)
     monkeypatch.setattr(rs.state, "is_recording", True)
-    monkeypatch.setattr(rs.state.current, "samples_heard", rs.state.current.samplerate)
     recording._sd_callback(rs.state.current, np.zeros((320, 1), np.int16), 320, None,
                            types.SimpleNamespace(input_overflow=True))
     monkeypatch.setattr(rs.state, "is_recording", False)

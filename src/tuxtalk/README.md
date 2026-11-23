@@ -43,6 +43,7 @@ is for.
   (`ai_cleanup.py`, handed the server that runs it), the spoken commands
   (`undo.py`, `voice_navigation.py`, `command_phrases.py`, `app_commands.py`,
   `mouse_phrases.py`), the microphone (`mic_stream.py`) and silence and voice detection
-  (`silence.py`, `chunking.py`, `voice_detector.py`). `tests/test_brain_wall.py`
+  (`silence.py`, `chunking.py`, `voice_detector.py`), among others: BRAIN in
+  `tests/test_brain_wall.py` lists them all. The test
   keeps each free of GTK, D-Bus and other Linux-only imports, so a Windows or
   Mac app could run it; new dictation logic goes there, its screens elsewhere.
