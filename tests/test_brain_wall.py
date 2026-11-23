@@ -19,10 +19,12 @@ import pytest
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 
 BRAIN = frozenset({
-    "audio_windows", "chunk_text", "chunking", "cleanup", "correction_safety",
-    "custom_commands", "dictation_keys", "hallucinations", "key_commands", "language_codes",
-    "logger", "normalize", "parakeet_bias", "sentence_fit", "silence", "spoken_numbers",
-    "spoken_quotes", "voice_detector", "voice_edit_rules", "word_spelling",
+    "ai_cleanup", "app_commands", "audio_windows", "chunk_text", "chunking", "cleanup",
+    "command_phrases", "correction_safety", "custom_commands", "dictation_keys",
+    "hallucinations", "key_commands", "language_codes", "logger", "mic_stream",
+    "mouse_phrases", "normalize", "parakeet_bias", "sentence_fit", "silence",
+    "spoken_numbers", "spoken_quotes", "undo", "voice_detector", "voice_edit_rules",
+    "voice_navigation", "word_spelling",
 })
 
 # What only Linux (or Unix) has, or its desktop: GTK and GLib, D-Bus, the

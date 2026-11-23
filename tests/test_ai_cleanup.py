@@ -113,6 +113,7 @@ def test_settings_start_and_stop_the_engine(monkeypatch):
     events = []
 
     class Engine:
+        def __init__(self, server): pass
         def start(self): events.append("start")
         def stop(self): events.append("stop")
 

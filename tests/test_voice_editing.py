@@ -98,9 +98,9 @@ class Reply:
 @pytest.fixture
 def engine(monkeypatch):
     sent = []
-    e = ai_cleanup.CorrectionEngine()
-    e._port, e._key = 1234, "k"
-    e._ready.set()
+    e = ai_cleanup.CorrectionEngine(ai_server.AIServer(warm_up=ai_cleanup.warm_up_messages()))
+    e.server._port, e.server._key = 1234, "k"
+    e.server._ready.set()
 
     def urlopen(request, timeout):
         sent.append((json.loads(request.data), timeout))
@@ -129,7 +129,7 @@ def test_edit_allows_room_for_a_longer_answer(engine):
 
 
 def test_edit_waits_for_the_engine_to_be_ready(engine):
-    engine._ready.clear()
+    engine.server._ready.clear()
     assert engine.edit("text", "shorten this") is None
     assert engine.sent == []
 
@@ -139,7 +139,8 @@ def test_the_engine_has_room_for_a_selection(monkeypatch):
     MAX_EDIT_CHARS of text plus the answer."""
     import types
     started = []
-    engine = ai_cleanup.CorrectionEngine()
+    engine = ai_cleanup.CorrectionEngine(
+        ai_server.AIServer(warm_up=ai_cleanup.warm_up_messages()))
     monkeypatch.setattr(ai_download, "is_installed", lambda: True)
     monkeypatch.setattr(ai_server, "kill_orphaned_engines", lambda: 0)
     monkeypatch.setattr(ai_download, "server_binary", lambda: "/x/llama-server")
@@ -147,7 +148,7 @@ def test_the_engine_has_room_for_a_selection(monkeypatch):
     monkeypatch.setattr(ai_server.subprocess, "Popen",
                         lambda argv, **k: started.append(argv)
                         or types.SimpleNamespace(pid=42, stderr=io.BytesIO()))
-    monkeypatch.setattr(engine, "_wait_until_ready", lambda proc, output: None)
+    monkeypatch.setattr(engine.server, "_wait_until_ready", lambda proc, output: None)
     engine.start()
     argv = started[0]
     assert int(argv[argv.index("-c") + 1]) >= 4096
@@ -172,7 +173,7 @@ class FakeEngine:
     thread of its own, as live_settings stops it)."""
     started = 0
 
-    def __init__(self):
+    def __init__(self, server):
         self.stopped = threading.Event()
 
     def start(self):

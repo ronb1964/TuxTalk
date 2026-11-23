@@ -9,11 +9,11 @@ of a dictation that contain a correction phrase, and none of the rest. Its
 answer replaces a sentence only when correction_safety says it is safe;
 otherwise the sentence is typed exactly as spoken. Voice editing sends the
 AI the selected text and the instruction (CorrectionEngine.edit).
-Everything runs on this machine.
+Everything runs on this machine. What runs the model is the caller's to
+give (ai_server on Linux), so this stays inside the portable brain.
 """
 import re
 
-from .ai_server import AIServer
 from .correction_safety import LINKING_WORDS, STAND_INS, edit_is_safe, words
 from .logger import setup_logger
 
@@ -190,16 +190,37 @@ def _line_count(text: str) -> int:
     return sum(1 for line in text.split("\n") if line.strip())
 
 
-class CorrectionEngine(AIServer):
-    """The local AI server, asked to fix self-corrections and to rewrite
-    selected text (voice editing). One server answers both."""
+def warm_up_messages():
+    """The chat a server is sent once before it counts as ready: a correction,
+    the request it gets most, so its prompt is then already in its cache."""
+    return _correction_messages(_WARM_UP)
 
-    def __init__(self):
-        super().__init__(warm_up=_correction_messages(_WARM_UP))
+
+class CorrectionEngine:
+    """The local AI, asked to fix self-corrections and to rewrite selected
+    text (voice editing). One server answers both: *server*, which has
+    ask(messages, max_tokens, timeout, what), is_ready(), start() and stop()
+    (ai_server.AIServer, made with warm_up_messages)."""
+
+    def __init__(self, server):
+        self.server = server
+
+    def start(self):
+        """Start the server in the background."""
+        self.server.start()
+
+    def stop(self):
+        """Stop the server."""
+        self.server.stop()
+
+    def is_ready(self) -> bool:
+        """Whether the server has warmed up and answers."""
+        return self.server.is_ready()
 
     def correct(self, sentence: str, timeout: float = 6.0):
         """The model's cleaned version of *sentence*, or None on any problem."""
-        return self.ask(_correction_messages(sentence), 200, timeout, what="AI cleanup")
+        return self.server.ask(_correction_messages(sentence), 200, timeout,
+                               what="AI cleanup")
 
     def edit(self, text: str, instruction: str):
         """*text* rewritten as *instruction* says (voice editing), or None on
@@ -242,8 +263,8 @@ class CorrectionEngine(AIServer):
         # Room for a rewrite longer than the text ("turn this into an email"),
         # and time for it on a processor.
         max_tokens = min(2000, len(text) // 2 + 400)
-        answer = self.ask(messages, max_tokens, timeout=max(20.0, len(text) / 50),
-                          what="voice edit")
+        answer = self.server.ask(messages, max_tokens, timeout=max(20.0, len(text) / 50),
+                                 what="voice edit")
         if answer is not None and answer.strip(" .").lower() in _NOT_AN_ANSWER:
             # The model's way of saying it has nothing ("delete this" can get
             # "None."), which must not replace the selection.

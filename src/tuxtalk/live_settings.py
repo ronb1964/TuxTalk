@@ -153,7 +153,9 @@ def apply(cfg):
     if want_ai and ai_engine is None:
         from . import ai_cleanup, ai_download
         if ai_download.is_installed():
-            ai_engine = ai_cleanup.CorrectionEngine()
+            from .ai_server import AIServer
+            ai_engine = ai_cleanup.CorrectionEngine(
+                AIServer(warm_up=ai_cleanup.warm_up_messages()))
             ai_engine.start()
         else:
             logger.warning("The AI is on but not downloaded; "
