@@ -249,3 +249,24 @@ def test_the_layout_is_believed_after_two_reads_alike(monkeypatch):
     assert watch.poll(watch.due) == frozenset({LALT})
     assert watch.poll(watch.due) is None                # a different answer, once
     assert watch.poll(watch.due) == frozenset()
+
+
+def test_an_error_on_one_key_event_doesnt_lose_the_release_read_with_it(
+        service, svc, guarded, monkeypatch, caplog):
+    """A bug in handling one event dropped the rest of that read, a hold
+    key's release included: the recording ran on, every keyboard grabbed."""
+    from tuxtalk import keyboard_devices
+    keyboard = SimpleNamespace(name="keyboard", read=lambda: iter(
+        [KeyEvent(ecodes.KEY_F1, 1), KeyEvent(ecodes.KEY_F1, 0)]))
+    monkeypatch.setattr(keyboard_devices, "devices_with_events", lambda devices, wait: devices)
+    monkeypatch.setattr(keyboard_grab, "is_own_injected_event", lambda dev, event: False)
+    seen = []
+
+    def on_key_event(event, *args):
+        seen.append(event.value)
+        if event.value == 1:
+            raise RuntimeError("a bug in starting")
+    monkeypatch.setattr(hotkeys, "_on_key_event", on_key_event)
+    keys = Hotkeys(ecodes.KEY_F1, None, "", None, None)
+    assert hotkeys._read_key_events([keyboard], keys, set(), Cfg(), svc, 1.0) == []
+    assert seen == [1, 0] and "a bug in starting" in caplog.text
