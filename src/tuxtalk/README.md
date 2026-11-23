@@ -39,7 +39,10 @@ is for.
   `spoken_quotes.py`, `cleanup.py`, `word_spelling.py` for Your Words,
   `custom_commands.py` for snippets), the AI correction check
   (`correction_safety.py`), voice editing's exact rules (`voice_edit_rules.py`),
-  Parakeet's lean toward Your Words (`parakeet_bias.py`) and silence and voice detection
+  Parakeet's lean toward Your Words (`parakeet_bias.py`), the AI's requests
+  (`ai_cleanup.py`, handed the server that runs it), the spoken commands
+  (`undo.py`, `voice_navigation.py`, `command_phrases.py`, `app_commands.py`,
+  `mouse_phrases.py`), the microphone (`mic_stream.py`) and silence and voice detection
   (`silence.py`, `chunking.py`, `voice_detector.py`). `tests/test_brain_wall.py`
   keeps each free of GTK, D-Bus and other Linux-only imports, so a Windows or
   Mac app could run it; new dictation logic goes there, its screens elsewhere.

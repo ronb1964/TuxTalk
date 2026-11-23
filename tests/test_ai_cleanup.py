@@ -110,12 +110,15 @@ def test_text_without_corrections_never_touches_the_engine():
 def test_settings_start_and_stop_the_engine(monkeypatch):
     from tuxtalk.config import Settings
 
-    events = []
+    import threading
+    from tuxtalk import ai_server
+    events, stopped = [], threading.Event()
 
     class Engine:
-        def __init__(self, server): pass
+        def __init__(self, server):
+            self.server = server
         def start(self): events.append("start")
-        def stop(self): events.append("stop")
+        def stop(self): events.append("stop") or stopped.set()     # on a thread of its own
 
     monkeypatch.setattr(ai, "CorrectionEngine", Engine)
     monkeypatch.setattr(ai_download, "is_installed", lambda: True)
@@ -123,8 +126,12 @@ def test_settings_start_and_stop_the_engine(monkeypatch):
 
     live.apply(Settings(remove_fillers=True, ai_corrections=True))
     assert live.remove_fillers and live.ai_engine is not None
+    # The server it's handed warms up on a correction, so the first one is quick.
+    assert isinstance(live.ai_engine.server, ai_server.AIServer)
+    assert live.ai_engine.server._warm_up == ai.warm_up_messages()
     live.apply(Settings(remove_fillers=True, ai_corrections=True))
     live.apply(Settings(remove_fillers=False, ai_corrections=False))
+    assert stopped.wait(5)
     assert events == ["start", "stop"] and live.ai_engine is None
 
 

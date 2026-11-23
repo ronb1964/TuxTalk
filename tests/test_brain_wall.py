@@ -1,8 +1,8 @@
 """The wall around TuxTalk's portable "brain" (CODE_HEALTH 128).
 
 The brain is the dictation code that turns sound into text and text into
-what gets typed: the text rules, the correction check, silence and voice
-detection. A Windows or Mac TuxTalk would run it under screens of its own,
+what gets typed: the text rules, the spoken commands, the AI's requests,
+the correction check, the microphone, silence and voice detection. A Windows or Mac TuxTalk would run it under screens of its own,
 so it stays free of GTK, D-Bus, the Linux keyboard and the other modules
 that exist only on Linux. A module joins BRAIN once everything it imports,
 lazily too, is another brain module, Python's portable library or a
@@ -45,6 +45,8 @@ def _imports(module: str) -> set:
         elif isinstance(node, ast.ImportFrom) and node.level:
             found |= ({f"tuxtalk.{node.module}"} if node.module
                       else {f"tuxtalk.{alias.name}" for alias in node.names})
+        elif isinstance(node, ast.ImportFrom) and node.module == "tuxtalk":
+            found |= {f"tuxtalk.{alias.name}" for alias in node.names}
         elif isinstance(node, ast.ImportFrom):
             found.add(node.module)
     return found
@@ -71,14 +73,38 @@ class NotHere:
         if name.split(".")[0] in sys.argv[1].split(","):
             raise ImportError(f"{name} doesn't exist on this system")
 
+# Ones loaded already would be found without a look.
+for name in list(sys.modules):
+    if name.split(".")[0] in sys.argv[1].split(","):
+        del sys.modules[name]
 sys.meta_path.insert(0, NotHere())
 for module in sys.argv[2:]:
     importlib.import_module(f"tuxtalk.{module}")
 """
 
 
-def test_the_brain_loads_where_the_linux_modules_dont_exist():
-    ran = subprocess.run(
-        [sys.executable, "-c", _LOAD_WITHOUT_LINUX, ",".join(PLATFORM_ONLY), *sorted(BRAIN)],
+def _load_without_linux(*modules):
+    # Not posix: Python's own library is built on it wherever it isn't
+    # Windows (which has nt), so only the brain's own imports can be
+    # checked for it, by the test above.
+    blocked = PLATFORM_ONLY - {"posix"}
+    return subprocess.run(
+        [sys.executable, "-c", _LOAD_WITHOUT_LINUX, ",".join(blocked), *modules],
         capture_output=True, text=True, timeout=60, cwd=SRC.parent)
+
+
+def test_the_brain_loads_where_the_linux_modules_dont_exist():
+    ran = _load_without_linux(*sorted(BRAIN))
     assert ran.returncode == 0, ran.stderr
+
+
+def test_a_module_that_needs_linux_doesnt_load_there():
+    """The check itself: config takes its file lock with fcntl."""
+    assert _load_without_linux("config").returncode != 0
+
+
+def test_an_absolute_import_of_a_tuxtalk_module_is_seen(tmp_path, monkeypatch):
+    """"from tuxtalk import focused_window" was read as "tuxtalk" alone."""
+    (tmp_path / "probe.py").write_text("from tuxtalk import focused_window\n")
+    monkeypatch.setattr(sys.modules[__name__], "SRC", tmp_path)
+    assert "tuxtalk.focused_window" in _imports("probe")

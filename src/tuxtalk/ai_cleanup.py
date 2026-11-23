@@ -168,8 +168,6 @@ def opens_with_correction(before: str, sentence: str) -> bool:
 
 # --- The engine, asked for both features ------------------------------------
 
-# A correction is the request it gets most, so its warm-up is one: the
-# correction prompt is then already in the server's cache.
 _WARM_UP = "Order two boxes, no wait, three boxes."
 # Answers that mean the model had nothing to give.
 _NOT_AN_ANSWER = {"", "none", "null", "n/a", "nothing", "empty"}
@@ -206,15 +204,14 @@ class CorrectionEngine:
         self.server = server
 
     def start(self):
-        """Start the server in the background."""
         self.server.start()
 
     def stop(self):
-        """Stop the server."""
         self.server.stop()
 
     def is_ready(self) -> bool:
-        """Whether the server has warmed up and answers."""
+        """Whether the server has warmed up and answers; asking may start
+        again one that died (ai_server.AIServer.is_ready)."""
         return self.server.is_ready()
 
     def correct(self, sentence: str, timeout: float = 6.0):

@@ -152,8 +152,8 @@ def apply(cfg):
     want_ai = ai_corrections or voice_editing
     if want_ai and ai_engine is None:
         from . import ai_cleanup, ai_download
+        from .ai_server import AIServer
         if ai_download.is_installed():
-            from .ai_server import AIServer
             ai_engine = ai_cleanup.CorrectionEngine(
                 AIServer(warm_up=ai_cleanup.warm_up_messages()))
             ai_engine.start()
