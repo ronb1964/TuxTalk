@@ -269,16 +269,17 @@ def _address_request(raw: str) -> AddressRequest | None:
     return AddressRequest(url) if url else None
 
 
-def parse(text: str, *, navigation: bool, actions: bool, grid: bool = False) -> (
+def parse(text: str, *, navigation: bool, actions: bool, grid: bool = False,
+          lang: str = "en") -> (
         voice_navigation.Command | OpenRequest | KeyRequest | DesktopRequest | SoundRequest
         | MusicRequest | SystemRequest | WindowRequest | AddressRequest | SearchRequest
         | MouseRequest | None):
     """What *text* commands, or None when it's dictation to type.
 
     *navigation* is select and move being on, *actions* the voice commands,
-    *grid* the mouse grid being on screen.
+    *grid* the mouse grid being on screen, *lang* the command language.
     """
-    if navigation and (command := voice_navigation.parse(text)):
+    if navigation and (command := voice_navigation.parse(text, lang)):
         return command
     if not actions:
         return None
@@ -297,9 +298,11 @@ def parse(text: str, *, navigation: bool, actions: bool, grid: bool = False) -> 
             or mouse_phrases.parse(said, grid))
 
 
-def literal_words(raw: str, *, navigation: bool, actions: bool, grid: bool = False) -> str:
+def literal_words(raw: str, *, navigation: bool, actions: bool, grid: bool = False,
+                  lang: str = "en") -> str:
     """The words to type for "literal <command>", else *raw* unchanged."""
     m = _LITERAL.match(raw)
-    if m and parse(m.group("rest"), navigation=navigation, actions=actions, grid=grid):
+    if m and parse(m.group("rest"), navigation=navigation, actions=actions, grid=grid,
+                   lang=lang):
         return m.group("rest")
     return raw

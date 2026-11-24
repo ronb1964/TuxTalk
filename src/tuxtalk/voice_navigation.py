@@ -7,7 +7,9 @@ output backend, so the host (the virtual keyboard) and the Flatpak (libei)
 do the same.
 
 A dictation is a command only when the WHOLE of it is one of the phrases
-here, so "I want to select the last sentence" is typed as text. These only
+here, so "I want to select the last sentence" is typed as text. With voice
+commands in German ("den letzten Satz markieren", "geh zum Zeilenende")
+the German phrases count too. These only
 select and move: changing the words is voice editing's (Shift with the
 dictation key, or a dictation that starts with "edit that").
 
@@ -17,12 +19,14 @@ into key codes, the letter A for the active keyboard layout.
 import re
 from dataclasses import dataclass
 
-from .undo import NUMBER_WORDS, calculate_undo_length
+from .undo import GERMAN_NUMBER_WORDS, GERMAN_UNITS, NUMBER_WORDS, calculate_undo_length
 
 C, S = "CTRL", "SHIFT"
 MAX_COUNT = 10
 
 _N = r"(?:(?P<n>\d+|" + "|".join(NUMBER_WORDS) + r")\s+)?"
+_GERMAN_N = r"(?:(?P<n>\d+|" + "|".join(GERMAN_NUMBER_WORDS) + r")\s+)?"
+_COUNTS = {**NUMBER_WORDS, **GERMAN_NUMBER_WORDS}
 
 
 @dataclass(frozen=True)
@@ -44,6 +48,24 @@ def normalize(text: str) -> str:
     s = " ".join(s.split())
     s = re.sub(r"^please\s+|\s+please$", "", s)
     return s
+
+
+# A German command's verb said first, as the infinitive it is said last as:
+# "markiere den letzten Satz" is read as "den letzten satz markieren", so
+# each German rule is written once, the verb last.
+_GERMAN_VERBS = {"markier": "markieren", "markiere": "markieren", "markieren": "markieren",
+                 "wähle": "markieren", "geh": "gehen", "gehe": "gehen", "gehen": "gehen",
+                 "spring": "gehen", "springe": "gehen", "springen": "gehen"}
+
+
+def _german_order(said: str) -> str:
+    """*said* (normalized) with its German verb last and no "bitte"."""
+    words = [w for w in said.split() if w != "bitte"]
+    if len(words) > 1 and words[0] in _GERMAN_VERBS:
+        words = [*words[1:], _GERMAN_VERBS[words[0]]]
+    elif words and words[-1] in _GERMAN_VERBS:
+        words[-1] = _GERMAN_VERBS[words[-1]]
+    return " ".join(words)
 
 
 # (pattern, builder). Each pattern matches the whole normalized dictation; the
@@ -89,22 +111,77 @@ _RULES = [
 ]
 _COMPILED = [(re.compile(rf"^(?:{pattern})$"), build) for pattern, build in _RULES]
 
+# German, the verb last (_german_order); a moving command may end in "gehen".
+_WORDS = r"(?:wort|wörter|worte)"
+_GO = r"(?: gehen)?"
+_GERMAN_LINE = r"(?:(?:die|diese) )?(?:aktuelle )?zeile"
+_LINE_END = r"(?:zeilenende|ende der zeile)"
+_LINE_START = r"(?:zeilenanfang|anfang der zeile)"
+_TEXT_END = r"(?:ende|textende|ende des textes|ende des dokuments)"
+_TEXT_START = r"(?:anfang|textanfang|anfang des textes|anfang des dokuments)"
+_GERMAN_RULES = [
+    (r"(?:das|es|das gesagte) markieren", lambda n: ("all", (), ())),
+    (rf"(?:(?:den|die|das) )?letzte[nsr]? {_GERMAN_N}(?P<u>{'|'.join(GERMAN_UNITS)}) markieren",
+     lambda n, u: (u, (), ())),
+    (r"alles markieren", lambda n: ("", (((C,), "A"),), ())),
+    (rf"{_GERMAN_LINE} markieren", lambda n: ("", (((S,), "END"),), (((), "HOME"),))),
+    (rf"(?:(?:das|die) )?nächste[n]? {_GERMAN_N}{_WORDS} markieren",
+     lambda n: ("", (((C, S), "RIGHT"),), (), ("word", 1, True))),
+    (rf"(?:(?:das|die) )?vorherige[n]? {_GERMAN_N}{_WORDS} markieren",
+     lambda n: ("", (((C, S), "LEFT"),), (), ("word", -1, True))),
+    (rf"(?:die )?nächste[n]? {_GERMAN_N}zeilen? markieren",
+     lambda n: ("", (((S,), "DOWN"),), ())),
+    (rf"(?:die )?vorherige[n]? {_GERMAN_N}zeilen? markieren",
+     lambda n: ("", (((S,), "UP"),), ())),
+    (rf"bis zum {_LINE_END} markieren", lambda n: ("", (((S,), "END"),), ())),
+    (rf"bis zum {_LINE_START} markieren", lambda n: ("", (((S,), "HOME"),), ())),
+    (rf"bis zum {_TEXT_END} markieren", lambda n: ("", (((C, S), "END"),), ())),
+    (rf"bis zum {_TEXT_START} markieren", lambda n: ("", (((C, S), "HOME"),), ())),
+    (rf"(?:zum|ans) {_LINE_END}{_GO}", lambda n: ("", (((), "END"),), ())),
+    (rf"zum {_LINE_START}{_GO}", lambda n: ("", (((), "HOME"),), ())),
+    (rf"(?:(?:zum|ans) {_TEXT_END}|nach ganz unten){_GO}", lambda n: ("", (((C,), "END"),), ())),
+    (rf"(?:zum {_TEXT_START}|nach ganz oben){_GO}", lambda n: ("", (((C,), "HOME"),), ())),
+    (rf"{_GERMAN_N}{_WORDS} zurück{_GO}|vorheriges wort",
+     lambda n: ("", (((C,), "LEFT"),), (), ("word", -1, False))),
+    (rf"{_GERMAN_N}{_WORDS} (?:vor|weiter|vorwärts){_GO}|nächstes wort",
+     lambda n: ("", (((C,), "RIGHT"),), (), ("word", 1, False))),
+    (rf"{_GERMAN_N}(?:zeichen|buchstaben?) zurück{_GO}",
+     lambda n: ("", (((), "LEFT"),), (), ("char", -1, False))),
+    (rf"{_GERMAN_N}(?:zeichen|buchstaben?) (?:vor|weiter|vorwärts){_GO}",
+     lambda n: ("", (((), "RIGHT"),), (), ("char", 1, False))),
+    (rf"{_GERMAN_N}zeilen? (?:nach oben|hoch|rauf){_GO}", lambda n: ("", (((), "UP"),), ())),
+    (rf"{_GERMAN_N}zeilen? (?:nach unten|runter){_GO}", lambda n: ("", (((), "DOWN"),), ())),
+    (r"(?:markierung|auswahl) (?:aufheben|löschen|entfernen)",
+     lambda n: ("", (((), "RIGHT"),), ())),
+]
+_GERMAN_COMPILED = [(re.compile(rf"^(?:{pattern})$"), build) for pattern, build in _GERMAN_RULES]
 
-def parse(text: str):
-    """The Command *text* is, or None when it's dictation to type."""
+
+def parse(text: str, lang: str = "en"):
+    """The Command *text* is, or None when it's dictation to type. With
+    *lang* "de" the German phrases count too."""
     said = normalize(text)
     if not said:
         return None
-    for pattern, build in _COMPILED:
+    if lang == "de" and (command := _match(_german_order(said), _GERMAN_COMPILED)):
+        return command
+    return _match(said, _COMPILED)
+
+
+def _match(said: str, rules):
+    """The Command the first of *rules* that matches all of *said* makes, or
+    None."""
+    for pattern, build in rules:
         m = pattern.fullmatch(said)
         if not m:
             continue
         groups = m.groupdict()
         raw = groups.get("n")
-        count = 1 if raw is None else (int(raw) if raw.isdigit() else NUMBER_WORDS[raw])
+        count = 1 if raw is None else (int(raw) if raw.isdigit() else _COUNTS[raw])
         if not 1 <= count <= MAX_COUNT:
             return None
-        args = (count, groups["u"]) if "u" in groups and groups["u"] else (count,)
+        unit_said = groups.get("u")
+        args = (count, GERMAN_UNITS.get(unit_said, unit_said)) if unit_said else (count,)
         unit, keys, first, *step = build(*args)
         name = said if raw is None else said[:m.start("n")] + str(count) + said[m.end("n"):]
         return Command(name=name, said_unit=unit, count=count, keys=keys, first=first,

@@ -46,7 +46,7 @@ GERMAN_NUMBER_WORDS = {
     'zwei': 2, 'drei': 3, 'vier': 4, 'fünf': 5,
     'sechs': 6, 'sieben': 7, 'acht': 8, 'neun': 9, 'zehn': 10,
 }
-_GERMAN_UNITS = {'wort': 'word', 'wörter': 'word', 'worte': 'word',
+GERMAN_UNITS = {'wort': 'word', 'wörter': 'word', 'worte': 'word',
                  'satz': 'sentence', 'sätze': 'sentence',
                  'absatz': 'paragraph', 'absätze': 'paragraph'}
 _GERMAN_VERB = re.compile(r"(?:lösch|entfern)(?:e|en)?")
@@ -54,7 +54,7 @@ _GERMAN_EVERYTHING = frozenset({'alles'})
 _GERMAN_UNIT_RE = re.compile(
     r"(?:(?:das|den|die|der)\s+)?letzte[nsr]?\s+"
     r"(?:(\d+)\s+|(" + "|".join(GERMAN_NUMBER_WORDS) + r")\s+)?"
-    r"(" + "|".join(_GERMAN_UNITS) + r")"
+    r"(" + "|".join(GERMAN_UNITS) + r")"
 )
 
 
@@ -100,7 +100,7 @@ def _german_undo(normalized: str) -> tuple[str, int] | None:
     if not m:
         return None
     digit, word, unit = m.groups()
-    return (_GERMAN_UNITS[unit], _count(digit, word, GERMAN_NUMBER_WORDS))
+    return (GERMAN_UNITS[unit], _count(digit, word, GERMAN_NUMBER_WORDS))
 
 
 def _count(digit, word, number_words) -> int:

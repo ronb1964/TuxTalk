@@ -263,7 +263,7 @@ def navigate(raw: str, beeps_on: bool, where=None):
     if not live.voice_navigation:
         return None
     from . import voice_navigation as nav
-    command = nav.parse(raw)
+    command = nav.parse(raw, live.command_language)
     if command is None:
         return None
     logger.info(f"Voice command: {command.name}")

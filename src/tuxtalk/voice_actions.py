@@ -55,7 +55,8 @@ def run(raw: str, beeps_on: bool, ongoing=None) -> bool | None:
 def _parse(raw: str):
     """command_phrases.parse with the settings and the mouse grid as they are now."""
     return command_phrases.parse(raw, navigation=live.voice_navigation,
-                                 actions=live.open_apps, grid=mouse_grid.showing())
+                                 actions=live.open_apps, grid=mouse_grid.showing(),
+                                 lang=live.command_language)
 
 
 def is_mouse_command(raw: str) -> bool:
@@ -110,4 +111,5 @@ def typed_as_words(raw: str) -> str:
     types "new tab", as "literal press enter" types "press enter". Anything
     else, or with voice commands off, unchanged."""
     return command_phrases.literal_words(raw, navigation=live.voice_navigation,
-                                         actions=live.open_apps, grid=mouse_grid.showing())
+                                         actions=live.open_apps, grid=mouse_grid.showing(),
+                                         lang=live.command_language)
