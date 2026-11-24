@@ -40,9 +40,10 @@ def _ready_tips(is_flatpak):
     cfg = load_config()
     # In German for German voice commands: the rest of TuxTalk is English, so
     # this line is how a German speaker learns the commands are theirs too.
-    tips = (['💡 <span lang="de">Sprachbefehle gehen auch auf Deutsch: sag „Komma“, „neue '
-             'Zeile“ oder „Enter drücken“. Alle Befehle stehen im TuxTalk-Menü unter Voice '
-             'Commands.</span>']
+    # Neither "sag" nor "Sagen Sie": "zum Beispiel" suits everyone.
+    tips = (['💡 <span lang="de">Sprachbefehle gehen auch auf Deutsch, zum Beispiel „Komma“, '
+             '„neue Zeile“ oder „Enter drücken“. Alle Befehle stehen im TuxTalk-Menü unter '
+             'Voice Commands.</span>']
             if getattr(cfg, "command_language", "en") == "de"
             else ['💡 Say "period", "comma" or "new line" as you talk'])
     if not is_flatpak and getattr(cfg, "toggle_hotkey", ""):
