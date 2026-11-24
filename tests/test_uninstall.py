@@ -921,8 +921,10 @@ def test_nothing_is_imported_after_the_package_is_removed(tmp_path):
     so the rest of the uninstall must find every module it needs already
     loaded. On KDE it once needed dbus_calls then, and left TuxTalk's
     entries in KDE's Shortcuts settings ("couldn't remove everything")."""
+    # The source folder by its full path: the child runs in tmp_path, where
+    # the relative PYTHONPATH=src that CI uses would find nothing.
     env = {"HOME": str(tmp_path), "PATH": os.environ["PATH"],
-           "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+           "PYTHONPATH": os.pathsep.join([str(ROOT / "src"), os.environ.get("PYTHONPATH", "")]),
            "XDG_CURRENT_DESKTOP": "KDE", "DBUS_SESSION_BUS_ADDRESS": "unix:path=/nonexistent"}
     ran = subprocess.run([sys.executable, "-c", _AFTER_THE_PACKAGE_IS_GONE], env=env,
                          capture_output=True, text=True, timeout=60, cwd=tmp_path)
