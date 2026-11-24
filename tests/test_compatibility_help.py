@@ -7,7 +7,7 @@ import pytest
 
 from tuxtalk import recommend as r
 from tuxtalk import whisper_vulkan as wv
-from tuxtalk.config import VALID_MODELS
+from tuxtalk.settings_schema import VALID_MODELS
 
 
 def test_every_offered_model_is_in_the_table_once():

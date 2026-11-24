@@ -8,7 +8,7 @@ from stand_ins import ShownWidget
 from shell_stubs import recorders, stub
 from tuxtalk import secure_input as si
 from tuxtalk import hotkey_helper
-from tuxtalk.config import CTRL_SPACE
+from tuxtalk.dictation_keys import CTRL_SPACE
 
 # The real check, before conftest stands in for it (no test may reach pkexec;
 # this one runs nothing as root).
@@ -260,7 +260,7 @@ def test_on_kde_system_check_says_why_the_start_asks_for_the_update(monkeypatch)
 def test_a_helper_too_old_for_a_dictation_key_set_is_a_warning(monkeypatch):
     """Left Ctrl+Space with helper 1.13, which doesn't report it: System
     check said "✓ Ready" and stayed closed while the key did nothing."""
-    from tuxtalk.config import CTRL_SPACE
+    from tuxtalk.dictation_keys import CTRL_SPACE
     P, prefs = _typing_prefs(monkeypatch, running="1.13", config={"hotkey": CTRL_SPACE})
     assert "needs a newer hotkey helper" in prefs.typing_status_label.markup
     assert prefs.fix_typing_button.label == P.UPDATE_HELPER_LABEL

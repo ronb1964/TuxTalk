@@ -6,7 +6,8 @@ the names the settings use ("F8", "Right Ctrl"). Nothing here opens a
 window, so all of it can be tested without one.
 """
 from . import dictation_keys, secure_input
-from .config import CTRL_SPACE, HOTKEY_CHOICES
+from .dictation_keys import CTRL_SPACE
+from .settings_schema import HOTKEY_CHOICES
 
 # The keys the test may write to the log. Without the hotkey helper it reads
 # every keyboard, so a password typed in another window must not get there.

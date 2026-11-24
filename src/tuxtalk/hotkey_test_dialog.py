@@ -17,7 +17,8 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gdk, GLib, Gtk
 
-from .config import CTRL_SPACE, HOTKEY_CHOICES
+from .dictation_keys import CTRL_SPACE
+from .settings_schema import HOTKEY_CHOICES
 from .hotkey_labels import layout_label
 from .hotkey_test_devices import flush_pending_events, hotkey_test_helper, read_ready
 from .hotkey_test_keys import (captured_key_problem, evdev_key_action, evdev_key_name,

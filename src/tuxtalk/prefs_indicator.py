@@ -7,7 +7,7 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk
 
 from . import ui_style
-from .config import CLASSIC_CYAN_HEX
+from .settings_schema import CLASSIC_CYAN_HEX
 from .prefs_tab import Tab, dropdown, fold, tip_label
 
 _SIZES = (("small", "Small (60%)"), ("medium", "Medium (100%)"), ("large", "Large (140%)"))

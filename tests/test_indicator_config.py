@@ -4,7 +4,7 @@ These settings drive the selectable indicator styles (waveform, bars, radial)
 alongside the orb, plus color and sensitivity. That a change reaches the
 running indicator is tested in test_live_settings_reload.py.
 """
-from tuxtalk import config
+from tuxtalk import config, settings_schema
 
 
 def test_new_indicator_fields_have_approved_defaults():
@@ -13,14 +13,14 @@ def test_new_indicator_fields_have_approved_defaults():
     # "Cyan" is not a mode of its own: the out-of-box look is the classic cyan
     # expressed as a custom color, so the orb keeps its classic gradient.
     assert s.indicator_color_mode == "custom"
-    assert s.indicator_color == config.CLASSIC_CYAN_HEX
+    assert s.indicator_color == settings_schema.CLASSIC_CYAN_HEX
     assert s.indicator_sensitivity == 1.0
 
 
 def test_valid_sets_exist():
-    assert config.VALID_INDICATOR_STYLES == {"orb", "waveform", "bars", "radial"}
+    assert settings_schema.VALID_INDICATOR_STYLES == {"orb", "waveform", "bars", "radial"}
     # There are two choices: match the desktop accent, or pick a color.
-    assert config.VALID_COLOR_MODES == {"system", "custom"}
+    assert settings_schema.VALID_COLOR_MODES == {"system", "custom"}
 
 
 def test_legacy_cyan_mode_migrates_to_custom_classic_cyan():
@@ -30,9 +30,9 @@ def test_legacy_cyan_mode_migrates_to_custom_classic_cyan():
     s = config.Settings()
     s.indicator_color_mode = "cyan"
     s.indicator_color = "#48b7f5"   # the old ignored default
-    config._migrate_settings(s)
+    settings_schema._migrate_settings(s)
     assert s.indicator_color_mode == "custom"
-    assert s.indicator_color == config.CLASSIC_CYAN_HEX
+    assert s.indicator_color == settings_schema.CLASSIC_CYAN_HEX
 
 
 def test_migration_leaves_a_real_custom_color_untouched():
@@ -40,7 +40,7 @@ def test_migration_leaves_a_real_custom_color_untouched():
     s = config.Settings()
     s.indicator_color_mode = "custom"
     s.indicator_color = "#ff5522"
-    config._migrate_settings(s)
+    settings_schema._migrate_settings(s)
     assert s.indicator_color_mode == "custom"
     assert s.indicator_color == "#ff5522"
 
@@ -48,14 +48,14 @@ def test_migration_leaves_a_real_custom_color_untouched():
 def test_invalid_style_is_reported():
     s = config.Settings()
     s.indicator_style = "bogus"
-    problems = dict(config._validation_problems(s))
+    problems = dict(settings_schema._validation_problems(s))
     assert "indicator_style" in problems
 
 
 def test_sensitivity_out_of_range_is_reported():
     s = config.Settings()
     s.indicator_sensitivity = 9.0
-    problems = dict(config._validation_problems(s))
+    problems = dict(settings_schema._validation_problems(s))
     assert "indicator_sensitivity" in problems
 
 

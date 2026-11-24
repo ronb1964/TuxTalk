@@ -250,7 +250,7 @@ def test_left_ctrl_space_picked_with_a_helper_too_old_for_it_brings_the_notice()
     """Helper 1.13 doesn't report the pair: Change Key saved it without a
     word, and the key showed "Seen, not active yet" with nothing saying why."""
     import threading
-    from tuxtalk.config import CTRL_SPACE
+    from tuxtalk.dictation_keys import CTRL_SPACE
     helper = SimpleNamespace(helper_keyboards=1, helper_version="1.13")
     dialog = SimpleNamespace(_stop=threading.Event(), keyboard_notice=_Notice(),
                              _heard_by_reader=set(), keys=dict(TEST_KEYS), capturing="hold",

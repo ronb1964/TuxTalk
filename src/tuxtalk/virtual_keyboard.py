@@ -17,23 +17,11 @@ import threading
 import time
 
 from .logger import setup_logger
+from .settings_schema import KEY_DELAY_MS
 
 logger = setup_logger(__name__)
 
 NAME = "TuxTalk virtual keyboard"
-
-# Per key event. Measured in the test VMs: at 1 ms GTK 3 and 4,
-# Qt, Xwayland, gnome-terminal, Konsole, Firefox and Brave (Chromium, the
-# engine of Electron apps) all got every character of a 200-character text
-# right, also with every processor busy; with no wait the kernel's buffer
-# overflowed and whole words were lost. That buffer holds about 64 key events
-# while the desktop isn't reading, so the wait also sets how long a freeze of
-# the desktop typing survives: 64 times it. Frozen on purpose mid-text, KWin
-# lost letters after 100 ms at 1 ms and after 200 ms at 2 ms, none at 4 ms.
-# The 12 ms TuxTalk once typed at came from letters arriving out of order at
-# 5 ms through ydotoold, a daemon in between that this keyboard doesn't
-# have. The key_delay setting raises it for a computer that loses letters.
-KEY_DELAY_MS = 2
 
 # The desktop opens a new keyboard a moment after it appears, and presses sent
 # before that are lost: the first letters were missing at once, never after

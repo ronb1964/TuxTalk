@@ -9,7 +9,7 @@ reading it all again would get slower with every read, and reading only
 its newest part made the text shift as its start moved. What gets typed
 doesn't change: that is still the whole audio, read once the user stops.
 It's live text or Type at pause, never both (Preferences' While you talk;
-config._migrate_settings): a recording typed at its pauses isn't read.
+settings_schema._migrate_settings): a recording typed at its pauses isn't read.
 
 The typed text must never wait long on a preview. A read goes to the worker
 only when it has nothing else to do (submit_if_idle), as it may still be

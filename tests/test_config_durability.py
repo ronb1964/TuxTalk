@@ -11,7 +11,7 @@ import pathlib
 
 import pytest
 
-from tuxtalk import config
+from tuxtalk import config, settings_schema
 
 
 @pytest.fixture
@@ -151,22 +151,22 @@ def test_invalid_settings_raise_instead_of_exiting():
     settings = config.Settings()
     settings.injection_mode = "nonsense"
 
-    with pytest.raises(config.ConfigError):
-        config.validate_config(settings)
+    with pytest.raises(settings_schema.ConfigError):
+        settings_schema.validate_config(settings)
 
 
 def test_the_error_names_the_setting_that_is_wrong():
     settings = config.Settings()
     settings.injection_mode = "nonsense"
 
-    with pytest.raises(config.ConfigError) as caught:
-        config.validate_config(settings)
+    with pytest.raises(settings_schema.ConfigError) as caught:
+        settings_schema.validate_config(settings)
 
     assert "injection_mode" in str(caught.value)
 
 
 def test_valid_settings_validate_cleanly():
-    config.validate_config(config.Settings())  # must not raise
+    settings_schema.validate_config(config.Settings())  # must not raise
 
 
 def test_loading_a_config_with_one_bad_value_falls_back_for_that_key(config_path):
@@ -810,7 +810,7 @@ def test_any_string_round_trips_as_valid_toml(value):
     tomllib arrived in Python 3.11; CI runs 3.10 like the AppImage, so there
     the strict parser this guards against isn't present to test."""
     tomllib = pytest.importorskip("tomllib")
-    assert tomllib.loads(f"k = {config._toml_string(value)}")["k"] == value
+    assert tomllib.loads(f"k = {settings_schema.toml_string(value)}")["k"] == value
 
 
 def test_a_setting_with_a_carriage_return_survives_a_save(config_path):

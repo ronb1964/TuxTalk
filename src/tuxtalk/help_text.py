@@ -23,7 +23,7 @@ import os
 from gi.repository import GLib
 
 from .ai_download import DOWNLOAD_SIZE_TEXT as AI_SIZE_TEXT
-from .config import CTRL_SPACE
+from .dictation_keys import CTRL_SPACE
 from .cuda_download import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 

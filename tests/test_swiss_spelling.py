@@ -5,7 +5,7 @@ swaps it in the finished text, so it works the same with every engine.
 """
 import pytest
 
-from tuxtalk import config
+from tuxtalk import config, settings_schema
 from tuxtalk import dictation_text
 from tuxtalk import live_settings as live
 from tuxtalk.normalize import swiss_spelling
@@ -46,7 +46,7 @@ def test_sharp_s_becomes_ss(text, expected):
     ({"LC_ALL": "C", "LANG": "de_CH.UTF-8"}, False),             # C over a lower LANG
 ])
 def test_on_by_default_only_on_swiss_german_systems(env, expected):
-    assert config.swiss_german_locale(env) is expected
+    assert settings_schema.swiss_german_locale(env) is expected
 
 
 def test_the_default_follows_the_system_locale(monkeypatch):

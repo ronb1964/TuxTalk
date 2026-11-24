@@ -8,7 +8,8 @@ import time
 import pytest
 
 from stand_ins import held_timers
-from tuxtalk import config, focused_window, key_commands, send_countdown, window_classes
+from tuxtalk import config, focused_window, key_commands, send_countdown, settings_schema
+from tuxtalk import window_classes
 from tuxtalk import hotkeys
 from tuxtalk import pipeline
 from tuxtalk import engine
@@ -738,8 +739,8 @@ def test_the_dictation_hands_its_left_off_space_to_the_send(monkeypatch):
 
 
 def test_the_wait_goes_up_to_four_seconds():
-    assert not any(k == "press_enter_delay" for k, _ in config._validation_problems(config.Settings(press_enter_delay=4.0)))
-    assert any(k == "press_enter_delay" for k, _ in config._validation_problems(config.Settings(press_enter_delay=5.0)))
+    assert not any(k == "press_enter_delay" for k, _ in settings_schema._validation_problems(config.Settings(press_enter_delay=4.0)))
+    assert any(k == "press_enter_delay" for k, _ in settings_schema._validation_problems(config.Settings(press_enter_delay=5.0)))
 
 
 def test_switching_windows_stops_the_countdown_at_once(countdown, monkeypatch):

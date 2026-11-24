@@ -258,7 +258,7 @@ class SpeechSection(Tab):
             "• Better handling of accents and background noise"
         )
         setup.attach(label, 0, row, 1, 1)
-        from .config import VALID_MODELS
+        from .settings_schema import VALID_MODELS
         # Rows: [model id, what the dropdown says].
         self.model_store = Gtk.ListStore(str, str)
         for model in VALID_MODELS:

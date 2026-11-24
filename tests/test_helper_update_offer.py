@@ -9,7 +9,7 @@ import pytest
 
 from tuxtalk import hotkey_helper, secure_input, welcome_dialog
 from tuxtalk import update_offers as offers
-from tuxtalk.config import CTRL_SPACE
+from tuxtalk.dictation_keys import CTRL_SPACE
 
 
 @pytest.fixture

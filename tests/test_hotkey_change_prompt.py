@@ -3,7 +3,7 @@ KDE already uses the key, as first run does, instead of leaving KDE's refusal
 in the log only."""
 import pytest
 
-from tuxtalk.config import CTRL_SPACE
+from tuxtalk.dictation_keys import CTRL_SPACE
 from tuxtalk.ctrl_space_clashes import GNOME, IBUS, KEYBOARD_OPTIONS
 from tuxtalk.hotkey_labels import hands_free_label, hotkey_label
 from tuxtalk.prefs_general import hotkey_change_message

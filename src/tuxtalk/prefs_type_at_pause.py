@@ -45,7 +45,7 @@ BOX_ON_PROCESSOR = ("Your speech model runs on the processor, so the box won't o
 
 def while_talking(config):
     """The WHILE_TALKING id *config* stands for. Both settings on (an older
-    config) is the box, as config._migrate_settings makes it."""
+    config) is the box, as settings_schema._migrate_settings makes it."""
     if config.get("live_text", False):
         return "box"
     return "pause" if config.get("chunked_dictation", False) else "nothing"

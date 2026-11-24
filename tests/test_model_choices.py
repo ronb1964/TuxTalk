@@ -8,7 +8,7 @@ build from, so a separate hardcoded list can't drift and hide a model.
 
 
 def test_offered_models_matches_what_can_actually_be_downloaded():
-    from tuxtalk.config import VALID_MODELS
+    from tuxtalk.settings_schema import VALID_MODELS
     from tuxtalk.model_helper import MODEL_REPOS
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
 
@@ -22,7 +22,7 @@ def test_offered_models_matches_what_can_actually_be_downloaded():
 
 
 def test_offered_models_has_no_duplicates():
-    from tuxtalk.config import VALID_MODELS
+    from tuxtalk.settings_schema import VALID_MODELS
 
     assert len(VALID_MODELS) == len(set(VALID_MODELS)), (
         f"VALID_MODELS contains duplicates: {VALID_MODELS}"
@@ -33,7 +33,7 @@ def test_every_model_picker_builds_from_the_shared_list(prefs_window):
     """No picker may keep its own hardcoded list, or the lists drift apart:
     that is how 'base' went missing from the first-run setup screen. (First
     run has no full picker: its card offers the models recommend.py picks.)"""
-    from tuxtalk.config import VALID_MODELS
+    from tuxtalk.settings_schema import VALID_MODELS
     offered = [row[0] for row in prefs_window().general_tab.speech.model_combo.get_model()]
     assert offered == list(VALID_MODELS)
 

@@ -1,6 +1,7 @@
 """Tests for config module validation logic"""
 import pytest
-from tuxtalk.config import ConfigError, Settings, apply_toml, repaired, validate_config
+from tuxtalk.config import Settings, apply_toml, repaired
+from tuxtalk.settings_schema import ConfigError, validate_config
 
 
 def test_valid_config():
@@ -192,7 +193,7 @@ def test_first_run_and_preferences_recommend_parakeet(prefs_window):
 def test_power_saving_defaults_on_with_a_battery_only(tmp_path):
     """A laptop's battery turns it on; a wireless mouse's battery (scope
     Device) and a desktop with none leave it off, so F8 always works there."""
-    from tuxtalk.config import has_battery
+    from tuxtalk.settings_schema import has_battery
     power = tmp_path / "power_supply"
     mouse = power / "hidpp_battery_0"
     mouse.mkdir(parents=True)
@@ -209,11 +210,11 @@ def test_power_saving_defaults_on_with_a_battery_only(tmp_path):
 
 
 def test_power_saving_default_follows_the_battery(monkeypatch):
-    import tuxtalk.config as config
-    monkeypatch.setattr(config, "has_battery", lambda: True)
-    assert config.Settings().auto_timeout_enabled is True
-    monkeypatch.setattr(config, "has_battery", lambda: False)
-    assert config.Settings().auto_timeout_enabled is False
+    from tuxtalk import settings_schema
+    monkeypatch.setattr(settings_schema, "has_battery", lambda: True)
+    assert Settings().auto_timeout_enabled is True
+    monkeypatch.setattr(settings_schema, "has_battery", lambda: False)
+    assert Settings().auto_timeout_enabled is False
 
 
 def test_a_quoted_false_turns_a_setting_off_not_on():
@@ -245,7 +246,7 @@ def test_a_model_name_no_longer_offered_becomes_the_one_that_replaced_it(old, no
 
 
 def test_every_model_a_config_may_hold_can_be_found_and_downloaded():
-    from tuxtalk.config import VALID_MODELS
+    from tuxtalk.settings_schema import VALID_MODELS
     from tuxtalk.model_helper import MODEL_REPOS
     from tuxtalk.parakeet_engine import is_parakeet
     assert {m for m in VALID_MODELS if not is_parakeet(m)} == set(MODEL_REPOS)

@@ -44,7 +44,7 @@ from gi.repository import GLib, Gtk  # noqa: E402
 from . import (a11y_switch, ai_download, config, cosmic_hotkeys, custom_words,  # noqa: E402
                desktop_detect, extension_helper, gnome_extensions, gnome_keybindings,
                installation, kwin_hotkeys, menu_cache, model_helper, parakeet_engine,
-               rename_migration, secure_input, service_launcher, settings_backup,
+               rename_migration, secure_input, service_launcher, settings_backup, settings_schema,
                single_instance, source_install, transcript_history, uinput_helper,
                update_install, whisper_vulkan, ydotoold_leftovers)
 # kwin_hotkeys imports it only when it forgets KDE's shortcuts, after the
@@ -136,7 +136,7 @@ def _hub_folder(repo):
 # it, "large" is large-v3.
 HF_REPOS = tuple(sorted({_hub_folder(repo) for repo in (
     *model_helper.MODEL_REPOS.values(),
-    *(f"Systran/faster-whisper-{m}" for m in config.OLD_MODEL_NAMES if m != "large"),
+    *(f"Systran/faster-whisper-{m}" for m in settings_schema.OLD_MODEL_NAMES if m != "large"),
     parakeet_engine.V3_REPO, whisper_vulkan.MODEL_REPO,
     *whisper_vulkan.MODEL_REPOS.values(), ai_download.MODEL_REPO)}))
 

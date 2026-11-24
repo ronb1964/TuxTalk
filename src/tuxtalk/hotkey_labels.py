@@ -3,7 +3,8 @@ the hotkey dropdowns' entries, each saying what else its key does, and the
 hands-free tickbox's words."""
 
 from . import secure_input
-from .config import CTRL_SPACE, HOTKEY_CHOICES
+from .dictation_keys import CTRL_SPACE
+from .settings_schema import HOTKEY_CHOICES
 
 # What else a key does, named in the hotkey dropdowns so nobody picks one
 # blind: dictating with F5 also reloads the page in a browser. Right Ctrl or
@@ -74,7 +75,7 @@ def layout_label(key):
 
 def dropdown_entries():
     """[(key, label)] for the hold and toggle dropdowns, in the order
-    config.HOTKEY_CHOICES gives, with Right Alt and Right Ctrl saying what
+    settings_schema.HOTKEY_CHOICES gives, with Right Alt and Right Ctrl saying what
     the active keyboard layout loses with them."""
     from .keyboard_layout import altgr_characters
     altgr_types = altgr_characters()

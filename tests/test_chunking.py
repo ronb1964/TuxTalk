@@ -314,8 +314,8 @@ def test_chunk_settings_default_off():
 @pytest.mark.parametrize("value,ok", [(0.8, True), (0.3, True), (3.0, True),
                                       (0.2, False), (3.5, False)])
 def test_chunk_pause_range(value, ok):
-    from tuxtalk import config
-    problems = config._validation_problems(config.Settings(chunk_pause_seconds=value))
+    from tuxtalk import config, settings_schema
+    problems = settings_schema._validation_problems(config.Settings(chunk_pause_seconds=value))
     flagged = any(key == "chunk_pause_seconds" for key, _msg in problems)
     assert flagged is (not ok)
 

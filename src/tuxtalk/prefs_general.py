@@ -9,7 +9,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
-from .config import HOTKEY_CHOICES
+from .settings_schema import HOTKEY_CHOICES
 from .hotkey_labels import dropdown_entries, hands_free_label
 from .logger import setup_logger
 from .prefs_hotkey_test import run_hotkey_test
@@ -541,7 +541,7 @@ class GeneralTab(Tab):
         with the window drawn and locked; no answer within their longest
         possible time (each LOOKUP_BUDGET_S) counts as no clash."""
         from . import ctrl_space_clashes, desktop_shortcut_clashes
-        from .config import CTRL_SPACE
+        from .dictation_keys import CTRL_SPACE
         found = []
 
         def look():

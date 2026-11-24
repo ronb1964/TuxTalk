@@ -8,7 +8,7 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk  # noqa: E402
 
 from gtk_text import combo_ids, find, toplevels, tree_text, widgets  # noqa: E402
-from tuxtalk.config import CLASSIC_CYAN_HEX  # noqa: E402
+from tuxtalk.settings_schema import CLASSIC_CYAN_HEX  # noqa: E402
 
 
 @pytest.fixture

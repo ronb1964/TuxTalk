@@ -301,7 +301,7 @@ def build_or_exit(settings: Settings):
     try:
         return build(settings)
     except ModelUnavailable as e:
-        from .config import VALID_MODELS
+        from .settings_schema import VALID_MODELS
         from .model_helper import is_model_cached_fast
         from .recommend import model_title
         try:

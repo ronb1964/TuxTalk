@@ -26,8 +26,8 @@ BRAIN = frozenset({
     "dictation_keys", "dictation_text", "dictation_worker", "hallucinations",
     "indicator_dsp", "key_commands", "language_codes", "logger", "mic_stream",
     "mouse_grid_model", "mouse_phrases", "normalize", "parakeet_bias", "resampling",
-    "sentence_fit", "silence", "spoken_numbers", "spoken_quotes", "undo", "voice_detector",
-    "voice_edit_rules", "voice_navigation", "word_spelling",
+    "sentence_fit", "settings_schema", "silence", "spoken_numbers", "spoken_quotes", "undo",
+    "voice_detector", "voice_edit_rules", "voice_navigation", "word_spelling",
 })
 
 # What only Linux (or Unix) has, or its desktop: GTK and GLib, D-Bus, the

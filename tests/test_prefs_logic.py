@@ -160,7 +160,7 @@ def _autostart(monkeypatch, works=True):
 def test_save_config_escapes_double_quotes(tmp_path, monkeypatch):
     """A microphone name containing a double quote must survive Apply.
 
-    The Preferences window must escape them like config.py's _toml_string:
+    The Preferences window must escape them like settings_schema.toml_string:
     `mic = "Blue Yeti "Nano" USB"` is invalid TOML, so the next load would
     quarantine the file and reset every setting — including the hotkey,
     which defaults to blank and silently kills dictation.
