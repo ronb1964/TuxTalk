@@ -38,9 +38,30 @@ _UNDO_UNIT_RE = re.compile(
 )
 
 
-def detect_undo_command(raw_text: str) -> tuple[str, int] | None:
+# German, verb last as most say it ("das letzte Wort löschen", "die letzten
+# drei Wörter löschen") or first ("lösche den letzten Satz"); the verb's
+# forms (lösch, lösche, löschen) all count.
+GERMAN_NUMBER_WORDS = {
+    'ein': 1, 'eine': 1, 'einen': 1, 'eins': 1,
+    'zwei': 2, 'drei': 3, 'vier': 4, 'fünf': 5,
+    'sechs': 6, 'sieben': 7, 'acht': 8, 'neun': 9, 'zehn': 10,
+}
+_GERMAN_UNITS = {'wort': 'word', 'wörter': 'word', 'worte': 'word',
+                 'satz': 'sentence', 'sätze': 'sentence',
+                 'absatz': 'paragraph', 'absätze': 'paragraph'}
+_GERMAN_VERB = re.compile(r"(?:lösch|entfern)(?:e|en)?")
+_GERMAN_EVERYTHING = frozenset({'alles'})
+_GERMAN_UNIT_RE = re.compile(
+    r"(?:(?:das|den|die|der)\s+)?letzte[nsr]?\s+"
+    r"(?:(\d+)\s+|(" + "|".join(GERMAN_NUMBER_WORDS) + r")\s+)?"
+    r"(" + "|".join(_GERMAN_UNITS) + r")"
+)
+
+
+def detect_undo_command(raw_text: str, lang: str = "en") -> tuple[str, int] | None:
     """
-    Check if the raw transcription is an undo command.
+    Check if the raw transcription is an undo command, in English or, when
+    *lang* is "de", in German too.
 
     Returns a (undo_type, count) tuple or None.
     - undo_type: 'word', 'sentence', 'paragraph', or 'everything'
@@ -48,22 +69,45 @@ def detect_undo_command(raw_text: str) -> tuple[str, int] | None:
     """
     normalized = re.sub(r'[^\w\s]', '', raw_text.lower()).strip()
     normalized = ' '.join(normalized.split())
+    return (_german_undo(normalized) if lang == "de" else None) or _english_undo(normalized)
 
+
+def _english_undo(normalized: str) -> tuple[str, int] | None:
+    """"delete last three words", "clear everything": (undo_type, count)."""
     if normalized in EVERYTHING_PATTERNS:
         return ('everything', 1)
-
     m = _UNDO_UNIT_RE.match(normalized)
-    if m:
-        digit, word, unit = m.groups()
-        if digit:
-            count = int(digit)
-        elif word:
-            count = NUMBER_WORDS[word.lower()]
-        else:
-            count = 1
-        return (unit.lower(), count)
+    if not m:
+        return None
+    digit, word, unit = m.groups()
+    return (unit.lower(), _count(digit, word, NUMBER_WORDS))
 
-    return None
+
+def _german_undo(normalized: str) -> tuple[str, int] | None:
+    """"die letzten drei Wörter löschen", "alles löschen": (undo_type, count)."""
+    words = normalized.split()
+    if len(words) < 2:
+        return None
+    if _GERMAN_VERB.fullmatch(words[-1]):
+        rest = " ".join(words[:-1])
+    elif _GERMAN_VERB.fullmatch(words[0]):
+        rest = " ".join(words[1:])
+    else:
+        return None
+    if rest in _GERMAN_EVERYTHING:
+        return ('everything', 1)
+    m = _GERMAN_UNIT_RE.fullmatch(rest)
+    if not m:
+        return None
+    digit, word, unit = m.groups()
+    return (_GERMAN_UNITS[unit], _count(digit, word, GERMAN_NUMBER_WORDS))
+
+
+def _count(digit, word, number_words) -> int:
+    """How many units: the digits said, the number word, or one."""
+    if digit:
+        return int(digit)
+    return number_words[word] if word else 1
 
 
 def single_unit_length(text: str, undo_type: str) -> int:

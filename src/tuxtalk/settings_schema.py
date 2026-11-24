@@ -63,6 +63,10 @@ VALID_MODES = {"hold", "toggle"}
 
 VALID_INJECTION_MODES = {"type", "paste", "auto"}
 
+# The languages voice commands can be said in, as the setting saves them and
+# Preferences shows them. English is understood in every one of them.
+COMMAND_LANGUAGES = {"en": "English", "de": "Deutsch"}
+
 VALID_INDICATOR_POSITIONS = {
     "center", "top-left", "top-center", "top-right",
     "bottom-left", "bottom-center", "bottom-right",
@@ -190,6 +194,10 @@ class Settings:
     typing_wpm: int = 40
     # language picked at first run (recommend.py); "" = system locale
     dictation_language: str = ""
+    # the language voice commands are said in (COMMAND_LANGUAGES), apart from
+    # the dictation language: some give commands in their own language while
+    # dictating in another
+    command_language: str = "en"
     # the one-time "better setup" notice was shown (or not needed)
     recommend_notice_shown: bool = False
     # the one-time Parakeet Ultra offer was answered (tray.py)
@@ -218,74 +226,52 @@ def _hotkey_problems(s: Settings) -> list[tuple[str, str]]:
     return problems
 
 
+# The settings that take one of a fixed set of words, in any case, and the
+# ranges the number settings must stay in.
+_CHOICES = {
+    "device": VALID_DEVICES,
+    "mode": VALID_MODES,
+    "injection_mode": VALID_INJECTION_MODES,
+    "indicator_position": VALID_INDICATOR_POSITIONS,
+    "indicator_size": VALID_INDICATOR_SIZES,
+    "indicator_style": VALID_INDICATOR_STYLES,
+    "indicator_color_mode": VALID_COLOR_MODES,
+    "command_language": COMMAND_LANGUAGES,
+}
+_RANGES = {
+    "press_enter_delay": (0.0, 4.0),
+    "auto_stop_seconds": (0.5, 10.0),
+    "chunk_pause_seconds": (0.3, 3.0),
+    "key_delay": (1, 50),
+    "indicator_sensitivity": (0.5, 2.0),
+}
+
+
 def _validation_problems(s: Settings) -> list[tuple[str, str]]:
     """Return (field name, message) for every setting holding an unusable value.
 
     Naming the field, not just the message, lets a caller repair that one
     setting instead of discarding the whole configuration.
     """
-    problems = []
-
-    problems += _hotkey_problems(s)
-
+    problems = _hotkey_problems(s)
     if s.model not in VALID_MODELS:
         problems.append(("model", f"Invalid model '{s.model}'. "
                                   f"Valid options: {', '.join(VALID_MODELS)}"))
-
-    if s.device.lower() not in VALID_DEVICES:
-        problems.append(("device", f"Invalid device '{s.device}'. "
-                                   "Must be 'cpu', 'cuda' or 'vulkan'"))
-
-    if s.mode.lower() not in VALID_MODES:
-        problems.append(("mode", f"Invalid mode '{s.mode}'. Must be 'hold' or 'toggle'"))
-
-    if s.injection_mode.lower() not in VALID_INJECTION_MODES:
-        problems.append(("injection_mode", f"Invalid injection_mode '{s.injection_mode}'. "
-                                           "Must be 'type', 'paste', or 'auto'"))
-
     if s.auto_timeout_minutes <= 0:
         problems.append(("auto_timeout_minutes",
                          f"Invalid auto_timeout_minutes '{s.auto_timeout_minutes}'. "
                          "Must be positive"))
-
-    if s.indicator_position.lower() not in VALID_INDICATOR_POSITIONS:
-        problems.append(("indicator_position",
-                         f"Invalid indicator_position '{s.indicator_position}'. "
-                         f"Valid options: {', '.join(sorted(VALID_INDICATOR_POSITIONS))}"))
-
-    if s.indicator_size.lower() not in VALID_INDICATOR_SIZES:
-        problems.append(("indicator_size",
-                         f"Invalid indicator_size '{s.indicator_size}'. "
-                         f"Valid options: {', '.join(sorted(VALID_INDICATOR_SIZES))}"))
-
-    if s.indicator_style.lower() not in VALID_INDICATOR_STYLES:
-        problems.append(("indicator_style",
-                         f"Invalid indicator_style '{s.indicator_style}'. "
-                         f"Valid options: {', '.join(sorted(VALID_INDICATOR_STYLES))}"))
-
-    if s.indicator_color_mode.lower() not in VALID_COLOR_MODES:
-        problems.append(("indicator_color_mode",
-                         f"Invalid indicator_color_mode '{s.indicator_color_mode}'. "
-                         f"Valid options: {', '.join(sorted(VALID_COLOR_MODES))}"))
-
-    if not (0.0 <= s.press_enter_delay <= 4.0):
-        problems.append(("press_enter_delay", f"Invalid press_enter_delay '{s.press_enter_delay}'. "
-                                              "Must be between 0 and 4"))
-    if not (0.5 <= s.auto_stop_seconds <= 10.0):
-        problems.append(("auto_stop_seconds", f"Invalid auto_stop_seconds '{s.auto_stop_seconds}'. "
-                                              "Must be between 0.5 and 10"))
-    if not (0.3 <= s.chunk_pause_seconds <= 3.0):
-        problems.append(("chunk_pause_seconds",
-                         f"Invalid chunk_pause_seconds '{s.chunk_pause_seconds}'. "
-                         "Must be between 0.3 and 3.0"))
-    if not (1 <= s.key_delay <= 50):
-        problems.append(("key_delay", f"Invalid key_delay '{s.key_delay}'. "
-                                      "Must be between 1 and 50"))
-    if not (0.5 <= s.indicator_sensitivity <= 2.0):
-        problems.append(("indicator_sensitivity",
-                         f"Invalid indicator_sensitivity '{s.indicator_sensitivity}'. "
-                         "Must be between 0.5 and 2.0"))
-
+    for name, valid in _CHOICES.items():
+        value = getattr(s, name)
+        if value.lower() not in valid:
+            problems.append((name, f"Invalid {name} '{value}'. "
+                                   f"Valid options: {', '.join(sorted(valid))}"))
+    for name, (low, high) in _RANGES.items():
+        value = getattr(s, name)
+        # "not within" so a nan, which compares false with everything, fails too.
+        if not low <= value <= high:
+            problems.append((name, f"Invalid {name} '{value}'. "
+                                   f"Must be between {low:g} and {high:g}"))
     return problems
 
 
@@ -301,10 +287,6 @@ def validate_config(s: Settings) -> None:
     if problems:
         raise ConfigError([msg for _, msg in problems],
                           fields=[name for name, _ in problems])
-
-
-_CASE_FREE_CHOICES = ("device", "mode", "injection_mode", "indicator_position",
-                      "indicator_size", "indicator_style", "indicator_color_mode")
 
 
 def _migrate_settings(s: Settings) -> Settings:
@@ -323,7 +305,7 @@ def _migrate_settings(s: Settings) -> Settings:
       then emptied as it was typed.
     - A model name no longer offered becomes its nearest (OLD_MODEL_NAMES).
     """
-    for name in _CASE_FREE_CHOICES:
+    for name in _CHOICES:
         value = getattr(s, name)
         if isinstance(value, str):
             setattr(s, name, value.lower())
@@ -597,6 +579,8 @@ LIVE_APPLIED_KEYS = {
     # Read into a module global on each reload, checked when each recording starts.
     "pause_media",
     "duck_audio",
+    # Read into a module global on each reload, used by each command's words.
+    "command_language",
     # Read by the tray and first run (recommend.py), never by the service.
     "dictation_language",
     "recommend_notice_shown",

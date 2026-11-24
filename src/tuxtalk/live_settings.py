@@ -56,6 +56,10 @@ swiss_spelling = False     # ß -> ss in the finished text (Swiss Standard Germa
 numbers_mode = None
 numbers_language = "en"
 
+# The language voice commands are said in ("en", "de"); English is always
+# understood too. See settings_schema.COMMAND_LANGUAGES.
+command_language = "en"
+
 # Select and move by voice (TuxTalk Labs, voice_navigation.py).
 voice_navigation = False
 
@@ -107,7 +111,8 @@ def apply(cfg):
     """Bring every live option in line with *cfg*, at startup and on each
     settings reload; start or stop the AI engine."""
     global remove_fillers, ai_engine, auto_stop_seconds, ai_corrections, voice_editing
-    global swiss_spelling, numbers_mode, numbers_language, voice_navigation, adapt_to_app
+    global swiss_spelling, numbers_mode, numbers_language, command_language
+    global voice_navigation, adapt_to_app
     global open_apps, live_text
     global auto_languages, press_enter_after
     global chunk_pause_seconds, settings, chunk_context_marks
@@ -147,6 +152,7 @@ def apply(cfg):
         numbers_mode = None
     from .recommend import effective_language
     numbers_language = effective_language(cfg)
+    command_language = cfg.command_language
     ai_corrections = bool(cfg.ai_corrections)
     voice_editing = bool(cfg.voice_editing)
     want_ai = ai_corrections or voice_editing

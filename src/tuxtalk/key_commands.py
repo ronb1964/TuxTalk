@@ -53,20 +53,37 @@ _TRAILING = re.compile(
     re.IGNORECASE,
 )
 
+# German: "Enter drücken", "Eingabe drücken", "Tab-Taste drücken", the verb
+# last as most say it, or first ("drück Enter"). "wörtlich" or "das Wort"
+# before it types the words.
+_GERMAN_LEAD = r"(?P<lead>^|[\s,;:.!?]+)(?P<literal>(?:wörtlich|das\s+wort|die\s+wörter)\s+)?"
+_GERMAN_KEY = r"(?P<key>enter|eingabe|return|tab|tabulator)(?:[\s-]?taste)?"
+_GERMAN_TRAILING = (
+    re.compile(_GERMAN_LEAD + r"(?:die\s+)?" + _GERMAN_KEY + r",?\s+drücken[\s.!?,]*$",
+               re.IGNORECASE),
+    re.compile(_GERMAN_LEAD + r"drück(?:e|en)?,?\s+(?:die\s+)?" + _GERMAN_KEY
+               + r"[\s.!?,]*$", re.IGNORECASE),
+)
+# Each language's patterns, its own first; English is understood in every one.
+_TRAILING_BY_LANGUAGE = {"en": (_TRAILING,), "de": (*_GERMAN_TRAILING, _TRAILING)}
+_TAB_NAMES = frozenset({"tab", "tabulator"})
 
-def split_key_command(raw: str) -> tuple[str, str]:
+
+def split_key_command(raw: str, lang: str = "en") -> tuple[str, str]:
     """(the dictation without a closing "press enter" or "press tab", the key
-    said: "ENTER", "TAB" or "").
+    said: "ENTER", "TAB" or ""), with *lang*'s words for it understood too
+    ("Enter drücken").
 
     The words before Enter keep their own sentence-ending punctuation
     ("noon."), but a comma or colon that only led into the command is dropped.
     Before Tab a period goes too: the engine ends "John" with one, and a name
     or a number in a form box doesn't; a "?" or "!" was said and stays.
     """
-    match = _TRAILING.search(raw) if raw else None
+    match = next((m for pattern in _TRAILING_BY_LANGUAGE.get(lang, (_TRAILING,))
+                  if raw and (m := pattern.search(raw))), None)
     if not match:
         return raw, ""
-    key = "TAB" if match.group("key").lower() == "tab" else "ENTER"
+    key = "TAB" if match.group("key").lower() in _TAB_NAMES else "ENTER"
     if match.group("literal"):
         # Typed as words, without "literal", like "literal new line". A
         # "press tab" keeps it: without it normalize.py would type a tab.

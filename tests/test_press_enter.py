@@ -45,6 +45,30 @@ def test_split_press_enter(raw, expected):
     assert split_key_command(raw) == (words, "ENTER" if said else "")
 
 
+@pytest.mark.parametrize("raw, expected", [
+    ("Bis morgen, Enter drücken.", ("Bis morgen", "ENTER")),
+    ("Bis morgen. Enter drücken.", ("Bis morgen.", "ENTER")),
+    ("Wie spät ist es? Eingabe drücken", ("Wie spät ist es?", "ENTER")),
+    ("Return-Taste drücken", ("", "ENTER")),
+    ("Drück Enter.", ("", "ENTER")),
+    ("Max Mustermann. Tab drücken.", ("Max Mustermann", "TAB")),
+    ("Max Tabulatortaste drücken", ("Max", "TAB")),
+    ("drücke die Tab-Taste", ("", "TAB")),
+    # English stays understood.
+    ("Bis morgen, press enter", ("Bis morgen", "ENTER")),
+    # Only the very end counts, and "wörtlich" types the words.
+    ("Enter drücken und weiter", ("Enter drücken und weiter", "")),
+    ("Schreib wörtlich Enter drücken", ("Schreib Enter drücken", "")),
+])
+def test_german_press_enter_and_tab_with_german_commands_on(raw, expected):
+    assert split_key_command(raw, "de") == expected
+
+
+def test_german_press_enter_waits_for_german_commands():
+    """With the command language English, "Enter drücken" is dictation."""
+    assert split_key_command("Bis morgen, Enter drücken.") == ("Bis morgen, Enter drücken.", "")
+
+
 def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browser"):
     """Run one dictation through pipeline.transcribe_and_inject; what was typed and
     whether Enter was pressed, in order."""

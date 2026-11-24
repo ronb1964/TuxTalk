@@ -1,3 +1,5 @@
+import pytest
+
 from tuxtalk.undo import (
     detect_undo_command,
     calculate_undo_length,
@@ -305,3 +307,41 @@ def test_deleting_a_sentence_keeps_the_space_before_the_next_dictation():
 def test_a_line_break_before_the_sentence_stays_too():
     typed = "Dear Sam.\nSee you at noon. "
     assert typed[:len(typed) - calculate_undo_length(typed, "sentence")] == "Dear Sam.\n"
+
+
+# ---------------------------------------------------------------------------
+# German, with the command language set to Deutsch
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("said, expected", [
+    ("Das letzte Wort löschen.", ("word", 1)),
+    ("letztes Wort löschen", ("word", 1)),
+    ("Lösche das letzte Wort", ("word", 1)),
+    ("lösch den letzten Satz", ("sentence", 1)),
+    ("Den letzten Absatz löschen.", ("paragraph", 1)),
+    ("Die letzten drei Wörter löschen.", ("word", 3)),
+    ("die letzten 3 Wörter löschen", ("word", 3)),
+    ("die letzten zwei Sätze entfernen", ("sentence", 2)),
+    ("Alles löschen.", ("everything", 1)),
+    ("lösche alles", ("everything", 1)),
+    # English stays understood.
+    ("delete last word", ("word", 1)),
+])
+def test_german_undo_commands_with_german_commands_on(said, expected):
+    assert detect_undo_command(said, "de") == expected
+
+
+@pytest.mark.parametrize("said", [
+    "Ich habe das letzte Wort gelöscht.",
+    "Das letzte Wort hat er.",
+    "Alles gut.",
+    "löschen",
+    "Wir löschen die Datei.",
+])
+def test_german_sentences_about_deleting_stay_text(said):
+    assert detect_undo_command(said, "de") is None
+
+
+def test_german_undo_waits_for_german_commands():
+    """With the command language English, German words are dictation."""
+    assert detect_undo_command("das letzte Wort löschen") is None

@@ -25,7 +25,7 @@ def handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
 
     Returns True if an undo was handled (caller should return early).
     """
-    detected = detect_undo_command(raw)
+    detected = detect_undo_command(raw, live.command_language)
     if not detected:
         return False
 

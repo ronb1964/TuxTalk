@@ -250,3 +250,10 @@ def test_every_model_a_config_may_hold_can_be_found_and_downloaded():
     from tuxtalk.model_helper import MODEL_REPOS
     from tuxtalk.parakeet_engine import is_parakeet
     assert {m for m in VALID_MODELS if not is_parakeet(m)} == set(MODEL_REPOS)
+
+
+def test_the_command_language_reads_any_case_and_an_unknown_one_goes_back_to_english():
+    """A hand-edited command_language = "DE" means German; "fr", which
+    TuxTalk can't do yet, is set back to English instead of failing."""
+    assert repaired(Settings(command_language="DE")).command_language == "de"
+    assert repaired(Settings(command_language="fr")).command_language == "en"

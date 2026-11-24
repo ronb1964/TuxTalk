@@ -191,7 +191,7 @@ def test_libei_backend_backspaces_via_fresh_session(monkeypatch):
 def test_handle_undo_everything_routes_through_backend(monkeypatch):
     # 'delete everything' must call the backend's select_all_delete, so it works
     # on the Flatpak (libei) exactly like on the host (the virtual keyboard).
-    monkeypatch.setattr(voice_commands, "detect_undo_command", lambda raw: ("everything", 1))
+    monkeypatch.setattr(voice_commands, "detect_undo_command", lambda raw, lang: ("everything", 1))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     calls = []
@@ -208,7 +208,7 @@ def test_handle_undo_everything_routes_through_backend(monkeypatch):
 
 def test_handle_undo_char_undo_routes_backspaces_through_backend(monkeypatch):
     # Character-level undo must send its backspaces through the backend too.
-    monkeypatch.setattr(voice_commands, "detect_undo_command", lambda raw: ("word", 1))
+    monkeypatch.setattr(voice_commands, "detect_undo_command", lambda raw, lang: ("word", 1))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     rs.state.last_inserted_text = "hello world"

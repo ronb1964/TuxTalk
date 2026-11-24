@@ -37,6 +37,7 @@ from .window_classes import app_kind, why_no_automatic_enter
 
 logger = setup_logger(__name__)
 
+
 # Chunked dictation (chunking.py). The audio callback adds blocks, has the
 # pause detector hear them and cuts chunks, and the stop takes the rest; this
 # lock keeps a block or a cut from landing in frames the stop has already
@@ -290,7 +291,7 @@ def resolve_boundary(message, audio_f32, language, injection_mode, raw="",
         return raw
     mark, joint = _heard_in_context(pending, audio_f32, language)
     enter = (raw and len(raw.split()) <= ENTER_IN_CONTEXT_MAX_WORDS
-             and not split_key_command(raw)[1] and split_key_command(joint)[1] == "ENTER")
+             and not _key_said(raw) and _key_said(joint) == "ENTER")
     if enter:
         # The sentence ends here, as it would after "press enter" said
         # clearly (flush_boundary): its mark, and no space to send.
@@ -389,7 +390,7 @@ def heard_whole_mark(message, mark: str, last_audio, language, may_change=True) 
                        f"{type(e).__name__}")
         return mark
     # "..., press enter" said at its end isn't part of the sentence.
-    if not split_key_command(heard)[0].rstrip().endswith("?"):
+    if not _without_key(heard).rstrip().endswith("?"):
         return mark
     logger.info("Heard whole, the sentence said over pauses is a question: it ends with ?")
     return "?"
@@ -435,7 +436,7 @@ def _short_phrase_in_context(raw: str, before: str, joint: str) -> str:
     press a key stays resolve_boundary's "press enter" rule's call."""
     heard = words_in_context(before, joint) or ""
     if (0 < word_count(heard) < word_count(raw)
-            and split_key_command(heard)[1] == split_key_command(raw)[1]):
+            and _key_said(heard) == _key_said(raw)):
         logger.info(f"Short phrase: {live.loggable(raw)} alone, {live.loggable(heard)} "
                     "in context; typing what the context heard")
         return heard
@@ -559,3 +560,14 @@ def _cut_off(message) -> str:
         if message.held_mark is not None:
             message.held_mark["mark"] = ""
     return cut_off
+
+
+def _key_said(text: str) -> str:
+    """The key a closing "press enter" or "press tab" in *text* asks for, in
+    the command language too ("Enter drücken"); "" for none."""
+    return split_key_command(text, live.command_language)[1]
+
+
+def _without_key(text: str) -> str:
+    """*text* without a closing "press enter" or "press tab"."""
+    return split_key_command(text, live.command_language)[0]

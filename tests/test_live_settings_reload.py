@@ -154,6 +154,7 @@ _MIRRORED = [
     ({"numbers_as_digits": True, "numbers_small_as_words": True},
      "numbers_mode", "small_as_words"),
     ({"language_mode": "manual", "language": "de"}, "numbers_language", "de"),
+    ({"command_language": "de"}, "command_language", "de"),
     ({"ai_corrections": True}, "ai_corrections", True),
     ({"voice_editing": True}, "voice_editing", True),
 ]

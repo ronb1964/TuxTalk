@@ -174,7 +174,7 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             # sentence's final mark may be gone from the screen.
             job.message.sentence_audio = []
             return
-        raw, said = split_key_command(as_words)
+        raw, said = split_key_command(as_words, live.command_language)
         key = _key_to_press(raw, said, job)
         if _nothing_to_type(raw, said, in_password, job):
             return
@@ -356,7 +356,7 @@ def _hear(audio_f32, job: _Job, t0: float):
 def _before_the_words(raw: str, audio_f32, job: _Job):
     """(raw, in a password field) once what goes before the words is dealt
     with; raw is None when a password field refuses them."""
-    rest, said = split_key_command(raw)
+    rest, said = split_key_command(raw, live.command_language)
     key_only = not rest.strip() and said
     # A password field gets nothing: not the words, nor what Type at
     # pause would type first (the mark held back from the last phrase, a
