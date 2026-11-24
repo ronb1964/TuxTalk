@@ -4,7 +4,8 @@ group's colour, the same in both windows, with two columns, what to say and
 what it does.
 
 Each card takes the keyboard focus, so Tab goes card by card, and a screen
-reader hears its heading and its commands.
+reader hears its heading and its commands. With voice commands in German
+each command shows its German words first.
 """
 import gi
 gi.require_version("Gtk", "3.0")
@@ -37,10 +38,25 @@ def labs_line(sections):
             "<b>Preferences → Advanced → TuxTalk Labs</b>.")
 
 
-def _row(command, say_width):
+def german_commands() -> bool:
+    """Whether voice commands are said in German (Voice commands in)."""
+    from .config import load_config
+    return load_config().command_language == "de"
+
+
+def _phrases(command, german: bool) -> tuple:
+    """The ways to say *command* shown: with *german*, its German ones
+    first; a German-only command shows only then."""
+    return (*command.german, *command.said) if german else command.said
+
+
+def _row(command, say_width, german):
     """One command: the ways to say it, bold, beside what it does (and its
-    note under that)."""
-    said = ", ".join(f"<b>{cards.escape(p)}</b>" for p in command.said)
+    note under that); None for a German-only command with English shown."""
+    phrases = _phrases(command, german)
+    if not phrases:
+        return None
+    said = ", ".join(f"<b>{cards.escape(p)}</b>" for p in phrases)
     say = cards.label(said, "tt-say")
     say.set_width_chars(_SAY_CHARS)
     say.set_max_width_chars(_SAY_CHARS)
@@ -57,17 +73,18 @@ def _row(command, say_width):
     return row
 
 
-def spoken(section):
+def spoken(section, german=False):
     """What a screen reader says on *section*'s card: each command, what it
     does, and the notes, the text the card shows."""
-    lines = [f"{', '.join(c.said)}: {cards.plain(c.result)}"
-             + (f". {cards.plain(c.note)}" if c.note else "") for c in section.commands]
+    lines = [f"{', '.join(_phrases(c, german))}: {cards.plain(c.result)}"
+             + (f". {cards.plain(c.note)}" if c.note else "") for c in section.commands
+             if _phrases(c, german)]
     if section.note:
         lines.append(cards.plain(ref.section_note(section)))
     return ".\n".join(lines)
 
 
-def section_card(section, say_width):
+def section_card(section, say_width, german=False):
     """The card of *section*: its heading band, then a row per command, and
     its note; *say_width* lines the "what to say" column up across cards.
     The card takes the keyboard focus, named for a screen reader by its
@@ -78,7 +95,8 @@ def section_card(section, say_width):
     head, _labels = cards.card_head(section.title, look, icon, labs=labs)
     rows = cards.card_box(head)
     for command in section.commands:
-        rows.pack_start(_row(command, say_width), False, False, 0)
+        if row := _row(command, say_width, german):
+            rows.pack_start(row, False, False, 0)
     if section.note:
         note = cards.label(ref.section_note(section), "tt-note")
         note.get_style_context().add_class("tt-card-row")
@@ -90,7 +108,7 @@ def section_card(section, say_width):
     card.add(rows)
     name = section.title + (f", needs Labs: {section.labs}" if section.labs else "")
     card.get_accessible().set_name(name)
-    card.get_accessible().set_description(spoken(section))
+    card.get_accessible().set_description(spoken(section, german))
     return card
 
 
@@ -98,7 +116,8 @@ def _group_children(group, say_width, found=None):
     """*group*'s cards, under the line naming the Labs tickboxes they need.
     *found*, a dict, gets each card (focusable, outlined) by (group, title)."""
     sections = [s for s in ref.SECTIONS if s.group == group]
-    children = [section_card(s, say_width) for s in sections]
+    german = german_commands()
+    children = [section_card(s, say_width, german) for s in sections]
     if found is not None:
         for section, card in zip(sections, children, strict=True):
             found[(group, section.title)] = (card, card.get_child())

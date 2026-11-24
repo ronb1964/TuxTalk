@@ -5,6 +5,20 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- Voice commands in German: set Preferences → General → Change model, device
+  or language → Voice commands in to Deutsch, and say "Komma", "Punkt",
+  "neue Zeile", "Enter drücken", "das letzte Wort löschen", "den letzten
+  Satz markieren", "Firefox öffnen", "Fenster schließen" or "Mausraster",
+  the verb last as most say it or first ("öffne Firefox"). Quotes come out
+  German („…“), and "Punkt 12 Uhr" or "auf den Punkt" stay words. English
+  commands keep working beside them, and the command language is its own
+  setting, apart from the language you dictate. The words came from
+  hmsgde and jskvbinmv on #49: thank you both. Self-corrections ("nein
+  warte") aren't in German yet.
+- Remove filler words takes German's "äh" and "ähm" too, and keeps a
+  German doubled article that's meant ("die Frau, die die Zeitung liest").
+  Send each dictation automatically holds the Enter after a German
+  dictation cut off on "und" or "aber", as it does after "and".
 - Pick any dictation key you like: the hold and toggle lists in
   Preferences → General end in "Other key or combination…", where you
   press the keys, such as Alt+D, Ctrl+Shift+K or F13 to F24. TuxTalk

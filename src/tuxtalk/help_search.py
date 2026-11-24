@@ -68,10 +68,12 @@ def _help_entries(tab, markup):
 
 
 def _command_entries():
-    """One entry per card of the Commands tab, under its group's name."""
+    """One entry per card of the Commands tab, under its group's name, with
+    the German words when the cards show them."""
+    german = commands_cards.german_commands()
     for section in ref.SECTIONS:
         yield Entry(COMMANDS_TITLE, section.group, section.title, "", bool(section.labs),
-                    commands_cards.spoken(section))
+                    commands_cards.spoken(section, german))
 
 
 def index(sections):

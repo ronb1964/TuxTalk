@@ -6,6 +6,8 @@ phrase in the table goes through the code that recognises it.
 """
 import re
 
+import gi
+
 import pytest
 
 from tuxtalk import (ai_cleanup, app_commands, app_finder, command_phrases, commands_cards,
@@ -68,6 +70,42 @@ def test_each_listed_phrase_is_recognised(kind, phrase, monkeypatch):
         # Any wording works: the AI reads it, nothing in code takes it.
         assert kind == "instruction"
         assert not _done_in_code(phrase) and voice_edit_rules.formatting(phrase) is None
+
+
+GERMAN = [(c.kind, phrase) for s in commands_reference.SECTIONS for c in s.commands
+          for phrase in c.german]
+
+
+@pytest.mark.parametrize("kind,phrase", GERMAN)
+def test_each_german_phrase_listed_works_with_german_commands_on(kind, phrase, monkeypatch):
+    from tuxtalk import live_settings
+    monkeypatch.setattr(live_settings, "command_language", "de")
+    if kind == "inline":
+        typed = normalize.normalize_text(f"Apfel {phrase} Birne {phrase} Kirsche", lang="de")
+        assert phrase.lower() not in typed.lower()
+    elif kind == "key":
+        key = "TAB" if "tab" in phrase.lower() else "ENTER"
+        assert key_commands.split_key_command(f"Bis morgen, {phrase}", "de")[1] == key
+    elif kind == "undo":
+        assert undo.detect_undo_command(phrase, "de") is not None
+    elif kind == "fix":
+        opened = []
+        monkeypatch.setattr(explain, "start_helper_window", lambda *args: opened.append(args))
+        assert voice_commands.handle_fix_word(f"{phrase.capitalize()}.", False)
+    elif kind == "edit":
+        assert voice_edit_rules.spoken_edit(phrase, "de")
+    elif kind == "select":
+        assert voice_navigation.parse(phrase, "de") is not None
+    elif kind == "action":
+        assert command_phrases.parse(phrase, navigation=False, actions=True, lang="de")
+    elif kind == "mouse":
+        assert command_phrases.parse(phrase, navigation=False, actions=True, grid=True,
+                                     lang="de")
+    else:
+        assert kind == "literal"
+        word = re.sub(r"^(wörtlich|das Wort) ", "", phrase)
+        typed = normalize.normalize_text(f"Apfel {phrase} Birne", lang="de")
+        assert typed == f"Apfel {word} Birne."
 
 
 # What each exact edit listed makes of _EDITED: done in code, not by the AI.
@@ -169,8 +207,10 @@ def screens(monkeypatch):
 
 
 def test_both_screens_show_every_command_on_its_own_row(screens):
-    """Each command's phrases, on a row of their own, in both."""
-    listed = [", ".join(c.said) for s in commands_reference.SECTIONS for c in s.commands]
+    """Each command's phrases, on a row of their own, in both (German's own
+    quotes only with German commands on)."""
+    listed = [", ".join(c.said) for s in commands_reference.SECTIONS for c in s.commands
+              if c.said]
     for screen in screens:
         assert _say_columns(screen) == listed
 
@@ -231,7 +271,8 @@ def test_a_screen_reader_hears_each_card_by_its_heading_and_commands():
         for command in section.commands:
             for phrase in command.said:
                 assert phrase in accessible.get_description()
-            assert _plain(command.result) in accessible.get_description()
+            if command.said:
+                assert _plain(command.result) in accessible.get_description()
 
 
 def test_a_heading_with_an_ampersand_still_shows():
@@ -413,3 +454,21 @@ def test_every_mouse_action_is_listed():
                if command_phrases.parse(p, navigation=False, actions=True, grid=False)]
     assert {"mouse grid", "left click", "right click"} <= set(no_grid)
     assert "click" not in no_grid and "five" not in no_grid
+
+
+def test_with_german_commands_the_cards_show_the_german_words_first(monkeypatch):
+    from tuxtalk import config
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    section = next(s for s in commands_reference.SECTIONS if s.title == "Punctuation")
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(command_language="de"))
+    assert commands_cards.spoken(section, commands_cards.german_commands()).startswith(
+        "Komma, Beistrich, comma: ,")
+    card = commands_cards.section_card(section, Gtk.SizeGroup(), german=True)
+    assert "Anführungszeichen unten" in card.get_accessible().get_description()
+
+
+def test_with_english_commands_the_cards_show_no_german(monkeypatch):
+    section = next(s for s in commands_reference.SECTIONS if s.title == "Punctuation")
+    text = commands_cards.spoken(section)
+    assert "Komma" not in text and "Anführungszeichen" not in text
