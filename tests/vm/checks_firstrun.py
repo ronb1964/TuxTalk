@@ -253,12 +253,18 @@ def ready(run):
 @check("First run", "defaults", "Default settings are right")
 def defaults(run):
     cfg = run.config()
-    wanted = {"model": '"parakeet-v3"', "device": run.vm.spec.expected_device,
-              "auto_period": "true", "auto_timeout_minutes": "5", "language_mode": '"auto"'}
-    wrong = [f"{k} = {cfg.get(k)} (expected {v})" for k, v in wanted.items() if cfg.get(k) != v]
+    chosen = {"model": '"parakeet-v3"', "device": run.vm.spec.expected_device}
+    # Since 0.25 first run writes only what it chose; a setting left out of
+    # config.toml is TuxTalk's default, so these must be absent or match.
+    defaults = {"auto_period": "true", "auto_timeout_minutes": "5", "language_mode": '"auto"'}
+    wrong = [f"{k} = {cfg.get(k)} (expected {v})" for k, v in chosen.items() if cfg.get(k) != v]
+    wrong += [f"{k} = {cfg[k]} (expected {v})" for k, v in defaults.items()
+              if k in cfg and cfg[k] != v]
     if wrong:
         return Outcome("fail", "; ".join(wrong))
-    return Outcome("pass", ", ".join(f"{k} = {v}" for k, v in wanted.items()))
+    return Outcome("pass", ", ".join(f"{k} = {v}" for k, v in chosen.items())
+                   + "; " + ", ".join(f"{k} = {cfg.get(k, f'{v} (default)')}"
+                                      for k, v in defaults.items()))
 
 
 @check("First run", "helper_hotkeys", "Hotkeys come from the hotkey helper")

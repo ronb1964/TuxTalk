@@ -20,6 +20,10 @@ say = "This is a test of the dictation system."
 say = "git status"
 tts = "Git, status."
 
+[terminal_new_line]
+say = "git status new line git log"
+tts = "Git, status. New line. Git, log."
+
 [noon_press_enter]
 say = "See you at noon, press enter."
 
@@ -54,6 +58,10 @@ say = "Is that right question mark"
 
 [german]
 say = "Die Straße ist groß."
+lang = "de"
+
+[german_commands]
+say = "Liebe Anna Komma neue Zeile wie geht es dir Fragezeichen"
 lang = "de"
 
 [your_words]

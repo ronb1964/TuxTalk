@@ -136,25 +136,31 @@ def beeps(run):
                    "beep)")
 
 
-def type_in_terminal(run, shot_name, key="f8"):
-    """Dictate "git status" into a terminal, holding *key* (a QEMU key name);
-    the Outcome: plain text, no stray character from the key."""
+def dictate_in_terminal(run, phrase_id, shot_name, key="f8"):
+    """Dictate *phrase_id* into a terminal, holding *key* (a QEMU key name):
+    (what reached the terminal, byte for byte; what Parakeet heard; shot)."""
     run.vm.ssh(f"rm -f {TERM_FILE}")
     command = run.vm.spec.terminal + ["bash", "-c", f"stty -icanon -echo; exec cat > {TERM_FILE}"]
     run.vm.session_background("terminal", *command)
     time.sleep(4)
     run.vm.click_centre()
     time.sleep(0.5)
-    _typed, _heard, mark = run.say("git_status", key=key, wait=False)
+    _typed, _heard, mark = run.say(phrase_id, key=key, wait=False)
     typed = run.wait_dictation(mark, sink="term")   # reads ~/tt/term.txt
     shot = run.shot(shot_name)
     run.vm.ssh("pkill -x cat", check=False)
     time.sleep(1)
     run.vm.tap("ctrl", "shift", "w")   # close the terminal window
     time.sleep(1)
+    return typed, heard_in(run.log_since(mark)), shot
+
+
+def type_in_terminal(run, shot_name, key="f8"):
+    """Dictate "git status" into a terminal, holding *key* (a QEMU key name);
+    the Outcome: plain text, no stray character from the key."""
+    typed, heard, shot = dictate_in_terminal(run, "git_status", shot_name, key)
     # Whatever words Parakeet heard, a terminal gets them plain: no capital
     # at the start, no period at the end, nothing from F8.
-    heard = heard_in(run.log_since(mark))
     plain = (heard[:1].lower() + heard[1:]).rstrip(".") if heard else "git status"
     typed_clean = (typed or "").rstrip(" ")
     if typed_clean == plain:
@@ -174,6 +180,23 @@ def terminal_plain(run):
     if blind:
         return Outcome("skip", blind)
     return type_in_terminal(run, "terminal")
+
+
+@check("Dictation", "terminal_new_line", "“New line” in a terminal types a space, never a line break")
+def terminal_new_line(run):
+    """A line break could run the half-said command in a shell that doesn't
+    hold pasted lines as text, so a terminal gets a space instead."""
+    blind = run.window_blind()
+    if blind:
+        return Outcome("skip", blind)
+    typed, heard, shot = dictate_in_terminal(run, "terminal_new_line", "terminal-new-line")
+    problems, typed = contains_all(typed, ["status", "log"],
+                                   absent=["\n", "\r", "new line", "New line"])
+    if problems:
+        return Outcome("fail", "; ".join(problems), expected="git status git log",
+                       typed=typed, heard=heard, screenshot=shot)
+    return Outcome("pass", "A space where “new line” was said, no line break",
+                   typed=typed, heard=heard, screenshot=shot)
 
 
 @check("Dictation", "handsfree_silence", "Hands-free stops by itself when nothing is said")
@@ -584,6 +607,22 @@ def swiss_german(run):
     run.set_config(numbers_as_digits=False, numbers_small_as_words=False, swiss_spelling=True)
     run.sink_ready()
     return pieces_outcome(run, "german", ["Strasse", "gross"], absent=["ß"])
+
+
+@check("Words and numbers", "german_commands", "Voice commands in German (Komma, neue Zeile)")
+def german_commands(run):
+    """The release's German commands, end to end: with "Voice commands in"
+    set to Deutsch, spoken marks and "neue Zeile" become marks and a line
+    break, and none of the command words is typed."""
+    with run.settings_put_back("command_language", "swiss_spelling"):
+        run.set_config(command_language="de", swiss_spelling=False)
+        run.sink_ready(fresh=True)
+        outcome = pieces_outcome(run, "german_commands", ["Anna,", "Wie geht es dir?"],
+                                 absent=["Komma", "Zeile", "Fragezeichen"])
+    if outcome.status == "pass" and "Anna,\nWie" not in (outcome.typed or ""):
+        outcome.status = "fail"
+        outcome.detail = "the marks are right, but “neue Zeile” made no line break"
+    return outcome
 
 
 @check("Words and numbers", "your_words", "Your Words for Parakeet")
