@@ -258,7 +258,10 @@ for this version, in plain words, from the CHANGELOG.
 git add <changed files>
 git commit -m "..."
 git push
-gh release create vX.X.X \
+git tag -m "TuxTalk X.X.X" vX.X.X     # signed: this repo's tag.gpgSign
+git tag -v vX.X.X                       # must say Good "git" signature
+git push origin vX.X.X
+gh release create vX.X.X --verify-tag \
   TuxTalk-vX.X.X-x86_64.AppImage \
   TuxTalk-vX.X.X-x86_64.AppImage.zsync \
   TalkType-vX.X.X-x86_64.AppImage.zsync \
@@ -272,6 +275,15 @@ gh release create vX.X.X \
 
 Note the .deb and .rpm use the bare version (`0.7.2`), NOT the `v` prefix the
 tag and AppImage use.
+
+**Every release tag is signed (since 0.25.0).** This repository's git config
+signs annotated tags with the SSH key `~/.ssh/tuxtalk_tag_signing` (no
+passphrase, used for nothing else; Ron's OK 2026-11-24), checked against
+`~/.config/git/tuxtalk_allowed_signers`; its public half is a Signing key on
+Ron's GitHub account, so the tag shows Verified. Never let `gh release create`
+make the tag itself (it would be unsigned): tag, check, push the tag, then
+`--verify-tag`. If `git tag -v` doesn't say Good, stop and fix the signing
+before publishing.
 
 **NEVER create a GitHub release without the .deb and .rpm.**
 They are how every Debian/Ubuntu/Mint and Fedora/RHEL user installs. Omitting
