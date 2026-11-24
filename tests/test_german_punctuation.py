@@ -60,6 +60,44 @@ def test_german_sentences_keep_mark_words_as_words(said, typed):
     assert normalize_text(said, lang="de") == typed
 
 
+@pytest.mark.parametrize("said, typed", [
+    # Parakeet wrote these as two words for a real German speaker.
+    ("Hallo, wie geht es dir? Frage Zeichen.", "Hallo, wie geht es dir?"),
+    ("Hallo Komma wie geht es dir Frage Zeichen", "Hallo, wie geht es dir?"),
+    ("Hallo Ausrufe Zeichen", "Hallo!"),
+    ("Bitte Doppel Punkt alles", "Bitte: alles."),
+    ("Max Binde Strich Moritz", "Max-Moritz."),
+    ("Liebe Anna Komma Zeilen Umbruch wie geht es dir",
+     f"Liebe Anna,{LINE_BREAK}Wie geht es dir."),
+    ("Anführungs Zeichen unten Hallo Anführungs Zeichen oben", "\u201eHallo\u201c."),
+    ("Warte Auslassungs Punkte gut", "Warte… Gut."),
+])
+def test_german_marks_the_engine_wrote_in_two_words_are_marks(said, typed):
+    assert normalize_text(said, lang="de") == typed
+
+
+@pytest.mark.parametrize("said, typed", [
+    # "Doppel Punkt" ending the dictation: doubles, and a full stop.
+    ("Wir spielen heute Doppel Punkt", "Wir spielen heute Doppel."),
+    # Held as words when two-word too: "wörtlich", after an article, in a run.
+    ("Schreib wörtlich Doppel Punkt", "Schreib Doppel Punkt."),
+    ("den Doppel Punkt", "Den Doppel Punkt."),
+    ("Punkt, Komma, Doppel Punkt", "Punkt, Komma, Doppel Punkt."),
+    # Kept as words, both halves are nouns and keep their capitals.
+    ("das frage zeichen ist falsch", "Das Frage Zeichen ist falsch."),
+    ("Da steht ein großes Frage Zeichen dahinter", "Da steht ein großes Frage Zeichen dahinter."),
+    # Only the compounds that aren't ordinary German as two words: a line
+    # with a full stop, "high" with a comma, thoughts and a verb.
+    ("Mach einen Strich Punkt", "Mach einen Strich."),
+    ("Das ist hoch Komma aber gut", "Das ist hoch, aber gut."),
+    ("In Gedanken strich sie über das Fell der Katze.",
+     "In Gedanken strich sie über das Fell der Katze."),
+    ("Diesen Gedanken strich er wieder.", "Diesen Gedanken strich er wieder."),
+])
+def test_two_words_that_are_ordinary_german_stay_words(said, typed):
+    assert normalize_text(said, lang="de") == typed
+
+
 def test_german_mark_words_wait_for_german_commands():
     """With the command language English, German words are dictation."""
     assert normalize_text("Hallo Komma wie geht es") == "Hallo Komma wie geht es."

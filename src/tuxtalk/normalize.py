@@ -255,10 +255,21 @@ _SINGLE_WORD_REPLACEMENTS = [
 # keeps what was said, its noun capitalised as German writes it ("um punkt
 # 12 Uhr" comes back "um Punkt 12 Uhr"); English placeholders give back a
 # fixed word instead.
-_GERMAN_MARK_WORDS = (r"komma|beistrich|punkt|fragezeichen|ausrufe?zeichen|ausrufungszeichen|"
-                      r"doppelpunkt|semikolon|strichpunkt|apostroph|hochkomma|hochstrich|"
-                      r"bindestrich|gedankenstrich|zeilenumbruch|neue\s+zeile|"
-                      r"neue[nr]?\s+absatz|anführungszeichen|gänsefü(?:ß|ss)chen|auslassungspunkte")
+# Said in a real voice, Parakeet can write a compound as two words ("Frage
+# Zeichen", "Doppel Punkt"), so these take either. "Strichpunkt",
+# "Hochkomma" and "Gedankenstrich" don't: "Strich Punkt", "hoch Komma" and
+# "in Gedanken strich sie" are ordinary German.
+_DE_QUESTION = r"frage\s?zeichen"
+_DE_EXCLAIM = r"(?:ausrufe?|ausrufungs)\s?zeichen"
+_DE_COLON = r"doppel\s?punkt"
+_DE_HYPHEN = r"binde\s?strich"
+_DE_QUOTES = r"(?:anführungs\s?zeichen|gänsefü(?:ß|ss)chen)"
+_DE_ELLIPSIS = r"auslassungs\s?punkte"
+_DE_NEW_LINE = r"(?:neue\s+zeile|zeilen\s?umbruch)"
+_GERMAN_MARK_WORDS = (rf"komma|beistrich|punkt|{_DE_QUESTION}|{_DE_EXCLAIM}|{_DE_COLON}|"
+                      rf"semikolon|strichpunkt|apostroph|hochkomma|hochstrich|{_DE_HYPHEN}|"
+                      rf"gedankenstrich|{_DE_NEW_LINE}|neue[nr]?\s+absatz|{_DE_QUOTES}|"
+                      rf"{_DE_ELLIPSIS}")
 _RE_GERMAN_HELD = re.compile(r"__LITDE_(\w+?)__")
 # Said with German commands on, a mark word is the mark, as in Dragon, and
 # "wörtlich" before it types the word. Rules can't parse German, so only
@@ -292,7 +303,7 @@ _GERMAN_CLAUSE_END = r"\b(?i:der|die|das|mit|sein|ihr|ein|ohne)\s+"
 _GERMAN_ADJECTIVE = (rf"{_GERMAN_DEGREE}(?-i:(?!(?:hier|immer|wieder|später|lieber|aber|oder|"
                       r"sehr|mehr|weiter|früher|länger|öfter|der)\s)[a-zäöüß]+(?:e|en|er|es))\s+")
 _GERMAN_CONJUNCTION = r"(?i:und|oder|aber|dass|ob|weil|wenn|bitte)\b"
-_GERMAN_SENTENCE_END = r"(?i:fragezeichen|ausrufe?zeichen|ausrufungszeichen|punkt)\b"
+_GERMAN_SENTENCE_END = rf"(?i:{_DE_QUESTION}|{_DE_EXCLAIM}|punkt)\b"
 _GERMAN_NUMBER = rf"(?:\d+|(?i:{GERMAN_NUMBER_PATTERN})\b)"
 
 
@@ -302,10 +313,10 @@ def _hold_german(m: re.Match) -> str:
 
 
 def _give_back_german(m: re.Match) -> str:
-    """A held German word as it was said, its noun (the last word) with a
-    capital."""
-    *before, noun = m.group(1).split("_")
-    return " ".join([*before, noun[:1].upper() + noun[1:]])
+    """A held German word as it was said, its nouns with a capital: every
+    word but the adjective of "neue Zeile" and "neuen Absatz"."""
+    return " ".join(word if word.lower().startswith("neue") else word[:1].upper() + word[1:]
+                    for word in m.group(1).split("_"))
 
 
 # Three or more mark words in a row with the engine's commas between them
@@ -331,7 +342,7 @@ _GERMAN_PROTECT_PATTERNS = [
     # "Komma-Fehler": a mark word starting a compound.
     re.compile(rf"(\b)({_GERMAN_MARK_WORDS})(?=-\w)", re.IGNORECASE),
     re.compile(rf"({_GERMAN_ARTICLE}|{_GERMAN_STRONG})({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
-    re.compile(rf"(\b(?i:ohne)\s+)(?!(?i:fragezeichen|ausrufe?zeichen|ausrufungszeichen)\b)"
+    re.compile(rf"(\b(?i:ohne)\s+)(?!(?i:{_DE_QUESTION}|{_DE_EXCLAIM})\b)"
                rf"({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
     re.compile(rf"(\b(?i:mit|ein)\s+)(?!{_GERMAN_SENTENCE_END})({_GERMAN_MARK_WORDS})\b"
                rf"(?!\s+{_GERMAN_CONJUNCTION})", re.IGNORECASE),
@@ -361,18 +372,18 @@ _RE_GERMAN_PAIR = re.compile("\u201e([^\u201e\u201c\u201d]*)\u201c")
 # "eckige Klammer auf" before "Klammer auf". German quotes are „…“, each
 # taking the spaces and the engine's pause comma on its inner side.
 _GERMAN_MARKS = [
-    (re.compile(r"\b(?:anführungszeichen|gänsefü(?:ß|ss)chen)\s+(?:auf|unten)\b[,.]?\s*",
+    (re.compile(rf"\b{_DE_QUOTES}\s+(?:auf|unten)\b[,.]?\s*",
                 re.IGNORECASE), "\u201e"),
-    (re.compile(r"[,\s]*\b(?:anführungszeichen|gänsefü(?:ß|ss)chen)\s+(?:zu|oben)\b",
+    (re.compile(rf"[,\s]*\b{_DE_QUOTES}\s+(?:zu|oben)\b",
                 re.IGNORECASE),
      _GERMAN_CLOSE),
-    (re.compile(r"[,\s]*\b(?:neue\s+zeile|zeilenumbruch)\b[,.:;\s]*", re.IGNORECASE),
+    (re.compile(rf"[,\s]*\b{_DE_NEW_LINE}\b[,.:;\s]*", re.IGNORECASE),
      LINE_BREAK),
     (re.compile(r"[,.\s]*\bneue[nr]?\s+absatz\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK * 2),
-    (re.compile(r"\bpunkt\s+punkt\s+punkt\b|\bauslassungspunkte\b", re.IGNORECASE), "…"),
-    (re.compile(_ENGINE_PERIOD + r"\b(?:ausrufe?zeichen|ausrufungszeichen)\b", re.IGNORECASE),
+    (re.compile(rf"\bpunkt\s+punkt\s+punkt\b|\b{_DE_ELLIPSIS}\b", re.IGNORECASE), "…"),
+    (re.compile(_ENGINE_PERIOD + rf"\b{_DE_EXCLAIM}\b", re.IGNORECASE),
      "!"),
-    (re.compile(_ENGINE_PERIOD + r"\bfragezeichen\b", re.IGNORECASE), "?"),
+    (re.compile(_ENGINE_PERIOD + rf"\b{_DE_QUESTION}\b", re.IGNORECASE), "?"),
     (re.compile(r"\bgeschweifte\s+klammer\s+auf\b", re.IGNORECASE), "{"),
     (re.compile(r"\bgeschweifte\s+klammer\s+zu\b", re.IGNORECASE), "}"),
     (re.compile(r"\beckige\s+klammer\s+auf\b", re.IGNORECASE), "["),
@@ -381,12 +392,13 @@ _GERMAN_MARKS = [
     (re.compile(r"\bklammer\s+zu\b", re.IGNORECASE), ")"),
     (re.compile(r"\b(?:komma|beistrich)\b,?", re.IGNORECASE), ","),
     (re.compile(r"\b(?:semikolon|strichpunkt)\b;?", re.IGNORECASE), ";"),
-    (re.compile(r"\bdoppelpunkt\b:?", re.IGNORECASE), ":"),
+    # "Doppel Punkt" ending a dictation is "doubles" and a full stop.
+    (re.compile(r"\bdoppel(?:punkt|\s+punkt(?!\W*$))\b:?", re.IGNORECASE), ":"),
     (re.compile(r"\bpunkt\b\.?", re.IGNORECASE), "."),
     (re.compile(r"\b(?:apostroph|hochkomma|hochstrich)\b", re.IGNORECASE), "'"),
     # German's dash between words is the en dash, with a space each side.
     (re.compile(r" *\bgedankenstrich\b *", re.IGNORECASE), " – "),
-    (re.compile(r" *\bbindestrich\b *", re.IGNORECASE), "-"),
+    (re.compile(rf" *\b{_DE_HYPHEN}\b *", re.IGNORECASE), "-"),
 ]
 
 
