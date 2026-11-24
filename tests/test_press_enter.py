@@ -70,6 +70,7 @@ def test_german_press_enter_and_tab_with_german_commands_on(raw, expected):
 @pytest.mark.parametrize("text, word", [
     ("Ich wollte noch sagen und", "und"),
     ("Das liegt daran, weil", "weil"),
+    ("Ich komme, wenn", "wenn"),
     ("Ich weiß das.", ""),
     ("Du kommst morgen, oder?", ""),
     ("Ich lade dich ein.", ""),

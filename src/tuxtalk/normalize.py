@@ -260,22 +260,33 @@ _GERMAN_MARK_WORDS = (r"komma|beistrich|punkt|fragezeichen|ausrufe?zeichen|ausru
 _RE_GERMAN_HELD = re.compile(r"__LITDE_(\w+?)__")
 # Words before a mark that make it a thing talked about ("auf den Punkt",
 # "ein großes Fragezeichen", "komm zum Punkt", "eine Zahl ohne Komma"):
-# an article, a possessive, "kein", "mit" or "ohne", or an article joined to
-# its preposition, maybe with an adjective or two after it, which German
-# writes small (a capital word there is a noun: "die Woche Fragezeichen" is
-# a question about the week).
-_GERMAN_ADJECTIVES = r"(?-i:(?:[a-zäöüß]+\s+)?[a-zäöüß]+(?:e|en|er|es|em))\s+"
+# an article, a possessive, "kein" or "ohne", or an article joined to its
+# preposition, maybe with an adjective after it.
 _GERMAN_ARTICLE = (r"\b(?i:den|dem|des|"
                    r"(?:ein|kein|mein|dein|unser|eur|euer)(?:e|en|em|er|es)?|"
                    # Bare "sein" and "ihr" are also a verb and a pronoun a
                    # sentence ends on ("Das kann nicht wahr sein Punkt").
                    r"(?:sein|ihr)(?:e|en|em|er|es)|"
                    r"dies(?:e|en|em|er|es)|jed(?:e|en|em|er|es)|"
-                   r"ohne|am|im|zum|zur|beim|vom|ins|ans)\s+")
+                   r"ohne|am|im|zum|zur|beim|vom|ins|ans|"
+                   # "mit" before a question mark, exclamation mark or full
+                   # stop ends a clause ("Kommst du mit Fragezeichen").
+                   r"mit(?!\s+(?:fragezeichen|ausrufe?zeichen|ausrufungszeichen|punkt)\b))\s+")
 # These end a clause as often as they start a noun ("Was ist das
-# Fragezeichen", "Kommst du mit Fragezeichen"), so the mark after one is a
-# word only with an adjective between them or more of the sentence after.
-_GERMAN_CLAUSE_END = r"\b(?i:der|die|das|mit)\s+"
+# Fragezeichen", "Kommst du mit Fragezeichen"): a mark after one is a word
+# only when more of the sentence follows.
+_GERMAN_CLAUSE_END = r"\b(?i:der|die|das|mit|sein|ihr)\s+"
+# An adjective between them and the mark, which German writes small (a
+# capital word there is a noun: "die Woche Fragezeichen" is a question about
+# the week). One ending -er, -es or -em is an adjective wherever it stands
+# ("ein ganz wichtiger Punkt"): no verb ends so, only the adverbs listed. One
+# ending -e or -en can be the verb that ends the clause ("Kannst du das
+# machen Fragezeichen"), so it counts only with more of the sentence after.
+_GERMAN_FIRM_ADJECTIVE = (r"(?-i:(?:[a-zäöüß]+\s+)?(?!(?:hier|immer|wieder|später|lieber|aber|"
+                          r"oder|sehr|mehr|weiter|früher|länger|öfter|wer|der)\s)"
+                          r"[a-zäöüß]+(?:er|es|em))\s+")
+_GERMAN_SOFT_ADJECTIVES = r"(?-i:(?:[a-zäöüß]+\s+)?[a-zäöüß]+(?:e|en|er|es|em))\s+"
+_GERMAN_MORE = r"(?=\s+[^\W\d_])"
 # A number, in digits or in words ("zwölf", "zwanzig", "einhundert").
 _GERMAN_NUMBER = (r"(?:\d+|(?i:ein|eins|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|"
                   r"elf|zwölf|null|[a-zäöüß]*(?:zehn|zig|ßig|hundert|tausend))\b)")
@@ -295,11 +306,11 @@ def _give_back_german(m: re.Match) -> str:
 
 # Three or more mark words in a row with the engine's commas between them
 # ("Punkt, Punkt, Komma, Strich" in the children's rhyme) are words; two
-# can be commands said with a pause ("Komma, neue Zeile"). So is "Punkt
-# für Punkt".
+# can be commands said with a pause ("Komma, neue Zeile"). So are "Punkt
+# für Punkt" and "null Komma nichts".
 _RE_GERMAN_MARK_RUN = re.compile(
     rf"\b(?:{_GERMAN_MARK_WORDS})(?:,\s+(?:{_GERMAN_MARK_WORDS})\b){{2,}}"
-    r"|\bpunkt\s+für\s+punkt\b",
+    r"|\bpunkt\s+für\s+punkt\b|\bnull\s+komma\s+nichts\b",
     re.IGNORECASE)
 _RE_GERMAN_MARK_WORD = re.compile(rf"()({_GERMAN_MARK_WORDS})", re.IGNORECASE)
 
@@ -312,12 +323,14 @@ def _hold_german_run(m: re.Match) -> str:
 _GERMAN_PROTECT_PATTERNS = [
     # "wörtlich Komma", "das Wort Punkt": the word itself, without "wörtlich".
     re.compile(rf"\b(?:wörtlich|das\s+wort)\s+()({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
-    re.compile(rf"({_GERMAN_ARTICLE}(?:{_GERMAN_ADJECTIVES})?)({_GERMAN_MARK_WORDS})\b",
+    # "Komma-Fehler": a mark word starting a compound.
+    re.compile(rf"(\b)({_GERMAN_MARK_WORDS})(?=-\w)", re.IGNORECASE),
+    re.compile(rf"({_GERMAN_ARTICLE}(?:{_GERMAN_FIRM_ADJECTIVE})?)({_GERMAN_MARK_WORDS})\b",
                re.IGNORECASE),
-    re.compile(rf"({_GERMAN_CLAUSE_END}{_GERMAN_ADJECTIVES})({_GERMAN_MARK_WORDS})\b",
+    re.compile(rf"({_GERMAN_CLAUSE_END}{_GERMAN_FIRM_ADJECTIVE})({_GERMAN_MARK_WORDS})\b",
                re.IGNORECASE),
-    re.compile(rf"({_GERMAN_CLAUSE_END})({_GERMAN_MARK_WORDS})\b(?=\s+[^\W\d_])",
-               re.IGNORECASE),
+    re.compile(rf"((?:{_GERMAN_ARTICLE}|{_GERMAN_CLAUSE_END})(?:{_GERMAN_SOFT_ADJECTIVES})?)"
+               rf"({_GERMAN_MARK_WORDS})\b{_GERMAN_MORE}", re.IGNORECASE),
     # "Punkt 12 Uhr", "um Punkt zwölf": the time, not a full stop.
     re.compile(rf"(\b)(punkt)(?=\s+{_GERMAN_NUMBER})", re.IGNORECASE),
     # "drei Komma fünf" is 3,5 (the engines mostly write it so already).

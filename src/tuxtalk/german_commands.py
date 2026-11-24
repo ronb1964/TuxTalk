@@ -169,19 +169,21 @@ _RULES = [
     (r"(.+) (öffnen|aufrufen|starten)",
      lambda m: f"{'start' if m[2] == 'starten' else 'open'} {_app(m[1])}"),
 ]
-_WINDOW_VERBS = {"schliessen": "close", "minimieren": "minimize", "maximieren": "maximize",
+_WINDOW_VERBS = {"schließen": "close", "minimieren": "minimize", "maximieren": "maximize",
                  "wiederherstellen": "restore"}
 
 
-def _swiss(text: str) -> str:
-    """*text* as Swiss German writes it, ss for ß: what's said is read so, and
-    the tables are, so "Fenster schließen" and "Fenster schliessen" match."""
-    return text.replace("ß", "ss")
+def _swiss(words: dict) -> dict:
+    """*words* ({said: meant}) with each said word's Swiss spelling too, ss
+    for ß ("schliessen"). Only the command's own words: an app's name is
+    found as it was said."""
+    return {**words, **{said.replace("ß", "ss"): meant for said, meant in words.items()}}
 
 
-_FIXED = {_swiss(said): english for said, english in _FIXED.items()}
-_VERBS_FIRST = {_swiss(form): _swiss(verb) for form, verb in _VERBS_FIRST.items()}
-_COMPILED = [(re.compile(_swiss(pattern)), build) for pattern, build in _RULES]
+_FIXED = _swiss(_FIXED)
+_VERBS_FIRST = _swiss(_VERBS_FIRST)
+_WINDOW_VERBS = _swiss(_WINDOW_VERBS)
+_COMPILED = [(re.compile(pattern.replace("ß", "(?:ß|ss)")), build) for pattern, build in _RULES]
 # A web address, read from the words as said: its dots, slashes and a
 # path's capitals stay ("geh zu example.com/Reset"). "Punkt" is its dot.
 _GO_TO = re.compile(
@@ -219,8 +221,10 @@ def to_english(text: str) -> str | None:
     if m := _SEARCH.match(text):
         return f"web search {m.group('words')}"
     if m := _GO_TO.match(text):
-        return "go to " + re.sub(r"(?i)\s*\bpunkt\b\s*", " dot ", m["first"] or m["last"])
-    said = german_verb_last(_swiss(normalize(text)), _VERBS_FIRST)
+        # A spoken "Punkt" is a dot in the host only: a path keeps its words.
+        host, slash, path = (m["first"] or m["last"]).partition("/")
+        return "go to " + re.sub(r"(?i)\s*\bpunkt\b\s*", " dot ", host) + slash + path
+    said = german_verb_last(normalize(text), _VERBS_FIRST)
     if not said:
         return None
     if english := _FIXED.get(said):

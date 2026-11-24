@@ -110,6 +110,14 @@ def test_without_smart_quotes_german_quotes_are_plain(monkeypatch):
     ("Kommst du mit Fragezeichen", "Kommst du mit?"),
     ("Was ist das Fragezeichen", "Was ist das?"),
     ("Das kann nicht wahr sein Punkt", "Das kann nicht wahr sein."),
+    # The verb or adverb that ends the clause is no adjective.
+    ("Kannst du das machen Fragezeichen", "Kannst du das machen?"),
+    ("Hast du das gesehen Fragezeichen", "Hast du das gesehen?"),
+    ("Ich muss das noch erledigen Punkt", "Ich muss das noch erledigen."),
+    ("Ich will einen haben Punkt", "Ich will einen haben."),
+    ("Wir machen das morgen Punkt", "Wir machen das morgen."),
+    ("Ich mag das hier Punkt", "Ich mag das hier."),
+    ("Er sagt das immer Punkt", "Er sagt das immer."),
     # Two marks with the engine's pause between them are both marks.
     ("Liebe Anna Komma, neue Zeile, wie geht es dir",
      f"Liebe Anna,{LINE_BREAK}Wie geht es dir."),
@@ -136,6 +144,14 @@ def test_more_german_marks_said_as_commands(said, typed):
     "Ich mag die neue Zeile im Gedicht.",
     "Setz einen neuen Absatz nach dem Titel.",
     "Mit diesem Semikolon bin ich nicht einverstanden.",
+    "Das ist ein wichtiger Punkt.",
+    "Da steht ein großes Fragezeichen.",
+    "Das war sein letzter Punkt.",
+    "Der Komma-Fehler ist ärgerlich.",
+    "Punkt-Abzug gibt es.",
+    "Das schreibt man mit Bindestrich.",
+    "In null Komma nichts war er da.",
+    "Das ist der springende Punkt bei der Sache.",
 ])
 def test_ordinary_german_sentences_stay_text(said):
     assert normalize_text(said, lang="de") == said

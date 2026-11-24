@@ -120,8 +120,8 @@ _UNFINISHED = frozenset({
 # German's, with voice commands in German. Not "aber", "oder" or "ein", which
 # end whole sentences ("Ich will aber!", "Du kommst, oder?", "Ich lade dich
 # ein."), nor an article that can be a pronoun ("Ich weiß das.").
-_GERMAN_UNFINISHED = _UNFINISHED | {"und", "weil", "dass", "eine", "einen", "des", "mein",
-                                     "dein", "unser", "äh", "ähm"}
+_GERMAN_UNFINISHED = _UNFINISHED | {"und", "weil", "dass", "wenn", "eine", "einen", "des",
+                                     "mein", "dein", "unser", "äh", "ähm"}
 
 
 def ends_unfinished(text: str, lang: str = "en") -> str:

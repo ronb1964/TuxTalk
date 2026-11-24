@@ -84,10 +84,14 @@ def test_each_german_phrase_listed_works_with_german_commands_on(kind, phrase, r
     if kind == "inline":
         typed = normalize.normalize_text(f"Apfel {phrase} Birne {phrase} Kirsche", lang="de")
         assert phrase.lower() not in typed.lower()
-        # The symbol the list shows for it, where the list shows one.
+        # What the list shows for it, once for each time it was said (the
+        # closing full stop is the dictation's own).
         symbol = result.split(" ")[0]
         if len(symbol) == 1:
-            assert symbol in typed
+            assert typed.count(symbol) == 2 + (symbol == ".")
+        elif "line break" in result:
+            breaks = 2 if result.startswith("double") else 1
+            assert typed.count(normalize.LINE_BREAK) == 2 * breaks
     elif kind == "key":
         key = "TAB" if "tab" in phrase.lower() else "ENTER"
         assert key_commands.split_key_command(f"Bis morgen, {phrase}", "de")[1] == key
