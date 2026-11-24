@@ -289,7 +289,8 @@ _GERMAN_CLAUSE_END = r"\b(?i:der|die|das|mit|sein|ihr|ein|ohne)\s+"
 # sentence follows ("der springende Punkt bei der Sache"), but not before
 # Komma: there it's the verb that ends a clause ("Wenn wir das machen Komma
 # dann klappt es").
-_GERMAN_ADJECTIVE = rf"{_GERMAN_DEGREE}(?-i:[a-zäöüß]+(?:e|en))\s+"
+_GERMAN_ADJECTIVE = (rf"{_GERMAN_DEGREE}(?-i:(?!(?:hier|immer|wieder|später|lieber|aber|oder|"
+                      r"sehr|mehr|weiter|früher|länger|öfter|der)\s)[a-zäöüß]+(?:e|en|er|es))\s+")
 _GERMAN_CONJUNCTION = r"(?i:und|oder|aber|dass|ob|weil|wenn|bitte)\b"
 _GERMAN_SENTENCE_END = r"(?i:fragezeichen|ausrufe?zeichen|ausrufungszeichen|punkt)\b"
 _GERMAN_NUMBER = rf"(?:\d+|(?i:{GERMAN_NUMBER_PATTERN})\b)"
@@ -338,8 +339,12 @@ _GERMAN_PROTECT_PATTERNS = [
                r"[^\W\d_])", re.IGNORECASE),
     re.compile(rf"({_GERMAN_CLAUSE_END}(?:{_GERMAN_ADJECTIVE})?)"
                rf"((?!komma\b|beistrich\b){_GERMAN_MARK_WORDS})\b(?=\s+[^\W\d_])", re.IGNORECASE),
+    # "Er hat den letzten Punkt vergessen", "Mit dem neuen Komma ist es besser".
+    re.compile(rf"({_GERMAN_ARTICLE}{_GERMAN_ADJECTIVE})({_GERMAN_MARK_WORDS})\b"
+               r"(?=\s+[^\W\d_])", re.IGNORECASE),
     # "Punkt 12 Uhr", "um Punkt zwölf", "um Punkt halb acht": the time.
-    re.compile(rf"(\b)(punkt)(?=\s+(?:{_GERMAN_NUMBER}|(?i:halb|viertel)\b))", re.IGNORECASE),
+    re.compile(rf"(\b)(punkt)(?=\s+(?:{_GERMAN_NUMBER}|(?i:halb|viertel|ein\s+uhr)\b))",
+               re.IGNORECASE),
     # "drei Komma fünf", "ein Komma fünf" are 3,5 and 1,5 (the engines mostly
     # write them so already).
     re.compile(rf"((?<!\w)(?:{_GERMAN_NUMBER}|(?i:ein)\b)\s+)(komma)(?=\s+{_GERMAN_NUMBER})",

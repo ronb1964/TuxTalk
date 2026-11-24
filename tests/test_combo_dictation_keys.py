@@ -271,6 +271,10 @@ def test_a_switched_layout_moves_a_combo_to_its_letters_new_key(monkeypatch):
         return Hotkeys(code, None, "", None, None,
                        combos=(combo_keys.ComboKey(code, (frozenset({LALT}),), "A"),))
     monkeypatch.setattr(hotkey_keys.Hotkeys, "from_settings", classmethod(from_settings))
+    claimed = []
+    monkeypatch.setattr(hotkeys, "_claim_desktop_hotkeys", claimed.append)
+    monkeypatch.setattr(hotkeys, "_log_ctrl_space_clashes", lambda keys: None)
+    monkeypatch.setattr(modifier_hotkeys, "read_compose_keys", lambda: None)
     cfg = Cfg()
     cfg.hotkey = "Alt+Y"
     keys = from_settings(Hotkeys, cfg)
@@ -280,9 +284,13 @@ def test_a_switched_layout_moves_a_combo_to_its_letters_new_key(monkeypatch):
                             built_for=("us", "", ""))
     assert hotkeys._recheck_layout(watch, cfg, [helper], keys, 0.0).hold_key == us_y
     made_on["layout"] = ("de", "", "")
+    # Not while a modifier is held: a combo may be half pressed.
+    assert hotkeys._recheck_layout(watch, cfg, [helper], keys, 0.0, {LALT}) is keys
     keys = hotkeys._recheck_layout(watch, cfg, [helper], keys, 0.0)
     assert keys.hold_key == de_y
     assert any(f"A:{de_y}" in specs for specs in asked)
+    # X11 grabs keys, not letters: the desktop's claims are made again.
+    assert claimed == [cfg]
 
 
 def test_an_error_on_one_key_event_doesnt_lose_the_release_read_with_it(

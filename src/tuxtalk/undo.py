@@ -53,7 +53,7 @@ GERMAN_NUMBER_PATTERN = (
     r"|(?:drei|vier|fünf|sech|sieb|acht|neun)zehn"
     r"|(?:(?:ein|zwei|drei|vier|fünf|sechs|sieben|acht|neun)und)?"
     r"(?:zwanzig|dreißig|vierzig|fünfzig|sechzig|siebzig|achtzig|neunzig)"
-    r"|[a-zäöüß]*(?:hundert|tausend)[a-zäöüß]*)")
+    r"|(?:ein|zwei|drei|vier|fünf|sechs|sieben|acht|neun)?(?:hundert|tausend)[a-zäöüß]*)")
 GERMAN_UNITS = {'wort': 'word', 'wörter': 'word', 'worte': 'word',
                  'satz': 'sentence', 'sätze': 'sentence',
                  'absatz': 'paragraph', 'absätze': 'paragraph'}

@@ -212,6 +212,13 @@ def test_a_clause_ending_in_a_verb_takes_the_mark(said, typed):
     "Schreib das mit Bindestrich und ohne Leerzeichen.",
     "Das ist die richtige neue Zeile für dich.",
     "Punkt eins der Tagesordnung.",
+    "Er hat den letzten Punkt vergessen.",
+    "Ich habe einen wichtigen Punkt vergessen.",
+    "Zum letzten Punkt komme ich gleich.",
+    "Mit dem neuen Komma ist es besser.",
+    "Sein letzter Punkt war gut.",
+    "Ihr letzter Punkt war gut.",
+    "Ich bin um Punkt ein Uhr da.",
 ])
 def test_mark_words_as_nouns_mid_sentence_stay_words(said):
     assert normalize_text(said, lang="de") == said

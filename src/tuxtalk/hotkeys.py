@@ -608,7 +608,7 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
             _forget_lost_presses(devices, keys)
             logger.info("Applied settings change without restarting")
 
-        keys = _recheck_layout(level3_watch, cfg, devices, keys, current_time)
+        keys = _recheck_layout(level3_watch, cfg, devices, keys, current_time, held_modifiers)
 
         dead_devices = _read_key_events(devices, keys, held_modifiers, cfg, svc, current_time)
         if dead_devices:
@@ -764,14 +764,16 @@ class _Level3Watch:
 
 
 def _recheck_layout(level3_watch, cfg: Settings, devices, keys: "hotkey_keys.Hotkeys",
-                    now: float) -> "hotkey_keys.Hotkeys":
-    """While idle with a combo dictation key, apply a changed answer of
-    *level3_watch* (_Level3Watch): a switched layout makes the keys again
-    from the settings (a combo's letter may sit elsewhere now), and the
-    combos, the helper's watch list and the modifier-key check follow. The
-    desktop's claims name letters, not keys, so they aren't made again (KDE
-    lets go of the keys while it does). The keys to use from now on."""
-    if not _letter_combos(keys) or rs.state.is_recording:
+                    now: float, held_modifiers=()) -> "hotkey_keys.Hotkeys":
+    """While idle with a combo dictation key and no modifier held (a combo
+    may be half pressed), apply a changed answer of *level3_watch*
+    (_Level3Watch): a switched layout makes the keys again from the
+    settings, a combo's letter maybe sitting elsewhere now, and then the
+    desktop's claims are made again too (X11 grabs keys, not letters); a
+    changed AltGr alone only moves the combos, the helper's watch list and
+    the modifier-key check (KDE lets go of the keys while it claims). The
+    keys to use from now on."""
+    if not _letter_combos(keys) or rs.state.is_recording or held_modifiers:
         return keys
     found = level3_watch.poll(now)
     if found is None:
@@ -781,7 +783,9 @@ def _recheck_layout(level3_watch, cfg: Settings, devices, keys: "hotkey_keys.Hot
     if layout != level3_watch.built_for:
         level3_watch.built_for = layout
         now_keys = hotkey_keys.Hotkeys.from_settings(cfg)
-    if now_keys != keys or level3 != _combo_presses.level3:
+    if now_keys != keys:
+        _watch(cfg, devices, now_keys, level3)
+    elif level3 != _combo_presses.level3:
         _follow_combos(cfg, devices, now_keys, level3)
     return now_keys
 
