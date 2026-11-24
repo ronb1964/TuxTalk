@@ -45,7 +45,7 @@ def determine_injection_method(injection_mode: str) -> tuple[str, str]:
     Decide between typing and pasting for this dictation.
 
     Args:
-        injection_mode: User's configured mode ("type", "paste", or "auto")
+        injection_mode: User's configured mode ("type", "type_only", "paste", or "auto")
 
     Returns:
         Tuple of (actual_mode, reason)
@@ -63,7 +63,7 @@ def determine_injection_method(injection_mode: str) -> tuple[str, str]:
     # If not auto mode, use user's choice directly
     if injection_mode.lower() != "auto":
         mode = "paste" if injection_mode.lower() == "paste" else "type"
-        return (mode, f"User selected {mode} mode")
+        return (mode, f"User selected {injection_mode.lower()} mode")
 
     # Pasting needs wl-copy, which only talks to a Wayland compositor. On X11
     # every paste would fail and fall back to typing anyway.
@@ -213,7 +213,8 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
         if outcome is not None:
             return outcome
     elif not (use_paste and _paste_whole(text, injection_start)):
-        text, inject_ok = _type_all(text, injection_start)
+        with keyboard_output.clipboard_fallback(allowed=injection_mode.lower() != "type_only"):
+            text, inject_ok = _type_all(text, injection_start)
 
     return _remember_delivered(text, inject_ok)
 

@@ -17,6 +17,7 @@ import pytest
 from tuxtalk import focused_window
 from tuxtalk import delivery
 from tuxtalk import voice_commands
+from tuxtalk import keyboard_layout
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 
@@ -312,6 +313,42 @@ def test_injection_method_respects_user_choice_on_host(monkeypatch):
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     assert delivery.determine_injection_method("paste")[0] == "paste"
     assert delivery.determine_injection_method("type")[0] == "type"
+
+
+@pytest.mark.parametrize("wayland_session", [True, False])
+def test_clipboard_free_typing_refuses_untypable_text(monkeypatch, wayland_session):
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: wayland_session)
+    monkeypatch.setattr(focused_window, "look", lambda: ("editor", None))
+    pastes = []
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda text: pastes.append(text) or True)
+    monkeypatch.setattr(keyboard_output, "paste_text_x11",
+                        lambda text: pastes.append(text) or True)
+
+    def untypable(text):
+        raise keyboard_layout.UntypableText("us", text)
+
+    monkeypatch.setattr(keyboard_layout, "layout_key_events", untypable)
+
+    assert delivery.inject_text("unsupported", "type_only") == "failed"
+    assert pastes == []
+    assert delivery.inject_text("unsupported", "type") == "ok"
+    assert pastes == ["unsupported"]
+
+
+def test_clipboard_free_typing_uses_keystrokes_for_kde_editor_newlines(monkeypatch, wayland):
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kate")
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kate", None))
+    typed = []
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: typed.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter",
+                        lambda: typed.append("Shift+Enter") or True)
+    monkeypatch.setattr(keyboard_output, "paste_text",
+                        lambda text: pytest.fail("this mode must not paste"))
+
+    assert delivery.inject_text("first\nsecond", "type_only") == "ok"
+    assert typed == ["first", "Shift+Enter", "second"]
 
 
 def test_auto_mode_pastes_without_scanning_processes(monkeypatch):

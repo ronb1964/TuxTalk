@@ -178,8 +178,8 @@ def _values():
     else:
         typing_para = (
             "Still nothing in one particular app? <b>Preferences → Advanced → Fine-tuning →\n"
-            "    Text Injection</b>: Auto pastes (it types on X11); try\n"
-            "    <b>Keystroke Typing</b> or <b>Clipboard Paste</b> there.")
+            "    Text Injection</b>. Try <b>Keystroke Typing</b> or <b>Clipboard Paste</b>.\n"
+            "    <b>Keystroke Typing (No Clipboard)</b> keeps dictation off the clipboard.")
 
     no_hotkey_block = _no_hotkey_tips(is_flatpak, keys_where)
     uninstall_text = _uninstall_text(is_flatpak)

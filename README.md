@@ -589,6 +589,11 @@ auto_period = true        # Add period at end of sentences
 <summary><b>Troubleshooting</b></summary>
 
 ### Text not appearing?
+- To keep dictated text off the clipboard, open **Preferences → Advanced →
+  Fine-tuning → Text Injection** and choose **Keystroke Typing (No Clipboard)**.
+  If your keyboard layout can't type a character, the dictation is still
+  available under **Recent Dictations** in the tray menu. Flatpak already
+  inserts dictation by typing through the desktop's input portal.
 - Look in `~/.config/tuxtalk/tuxtalk.log` for "Made TuxTalk's virtual keyboard".
   If it says "Can't make TuxTalk's virtual keyboard" instead, open Preferences →
   Advanced → Show system check and click Fix Typing Permissions

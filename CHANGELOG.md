@@ -3,6 +3,12 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## Unreleased
+
+- Choose **Keystroke Typing (No Clipboard)** under **Preferences → Advanced →
+  Fine-tuning → Text Injection** to keep dictated text off the clipboard.
+  The full text is still available under **Recent Dictations**.
+
 ## [0.24.0] - 2026-11-19
 
 - On GNOME, the TuxTalk extension now draws the recording indicator itself,

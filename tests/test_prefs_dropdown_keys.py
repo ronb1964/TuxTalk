@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 from gi.repository import Gdk, Gtk
 
+from gtk_text import find
 from tuxtalk import prefs_tab
 from tuxtalk.config import Settings
 
@@ -64,6 +65,21 @@ def _focused(combo):
     combo.grab_focus()
     _settle()
     return combo
+
+
+def test_text_injection_dropdown_can_select_and_display_clipboard_free_typing(
+        monkeypatch, prefs_window):
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    prefs = prefs_window()
+    label = "Keystroke Typing (No Clipboard)"
+    combo = find(prefs.window, Gtk.ComboBoxText, label)
+
+    assert combo.get_active_id() == "auto"
+    combo.set_active_id("type_only")
+    assert prefs.config["injection_mode"] == "type_only"
+
+    reopened = prefs_window(injection_mode="type_only")
+    assert find(reopened.window, Gtk.ComboBoxText, label).get_active_text() == label
 
 
 @pytest.mark.parametrize("key", ["Up", "Down", "Page_Down", "Home", "End"])

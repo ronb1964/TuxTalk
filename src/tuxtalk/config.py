@@ -114,7 +114,7 @@ HOTKEY_CHOICES = {
     "Scroll Lock": "KEY_SCROLLLOCK",
     CTRL_SPACE: "KEY_SPACE",
 }
-VALID_INJECTION_MODES = {"type", "paste", "auto"}
+VALID_INJECTION_MODES = {"type", "type_only", "paste", "auto"}
 
 VALID_INDICATOR_POSITIONS = {
     "center", "top-left", "top-center", "top-right",
@@ -358,8 +358,9 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
         problems.append(("mode", f"Invalid mode '{s.mode}'. Must be 'hold' or 'toggle'"))
 
     if s.injection_mode.lower() not in VALID_INJECTION_MODES:
+        options = ", ".join(sorted(VALID_INJECTION_MODES))
         problems.append(("injection_mode", f"Invalid injection_mode '{s.injection_mode}'. "
-                                           "Must be 'type', 'paste', or 'auto'"))
+                                           f"Valid options: {options}"))
 
     if s.auto_timeout_minutes <= 0:
         problems.append(("auto_timeout_minutes",

@@ -218,8 +218,8 @@ class _ThisThread(threading.local):
     window it may go into, else None; whether it's a dictation, which never
     goes into a password field; the dictation Esc may cancel (a
     recording_state.Message), else None; whether its pastes keep the user's
-    clipboard (_keeping); and a last check its keys must pass right
-    before the first goes down, else None (a held send's space on its own
+    clipboard (_keeping); whether typing can fall back to paste; and a last
+    check its keys pass before the first goes down, else None (a held send's space on its own
     may not go out with Alt or a dictation key down:
     send_countdown.give_back_space)."""
     sends = 0
@@ -227,6 +227,7 @@ class _ThisThread(threading.local):
     no_password_field = False
     cancel_with = None
     keep_clipboard = False
+    allow_clipboard_fallback = True
     last_check = None
 
 
@@ -253,6 +254,11 @@ def only_into(window):
     through the Flatpak's portal alike, whose handshake can take minutes.
     Another window by then: virtual_keyboard.GaveUp("moved"), nothing sent."""
     return _on_this_thread(into=window)
+
+
+def clipboard_fallback(*, allowed):
+    """Whether typing on this thread may paste unsupported characters or line breaks."""
+    return _on_this_thread(allow_clipboard_fallback=allowed)
 
 
 def delivering(into):
@@ -422,21 +428,23 @@ def deliver_lines(parts, put, before_break_s: float, after_break_s: float,
 
 def type_text(text: str) -> bool:
     """Type text, its line-break markers as Shift+Enter, or in KDE's editors
-    as a pasted newline (_paste_newline). Returns True if it was actually
-    typed into the focused app, False if none of it was (deliver_lines).
+    as a pasted newline (_paste_newline) when clipboard fallback is allowed.
+    Returns True if it was typed into the focused app, False if none of it
+    was (deliver_lines).
     Raises virtual_keyboard.StoppedPartway when a later line or a line
     break failed after earlier lines went in: told "Couldn't type the
     dictation", the user would paste it all again over them."""
     acting = focused_window.acts_as(focused_window.window_class())
-    in_kde_editor = (acting or "").lower() in KDE_EDITOR_CLASSES_LOWER
+    paste_breaks = (this_thread.allow_clipboard_fallback
+                    and (acting or "").lower() in KDE_EDITOR_CLASSES_LOWER)
     lines = text.split(LINE_BREAK)
     # The line breaks there are pastes, and so is a line holding an emoji:
     # the user's clipboard is kept from the first and comes back after the
     # last, whatever the "Restore clipboard" setting. That's off so a pasted
     # dictation can be pasted again, and these pastes are only parts of one.
-    with _on_this_thread(keep_clipboard=in_kde_editor and len(lines) > 1):
+    with _on_this_thread(keep_clipboard=paste_breaks and len(lines) > 1):
         delivered = deliver_lines(lines, type_text_raw, 0.05, 0.05,
-                                  send_break=_paste_newline if in_kde_editor else None)
+                                  send_break=_paste_newline if paste_breaks else None)
     if delivered.stopped and delivered.went_in(lines):
         raise virtual_keyboard.StoppedPartway(
             f"{delivered.parts} of {len(lines)} lines",
@@ -457,8 +465,8 @@ def type_text_raw(text: str) -> bool:
     layout (keyboard_layout). True only if it was typed.
 
     Text the layout has no keys for (an emoji, Latin text on a Ukrainian
-    layout) is pasted instead, which works on any layout. Without a virtual
-    keyboard (no access to /dev/uinput), wtype, where the desktop has one.
+    layout) is pasted if clipboard fallback is allowed. Without a virtual
+    keyboard (no access to /dev/uinput), use wtype where the desktop has one.
     Raises virtual_keyboard.StoppedPartway when the keyboard failed partway:
     some of the text is in the app, and nothing may type it again; and
     virtual_keyboard.GaveUp when typing stopped for a dictation key held
@@ -469,6 +477,10 @@ def type_text_raw(text: str) -> bool:
         events = keyboard_layout.layout_key_events(text)
     except keyboard_layout.UntypableText as e:
         layout, blocker = e.args
+        if not this_thread.allow_clipboard_fallback:
+            logger.info(f"The {layout} keyboard layout can't type {live.loggable(blocker)}; "
+                        "clipboard fallback is off")
+            return False
         logger.info(f"The {layout} keyboard layout can't type {live.loggable(blocker)}; "
                     "pasting instead")
         if is_wayland_session():
