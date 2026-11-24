@@ -248,6 +248,91 @@ _SINGLE_WORD_REPLACEMENTS = [
     (re.compile(r" *\b(?:hyphen|dash)\b *", re.IGNORECASE), "-"),
 ]
 
+# --- German, when voice commands are said in German (lang "de") ---
+# The mark words. A German one said as a word is held as a placeholder that
+# keeps what was said, its noun capitalised as German writes it ("um punkt
+# 12 Uhr" comes back "um Punkt 12 Uhr"); English placeholders give back a
+# fixed word instead.
+_GERMAN_MARK_WORDS = (r"komma|beistrich|punkt|fragezeichen|ausrufe?zeichen|ausrufungszeichen|"
+                      r"doppelpunkt|semikolon|strichpunkt|apostroph|hochkomma|hochstrich|"
+                      r"bindestrich|gedankenstrich|zeilenumbruch|neue\s+zeile|"
+                      r"neue[nr]?\s+absatz")
+_RE_GERMAN_HELD = re.compile(r"__LITDE_(\w+?)__")
+# Words before a mark that make it a thing talked about: an article, a
+# pronoun, "kein", "mit" or "ohne", or an article joined to its preposition
+# ("zum", "im"), maybe with one adjective ("ein großes Fragezeichen", "auf
+# den Punkt", "komm zum Punkt", "eine Zahl ohne Komma").
+_GERMAN_DETERMINER = (r"\b(?i:ein|eine|einen|einem|einer|eines|der|die|das|den|dem|des|"
+                      r"kein|keine|keinen|keinem|dieser|diese|dieses|diesen|diesem|"
+                      r"jeder|jedes|jeden|jedem|mein|meinen|sein|seinen|ihr|ihren|"
+                      r"mit|ohne|am|im|zum|zur|beim|vom|ins|ans)\s+"
+                      r"(?:[^\W\d_]+(?:e|en|er|es|em)\s+)?")
+_GERMAN_NUMBER = (r"(?:\d|(?i:ein|eins|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|"
+                  r"elf|zwölf|null)\b)")
+
+
+def _hold_german(m: re.Match) -> str:
+    """The protected mark word *m* matched as a placeholder that keeps it."""
+    return m.group(1) + "__LITDE_" + "_".join(m.group(2).split()) + "__"
+
+
+def _give_back_german(m: re.Match) -> str:
+    """A held German word as it was said, its noun (the last word) with a
+    capital."""
+    *before, noun = m.group(1).split("_")
+    return " ".join([*before, noun[:1].upper() + noun[1:]])
+
+
+# Mark words in a row with the engine's commas between them ("Punkt, Punkt,
+# Komma, Strich" in the children's rhyme) are words: said as commands, the
+# engine writes no comma between them.
+_RE_GERMAN_MARK_RUN = re.compile(rf"\b(?:{_GERMAN_MARK_WORDS})(?:,\s+(?:{_GERMAN_MARK_WORDS})\b)+",
+                                 re.IGNORECASE)
+_RE_GERMAN_MARK_WORD = re.compile(rf"()({_GERMAN_MARK_WORDS})", re.IGNORECASE)
+
+
+def _hold_german_run(m: re.Match) -> str:
+    """Every mark word in the run *m* matched, held as a word."""
+    return _RE_GERMAN_MARK_WORD.sub(_hold_german, m.group())
+
+
+_GERMAN_PROTECT_PATTERNS = [
+    # "wörtlich Komma", "das Wort Punkt": the word itself, without "wörtlich".
+    re.compile(rf"\b(?:wörtlich|das\s+wort)\s+()({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
+    re.compile(rf"({_GERMAN_DETERMINER})({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
+    # "Punkt 12 Uhr", "um Punkt zwölf": the time, not a full stop.
+    re.compile(rf"(\b)(punkt)(?=\s+{_GERMAN_NUMBER})", re.IGNORECASE),
+    # "drei Komma fünf" is 3,5 (the engines mostly write it so already).
+    re.compile(rf"((?<!\w){_GERMAN_NUMBER}\s+)(komma)(?=\s+{_GERMAN_NUMBER})", re.IGNORECASE),
+    re.compile(r"(\b)(punkt)(?=\s+für\s+punkt\b)", re.IGNORECASE),
+]
+
+# Phrases first, as in English: "Punkt Punkt Punkt" before "Punkt",
+# "eckige Klammer auf" before "Klammer auf".
+_GERMAN_MARKS = [
+    (re.compile(r"[,\s]*\b(?:neue\s+zeile|zeilenumbruch)\b[,.:;\s]*", re.IGNORECASE),
+     LINE_BREAK),
+    (re.compile(r"[,.\s]*\bneue[nr]?\s+absatz\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK * 2),
+    (re.compile(r"\bpunkt\s+punkt\s+punkt\b|\bauslassungspunkte\b", re.IGNORECASE), "…"),
+    (re.compile(_ENGINE_PERIOD + r"\b(?:ausrufe?zeichen|ausrufungszeichen)\b", re.IGNORECASE),
+     "!"),
+    (re.compile(_ENGINE_PERIOD + r"\bfragezeichen\b", re.IGNORECASE), "?"),
+    (re.compile(r"\bgeschweifte\s+klammer\s+auf\b", re.IGNORECASE), "{"),
+    (re.compile(r"\bgeschweifte\s+klammer\s+zu\b", re.IGNORECASE), "}"),
+    (re.compile(r"\beckige\s+klammer\s+auf\b", re.IGNORECASE), "["),
+    (re.compile(r"\beckige\s+klammer\s+zu\b", re.IGNORECASE), "]"),
+    (re.compile(r"\bklammer\s+auf\b", re.IGNORECASE), "("),
+    (re.compile(r"\bklammer\s+zu\b", re.IGNORECASE), ")"),
+    (re.compile(r"\b(?:komma|beistrich)\b,?", re.IGNORECASE), ","),
+    (re.compile(r"\b(?:semikolon|strichpunkt)\b;?", re.IGNORECASE), ";"),
+    (re.compile(r"\bdoppelpunkt\b:?", re.IGNORECASE), ":"),
+    (re.compile(r"\bpunkt\b\.?", re.IGNORECASE), "."),
+    (re.compile(r"\b(?:apostroph|hochkomma|hochstrich)\b", re.IGNORECASE), "'"),
+    (re.compile(r"\bgedankenstrich\b", re.IGNORECASE), "—"),
+    (re.compile(r" *\bbindestrich\b *", re.IGNORECASE), "-"),
+]
+
+
 # --- _tidy_punctuation: spaces inside brackets and quotes, before marks,
 #     and runs of marks, in this order ---
 def _colon_after_dash(m: re.Match) -> str:
@@ -301,7 +386,7 @@ _RE_TRAILING_COMMA = re.compile(r",$")
 _RE_ENDS_PUNCTUATED = re.compile(r"[.?!…:;][\"'”’)\]}]*$")
 # Negative lookbehind: don't capitalize after single-letter abbreviations
 # ("e.g. that" / "U.S. economy" must not become "e.g. That" / "U.S. Economy").
-_RE_CAP_AFTER_ENDER = re.compile(r"(?<![A-Za-z]\.[A-Za-z])([.?!…]\s+)([a-z])")
+_RE_CAP_AFTER_ENDER = re.compile(r"(?<![A-Za-z]\.[A-Za-z])([.?!…]\s+)([a-zäöü])")
 # Standalone lowercase "i" → "I" (also catches "i'll", "i'm", "i've", "i'd"
 # because the apostrophe is a word boundary). Case-sensitive: an existing
 # "I" is left alone. Words like "in", "it", "iPad" are not matched because
@@ -686,20 +771,27 @@ def _join_spoken_addresses(text: str) -> str:
     return _RE_EMAIL_JOINED.sub(_join_email, text)
 
 
-def _protect_command_words(text: str) -> str:
+def _protect_command_words(text: str, lang: str) -> str:
     """Placeholders for command words that are meant as words: "literal
-    period", and nouns such as "period of time" or "a dash of salt"."""
+    period", and nouns such as "period of time" or "a dash of salt"; with
+    *lang* "de" the German ones too ("auf den Punkt")."""
+    if lang == "de":
+        text = _RE_GERMAN_MARK_RUN.sub(_hold_german_run, text)
+        for pat in _GERMAN_PROTECT_PATTERNS:
+            text = pat.sub(_hold_german, text)
     for pat, placeholder in (*_LITERAL_PATTERNS, *_CONTEXT_PROTECT_PATTERNS):
         text = pat.sub(placeholder, text)
     return text
 
 
-def _spoken_marks_to_symbols(text: str) -> str:
+def _spoken_marks_to_symbols(text: str, lang: str) -> str:
     """Spoken punctuation and breaks as symbols: "comma" is ",", "new line"
-    LINE_BREAK. Quotes first, each a mark or the word (spoken_quotes), then
-    the phrases before single words ("question mark" before "mark")."""
+    LINE_BREAK, and with *lang* "de" "Komma" too. Quotes first, each a mark
+    or the word (spoken_quotes), then the phrases before single words
+    ("question mark" before "mark")."""
     text = mark_spoken_quotes(text)
-    for pat, repl in (*_MULTI_WORD_REPLACEMENTS, *_SINGLE_WORD_REPLACEMENTS):
+    german = _GERMAN_MARKS if lang == "de" else ()
+    for pat, repl in (*german, *_MULTI_WORD_REPLACEMENTS, *_SINGLE_WORD_REPLACEMENTS):
         text = pat.sub(repl, text)
     return text
 
@@ -786,7 +878,7 @@ def _restore_protected_words(text: str) -> str:
     """The words _protect_command_words held, and a soft break's three spaces."""
     for placeholder, word in (*LITERAL_RESTORE.items(), (_SOFT_BREAK, "   ")):
         text = text.replace(placeholder, word)
-    return text
+    return _RE_GERMAN_HELD.sub(_give_back_german, text)
 
 
 def _finish_addresses(text: str) -> str:
@@ -796,10 +888,11 @@ def _finish_addresses(text: str) -> str:
     return _fix_email_spacing(text)
 
 
-def normalize_text(text: str, auto_period: bool = True) -> str:
+def normalize_text(text: str, auto_period: bool = True, lang: str = "en") -> str:
     """Spoken punctuation -> symbols; tidy punctuation; auto-capitalize; keep newlines/tabs.
 
-    auto_period mirrors the "Ensure period at end of sentences" preference.
+    auto_period mirrors the "Ensure period at end of sentences" preference;
+    *lang* is the command language, "de" adding the German mark words.
     It is honoured *here* as well as in append_auto_punct: this pass ends every
     line with a full stop and runs first, so otherwise unchecking the
     preference would do nothing.
@@ -811,8 +904,8 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     text = _join_spoken_addresses(text)
     # Everything inside "open quote ... close quote" is kept as said.
     text, quoted_sections = _hold_quoted(text)
-    text = _protect_command_words(text)
-    text = _spoken_marks_to_symbols(text)
+    text = _protect_command_words(text, lang)
+    text = _spoken_marks_to_symbols(text, lang)
     text = _tidy_punctuation(text)
     # Times before the spacing and capitals, which would otherwise read the
     # "m." of "a. m." as a sentence end ("meet at 9 a. m. Tomorrow").

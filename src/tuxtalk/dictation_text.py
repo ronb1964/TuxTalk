@@ -5,7 +5,8 @@ and the AI's self-corrections when they're on.
 
 What the user's settings say comes in as *settings*: anything with
 live_settings' names (commands, words, numbers_mode, numbers_language,
-remove_fillers, ai_corrections, ai_engine, swiss_spelling, loggable), and
+command_language, remove_fillers, ai_corrections, ai_engine, swiss_spelling,
+loggable), and
 live_settings itself in the service. Whether the dictation carries on the
 last sentence is the caller's to say, since that depends on the window."""
 from collections.abc import Callable
@@ -114,6 +115,7 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     text = normalize_text(
         processed if smart_quotes else processed.replace("\u201c","\"").replace("\u201d","\""),
         auto_period=auto_period,
+        lang=settings.command_language,
     )
     # A lone "open quote" or "close quote" becomes a curly quote inside
     # normalize_text, so the preference is applied to its output as well.
