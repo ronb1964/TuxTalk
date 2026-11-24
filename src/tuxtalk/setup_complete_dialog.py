@@ -38,7 +38,12 @@ def _ready_tips(is_flatpak):
     keys this user has, where the menu is, and launch at login when on."""
     from .config import load_config
     cfg = load_config()
-    tips = ['💡 Say "period", "comma" or "new line" as you talk']
+    # In German for German voice commands: the rest of TuxTalk is English, so
+    # this line is how a German speaker learns the commands are theirs too.
+    tips = (['💡 Sprachbefehle gehen auch auf Deutsch: sag „Komma“, „neue Zeile“ oder '
+             '„Enter drücken“. Alle Befehle stehen im TuxTalk-Menü unter Voice Commands.']
+            if getattr(cfg, "command_language", "en") == "de"
+            else ['💡 Say "period", "comma" or "new line" as you talk'])
     if not is_flatpak and getattr(cfg, "toggle_hotkey", ""):
         tips.append(f"⏯️ Or tap <b>{GLib.markup_escape_text(cfg.toggle_hotkey)}</b> "
                     "to start, and tap it again to stop")

@@ -12,7 +12,9 @@ before 0.15.0, so older entries use that name.
   the verb last as most say it or first ("öffne Firefox"). Quotes come out
   German („…“), and "Punkt 12 Uhr" or "auf den Punkt" stay words. English
   commands keep working beside them, and the command language is its own
-  setting, apart from the language you dictate. The words came from
+  setting, apart from the language you dictate. A new install set up for
+  German starts with German commands on, and its last setup screen says
+  so in German. The words came from
   hmsgde and jskvbinmv on #49: thank you both. Self-corrections ("nein
   warte") aren't in German yet.
 - Remove filler words takes German's "äh" and "ähm" too, and keeps a

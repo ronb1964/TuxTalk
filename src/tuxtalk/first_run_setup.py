@@ -102,11 +102,18 @@ def _use(model, device=None):
 
 def _save_choice(result):
     """Save the setup the welcome card showed. The update notice is marked
-    shown, since a new install starts on the recommendation already."""
+    shown, since a new install starts on the recommendation already. Voice
+    commands are set to the language dictated when TuxTalk has commands in
+    it: someone dictating German says "Komma", and English is understood
+    with them too. Only here, at first run: an existing setup keeps its
+    choice."""
     from tuxtalk.config import save_changes
+    from tuxtalk.settings_schema import COMMAND_LANGUAGES
+    language = result.get("dictation_language", "")
     try:
         save_changes(model=result["model"], device=result["device"],
-                      dictation_language=result.get("dictation_language", ""),
+                      dictation_language=language,
+                      command_language=language if language in COMMAND_LANGUAGES else "en",
                       recommend_notice_shown=True)
     except Exception as e:
         logger.warning(f"Could not save the first-run setup: {e}")

@@ -378,3 +378,14 @@ def test_setup_complete_promises_a_start_at_login_only_when_it_is_on(setup_compl
     monkeypatch.setattr(config, "load_config", lambda: config.Settings(launch_at_login=on))
     shown = " ".join(setup_complete())
     assert ("start automatically when you log in" in shown) is on
+
+
+@pytest.mark.parametrize("language, commands", [("de", "de"), ("en", "en"), ("ja", "en"),
+                                                ("", "en")])
+def test_a_german_first_run_gets_german_voice_commands(env, language, commands):
+    """Someone dictating German says "Komma"; English is understood with
+    German commands too, and every other language keeps English ones."""
+    cfg, _calls = env
+    fr._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu",
+                               "dictation_language": language})
+    assert cfg.command_language == commands
