@@ -20,7 +20,7 @@ The order matters, first match wins:
 import re
 from dataclasses import dataclass
 
-from . import mouse_phrases, voice_navigation
+from . import german_commands, mouse_phrases, voice_navigation
 from .app_commands import OpenRequest, app_name, parse as parse_open
 from .mouse_phrases import MouseRequest
 from .undo import NUMBER_WORDS
@@ -174,7 +174,7 @@ _NO_SUCH_DESKTOP = re.compile(
 
 _SEARCH = re.compile(r"^\s*web\s+search\s*[,:]?\s+(?P<words>.+?)[\s.!?]*$", re.IGNORECASE)
 _GO_TO = re.compile(r"^\s*(?:go\s+to|open)\s+(?P<rest>.+)$", re.IGNORECASE)
-_LITERAL = re.compile(r"^\s*literal\s+(?P<rest>.+)$", re.IGNORECASE)
+_LITERAL = re.compile(r"^\s*(?:literal|wörtlich)\s+(?P<rest>.+)$", re.IGNORECASE)
 
 ADDRESS_ENDINGS = frozenset({
     "com", "org", "net", "io", "gov", "edu", "app", "dev", "co", "uk", "de", "ca", "au",
@@ -277,12 +277,15 @@ def parse(text: str, *, navigation: bool, actions: bool, grid: bool = False,
     """What *text* commands, or None when it's dictation to type.
 
     *navigation* is select and move being on, *actions* the voice commands,
-    *grid* the mouse grid being on screen, *lang* the command language.
+    *grid* the mouse grid being on screen, *lang* the command language: with
+    "de" a German command is read as the English one it means.
     """
     if navigation and (command := voice_navigation.parse(text, lang)):
         return command
     if not actions:
         return None
+    if lang == "de" and (request := _from_german(text, navigation, actions, grid)):
+        return request
     if m := _SEARCH.match(text):
         return SearchRequest(m.group("words"))
     said = normalize(text)
@@ -296,6 +299,13 @@ def parse(text: str, *, navigation: bool, actions: bool, grid: bool = False,
         return _address_request(text)
     return (_window(said) or _address_request(text) or parse_open(text)
             or mouse_phrases.parse(said, grid))
+
+
+def _from_german(text: str, navigation: bool, actions: bool, grid: bool):
+    """What the German command *text* asks, read as the English one it
+    means; None when it is no German command."""
+    english = german_commands.to_english(text)
+    return english and parse(english, navigation=navigation, actions=actions, grid=grid)
 
 
 def literal_words(raw: str, *, navigation: bool, actions: bool, grid: bool = False,
