@@ -26,25 +26,40 @@ import re
 _SPOKEN_EDIT = re.compile(r"^\s*(?:please\s+)?edit\s+that\b"
                           r"(?P<pause>[\s]*[,.:;!?-])?\s*(?P<rest>.*?)\s*$",
                           re.IGNORECASE | re.DOTALL)
-_EDIT_VERBS = frozenset("""make change turn remove delete take add put replace rewrite reword
+_EDIT_WORDS = frozenset("""make change turn remove delete take add put replace rewrite reword
     fix correct shorten lengthen expand simplify use say write translate capitalize
     capitalise uppercase lowercase bold italicize underline swap move cut drop
-    spell format convert""".split())
+    spell format convert please can could""".split())
+# German, with voice commands in German: "bearbeite das, mach es kürzer",
+# or the verb last, "das bearbeiten, ...". The instruction goes to the AI as
+# any instruction the exact rules below don't know does.
+_GERMAN_SPOKEN_EDIT = re.compile(
+    r"^\s*(?:bitte\s+)?(?:(?:bearbeite|bearbeit|ändere|änder)\s+das|das\s+(?:bearbeiten|ändern))"
+    r"\b(?P<pause>[\s]*[,.:;!?-])?\s*(?P<rest>.*?)\s*$", re.IGNORECASE | re.DOTALL)
+_GERMAN_EDIT_WORDS = frozenset({
+    "mach", "mache", "ändere", "änder", "schreib", "schreibe", "entferne", "entfern", "lösche",
+    "lösch", "füge", "ersetze", "ersetz", "kürze", "kürz", "übersetze", "übersetz",
+    "korrigiere", "korrigier", "formuliere", "formulier", "setze", "setz", "nimm", "verwandle",
+    "wandle", "bitte", "kannst", "könntest"})
 
 
-def spoken_edit(raw: str):
+def spoken_edit(raw: str, lang: str = "en"):
     """The instruction in "edit that, make it shorter": "make it shorter";
     "" for "edit that" alone (the next phrase says what); None when the
     dictation doesn't start with "edit that", or what follows it reads as
-    a sentence ("edit that file")."""
-    m = _SPOKEN_EDIT.match(raw or "")
-    if m is None:
-        return None
-    rest = m.group("rest")
-    if not rest or m.group("pause"):
-        return rest
-    first = re.sub(r"[^a-z]", "", rest.split()[0].lower())
-    return rest if first in _EDIT_VERBS or first in ("please", "can", "could") else None
+    a sentence ("edit that file"). With *lang* "de", "bearbeite das, ..."
+    too."""
+    german = ((_GERMAN_SPOKEN_EDIT, _GERMAN_EDIT_WORDS),) if lang == "de" else ()
+    for pattern, words in (*german, (_SPOKEN_EDIT, _EDIT_WORDS)):
+        m = pattern.match(raw or "")
+        if m is None:
+            continue
+        rest = m.group("rest")
+        if not rest or m.group("pause"):
+            return rest
+        first = re.sub(r"[^\w]", "", rest.split()[0].lower())
+        return rest if first in words else None
+    return None
 
 
 # --- the instruction, tidied ------------------------------------------------------------

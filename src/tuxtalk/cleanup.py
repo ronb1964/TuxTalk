@@ -14,16 +14,18 @@ tab" is a real tab character by then, so these rules only ever touch spaces.
 """
 import re
 
-# Hesitation sounds. Deliberately narrow: "hmm" is often meant ("Hmm, not
-# sure"), "er" is too close to real text, and "you know"/"like" depend on
-# meaning, so none of those are touched.
-_FILLER = r"(?:u+m+|u+h+m*|erm)"
+# Hesitation sounds, English and German ("äh", "ähm", "öhm"). Deliberately
+# narrow: "hmm" is often meant ("Hmm, not sure"), "er" is too close to real
+# text, and "you know"/"like" depend on meaning, so none of those are touched.
+_FILLER = r"(?:u+m+|u+h+m*|erm|ä+h+m*|ö+h+m*)"
 
 # Words that are correctly doubled in ordinary English: "I know that that is
-# true", "she had had enough", "what it is is...", "very very", "so so".
-# The AI's corrections are held to the same list (correction_safety).
+# true", "she had had enough", "what it is is...", "very very", "so so"; and
+# German's article after a relative pronoun ("die Frau, die die Zeitung liest",
+# "das Kind, das das Buch hat"). The AI's corrections are held to the same
+# list (correction_safety).
 LEGIT_DOUBLES = {"that", "had", "is", "do", "very", "so", "bye", "no", "yeah", "ha", "really",
-                 "far", "long"}
+                 "far", "long", "die", "das", "der", "den", "dem"}
 
 # Numbers are read out digit by digit ("five five five", "4 4 7 1"), so a
 # repeated number is a phone number or PIN, never a stutter. The AI's

@@ -63,3 +63,15 @@ def test_german_sentences_keep_mark_words_as_words(said, typed):
 def test_german_mark_words_wait_for_german_commands():
     """With the command language English, German words are dictation."""
     assert normalize_text("Hallo Komma wie geht es") == "Hallo Komma wie geht es."
+
+
+@pytest.mark.parametrize("said, cleaned", [
+    ("Ich wollte äh morgen kommen.", "Ich wollte morgen kommen."),
+    ("Ähm, das passt.", "Das passt."),
+    ("Wir öhm sehen uns.", "Wir sehen uns."),
+    # German's doubled article is meant, and stays.
+    ("Die Frau die die Zeitung liest.", "Die Frau die die Zeitung liest."),
+])
+def test_german_fillers_go_and_meant_doubles_stay(said, cleaned):
+    from tuxtalk.cleanup import clean_fillers_and_repeats
+    assert clean_fillers_and_repeats(said) == cleaned

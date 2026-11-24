@@ -156,11 +156,20 @@ _FIX_WORD_PHRASES = frozenset({
 })
 
 
+# The same in German, with voice commands in German.
+_GERMAN_FIX_WORD_PHRASES = frozenset({
+    "wort korrigieren", "das wort korrigieren", "korrigiere das wort", "korrigier das wort",
+    "letztes wort korrigieren", "das letzte wort korrigieren", "korrigiere das letzte wort",
+    "das korrigieren", "korrigiere das", "korrigier das", "wort verbessern",
+})
+
+
 def handle_fix_word(raw: str, beeps_on: bool) -> bool:
     """"fix that word": open Fix a Word over the app, on the newest dictation.
     True when the dictation was that command."""
     said = " ".join(re.sub(r"[^\w\s]", " ", raw.lower()).split())
-    if said not in _FIX_WORD_PHRASES:
+    german = said in _GERMAN_FIX_WORD_PHRASES and live.command_language == "de"
+    if said not in _FIX_WORD_PHRASES and not german:
         return False
     logger.info("Voice command: fix that word")
     # Right after a dictation, in its window, Fix a Word can also fix it in

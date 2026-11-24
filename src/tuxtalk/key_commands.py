@@ -102,9 +102,13 @@ def split_key_command(raw: str, lang: str = "en") -> tuple[str, str]:
 # Not "with" or "of": a sentence can end on either ("to play around with",
 # "what it's made of"), and holding back a finished message looks as if
 # sending were off.
+# German's are here too, but not "das" or "der", which can end a whole
+# sentence ("Ich weiß das."), nor "die", which can end an English one.
 _UNFINISHED = frozenset({
     "and", "but", "or", "because", "the", "a", "an", "if",
     "my", "your", "our", "their", "um", "uh",
+    "und", "aber", "oder", "weil", "dass", "wenn", "ein", "eine", "einen", "den", "dem",
+    "des", "mein", "dein", "unser", "äh", "ähm",
 })
 
 

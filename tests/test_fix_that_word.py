@@ -47,6 +47,18 @@ def test_inside_a_sentence_it_is_typed(opened, said):
     assert opened == []
 
 
+@pytest.mark.parametrize("said", ["Wort korrigieren.", "Korrigiere das Wort", "das letzte Wort korrigieren"])
+def test_the_german_phrases_open_fix_a_word_with_german_commands_on(opened, monkeypatch, said):
+    from tuxtalk import live_settings
+    monkeypatch.setattr(live_settings, "command_language", "de")
+    assert voice_commands.handle_fix_word(said, False) is True
+    assert opened == ["tuxtalk.fix_word_dialog"]
+
+
+def test_the_german_phrase_is_typed_with_english_commands(opened):
+    assert voice_commands.handle_fix_word("Wort korrigieren", False) is False
+
+
 def test_a_window_that_cannot_start_says_so(monkeypatch):
     notices = []
     monkeypatch.setattr(explain, "start_helper_window",

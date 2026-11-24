@@ -64,6 +64,16 @@ def test_german_press_enter_and_tab_with_german_commands_on(raw, expected):
     assert split_key_command(raw, "de") == expected
 
 
+@pytest.mark.parametrize("text, word", [
+    ("Ich wollte noch sagen und", "und"),
+    ("Wir treffen uns, aber", "aber"),
+    ("Ich weiß das.", ""),
+])
+def test_a_german_dictation_cut_off_holds_the_automatic_enter(text, word):
+    from tuxtalk.key_commands import ends_unfinished
+    assert ends_unfinished(text) == word
+
+
 def test_german_press_enter_waits_for_german_commands():
     """With the command language English, "Enter drücken" is dictation."""
     assert split_key_command("Bis morgen, Enter drücken.") == ("Bis morgen, Enter drücken.", "")

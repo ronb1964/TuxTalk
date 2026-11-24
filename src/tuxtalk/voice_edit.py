@@ -679,7 +679,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     if waiting is not None:
         instruction, target = raw, waiting
     else:
-        instruction = voice_edit_rules.spoken_edit(raw)
+        instruction = voice_edit_rules.spoken_edit(raw, live.command_language)
         if instruction is None:
             return False
         target = voice_commands.spoken_edit_target()
