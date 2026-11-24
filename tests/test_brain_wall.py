@@ -2,7 +2,8 @@
 
 The brain is the dictation code that turns sound into text and text into
 what gets typed: the text rules, the spoken commands, the AI's requests,
-the correction check, the microphone, silence and voice detection. A
+the correction check, the microphone, silence and voice detection, the
+sounds TuxTalk plays and the thread that transcribes and types in turn. A
 Windows or Mac TuxTalk would run it under screens of its own, so it stays
 free of GTK, D-Bus, the Linux keyboard and the other modules
 that exist only on Linux. A module joins BRAIN once everything it imports,
@@ -20,13 +21,13 @@ import pytest
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 
 BRAIN = frozenset({
-    "ai_cleanup", "app_commands", "audio_windows", "chunk_text", "chunking", "cleanup",
-    "command_phrases", "correction_safety", "custom_commands", "dictation_keys",
-    "dictation_text",
-    "hallucinations", "key_commands", "language_codes", "logger", "mic_stream",
-    "mouse_phrases", "normalize", "parakeet_bias", "sentence_fit", "silence",
-    "spoken_numbers", "spoken_quotes", "undo", "voice_detector", "voice_edit_rules",
-    "voice_navigation", "word_spelling",
+    "ai_cleanup", "app_commands", "audio_windows", "beeps", "chunk_meter", "chunk_text",
+    "chunking", "cleanup", "command_phrases", "correction_safety", "custom_commands",
+    "dictation_keys", "dictation_text", "dictation_worker", "hallucinations",
+    "indicator_dsp", "key_commands", "language_codes", "logger", "mic_stream",
+    "mouse_grid_model", "mouse_phrases", "normalize", "parakeet_bias", "resampling",
+    "sentence_fit", "silence", "spoken_numbers", "spoken_quotes", "undo", "voice_detector",
+    "voice_edit_rules", "voice_navigation", "word_spelling",
 })
 
 # What only Linux (or Unix) has, or its desktop: GTK and GLib, D-Bus, the
