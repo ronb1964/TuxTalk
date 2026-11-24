@@ -12,8 +12,7 @@ import functools
 import os
 from dataclasses import dataclass
 
-from .settings_schema import display_locale
-from .language_codes import locale_language
+from .language_codes import display_locale, locale_language
 from .parakeet_engine import PARAKEET_LANGUAGES, effective_device, is_parakeet
 from .cuda_download import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .whisper_vulkan import ENGINE_SIZE_TEXT

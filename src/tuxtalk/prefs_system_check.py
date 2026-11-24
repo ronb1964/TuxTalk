@@ -556,7 +556,7 @@ class SystemCheck(Tab):
 
     def _dictation_keys(self):
         """The hold and toggle keys set."""
-        from .config import HOTKEY_KEYS
+        from .settings_schema import HOTKEY_KEYS
         return [self.config.get(key, "") or "" for key in HOTKEY_KEYS]
 
     def _shortcuts_the_helper_refuses(self):

@@ -739,8 +739,11 @@ def test_the_dictation_hands_its_left_off_space_to_the_send(monkeypatch):
 
 
 def test_the_wait_goes_up_to_four_seconds():
-    assert not any(k == "press_enter_delay" for k, _ in settings_schema._validation_problems(config.Settings(press_enter_delay=4.0)))
-    assert any(k == "press_enter_delay" for k, _ in settings_schema._validation_problems(config.Settings(press_enter_delay=5.0)))
+    def problems(delay):
+        settings = settings_schema.Settings(press_enter_delay=delay)
+        return [k for k, _ in settings_schema._validation_problems(settings)]
+    assert "press_enter_delay" not in problems(4.0)
+    assert "press_enter_delay" in problems(5.0)
 
 
 def test_switching_windows_stops_the_countdown_at_once(countdown, monkeypatch):

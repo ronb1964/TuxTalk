@@ -109,7 +109,7 @@ def _speech(win, model, device):
 
 
 def _changed_since_open(stub):
-    from tuxtalk.config import changed_keys
+    from tuxtalk.settings_schema import changed_keys
 
     return changed_keys(stub._config_at_open, stub.config)
 
@@ -253,7 +253,7 @@ class MergingStub(StubPrefs):
     (.on_disk) is kept unless this window changed it too."""
 
     def save_config(self):
-        from tuxtalk.config import merge_changed_keys
+        from tuxtalk.settings_schema import merge_changed_keys
         base = {**self._config_at_open, **self.on_disk}
         merged = merge_changed_keys(self._config_at_open, self.config, dict(base))
         self._saved_before, self._config_at_open = base, dict(merged)

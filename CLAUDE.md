@@ -338,7 +338,7 @@ skip it by its name (`virtual_keyboard.NAME`, the helper's
 keyboards shaped like a pointer too (Logitech's, issue #26). Access to /dev/uinput comes from the hotkey
 helper's udev rule (`secure_input.py`) or the older input-group rule.
 
-Timing (`KEY_DELAY_MS`, config `key_delay`, default 2 ms after each key
+Timing (`settings_schema.KEY_DELAY_MS`, setting `key_delay`, default 2 ms after each key
 event) was measured in the VMs: 1 ms is clean in every app class tested, 0 ms
 overflows the kernel's buffer, and the delay also sets how long a frozen
 desktop survives (about 64 key events' worth). Never lower it without the

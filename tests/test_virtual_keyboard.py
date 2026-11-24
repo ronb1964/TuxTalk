@@ -4,6 +4,7 @@ Every test here runs on the recording keyboard from conftest.py; a real one
 would type into whatever window has the focus on the computer running them.
 """
 import itertools
+import sys
 
 import pytest
 
@@ -182,6 +183,17 @@ def test_making_the_keyboard_waits_for_nothing(monkeypatch):
                                                 virtual_keyboard.NAME, "tuxtalk/keyboard")
     assert waits == [] and device.device is None
     device.close()
+
+
+def test_without_python_evdev_nothing_is_typed_and_the_log_says_why(monkeypatch):
+    """A source install missing python-evdev: the keyboard isn't made and the
+    reason is kept for the log, where the error handler itself used to fail
+    on the name it couldn't import."""
+    monkeypatch.setitem(sys.modules, "evdev", None)
+    monkeypatch.setattr(virtual_keyboard, "_device", None)
+    monkeypatch.setattr(virtual_keyboard, "_failure", None)
+    assert virtual_keyboard._open() is None
+    assert "evdev" in virtual_keyboard._failure
 
 
 # --- a keyboard that fails partway: what landed is never sent again ------------

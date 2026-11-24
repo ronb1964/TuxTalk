@@ -416,7 +416,8 @@ def update_reason(running):
 
 def saved_keys():
     """The hold and toggle keys in the settings, for needs_update."""
-    from .config import HOTKEY_KEYS, load_config
+    from .config import load_config
+    from .settings_schema import HOTKEY_KEYS
     cfg = load_config()
     return [getattr(cfg, key) for key in HOTKEY_KEYS]
 

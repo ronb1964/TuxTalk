@@ -166,7 +166,7 @@ def test_the_error_names_the_setting_that_is_wrong():
 
 
 def test_valid_settings_validate_cleanly():
-    settings_schema.validate_config(config.Settings())  # must not raise
+    settings_schema.validate_config(settings_schema.Settings())  # must not raise
 
 
 def test_loading_a_config_with_one_bad_value_falls_back_for_that_key(config_path):

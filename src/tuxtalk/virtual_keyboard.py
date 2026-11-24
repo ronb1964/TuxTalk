@@ -112,20 +112,30 @@ def _make_device():
     return write_only_device(_capabilities(), NAME, "tuxtalk/keyboard")
 
 
+def _cannot_make(error):
+    """Log why the keyboard can't be made, once until the reason changes."""
+    global _failure
+    reason = f"{type(error).__name__}: {error}"
+    if reason != _failure:
+        logger.error(f"Can't make TuxTalk's virtual keyboard ({reason}); nothing can be typed")
+        _failure = reason
+
+
 def _open():
     """The keyboard, made the first time it's needed; None if it can't be."""
     global _device, _ready_at, _failure
     if _device is not None:
         return _device
+    # Imported on its own: when python-evdev is missing, an except clause
+    # naming UInputError would fail on the name itself.
     try:
         from evdev import UInputError
+    except ImportError as e:
+        return _cannot_make(e)
+    try:
         _device = _make_device()
-    except (OSError, UInputError, ImportError) as e:
-        reason = f"{type(e).__name__}: {e}"
-        if reason != _failure:
-            logger.error(f"Can't make TuxTalk's virtual keyboard ({reason}); nothing can be typed")
-            _failure = reason
-        return None
+    except (OSError, UInputError) as e:
+        return _cannot_make(e)
     _ready_at = time.monotonic() + SETTLE_S
     _failure = None
     logger.info("Made TuxTalk's virtual keyboard")

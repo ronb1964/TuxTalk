@@ -28,7 +28,8 @@ import dbus.mainloop.glib
 from dataclasses import asdict
 from . import prefs_ipc
 from . import config
-from .config import ConfigNotLoadedError, changed_keys, merge_changed_keys, rewrite_config
+from .config import ConfigNotLoadedError, rewrite_config
+from .settings_schema import changed_keys, merge_changed_keys
 
 logger = setup_logger(__name__)
 
@@ -685,7 +686,7 @@ class PreferencesWindow:
         the hotkey silently does nothing, so a change like auto-punctuation
         must not cause one.
         """
-        from .config import needs_service_restart
+        from .settings_schema import needs_service_restart
 
         if not needs_service_restart(changed):
             logger.info(f"Applied without restart: {sorted(changed) or 'no changes'}")
@@ -819,7 +820,7 @@ class PreferencesWindow:
                 changed, saved_at):
             # (A hotkey question stands in for this.) Whether the service
             # really restarted, not just that the change applied.
-            from .config import needs_service_restart
+            from .settings_schema import needs_service_restart
             show_message(self.window, Gtk.MessageType.INFO, "Settings applied successfully!",
                          "Dictation is restarting with the new settings."
                          if needs_service_restart(changed)

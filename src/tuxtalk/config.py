@@ -23,7 +23,7 @@ from .logger import setup_logger
 from .settings_schema import Settings, apply_toml, repaired, settings_text, toml_string
 
 # setup_logger, so every process that reads settings also has the log file
-# handler that "Damaged config…" and "Resetting invalid setting…" go to.
+# handler that "Damaged config…" goes to.
 logger = setup_logger(__name__)
 
 # Detect dev mode - use separate paths for dev vs production
@@ -55,6 +55,29 @@ def _data_home():
 
 
 CONFIG_PATH = os.path.join(_config_home(), CONFIG_DIR, "config.toml")
+
+
+def has_battery(power_dir="/sys/class/power_supply") -> bool:
+    """Whether this computer runs on a battery (a laptop). A wireless mouse's
+    or keyboard's battery doesn't count: the kernel marks those scope=Device."""
+    try:
+        names = os.listdir(power_dir)
+    except OSError:
+        return False
+    def read(name, what):
+        try:
+            with open(os.path.join(power_dir, name, what)) as f:
+                return f.read().strip()
+        except OSError:
+            return ""
+    return any(read(name, "type") == "Battery" and read(name, "scope") != "Device"
+               for name in names)
+
+
+def defaults() -> Settings:
+    """The default settings for this computer: Settings' own, with Power
+    Saving (the auto-timeout) on where it runs on a battery."""
+    return Settings(auto_timeout_enabled=has_battery())
 
 
 class ConfigNotLoadedError(Exception):
@@ -143,7 +166,7 @@ def _recover_if_still_damaged() -> Settings:
         return _recover_from_backup()
     if not data:
         return _recover_from_backup()
-    fresh = Settings()
+    fresh = defaults()
     apply_toml(fresh, data)
     return fresh
 
@@ -151,7 +174,7 @@ def _recover_if_still_damaged() -> Settings:
 def _backup_settings():
     """(the settings in config.toml.bak, or the defaults, whether they came
     from it)."""
-    recovered = Settings()
+    recovered = defaults()
     backup = f"{CONFIG_PATH}.bak"
     if os.path.exists(backup):
         try:
@@ -265,7 +288,7 @@ def load_config() -> Settings:
 
     _config_read_failed = False
 
-    s = Settings()
+    s = defaults()
     if os.path.exists(CONFIG_PATH):
         try:
             data = load_toml_file(CONFIG_PATH)
@@ -283,7 +306,7 @@ def load_config() -> Settings:
             # rewriting them would destroy settings that only needed a chmod.
             logger.error(f"Could not read {CONFIG_PATH}: {e}; using defaults for now, "
                          "the file left untouched")
-            s = dataclasses.replace(_config_cache) if _config_cache else Settings()
+            s = dataclasses.replace(_config_cache) if _config_cache else defaults()
             # Hand out defaults so the app keeps running, but mark them as
             # never-loaded: save_config() must refuse to write them back over
             # a file it could not read, or any later save (the daily update
@@ -469,20 +492,6 @@ def rewrite_config(merge) -> dict:
     return values
 
 
-def changed_keys(original: dict, current: dict) -> set:
-    """Keys whose value differs between *original* and *current*.
-
-    A key missing from *original* counts as changed — it is a value the user
-    has now set. Shared with merge_changed_keys so there is exactly one
-    definition of "changed"; the Preferences restart decision and the config
-    merge must never disagree about what the user touched.
-    """
-    return {
-        key for key, value in current.items()
-        if key not in original or original[key] != value
-    }
-
-
 def record_update_check(timestamp: str) -> None:
     """Persist the update-check timestamp without dragging other settings back.
 
@@ -496,150 +505,6 @@ def record_update_check(timestamp: str) -> None:
         save_changes(last_update_check=timestamp)
     except Exception as e:
         logger.warning(f"Could not save the update-check time: {e}")
-
-
-def merge_changed_keys(original: dict, current: dict, base: dict) -> dict:
-    """Overlay only the keys that changed between *original* and *current*
-    onto *base*, returning base.
-
-    Used by the Preferences window to avoid clobbering settings another
-    process (the tray) wrote while the window was open: *original* is the
-    config as loaded when the window opened, *current* is the UI state at
-    save time, and *base* is a fresh read of the file on disk. Keys the
-    user didn't touch keep their on-disk values; keys the user changed win.
-    """
-    for key in changed_keys(original, current):
-        base[key] = current[key]
-    return base
-
-
-# ---------------------------------------------------------------------------
-# Which settings need the dictation service restarted
-# ---------------------------------------------------------------------------
-#
-# Restarting rebuilds the speech model — roughly ten seconds during which the
-# hotkey does nothing at all — so only the settings that need it trigger one.
-#
-# Most settings are read off the long-lived cfg object at the point of use
-# (every dictation ends by passing cfg.beeps, cfg.auto_period and the rest into
-# stop_recording), so refreshing that object's fields makes them live. The rest
-# are re-applied explicitly by the service's config watcher.
-
-# The model is constructed once at startup; changing either rebuilds it.
-RESTART_REQUIRED_KEYS = {
-    "model",
-    "device",
-    "graphics_card",
-    # Turning the indicator on would mean constructing a GTK window from the
-    # polling path mid-flight. Low value, real risk — restart instead.
-    "recording_indicator",
-}
-
-LIVE_APPLIED_KEYS = {
-    # Read off cfg at the moment they are used — live once cfg is refreshed.
-    "beeps",
-    "notify",
-    "smart_quotes",
-    "language",
-    "auto_space",
-    "auto_period",
-    "injection_mode",
-    "auto_timeout_enabled",
-    "auto_timeout_minutes",
-    "mic",  # already re-resolved by the service when a stream fails
-
-    # Copied into locals or module state at startup; the watcher re-applies them.
-    "hotkey",
-    "toggle_hotkey",
-    "voice_commands_hotkey",
-    "paste_last_hotkey",
-    "mode",
-    "key_delay",
-    "indicator_position",
-    "indicator_size",
-    "indicator_offset_x",
-    "indicator_offset_y",
-    "indicator_style",
-    "indicator_color_mode",
-    "indicator_color",
-    "indicator_sensitivity",
-    "indicator_follows_window",
-
-    # The dictation service never reads these at all — they belong to
-    # Preferences and the tray. Listing them stops a "Launch at login" toggle
-    # costing a ten-second model reload.
-    "launch_at_login",
-    "typing_wpm",          # only the Stats tab uses it
-    "auto_check_updates",
-    "last_update_check",
-    "language_mode",
-    # Read into a module global on each reload, used on each dictation.
-    "auto_languages",
-    # Read into a module global by the service so toggling transcript logging in
-    # Preferences takes effect on the next utterance, no restart.
-    "log_transcripts",
-    # Dictation cleanup. Read on each utterance; turning AI corrections on or
-    # off starts or stops its engine from the same reload (live_settings.apply).
-    "remove_fillers",
-    "swiss_spelling",
-    "numbers_as_digits",
-    "numbers_small_as_words",
-    "voice_navigation",
-    "open_apps",
-    "live_text",
-    "adapt_to_app",
-    "press_enter_after",
-    "press_enter_delay",
-    "ai_corrections",
-    "voice_editing",
-    # Hands-free auto-stop; read when each toggle recording starts.
-    "auto_stop_silence",
-    "auto_stop_seconds",
-    # Chunked dictation; read when each recording starts.
-    "chunked_dictation",
-    "chunk_pause_seconds",
-    "chunk_context_marks",
-    # Usage stats; read into a module global on each reload, checked per dictation.
-    "usage_stats",
-    # Read into a module global on each reload, checked on each paste.
-    "restore_clipboard",
-    # Read into a module global on each reload, checked when each recording starts.
-    "pause_media",
-    "duck_audio",
-    # Read by the tray and first run (recommend.py), never by the service.
-    "dictation_language",
-    "recommend_notice_shown",
-    "parakeet_update_offered",
-    "vulkan_slower",
-}
-
-
-HOTKEY_KEYS = ("hotkey", "toggle_hotkey")
-
-
-def unapplied_hotkeys(shown: dict, saved: dict) -> list:
-    """Hotkey settings the user has changed but not yet applied.
-
-    The hotkey test reports which ROLE the service matched (hold or toggle) and
-    the dialog prints that against the key names currently shown in Preferences.
-    Those agree only while the shown config matches the saved one the service
-    reads. Change the hold key from F4 to F5 without applying, press F5, and the
-    service — still on F4/F5 — matches its TOGGLE key, so the dialog ticks the
-    row labelled F6. Nothing is wrong with the detection; the labels simply
-    describe a config that is not in force yet.
-    """
-    return [k for k in HOTKEY_KEYS if shown.get(k) != saved.get(k)]
-
-
-def needs_service_restart(changed: set) -> bool:
-    """Whether a set of changed keys requires restarting the dictation service.
-
-    Anything not explicitly known to be live counts as requiring a restart.
-    That direction is deliberate: a setting added later then costs an
-    unnecessary restart, which is merely slow. Defaulting the other way would
-    make it silently fail to apply: a setting that lies about itself.
-    """
-    return bool(set(changed) - LIVE_APPLIED_KEYS)
 
 
 def get_data_dir():

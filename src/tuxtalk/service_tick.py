@@ -5,7 +5,6 @@ the portal made, lets the speech model rest when Power Saving is on, and
 picks up settings changed in Preferences without a restart."""
 import time
 
-from . import config as config_module
 from . import (
     dictation_worker,
     engine,
@@ -16,6 +15,7 @@ from . import (
     mouse_grid,
     pipeline,
     recording,
+    settings_schema,
     virtual_pointer,
     x11_clipboard,
 )
@@ -56,7 +56,7 @@ def _reload_live_settings(cfg, indicator):
         return None
 
     try:
-        for key in config_module.LIVE_APPLIED_KEYS:
+        for key in settings_schema.LIVE_APPLIED_KEYS:
             setattr(cfg, key, getattr(fresh, key))
 
         keyboard_output.key_delay_ms = cfg.key_delay

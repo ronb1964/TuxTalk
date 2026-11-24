@@ -9,7 +9,7 @@ from typing import NamedTuple
 
 from evdev import ecodes
 
-from .settings_schema import HOTKEY_CHOICES
+from .dictation_keys import HOTKEY_CHOICES
 
 # The dictation keys by upper-case name ("RIGHT CTRL"), as evdev codes: the
 # dropdowns' and F13-F24, which Preferences takes pressed (dictation_keys).

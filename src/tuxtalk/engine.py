@@ -13,6 +13,7 @@ from . import gtk_loop, hallucinations, silence, tray_link
 from . import live_settings as live
 from . import notify as notify_module
 from .config import Settings, load_config
+from .settings_schema import VALID_MODELS
 from .logger import is_quiet, setup_logger
 
 logger = setup_logger(__name__)
@@ -301,7 +302,6 @@ def build_or_exit(settings: Settings):
     try:
         return build(settings)
     except ModelUnavailable as e:
-        from .settings_schema import VALID_MODELS
         from .model_helper import is_model_cached_fast
         from .recommend import model_title
         try:

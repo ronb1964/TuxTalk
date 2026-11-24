@@ -1,14 +1,14 @@
 """TuxTalk's settings as values: the Settings fields and their defaults,
 which values each accepts, how an older or hand-edited config.toml's values
-are brought forward or set back to their default, and the file's text for a
-set of values. Reading, locking and saving the file is config.py's."""
+are brought forward or set back to their default, the file's text for a
+set of values, and which changed settings the dictation service takes on
+without a restart. Reading, locking and saving the file is config.py's."""
 from __future__ import annotations
-import os
 import re
 from dataclasses import dataclass, field, fields
 
-from .dictation_keys import CTRL_SPACE, same_last_key, problem as dictation_key_problem
-from .language_codes import locale_language
+from .dictation_keys import same_last_key, problem as dictation_key_problem
+from .language_codes import swiss_german_locale
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -42,7 +42,7 @@ class ConfigError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# Validation constants — defined once, used by validate_config()
+# The values each setting accepts, used by validate_config()
 # ---------------------------------------------------------------------------
 
 # The models TuxTalk downloads and offers, smallest first: every screen with a
@@ -61,24 +61,6 @@ OLD_MODEL_NAMES = {"tiny.en": "tiny", "base.en": "base", "small.en": "small",
 VALID_DEVICES = {"cpu", "cuda", "vulkan"}
 VALID_MODES = {"hold", "toggle"}
 
-# The dictation keys (hotkey, toggle_hotkey), by the name the settings save and
-# Preferences and Help show, with the key's evdev name. Many laptops and
-# compact keyboards send F1-F12 only with Fn held (Discussion #18), so three
-# keys that never need Fn come after them. Pause isn't one: most keyboards
-# send its release the moment it's pressed, so it can't be held. Nor are
-# Insert (a press that reached an editor would turn on overwrite) or Menu
-# (the Compose key on many setups).
-#
-# Left Ctrl+Space is Ctrl+Space as Handy and other dictation apps use it
-# (Discussion #28). The service listens for Space, the key named here, and
-# only counts it while Left Ctrl is held (see combo_keys).
-HOTKEY_CHOICES = {
-    **{f"F{i}": f"KEY_F{i}" for i in range(1, 13)},
-    "Right Ctrl": "KEY_RIGHTCTRL",
-    "Right Alt": "KEY_RIGHTALT",
-    "Scroll Lock": "KEY_SCROLLLOCK",
-    CTRL_SPACE: "KEY_SPACE",
-}
 VALID_INJECTION_MODES = {"type", "paste", "auto"}
 
 VALID_INDICATOR_POSITIONS = {
@@ -99,51 +81,6 @@ VALID_COLOR_MODES = {"system", "custom"}
 # exactly as it always has. It also seeds the first swatch
 # in the color picker so the classic color is always one click away.
 CLASSIC_CYAN_HEX = "#4db3ff"
-
-
-def display_locale(env=None) -> str:
-    """The locale the desktop's text is in, region and all where it's known
-    ("de_CH.UTF-8"; "de" from LANGUAGE), or "" for the C locale or none.
-
-    The first of LC_ALL, LC_MESSAGES and LANG that is set, unless LANGUAGE's
-    first readable entry names another language or a region of its own, as
-    in gettext (which ignores LANGUAGE when the locale is C). KDE sets
-    LANGUAGE when the display language differs from the formats locale, and
-    sets the bare "de" for a Swiss German user, which mustn't hide the de_CH
-    locale."""
-    env = os.environ if env is None else env
-    locale = next((env[v] for v in ("LC_ALL", "LC_MESSAGES", "LANG") if env.get(v)), "")
-    language = locale_language(locale)
-    if not language:
-        return ""               # C or POSIX wins over everything, LANGUAGE included
-    first = next((e for e in (env.get("LANGUAGE") or "").split(":")
-                  if locale_language(e)), None)
-    if first and (locale_language(first) != language or "_" in first):
-        return first
-    return locale
-
-
-def swiss_german_locale(env=None) -> bool:
-    """Whether the system is set to Swiss German (de_CH, or gsw for Swiss
-    German itself), where ß is never written."""
-    return display_locale(env).replace("-", "_").startswith(("de_CH", "gsw"))
-
-
-def has_battery(power_dir="/sys/class/power_supply") -> bool:
-    """Whether this computer runs on a battery (a laptop). A wireless mouse's
-    or keyboard's battery doesn't count: the kernel marks those scope=Device."""
-    try:
-        names = os.listdir(power_dir)
-    except OSError:
-        return False
-    def read(name, what):
-        try:
-            with open(os.path.join(power_dir, name, what)) as f:
-                return f.read().strip()
-        except OSError:
-            return ""
-    return any(read(name, "type") == "Battery" and read(name, "scope") != "Device"
-               for name in names)
 
 
 @dataclass
@@ -195,9 +132,10 @@ class Settings:
     # "auto" (smart detection), "type" (the virtual keyboard), or "paste" (wl-copy + Ctrl+V)
     injection_mode: str = "auto"
     key_delay: int = KEY_DELAY_MS  # milliseconds after each typed key event (1-50, higher = slower)
-    # Turn dictation off after a while unused, to save power: on by default
-    # on a laptop, off on a desktop, where F8 then simply always works.
-    auto_timeout_enabled: bool = field(default_factory=lambda: has_battery())
+    # Turn dictation off after a while unused, to save power. Off here; the
+    # platform layer turns it on for a laptop (config.defaults()), and on a
+    # desktop F8 then simply always works.
+    auto_timeout_enabled: bool = False
     auto_timeout_minutes: int = 5       # minutes of inactivity before auto-stop
     recording_indicator: bool = True    # show visual recording indicator near cursor
     # screen position: center, top-left, top-center, top-right, bottom-left, bottom-center,
@@ -272,7 +210,7 @@ def _hotkey_problems(s: Settings) -> list[tuple[str, str]]:
     """The dictation keys that can't be: a key that types ("d" written by
     hand) would start a dictation with every one typed, and a toggle key
     ending in the hold key's own key (Alt+D, Ctrl+D) would be read as it."""
-    problems = [(name, why) for name in ("hotkey", "toggle_hotkey")
+    problems = [(name, why) for name in HOTKEY_KEYS
                 if (why := dictation_key_problem(getattr(s, name)))]
     if not problems and s.toggle_hotkey and same_last_key(s.hotkey, s.toggle_hotkey):
         problems.append(("toggle_hotkey", f"{s.toggle_hotkey} ends in the same key as "
@@ -535,3 +473,161 @@ def toml_string(value: str) -> str:
         else:
             out.append(ch)
     return '"' + "".join(out) + '"'
+
+
+def changed_keys(original: dict, current: dict) -> set:
+    """Keys whose value differs between *original* and *current*.
+
+    A key missing from *original* counts as changed — it is a value the user
+    has now set. Shared with merge_changed_keys so there is exactly one
+    definition of "changed"; the Preferences restart decision and the config
+    merge must never disagree about what the user touched.
+    """
+    return {
+        key for key, value in current.items()
+        if key not in original or original[key] != value
+    }
+
+
+def merge_changed_keys(original: dict, current: dict, base: dict) -> dict:
+    """Overlay only the keys that changed between *original* and *current*
+    onto *base*, returning base.
+
+    Used by the Preferences window to avoid clobbering settings another
+    process (the tray) wrote while the window was open: *original* is the
+    config as loaded when the window opened, *current* is the UI state at
+    save time, and *base* is a fresh read of the file on disk. Keys the
+    user didn't touch keep their on-disk values; keys the user changed win.
+    """
+    for key in changed_keys(original, current):
+        base[key] = current[key]
+    return base
+
+
+# ---------------------------------------------------------------------------
+# Which settings need the dictation service restarted
+# ---------------------------------------------------------------------------
+#
+# Restarting rebuilds the speech model — roughly ten seconds during which the
+# hotkey does nothing at all — so only the settings that need it trigger one.
+#
+# Most settings are read off the long-lived cfg object at the point of use
+# (every dictation ends by passing cfg.beeps, cfg.auto_period and the rest into
+# stop_recording), so refreshing that object's fields makes them live. The rest
+# are re-applied explicitly by the service's config watcher.
+
+# The model is constructed once at startup; changing either rebuilds it.
+RESTART_REQUIRED_KEYS = {
+    "model",
+    "device",
+    "graphics_card",
+    # Turning the indicator on would mean constructing a GTK window from the
+    # polling path mid-flight. Low value, real risk — restart instead.
+    "recording_indicator",
+}
+
+LIVE_APPLIED_KEYS = {
+    # Read off cfg at the moment they are used — live once cfg is refreshed.
+    "beeps",
+    "notify",
+    "smart_quotes",
+    "language",
+    "auto_space",
+    "auto_period",
+    "injection_mode",
+    "auto_timeout_enabled",
+    "auto_timeout_minutes",
+    "mic",  # already re-resolved by the service when a stream fails
+
+    # Copied into locals or module state at startup; the watcher re-applies them.
+    "hotkey",
+    "toggle_hotkey",
+    "voice_commands_hotkey",
+    "paste_last_hotkey",
+    "mode",
+    "key_delay",
+    "indicator_position",
+    "indicator_size",
+    "indicator_offset_x",
+    "indicator_offset_y",
+    "indicator_style",
+    "indicator_color_mode",
+    "indicator_color",
+    "indicator_sensitivity",
+    "indicator_follows_window",
+
+    # The dictation service never reads these at all — they belong to
+    # Preferences and the tray. Listing them stops a "Launch at login" toggle
+    # costing a ten-second model reload.
+    "launch_at_login",
+    "typing_wpm",          # only the Stats tab uses it
+    "auto_check_updates",
+    "last_update_check",
+    "language_mode",
+    # Read into a module global on each reload, used on each dictation.
+    "auto_languages",
+    # Read into a module global by the service so toggling transcript logging in
+    # Preferences takes effect on the next utterance, no restart.
+    "log_transcripts",
+    # Dictation cleanup. Read on each utterance; turning AI corrections on or
+    # off starts or stops its engine from the same reload (live_settings.apply).
+    "remove_fillers",
+    "swiss_spelling",
+    "numbers_as_digits",
+    "numbers_small_as_words",
+    "voice_navigation",
+    "open_apps",
+    "live_text",
+    "adapt_to_app",
+    "press_enter_after",
+    "press_enter_delay",
+    "ai_corrections",
+    "voice_editing",
+    # Hands-free auto-stop; read when each toggle recording starts.
+    "auto_stop_silence",
+    "auto_stop_seconds",
+    # Chunked dictation; read when each recording starts.
+    "chunked_dictation",
+    "chunk_pause_seconds",
+    "chunk_context_marks",
+    # Usage stats; read into a module global on each reload, checked per dictation.
+    "usage_stats",
+    # Read into a module global on each reload, checked on each paste.
+    "restore_clipboard",
+    # Read into a module global on each reload, checked when each recording starts.
+    "pause_media",
+    "duck_audio",
+    # Read by the tray and first run (recommend.py), never by the service.
+    "dictation_language",
+    "recommend_notice_shown",
+    "parakeet_update_offered",
+    "vulkan_slower",
+}
+
+
+HOTKEY_KEYS = ("hotkey", "toggle_hotkey")
+
+
+def unapplied_hotkeys(shown: dict, saved: dict) -> list:
+    """Hotkey settings the user has changed but not yet applied.
+
+    The hotkey test reports which ROLE the service matched (hold or toggle) and
+    the dialog prints that against the key names currently shown in Preferences.
+    Those agree only while the shown config matches the saved one the service
+    reads. Change the hold key from F4 to F5 without applying, press F5, and the
+    service — still on F4/F5 — matches its TOGGLE key, so the dialog ticks the
+    row labelled F6. Nothing is wrong with the detection; the labels simply
+    describe a config that is not in force yet.
+    """
+    return [k for k in HOTKEY_KEYS if shown.get(k) != saved.get(k)]
+
+
+def needs_service_restart(changed: set) -> bool:
+    """Whether a set of changed keys requires restarting the dictation service.
+
+    Anything not explicitly known to be live counts as requiring a restart.
+    That direction is deliberate: a setting added later then costs an
+    unnecessary restart, which is merely slow. Defaulting the other way would
+    make it silently fail to apply: a setting that lies about itself.
+    """
+    return bool(set(changed) - LIVE_APPLIED_KEYS)

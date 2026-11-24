@@ -16,6 +16,24 @@ CTRL_SPACE = "Left Ctrl+Space"
 # The keys that may be a dictation key on their own: they type nothing.
 SINGLE_KEYS = frozenset({*(f"F{n}" for n in range(1, 25)), "Right Ctrl", "Right Alt",
                          "Scroll Lock"})
+# The dictation keys (hotkey, toggle_hotkey), by the name the settings save and
+# Preferences and Help show, with the key's evdev name. Many laptops and
+# compact keyboards send F1-F12 only with Fn held (Discussion #18), so three
+# keys that never need Fn come after them. Pause isn't one: most keyboards
+# send its release the moment it's pressed, so it can't be held. Nor are
+# Insert (a press that reached an editor would turn on overwrite) or Menu
+# (the Compose key on many setups).
+#
+# Left Ctrl+Space is Ctrl+Space as Handy and other dictation apps use it
+# (Discussion #28). The service listens for Space, the key named here, and
+# only counts it while Left Ctrl is held (see combo_keys).
+HOTKEY_CHOICES = {
+    **{f"F{i}": f"KEY_F{i}" for i in range(1, 13)},
+    "Right Ctrl": "KEY_RIGHTCTRL",
+    "Right Alt": "KEY_RIGHTALT",
+    "Scroll Lock": "KEY_SCROLLLOCK",
+    CTRL_SPACE: "KEY_SPACE",
+}
 # The modifiers a combo may name. Shift only with one of the others.
 MODIFIERS = ("Ctrl", "Alt", "Super", "Shift")
 _UNLOCKING = frozenset({"Ctrl", "Alt", "Super"})

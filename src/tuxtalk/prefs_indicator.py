@@ -7,8 +7,8 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk
 
 from . import ui_style
-from .settings_schema import CLASSIC_CYAN_HEX
 from .prefs_tab import Tab, dropdown, fold, tip_label
+from .settings_schema import CLASSIC_CYAN_HEX
 
 _SIZES = (("small", "Small (60%)"), ("medium", "Medium (100%)"), ("large", "Large (140%)"))
 _STYLES = (("orb", "Orb"), ("waveform", "Waveform"), ("bars", "Frequency bars"),

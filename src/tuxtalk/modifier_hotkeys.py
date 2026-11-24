@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from evdev import ecodes
 
 from . import ctrl_kept, focused_window, keyboard_layout, virtual_keyboard
-from .settings_schema import HOTKEY_CHOICES
+from .dictation_keys import HOTKEY_CHOICES
 from .hotkey_keys import MODIFIER_CODES, SHIFT_CODES, keys_down
 from .keyboard_devices import is_keyboard_device
 from .logger import setup_logger

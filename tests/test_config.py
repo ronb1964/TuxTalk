@@ -141,7 +141,7 @@ def test_save_config_includes_language_mode(tmp_path, monkeypatch):
 def test_merge_changed_keys_preserves_external_changes():
     """Keys the user did NOT touch keep the on-disk value (e.g. a model
     switch made from the tray while Preferences was open)."""
-    from tuxtalk.config import merge_changed_keys
+    from tuxtalk.settings_schema import merge_changed_keys
     original = {"model": "small", "device": "cpu", "beeps": True}
     current = {"model": "small", "device": "cpu", "beeps": False}  # user toggled beeps
     base = {"model": "medium", "device": "cpu", "beeps": True}     # tray changed model meanwhile
@@ -151,13 +151,13 @@ def test_merge_changed_keys_preserves_external_changes():
 
 
 def test_merge_changed_keys_user_wins_on_conflict():
-    from tuxtalk.config import merge_changed_keys
+    from tuxtalk.settings_schema import merge_changed_keys
     merged = merge_changed_keys({"model": "small"}, {"model": "large-v3"}, {"model": "medium"})
     assert merged["model"] == "large-v3"
 
 
 def test_merge_changed_keys_adds_new_keys():
-    from tuxtalk.config import merge_changed_keys
+    from tuxtalk.settings_schema import merge_changed_keys
     merged = merge_changed_keys({}, {"language_mode": "manual"}, {"model": "small"})
     assert merged["language_mode"] == "manual"
     assert merged["model"] == "small"
@@ -193,7 +193,7 @@ def test_first_run_and_preferences_recommend_parakeet(prefs_window):
 def test_power_saving_defaults_on_with_a_battery_only(tmp_path):
     """A laptop's battery turns it on; a wireless mouse's battery (scope
     Device) and a desktop with none leave it off, so F8 always works there."""
-    from tuxtalk.settings_schema import has_battery
+    from tuxtalk.config import has_battery
     power = tmp_path / "power_supply"
     mouse = power / "hidpp_battery_0"
     mouse.mkdir(parents=True)
@@ -210,11 +210,11 @@ def test_power_saving_defaults_on_with_a_battery_only(tmp_path):
 
 
 def test_power_saving_default_follows_the_battery(monkeypatch):
-    from tuxtalk import settings_schema
-    monkeypatch.setattr(settings_schema, "has_battery", lambda: True)
-    assert Settings().auto_timeout_enabled is True
-    monkeypatch.setattr(settings_schema, "has_battery", lambda: False)
-    assert Settings().auto_timeout_enabled is False
+    from tuxtalk import config
+    monkeypatch.setattr(config, "has_battery", lambda: True)
+    assert config.defaults().auto_timeout_enabled is True
+    monkeypatch.setattr(config, "has_battery", lambda: False)
+    assert config.defaults().auto_timeout_enabled is False
 
 
 def test_a_quoted_false_turns_a_setting_off_not_on():

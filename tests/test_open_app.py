@@ -9,7 +9,7 @@ import pytest
 from conftest import QueuedWorker, esc, next_recording
 from type_at_pause_rig import frames_of, service_tick_runs, speech, type_chunk
 from tuxtalk import (app_finder, app_focus, app_launcher, config, dictation_worker,
-                     pipeline, recording, screen_message, voice_actions)
+                     pipeline, recording, screen_message, settings_schema, voice_actions)
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk.app_finder import AppEntry
@@ -105,7 +105,7 @@ def test_the_flatpak_treats_it_as_off(monkeypatch):
 
 
 def test_it_is_live_applied():
-    assert "open_apps" in config.LIVE_APPLIED_KEYS
+    assert "open_apps" in settings_schema.LIVE_APPLIED_KEYS
 
 
 # --- opening -------------------------------------------------------------------------------

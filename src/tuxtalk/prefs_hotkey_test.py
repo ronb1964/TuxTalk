@@ -31,7 +31,8 @@ def run_hotkey_test(parent, config):
     # The service tests against the SAVED hotkeys, but this window labels its
     # rows from the dropdowns. Changed without Apply, the wrong row would
     # light up, so the change is applied first.
-    from .config import load_config, unapplied_hotkeys
+    from .config import load_config
+    from .settings_schema import unapplied_hotkeys
     if unapplied_hotkeys(config, load_config().__dict__):
         show_message(parent,
                      Gtk.MessageType.INFO,

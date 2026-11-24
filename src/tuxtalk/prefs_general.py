@@ -9,7 +9,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
-from .settings_schema import HOTKEY_CHOICES
+from .dictation_keys import HOTKEY_CHOICES
 from .hotkey_labels import dropdown_entries, hands_free_label
 from .logger import setup_logger
 from .prefs_hotkey_test import run_hotkey_test
@@ -515,7 +515,7 @@ class GeneralTab(Tab):
         """After OK or Apply with a changed hotkey: offer the hotkey test,
         and say so if KDE already uses the key. True when it asked, so Apply
         doesn't also say "Settings applied"."""
-        from .config import HOTKEY_KEYS
+        from .settings_schema import HOTKEY_KEYS
         if not set(changed) & {*HOTKEY_KEYS, "voice_commands_hotkey", "paste_last_hotkey"}:
             return False
         from .kwin_hotkeys import app_shortcuts_since
