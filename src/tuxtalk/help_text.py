@@ -336,7 +336,7 @@ presses Enter.
   • In a terminal it never presses Enter either, so nothing runs before you've
     read it. End with <b>press enter</b> to run what you said.
   • If what you said ends on a word like "and" or "the", it was probably cut
-    off, so it isn't sent.
+    off, so it isn't sent (with voice commands in German, "und" or "weil" too).
 
 ### 🧪 Changing it before it's sent
 With voice editing on, right after you dictate: hold <b>{hold}</b>, say <b>edit that,
@@ -387,7 +387,7 @@ sentence, a space where one is missing, and no period when more text follows.
 "25 chickens"). With digits, "seven thirty" after at becomes 7:30 and "october
 fifteenth" becomes october 15th. "One" and "two" become digits where they
 number or count something ("test 1", "number 2", "2 cats") and stay words
-elsewhere ("this one", "one of them"), and so do fractions.
+elsewhere ("this one", "one of them"), as fractions do.
 
 ### Email and web addresses
 Say them the way you'd say them out loud. Hold <b>{hold}</b>, say "john at gmail dot com",
@@ -458,6 +458,8 @@ Change text by saying how you want it changed.
 3. Hold <b>Shift</b> together with your dictation key (<b>Shift+{hold}</b>) and say what you
    want. Let go of the keys when you're done talking.
    (Or tap <b>Shift+{toggle}</b> to start, say it, and tap <b>Shift+{toggle}</b> again to finish.)
+   A dictation key that already has Shift in it (like Ctrl+Shift+K) can't take another:
+   say <b>edit that</b> instead, as below.
 4. A moment later the selection is replaced with the rewritten text.
 5. Not what you wanted? Press <b>Ctrl+Z</b> in the app to get your original back.
 
@@ -1021,8 +1023,9 @@ There are two kinds:
 The commands are English words, whatever language you dictate in. Most can be said
 in German too: Preferences → General → Change model, device or language, then set
 <b>Voice commands in</b> to Deutsch, and say <b>Komma</b>, <b>neue Zeile</b>,
-<b>Enter drücken</b>, <b>das letzte Wort löschen</b> or <b>den letzten Satz
-markieren</b>. English commands keep working.
+<b>Enter drücken</b>, <b>das letzte Wort löschen</b> or <b>Wort korrigieren</b>.
+English commands keep working. Changing your mind mid-sentence ("no wait") stays
+English.
 
 The same list, a tab per group, is in the TuxTalk menu → Voice Commands..., or, with
 <b>Apps, windows, keys and the mouse by voice</b> ticked in TuxTalk Labs, say

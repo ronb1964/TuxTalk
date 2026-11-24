@@ -23,7 +23,7 @@ WIDTH, HEIGHT = 900, 640
 
 INTRO = ("Hold your dictation key, say the command, let go. The commands are English "
          "words, whatever language you dictate in, or German as well with Voice commands "
-         "in set to Deutsch in Preferences → General.")
+         "in set to Deutsch in Preferences → General → Change model, device or language.")
 SNIPPETS = ("<b>Snippets</b>: say a short phrase, get the full text. Add your own in "
             "<b>Preferences → Words</b>; wrap the text in <b>\"quotes\"</b> to type it "
             "exactly as written.")

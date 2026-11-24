@@ -36,7 +36,7 @@
 
 https://github.com/user-attachments/assets/ddedf92d-bbd2-4fc2-94e1-05461e633784
 
-That works on GNOME, KDE, COSMIC, Sway, Hyprland and X11 with no setup, because TuxTalk's little hotkey helper reads the key straight from the keyboard instead of asking the desktop for it, so there's no shortcut to set up in your desktop's settings. It's the only part that reads the keyboard, so other programs you run can't read your typing.
+That works on GNOME, KDE, COSMIC, Sway, Hyprland and X11 with no setup, because TuxTalk's little hotkey helper reads the key straight from the keyboard instead of asking the desktop for it, so there's no shortcut to set up in your desktop's settings. It's the only part that reads the keyboard, so other programs you run can't read your typing (one exception, on some keyboard setups, is under [Why is there a hotkey helper service?](#why-is-there-a-hotkey-helper-service)).
 
 It's free, it runs completely offline, and nothing you say ever leaves your computer.
 
@@ -393,7 +393,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 
 ## All the features
 
-- **Two hotkeys, both always on.** Hold F8 to talk, or tap F9 to start and tap again to stop. Pick any keys you like, including Left Ctrl+Space if your F-keys need Fn.
+- **Two hotkeys, both always on.** Hold F8 to talk, or tap F9 to start and tap again to stop. Pick other keys if you like: Right Ctrl, Right Alt, Scroll Lock or Left Ctrl+Space if your F-keys need Fn, another key that types nothing, or a combination like Alt+D or Ctrl+Shift+K.
 - **Hands-free if you want it.** Double-tap F9, talk, and it stops by itself when you go quiet. A single tap still works as a plain on/off switch, so a long dictation with thinking pauses never gets cut off. Say nothing for 10 seconds and it stops without typing anything.
 - **Your choice of speech model.** NVIDIA's Parakeet is the default: fast on any processor, for English and 24 European languages. OpenAI's Whisper covers 99 languages, from Tiny up to Large-v3. Not sure which? **What works with what?** in Preferences lays it out.
 - **Only these languages.** Tick the languages you actually speak and Whisper's auto-detect sticks to those.
@@ -401,6 +401,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **See the words while you talk (Labs).** A box by the recording indicator shows what you've said so far, on a graphics card. Or pick Type at pause instead, and each phrase is typed as soon as you pause.
 - **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. A separate setting with no AI drops "um", "uh" and stutters.
 - **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
+- **Voice commands in German.** Set Voice commands in to Deutsch (Preferences → General → Change model, device or language) and say "Komma", "neue Zeile", "Enter drücken" or "das letzte Wort löschen", the verb last or first. English commands keep working beside them, and the command language is its own setting, apart from the language you dictate. A new install set up for German starts with them on.
 - **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com. Said on its own, an address gets no period after it. Only the word right before "at" is the name; say the marks in a longer one: "john dot doe at gmail dot com" types john.doe@gmail.com, and "underscore" and "no space" work the same way ("john no space doe" is johndoe).
 - **Numbers as digits, if you want them.** 25 instead of twenty-five, and 7:30 and 15th too. Works in English and seven other languages.
 - **Fits the sentence at the cursor.** Dictating into the middle of a sentence carries it on, with no capital and the right spaces, where the app says what's around the cursor: GTK apps (on GNOME with the TuxTalk extension), KDE apps, Firefox, Chrome and apps built on Chrome once you let TuxTalk turn on the desktop's accessibility.
@@ -488,12 +489,12 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 | "colon" | : |
 | "semicolon" | ; |
 | "open quote" / "close quote" | " " (smart quotes) |
-| "dot dot dot" / "ellipsis" | ... |
+| "dot dot dot" / "ellipsis" | … |
 
 ### Formatting
 | Say This | Result |
 |----------|--------|
-| "new line" | Line break |
+| "new line" | Line break (a space in a terminal, where a line break would run the line) |
 | "new paragraph" | Double line break |
 | "press tab" | Tab character ("tab" on its own is just the word). At the end of a dictation it presses the Tab key, so in a form you go to the next box. In Claude Desktop it types four spaces instead, because there the Tab key jumps to the Send button |
 
@@ -520,6 +521,23 @@ words one through ten.
 Say **"literal"** before any command to output the word instead:
 - "literal comma" → types "comma" (not ,)
 - "literal period" → types "period" (not .)
+
+### In German
+With **Voice commands in** set to Deutsch, most commands above can be said in German too, the verb last as most people say it ("den letzten Satz löschen") or first ("lösche den letzten Satz"). A few of them:
+
+| Say This | Result |
+|----------|--------|
+| "Komma" / "Beistrich" | , |
+| "Punkt" | . |
+| "Fragezeichen" / "Ausrufezeichen" | ? / ! |
+| "Anführungszeichen unten" … "Anführungszeichen oben" | „ … “ |
+| "neue Zeile" / "neuer Absatz" | Line break / double line break |
+| "Enter drücken" / "Tab drücken" (at the end) | Presses the key |
+| "das letzte Wort löschen" / "alles löschen" | Undo, as above |
+| "Wort korrigieren" | Opens Fix a Word |
+| "wörtlich Punkt" | Types the word "Punkt" |
+
+The same words in an ordinary sentence stay words: "auf den Punkt", "Punkt 12 Uhr", "drei Komma fünf". The Labs commands work in German too ("den letzten Satz markieren", "Firefox öffnen", "Fenster schließen", "Mausraster"), with their Labs setting on. The Voice Commands window shows the German words first once Deutsch is on. Changing your mind mid-sentence ("no wait") stays English.
 
 </details>
 
@@ -581,6 +599,7 @@ beeps = true              # Audio feedback sounds
 smart_quotes = true       # Use curly quotes " "
 auto_space = true         # Auto-space between utterances
 auto_period = true        # Add period at end of sentences
+command_language = "en"   # Voice commands in: "en", or "de" for German too
 ```
 
 </details>
@@ -621,8 +640,8 @@ Older versions put you in the `input` group. That works, but the group lets
 every program you run read every key you press, passwords too. The helper
 fixes that. It runs as a throwaway system user with no network and no access
 to your files, it never reports a letter or a number you type, only F-keys,
-Esc, Scroll Lock, Right Ctrl and Right Alt and shortcuts with Ctrl, Alt or
-Super, and only to whoever's at the screen.
+Esc, Pause, Scroll Lock, Right Ctrl and Right Alt and shortcuts with Ctrl,
+Left Alt or Super, and only to whoever's at the screen.
 `systemd-analyze security tuxtalk-hotkeys` rates it 0.6, "SAFE".
 
 A shortcut that isn't an F-key needs Ctrl, Left Alt or Super with it (since

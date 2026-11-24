@@ -128,7 +128,8 @@ SECTIONS = (
                  "word to type the word itself. It works with: "
                  + ", ".join(LITERAL_REPLACEMENTS) + ". <b>literal</b> before a command "
                  "from Select and Move, Apps and Windows, Keys and Web or Sound and "
-                 "System types its words too (<b>literal open Firefox</b>).",
+                 "System types its words too (<b>literal open Firefox</b>). With voice "
+                 "commands in German, <b>wörtlich</b> does the same (<b>wörtlich Punkt</b>).",
             commands=(
                 _literal("period", ".", "the word period"),
                 _literal("comma", ",", "the word comma"),
@@ -170,7 +171,8 @@ SECTIONS = (
     )),
     Section("Changing Your Mind", FIXING,
             note="Needs <b>Fix self-corrections with AI</b> turned on in Preferences → "
-                 "Advanced (a one-time download of about {ai_size})",
+                 "Advanced (a one-time download of about {ai_size}). English only, even "
+                 "with voice commands in German",
             commands=(
         Command(("no wait", "I mean", "make that", "scratch that", "or rather"),
                 'correct yourself mid-sentence: "meet at 3, no wait, 4" → "meet at 4"',

@@ -445,7 +445,8 @@ class AdvancedTab(Tab):
             "“shorten this”, “fix the grammar”, “turn this into a bullet list”.\n"
             "The selection is replaced with the rewrite. Ctrl+Z puts it back.\n"
             "Or, right after dictating, say “edit that, make it shorter”: no keys needed,\n"
-            "handy with hands-free and Type at pause.\n\n"
+            "handy with hands-free and Type at pause, and the way to go when your\n"
+            "dictation key already has Shift in it (Ctrl+Shift+K).\n\n"
             "Uses the same small AI as self-corrections (one shared "
             f"{ai_download.DOWNLOAD_SIZE_TEXT} download),\n"
             "on this computer. Simple, clear changes work best.")

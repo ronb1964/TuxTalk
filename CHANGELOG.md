@@ -7,22 +7,24 @@ before 0.15.0, so older entries use that name.
 
 - Voice commands in German: set Preferences → General → Change model, device
   or language → Voice commands in to Deutsch, and say "Komma", "Punkt",
-  "neue Zeile", "Enter drücken", "das letzte Wort löschen", "den letzten
-  Satz markieren", "Firefox öffnen", "Fenster schließen" or "Mausraster",
-  the verb last as most say it or first ("öffne Firefox"). Quotes come out
-  German („…“), and "Punkt 12 Uhr" or "auf den Punkt" stay words. English
-  commands keep working beside them, and the command language is its own
-  setting, apart from the language you dictate. A new install set up for
-  German starts with German commands on, and its last setup screen says
-  so in German. The words came from
-  hmsgde and jskvbinmv on #49: thank you both. Self-corrections ("nein
-  warte") aren't in German yet.
+  "neue Zeile", "Enter drücken", "das letzte Wort löschen" or "Wort
+  korrigieren", the verb last as most say it or first ("lösche das letzte
+  Wort"). With their TuxTalk Labs setting on, "den letzten Satz
+  markieren", "Firefox öffnen", "Fenster schließen" and "Mausraster" work
+  too. "Anführungszeichen unten" and "oben" type German quotes („…“), and
+  "Punkt 12 Uhr" or "auf den Punkt" stay words. English commands keep
+  working beside them, and the command language is its own setting, apart
+  from the language you dictate. Help's and the Voice Commands window's
+  lists show the German words first. A new install set up for German
+  starts with German commands on, and its last setup screen says so in
+  German. The words came from hmsgde and jskvbinmv on #49: thank you both.
+  Self-corrections ("nein warte") aren't in German yet.
 - Remove filler words takes German's "äh" and "ähm" too, and keeps a
   German doubled article that's meant ("die Frau, die die Zeitung liest").
   With voice commands in German, Send each dictation automatically holds
   the Enter after a dictation cut off on "und" or "weil", as it does after
   "and".
-- Pick any dictation key you like: the hold and toggle lists in
+- Pick your own dictation key: the hold and toggle lists in
   Preferences → General end in "Other key or combination…", where you
   press the keys, such as Alt+D, Ctrl+Shift+K or F13 to F24. TuxTalk
   refuses keys that would type (a letter on its own), reminds you that

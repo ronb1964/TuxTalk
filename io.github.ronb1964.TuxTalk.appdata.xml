@@ -21,7 +21,7 @@
       <li>OpenAI's Whisper for 99 languages, from Tiny up to Large-v3</li>
       <li>Any graphics card through Vulkan (NVIDIA, AMD or Intel), or CUDA on NVIDIA</li>
       <li>First run picks a setup for your computer and language</li>
-      <li>Voice commands for punctuation, new lines and undo, plus your own phrases</li>
+      <li>Voice commands for punctuation, new lines and undo, plus your own phrases, in English or German</li>
       <li>Optional AI corrections, also on your computer: "three o'clock, no wait, four" types "four o'clock"</li>
       <li>Fix a Word teaches it names and terms it keeps getting wrong</li>
       <li>Hands-free mode that stops by itself when you go quiet</li>
@@ -95,6 +95,21 @@
   </screenshots>
 
   <releases>
+    <release version="0.25.0" date="2026-11-24">
+      <description>
+        <p>Voice commands in German, and a dictation key of your own</p>
+        <ul>
+          <li>Voice commands can be said in German: set Voice commands in to Deutsch in Preferences and say "Komma", "neue Zeile", "Enter drücken" or "das letzte Wort löschen", the verb last or first. English commands keep working, and a new install set up for German starts with them on</li>
+          <li>Any key that types nothing, or a combination such as Alt+D or Ctrl+Shift+K, can be the dictation key</li>
+          <li>In a terminal, "new line" types a space, so a half-said command never runs</li>
+          <li>"No space" joins an email name however the speech model writes it</li>
+          <li>With numbers as digits, "one" and "two" become digits where they count something</li>
+          <li>A punctuation word used as an ordinary word stays a word: "came to a full stop", "colon cancer"</li>
+          <li>Remove filler words takes German's "äh" and "ähm" too</li>
+          <li>A dictation recorded while the computer stalled is typed but not sent automatically</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.24.0" date="2026-11-19">
       <description>
         <p>Dictation fits the sentence at the cursor, and Help can be searched</p>
