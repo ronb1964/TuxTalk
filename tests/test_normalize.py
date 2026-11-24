@@ -845,6 +845,58 @@ def test_no_space_joins_the_name_however_the_engine_wrote_it(said):
     assert _whole(said) == "johndoe@gmail.com "
 
 
+@pytest.mark.parametrize("said, typed", [
+    ("New line John Nospace Doe at gmail.com.", LINE_BREAK + "johndoe@gmail.com"),
+    ("New line, doe at gmail dot com.", LINE_BREAK + "doe@gmail.com"),
+    ("New paragraph. Doe at gmail dot com.", LINE_BREAK * 2 + "doe@gmail.com"),
+    ("New line new line github dot com.", LINE_BREAK * 2 + "github.com"),
+])
+def test_an_address_after_a_spoken_line_break_still_stands_alone(said, typed):
+    """Starting a new line, then saying the address, gave it a full stop: the
+    dictation as a whole wasn't the address alone."""
+    assert _whole(said) == typed + " "
+
+
+@pytest.mark.parametrize("said, typed", [
+    ("return@example.com", "return@example.com "),
+    ("Return at example dot com.", "return@example.com "),
+    ("newline.com", "newline.com "),
+    ("return.example.com", "return.example.com "),
+    ("Return to.com.", "Return to.com. "),
+    ("New line of.com.", "New line of.com. "),
+], ids=["named return", "said return at", "newline domain", "return subdomain",
+        "return to", "a new line of"])
+def test_an_address_starting_with_a_command_word_is_still_the_address(said, typed):
+    assert _whole(said) == typed
+
+
+@pytest.mark.parametrize("said, typed", [
+    ("My email.", "Ron@Example.com "),
+    ("New line my email.", LINE_BREAK + "Ron@Example.com "),
+])
+def test_a_quoted_snippet_for_your_address_loses_the_engines_full_stop(monkeypatch, said, typed):
+    """A real quoted snippet: the engine's full stop sits outside it."""
+    monkeypatch.setattr(live, "commands", {"my email": '"Ron@Example.com"'})
+    assert _whole(said) == typed
+
+
+def test_a_snippet_holding_the_words_new_line_is_typed_as_written(monkeypatch):
+    from tuxtalk import dictation_text
+    monkeypatch.setattr(dictation_text, "apply_custom_commands",
+                        lambda raw, settings: ("§CMDLIT_0§", {"§CMDLIT_0§": "New line Ron@Example.com"}))
+    assert _whole("My email.").startswith("New line Ron@Example.com")
+
+
+def test_german_line_breaks_before_an_address_with_german_commands(monkeypatch):
+    monkeypatch.setattr(live, "command_language", "de")
+    assert _whole("Neue Zeile john no space doe at gmail dot com") == LINE_BREAK + "johndoe@gmail.com "
+
+
+def test_a_sentence_after_a_spoken_line_break_keeps_its_full_stop():
+    assert _whole("New line please contact john at gmail dot com.") == (
+        LINE_BREAK + "Please contact john@gmail.com. ")
+
+
 def test_nospace_outside_an_address_stays_a_word():
     assert normalize_text("there is nospace left") == "There is nospace left."
 

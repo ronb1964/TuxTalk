@@ -204,10 +204,12 @@ _CONTEXT_PROTECT_PATTERNS = [
 _ENGINE_PERIOD = r"(?:(?<=[^\W\d_])(?<!\.[^\W\d_])\.\s+)?"
 
 # --- _spoken_marks_to_symbols: phrases, first ---
+_EN_NEW_LINE = r"(?:new\s*line|return|line\s+break)"
+_EN_NEW_PARAGRAPH = r"(?:new\s+paragraph|paragraph\s+break)"
 _MULTI_WORD_REPLACEMENTS = [
     # A spoken "comma" is still a word here, so a comma written just before
     # the command is the engine's pause and goes, as it does for paragraphs.
-    (re.compile(r"[,\s]*\b(?:new\s*line|return|line\s+break)\b[,.:;\s]*", re.IGNORECASE),
+    (re.compile(rf"[,\s]*\b{_EN_NEW_LINE}\b[,.:;\s]*", re.IGNORECASE),
      LINE_BREAK),
     (re.compile(r"[,.\s]*\bnew\s+paragraph\b[,.:;\s]*|\bparagraph\s+break\b[,.:;\s]*",
                 re.IGNORECASE), LINE_BREAK * 2),
@@ -266,9 +268,10 @@ _DE_HYPHEN = r"binde\s?strich"
 _DE_QUOTES = r"(?:anführungs\s?zeichen|gänsefü(?:ß|ss)chen)"
 _DE_ELLIPSIS = r"auslassungs\s?punkte"
 _DE_NEW_LINE = r"(?:neue\s+zeile|zeilen\s?umbruch)"
+_DE_NEW_PARAGRAPH = r"neue[nr]?\s+absatz"
 _GERMAN_MARK_WORDS = (rf"komma|beistrich|punkt|{_DE_QUESTION}|{_DE_EXCLAIM}|{_DE_COLON}|"
                       rf"semikolon|strichpunkt|apostroph|hochkomma|hochstrich|{_DE_HYPHEN}|"
-                      rf"gedankenstrich|{_DE_NEW_LINE}|neue[nr]?\s+absatz|{_DE_QUOTES}|"
+                      rf"gedankenstrich|{_DE_NEW_LINE}|{_DE_NEW_PARAGRAPH}|{_DE_QUOTES}|"
                       rf"{_DE_ELLIPSIS}")
 _RE_GERMAN_HELD = re.compile(r"__LITDE_(\w+?)__")
 # Said with German commands on, a mark word is the mark, as in Dragon, and
@@ -379,7 +382,7 @@ _GERMAN_MARKS = [
      _GERMAN_CLOSE),
     (re.compile(rf"[,\s]*\b{_DE_NEW_LINE}\b[,.:;\s]*", re.IGNORECASE),
      LINE_BREAK),
-    (re.compile(r"[,.\s]*\bneue[nr]?\s+absatz\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK * 2),
+    (re.compile(rf"[,.\s]*\b{_DE_NEW_PARAGRAPH}\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK * 2),
     (re.compile(rf"\bpunkt\s+punkt\s+punkt\b|\b{_DE_ELLIPSIS}\b", re.IGNORECASE), "…"),
     (re.compile(_ENGINE_PERIOD + rf"\b{_DE_EXCLAIM}\b", re.IGNORECASE),
      "!"),
@@ -612,6 +615,33 @@ _RE_WEB_ALONE = re.compile(
 _RE_SPACED_ENDING = re.compile(r"\.\s+((?i:" + _EMAIL_TLDS_SAFE + r"))\b")
 _NOT_NAME_WORDS = _NOT_EMAIL_NAMES | {"i", "we", "they", "he", "she", "the", "a", "an", "to", "and",
                                         "my", "our"}
+
+
+# Line breaks said before an address ("New line, John at gmail dot com"):
+# the address after them still stands alone. A command word counts only
+# with a space or the end after it, so "return.example.com" is an address.
+# German ones with German commands.
+_BREAK_END = r"\b(?=[,.:;]?(?:\s|$))[,.:;\s]*"
+_RE_LEADING_BREAK = re.compile(rf"\s*(?:({_EN_NEW_LINE})|{_EN_NEW_PARAGRAPH}){_BREAK_END}",
+                               re.IGNORECASE)
+_RE_LEADING_BREAK_DE = re.compile(rf"\s*(?:({_DE_NEW_LINE})|{_DE_NEW_PARAGRAPH}){_BREAK_END}",
+                                  re.IGNORECASE)
+
+
+def leading_line_breaks(text: str, lang: str) -> tuple[str, str]:
+    """(the line breaks *text* starts with, said as commands, as LINE_BREAK
+    marks; the rest of *text*), so an address after them can be found."""
+    patterns = [_RE_LEADING_BREAK, _RE_LEADING_BREAK_DE] if lang == "de" else [_RE_LEADING_BREAK]
+    breaks = ""
+    while True:
+        for pattern in patterns:
+            m = pattern.match(text)
+            if m:
+                breaks += LINE_BREAK if m.group(1) else LINE_BREAK * 2
+                text = text[m.end():]
+                break
+        else:
+            return breaks, text
 
 
 def address_alone(text: str) -> str | None:

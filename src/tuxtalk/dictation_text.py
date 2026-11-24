@@ -16,6 +16,7 @@ from .logger import setup_logger
 from .normalize import (
     address_alone,
     append_auto_punct,
+    leading_line_breaks,
     normalize_text,
     plain_for_app,
     safe_to_lowercase_first_word,
@@ -69,6 +70,26 @@ def _carry_on_sentence(text, words, continues):
     return text
 
 
+def _address_on_its_own(processed: str, protected: dict[str, str], settings) -> str | None:
+    """The dictation typed as the address it is, when nothing else was said
+    but line breaks before it ("New line, John at gmail dot com"); None
+    otherwise. After the snippets, so "my email" said alone is an address on
+    its own too; a quoted one is typed exactly as written."""
+    breaks, said = "", processed
+    if not address_alone(custom_commands.restore_protected(processed, protected)):
+        breaks, said = leading_line_breaks(processed, settings.command_language)
+        # Only where the line-break rules agree ("Return to ..." stays words).
+        if not breaks or not normalize_text(
+                processed, lang=settings.command_language).startswith(breaks):
+            return None
+    literal = custom_commands.restore_protected(said, protected)
+    address = address_alone(literal)
+    if address and literal != said:
+        # As written, without the engine's full stop after the snippet.
+        address = custom_commands.restore_protected(said.rstrip(" .,!?;:"), protected).strip()
+    return breaks + address if address else None
+
+
 def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool,
                  app_kind: str = "", ai: bool = True, whole: bool = True, *,
                  settings, continues: Callable[[], bool] | None = None) -> str:
@@ -99,12 +120,7 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     if settings.words:
         from .word_spelling import fix_spelling
         processed = fix_spelling(processed, settings.words)
-    # After the snippets, so "my email" said alone is an address on its own too;
-    # a quoted one is typed exactly as written.
-    literal = custom_commands.restore_protected(processed, protected)
-    address = whole and address_alone(literal)
-    if address and literal != processed:
-        address = literal.strip()
+    address = whole and _address_on_its_own(processed, protected, settings)
     if address:
         logger.info(f"Normalized text: {settings.loggable(address)} (an address on its own)")
         return address + (" " if auto_space else "")
