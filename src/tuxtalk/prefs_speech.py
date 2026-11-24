@@ -16,7 +16,7 @@ from .config import Settings
 from .settings_schema import VALID_MODELS
 from .logger import setup_logger
 from .prefs_graphics_card import GraphicsCardRow
-from .prefs_language import LanguageRow, language_summary
+from .prefs_language import CommandLanguageRow, LanguageRow, language_summary
 from .prefs_tab import Tab, dropdown, fold, section_header, tip_label
 from .ui_style import WARNING_AMBER, message_dialog, show_message
 from .cuda_download import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
@@ -183,6 +183,8 @@ class SpeechSection(Tab):
         self.graphics_card.build(setup, 3, self._card_device())
         self.language = LanguageRow(self.win, self.selected_model, self.update_hint)
         self.language.build(setup, 4, self.config.get("model", Settings.model))
+        self.command_language = CommandLanguageRow(self.win)
+        self.command_language.build(setup, 5)
         for combo in (self.model_combo, self.device_combo, self.language.combo):
             combo.connect("changed", lambda *_: self.update_hint())
         self.update_hint()
@@ -855,6 +857,7 @@ class SpeechSection(Tab):
             # and CUDA without its files is shown as CPU.
             self._refill_device_options()
         self.language.show_saved()
+        self.command_language.show_saved()
         self.update_hint()
 
     # --- Apply and OK -----------------------------------------------------------

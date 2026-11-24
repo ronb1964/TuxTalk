@@ -732,9 +732,9 @@ Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>
   • <b>go to</b> needs a real web address, like youtube.com. Only <b>web search</b> searches.
   • An AppImage can be opened only if it has a menu entry (a tool like Gear Lever
     or AppImageLauncher makes one).
-  • The command words (open, close, new tab, web search, literal…) are English, like every
-    voice command here, whatever language you dictate in. App names can be said as the
-    menu shows them.'''
+  • The command words (open, close, new tab, web search, literal…) are English, whatever
+    language you dictate in, even with Voice commands in set to Deutsch. App names can be
+    said as the menu shows them.'''
 
 TERMINALS = '''# Terminals and Code Editors
 
@@ -1017,9 +1017,15 @@ There are two kinds:
   them right after the dictation they're about, as a dictation by themselves: hold
   your dictation key, say only the command, let go.
 
-The commands are English words, whatever language you dictate in. The same list,
-a tab per group, is in the TuxTalk menu → Voice Commands..., or, with <b>Apps, windows,
-keys and the mouse by voice</b> ticked in TuxTalk Labs, say <b>what can I say</b>.'''
+The commands are English words, whatever language you dictate in. Punctuation, new
+lines, <b>press enter</b>, <b>press tab</b> and deleting the last words can be said in
+German too: Preferences → General → Change model, device or language, then set
+<b>Voice commands in</b> to Deutsch, and say <b>Komma</b>, <b>neue Zeile</b>,
+<b>Enter drücken</b> or <b>das letzte Wort löschen</b>. English commands keep working.
+
+The same list, a tab per group, is in the TuxTalk menu → Voice Commands..., or, with
+<b>Apps, windows, keys and the mouse by voice</b> ticked in TuxTalk Labs, say
+<b>what can I say</b>.'''
 
 COMMANDS_EXAMPLES = '''<b>Usage Examples:</b>
 Say: <i>Hello world comma how are you question mark</i>

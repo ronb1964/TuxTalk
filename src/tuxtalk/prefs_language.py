@@ -1,6 +1,7 @@
-"""Preferences, General tab: the Language dropdown.
+"""Preferences, General tab: the Language dropdown, and the language voice
+commands are said in.
 
-One dropdown stands for three settings (language_mode, language,
+The Language dropdown stands for three settings (language_mode, language,
 auto_languages), which keep their meaning, so older configs and backups read
 the same. Its last entry, Several languages, holds auto-detect to a list
 ticked in a window of its own, for the Whisper models.
@@ -10,6 +11,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
 from .prefs_tab import Tab, dropdown, tip_label
+from .settings_schema import COMMAND_LANGUAGES
 from .ui_style import WARNING_AMBER
 
 # The Language dropdown's entry for auto-detect held to a list of languages.
@@ -261,3 +263,35 @@ class LanguageRow(Tab):
                 "is. Tick just one and it’s the same as choosing that language by hand."
                 "</small>")
         return checks
+
+
+class CommandLanguageRow(Tab):
+    """The Voice commands in dropdown: the language "press enter", "new
+    line" and the other commands are said in, apart from the language
+    dictated (some give commands in their own language while dictating in
+    another). English is understood in every one."""
+
+    def build(self, grid, row):
+        """The label and the dropdown at *row* of *grid*."""
+        label = tip_label(
+            "Voice commands in",
+            "The language you say voice commands in, like \"press enter\" or\n"
+            "\"new line\" (\"Enter drücken\", \"neue Zeile\" in German).\n"
+            "English commands always work too.")
+        grid.attach(label, 0, row, 1, 1)
+        self.combo = dropdown(Gtk.ComboBoxText())
+        label.set_mnemonic_widget(self.combo)
+        for code, name in COMMAND_LANGUAGES.items():
+            self.combo.append(code, name)
+        self.show_saved()
+        self.combo.connect("changed", self._on_changed)
+        grid.attach(self.combo, 1, row, 1, 1)
+
+    def show_saved(self):
+        """Select the saved setting's entry."""
+        self.combo.set_active_id(self.config.get("command_language", "en"))
+
+    def _on_changed(self, combo):
+        code = combo.get_active_id()
+        if code and code != self.config.get("command_language", "en"):
+            self.update_config("command_language", code)
