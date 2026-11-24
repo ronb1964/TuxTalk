@@ -189,12 +189,13 @@ _COMPILED = [(re.compile(pattern.replace("ß", "(?:ß|ss)")), build) for pattern
 _GO_TO = re.compile(
     r"^\s*(?:bitte\s+)?(?:geh(?:e)?\s+zu\s+(?P<first>.+?)|zu\s+(?P<last>.+?)\s+gehen)"
     r"(?:\s+bitte)?[\s.!?]*$", re.IGNORECASE)
+_SCHEME = re.compile(r"((?i:https?://)?)(.*)", re.DOTALL)
 # A web search, read from the words as said so their capitals stay. Not
 # "suche nach ...", which starts everyday sentences ("Suche nach einer
 # Wohnung in Berlin.").
 _SEARCH = re.compile(
     r"^\s*(?:websuche|im\s+(?:web|internet)\s+suchen|suche\s+im\s+(?:web|internet))"
-    r"\s*[,:]?\s+(?P<words>.+?)[\s.!?]*$", re.IGNORECASE)
+    r"\s*[,:]?(?:\s+nach)?\s+(?P<words>.+?)[\s.!?]*$", re.IGNORECASE)
 
 
 def _scroll(direction: str, count: str | None) -> str | None:
@@ -222,8 +223,10 @@ def to_english(text: str) -> str | None:
         return f"web search {m.group('words')}"
     if m := _GO_TO.match(text):
         # A spoken "Punkt" is a dot in the host only: a path keeps its words.
-        host, slash, path = (m["first"] or m["last"]).partition("/")
-        return "go to " + re.sub(r"(?i)\s*\bpunkt\b\s*", " dot ", host) + slash + path
+        scheme, rest = _SCHEME.match(m["first"] or m["last"]).groups()
+        host, slash, path = rest.partition("/")
+        return ("go to " + scheme + re.sub(r"(?i)\s*\bpunkt\b\s*", " dot ", host)
+                + slash + path)
     said = german_verb_last(normalize(text), _VERBS_FIRST)
     if not said:
         return None

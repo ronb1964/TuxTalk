@@ -118,6 +118,19 @@ def test_without_smart_quotes_german_quotes_are_plain(monkeypatch):
     ("Wir machen das morgen Punkt", "Wir machen das morgen."),
     ("Ich mag das hier Punkt", "Ich mag das hier."),
     ("Er sagt das immer Punkt", "Er sagt das immer."),
+    ("Ich weiß das alles Punkt", "Ich weiß das alles."),
+    ("Ich finde das super Punkt", "Ich finde das super."),
+    ("Ist das ganz sicher Fragezeichen", "Ist das ganz sicher?"),
+    ("Der ist super Ausrufezeichen", "Der ist super!"),
+    # "ein", "ohne" and "mit" end a clause too.
+    ("Fällt dir nichts ein Fragezeichen", "Fällt dir nichts ein?"),
+    ("Schalte das Licht ein Punkt", "Schalte das Licht ein."),
+    ("Geht das auch ohne Fragezeichen", "Geht das auch ohne?"),
+    ("Kommst du mit Komma oder bleibst du", "Kommst du mit, oder bleibst du."),
+    # A conjunction after it is no more of a noun.
+    ("Es könnte sein Komma dass er kommt", "Es könnte sein, dass er kommt."),
+    ("Sag es ihr Komma bitte", "Sag es ihr, bitte."),
+    ("Ich mache das gerne Punkt", "Ich mache das gerne."),
     # Two marks with the engine's pause between them are both marks.
     ("Liebe Anna Komma, neue Zeile, wie geht es dir",
      f"Liebe Anna,{LINE_BREAK}Wie geht es dir."),
@@ -152,6 +165,12 @@ def test_more_german_marks_said_as_commands(said, typed):
     "Das schreibt man mit Bindestrich.",
     "In null Komma nichts war er da.",
     "Das ist der springende Punkt bei der Sache.",
+    "Wir treffen uns um Punkt halb acht.",
+    "Eine Zahl ohne Komma.",
+    "Kein Komma hier.",
+    "Das ist der letzte Punkt.",
+    "Das ist die richtige neue Zeile.",
+    "Punkt, Komma, Strich.",
 ])
 def test_ordinary_german_sentences_stay_text(said):
     assert normalize_text(said, lang="de") == said

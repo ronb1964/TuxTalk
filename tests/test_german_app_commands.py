@@ -65,6 +65,7 @@ from tuxtalk.german_commands import to_english
     ("geh zu example.com/ResetToken", "go to example.com/ResetToken"),
     # A spoken Punkt is a dot in the host only; an app's name keeps its ß.
     ("geh zu example.com/Punkt/Reset", "go to example.com/Punkt/Reset"),
+    ("geh zu https://example Punkt com", "go to https://example dot com"),
     ("Maße schliessen", "close maße"),
     ("Mausraster", "mouse grid"),
     ("Fünf", "5"),
