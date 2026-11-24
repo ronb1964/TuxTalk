@@ -72,17 +72,22 @@ def test_each_listed_phrase_is_recognised(kind, phrase, monkeypatch):
         assert not _done_in_code(phrase) and voice_edit_rules.formatting(phrase) is None
 
 
-GERMAN = [(c.kind, phrase) for s in commands_reference.SECTIONS for c in s.commands
+GERMAN = [(c.kind, phrase, c.result) for s in commands_reference.SECTIONS for c in s.commands
           for phrase in c.german]
 
 
-@pytest.mark.parametrize("kind,phrase", GERMAN)
-def test_each_german_phrase_listed_works_with_german_commands_on(kind, phrase, monkeypatch):
+@pytest.mark.parametrize("kind,phrase,result", GERMAN)
+def test_each_german_phrase_listed_works_with_german_commands_on(kind, phrase, result,
+                                                                 monkeypatch):
     from tuxtalk import live_settings
     monkeypatch.setattr(live_settings, "command_language", "de")
     if kind == "inline":
         typed = normalize.normalize_text(f"Apfel {phrase} Birne {phrase} Kirsche", lang="de")
         assert phrase.lower() not in typed.lower()
+        # The symbol the list shows for it, where the list shows one.
+        symbol = result.split(" ")[0]
+        if len(symbol) == 1:
+            assert symbol in typed
     elif kind == "key":
         key = "TAB" if "tab" in phrase.lower() else "ENTER"
         assert key_commands.split_key_command(f"Bis morgen, {phrase}", "de")[1] == key

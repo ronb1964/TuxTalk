@@ -203,8 +203,9 @@ def _is_sentence_end(text: str, i: int) -> bool:
     return True
 
 
-# Closing marks that belong to the sentence they follow, not to the next one.
-_SENTENCE_CLOSERS = '"\'”’)]}'
+# Closing marks that belong to the sentence they follow, not to the next one;
+# “ is German's closing quote („Hallo.“).
+_SENTENCE_CLOSERS = '"\'”“’)]}'
 
 
 def _end_of_sentence(text: str, i: int) -> int:

@@ -256,19 +256,29 @@ _SINGLE_WORD_REPLACEMENTS = [
 _GERMAN_MARK_WORDS = (r"komma|beistrich|punkt|fragezeichen|ausrufe?zeichen|ausrufungszeichen|"
                       r"doppelpunkt|semikolon|strichpunkt|apostroph|hochkomma|hochstrich|"
                       r"bindestrich|gedankenstrich|zeilenumbruch|neue\s+zeile|"
-                      r"neue[nr]?\s+absatz|anführungszeichen|gänsefüßchen")
+                      r"neue[nr]?\s+absatz|anführungszeichen|gänsefü(?:ß|ss)chen|auslassungspunkte")
 _RE_GERMAN_HELD = re.compile(r"__LITDE_(\w+?)__")
-# Words before a mark that make it a thing talked about: an article, a
-# pronoun, "kein", "mit" or "ohne", or an article joined to its preposition
-# ("zum", "im"), maybe with one adjective ("ein großes Fragezeichen", "auf
-# den Punkt", "komm zum Punkt", "eine Zahl ohne Komma").
-_GERMAN_DETERMINER = (r"\b(?i:ein|eine|einen|einem|einer|eines|der|die|das|den|dem|des|"
-                      r"kein|keine|keinen|keinem|dieser|diese|dieses|diesen|diesem|"
-                      r"jeder|jedes|jeden|jedem|mein|meinen|sein|seinen|ihr|ihren|"
-                      r"mit|ohne|am|im|zum|zur|beim|vom|ins|ans)\s+"
-                      r"(?:[^\W\d_]+(?:e|en|er|es|em)\s+)?")
-_GERMAN_NUMBER = (r"(?:\d|(?i:ein|eins|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|"
-                  r"elf|zwölf|null)\b)")
+# Words before a mark that make it a thing talked about ("auf den Punkt",
+# "ein großes Fragezeichen", "komm zum Punkt", "eine Zahl ohne Komma"):
+# an article, a possessive, "kein", "mit" or "ohne", or an article joined to
+# its preposition, maybe with an adjective or two after it, which German
+# writes small (a capital word there is a noun: "die Woche Fragezeichen" is
+# a question about the week).
+_GERMAN_ADJECTIVES = r"(?-i:(?:[a-zäöüß]+\s+)?[a-zäöüß]+(?:e|en|er|es|em))\s+"
+_GERMAN_ARTICLE = (r"\b(?i:den|dem|des|"
+                   r"(?:ein|kein|mein|dein|unser|eur|euer)(?:e|en|em|er|es)?|"
+                   # Bare "sein" and "ihr" are also a verb and a pronoun a
+                   # sentence ends on ("Das kann nicht wahr sein Punkt").
+                   r"(?:sein|ihr)(?:e|en|em|er|es)|"
+                   r"dies(?:e|en|em|er|es)|jed(?:e|en|em|er|es)|"
+                   r"ohne|am|im|zum|zur|beim|vom|ins|ans)\s+")
+# These end a clause as often as they start a noun ("Was ist das
+# Fragezeichen", "Kommst du mit Fragezeichen"), so the mark after one is a
+# word only with an adjective between them or more of the sentence after.
+_GERMAN_CLAUSE_END = r"\b(?i:der|die|das|mit)\s+"
+# A number, in digits or in words ("zwölf", "zwanzig", "einhundert").
+_GERMAN_NUMBER = (r"(?:\d+|(?i:ein|eins|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|"
+                  r"elf|zwölf|null|[a-zäöüß]*(?:zehn|zig|ßig|hundert|tausend))\b)")
 
 
 def _hold_german(m: re.Match) -> str:
@@ -283,11 +293,14 @@ def _give_back_german(m: re.Match) -> str:
     return " ".join([*before, noun[:1].upper() + noun[1:]])
 
 
-# Mark words in a row with the engine's commas between them ("Punkt, Punkt,
-# Komma, Strich" in the children's rhyme) are words: said as commands, the
-# engine writes no comma between them.
-_RE_GERMAN_MARK_RUN = re.compile(rf"\b(?:{_GERMAN_MARK_WORDS})(?:,\s+(?:{_GERMAN_MARK_WORDS})\b)+",
-                                 re.IGNORECASE)
+# Three or more mark words in a row with the engine's commas between them
+# ("Punkt, Punkt, Komma, Strich" in the children's rhyme) are words; two
+# can be commands said with a pause ("Komma, neue Zeile"). So is "Punkt
+# für Punkt".
+_RE_GERMAN_MARK_RUN = re.compile(
+    rf"\b(?:{_GERMAN_MARK_WORDS})(?:,\s+(?:{_GERMAN_MARK_WORDS})\b){{2,}}"
+    r"|\bpunkt\s+für\s+punkt\b",
+    re.IGNORECASE)
 _RE_GERMAN_MARK_WORD = re.compile(rf"()({_GERMAN_MARK_WORDS})", re.IGNORECASE)
 
 
@@ -299,25 +312,32 @@ def _hold_german_run(m: re.Match) -> str:
 _GERMAN_PROTECT_PATTERNS = [
     # "wörtlich Komma", "das Wort Punkt": the word itself, without "wörtlich".
     re.compile(rf"\b(?:wörtlich|das\s+wort)\s+()({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
-    re.compile(rf"({_GERMAN_DETERMINER})({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
+    re.compile(rf"({_GERMAN_ARTICLE}(?:{_GERMAN_ADJECTIVES})?)({_GERMAN_MARK_WORDS})\b",
+               re.IGNORECASE),
+    re.compile(rf"({_GERMAN_CLAUSE_END}{_GERMAN_ADJECTIVES})({_GERMAN_MARK_WORDS})\b",
+               re.IGNORECASE),
+    re.compile(rf"({_GERMAN_CLAUSE_END})({_GERMAN_MARK_WORDS})\b(?=\s+[^\W\d_])",
+               re.IGNORECASE),
     # "Punkt 12 Uhr", "um Punkt zwölf": the time, not a full stop.
     re.compile(rf"(\b)(punkt)(?=\s+{_GERMAN_NUMBER})", re.IGNORECASE),
     # "drei Komma fünf" is 3,5 (the engines mostly write it so already).
     re.compile(rf"((?<!\w){_GERMAN_NUMBER}\s+)(komma)(?=\s+{_GERMAN_NUMBER})", re.IGNORECASE),
-    re.compile(r"(\b)(punkt)(?=\s+für\s+punkt\b)", re.IGNORECASE),
 ]
 
 # A German closing quote, “, is English's opening one, which the spacing
-# rules treat as one: it stands in as this until they have run.
+# rules treat as one: it stands in as this until they have run, for a
+# spoken one and for one the engine wrote after its „ ("„Hallo“ und").
 _GERMAN_CLOSE = "\x02"
+_RE_GERMAN_PAIR = re.compile("\u201e([^\u201e\u201c\u201d]*)\u201c")
 
 # Phrases first, as in English: "Punkt Punkt Punkt" before "Punkt",
 # "eckige Klammer auf" before "Klammer auf". German quotes are „…“, each
 # taking the spaces and the engine's pause comma on its inner side.
 _GERMAN_MARKS = [
-    (re.compile(r"\b(?:anführungszeichen|gänsefüßchen)\s+(?:auf|unten)\b[,.]?\s*",
+    (re.compile(r"\b(?:anführungszeichen|gänsefü(?:ß|ss)chen)\s+(?:auf|unten)\b[,.]?\s*",
                 re.IGNORECASE), "\u201e"),
-    (re.compile(r"[,\s]*\b(?:anführungszeichen|gänsefüßchen)\s+(?:zu|oben)\b", re.IGNORECASE),
+    (re.compile(r"[,\s]*\b(?:anführungszeichen|gänsefü(?:ß|ss)chen)\s+(?:zu|oben)\b",
+                re.IGNORECASE),
      _GERMAN_CLOSE),
     (re.compile(r"[,\s]*\b(?:neue\s+zeile|zeilenumbruch)\b[,.:;\s]*", re.IGNORECASE),
      LINE_BREAK),
@@ -337,7 +357,8 @@ _GERMAN_MARKS = [
     (re.compile(r"\bdoppelpunkt\b:?", re.IGNORECASE), ":"),
     (re.compile(r"\bpunkt\b\.?", re.IGNORECASE), "."),
     (re.compile(r"\b(?:apostroph|hochkomma|hochstrich)\b", re.IGNORECASE), "'"),
-    (re.compile(r"\bgedankenstrich\b", re.IGNORECASE), "—"),
+    # German's dash between words is the en dash, with a space each side.
+    (re.compile(r" *\bgedankenstrich\b *", re.IGNORECASE), " – "),
     (re.compile(r" *\bbindestrich\b *", re.IGNORECASE), "-"),
 ]
 
@@ -395,7 +416,7 @@ _RE_TRAILING_COMMA = re.compile(r",$")
 _RE_ENDS_PUNCTUATED = re.compile(r"[.?!…:;][\"'”“’)\]}]*$")
 # Negative lookbehind: don't capitalize after single-letter abbreviations
 # ("e.g. that" / "U.S. economy" must not become "e.g. That" / "U.S. Economy").
-_RE_CAP_AFTER_ENDER = re.compile(r"(?<![A-Za-z]\.[A-Za-z])([.?!…]\s+)([a-zäöü])")
+_RE_CAP_AFTER_ENDER = re.compile(r"(?<![A-Za-z]\.[A-Za-z])([.?!…]\s+)([^\W\d_])")
 # Standalone lowercase "i" → "I" (also catches "i'll", "i'm", "i've", "i'd"
 # because the apostrophe is a word boundary). Case-sensitive: an existing
 # "I" is left alone. Words like "in", "it", "iPad" are not matched because
@@ -915,6 +936,7 @@ def normalize_text(text: str, auto_period: bool = True, lang: str = "en") -> str
     text, quoted_sections = _hold_quoted(text)
     text = _protect_command_words(text, lang)
     text = _spoken_marks_to_symbols(text, lang)
+    text = _RE_GERMAN_PAIR.sub("\u201e\\1" + _GERMAN_CLOSE, text)
     text = _tidy_punctuation(text)
     # Times before the spacing and capitals, which would otherwise read the
     # "m." of "a. m." as a sentence end ("meet at 9 a. m. Tomorrow").

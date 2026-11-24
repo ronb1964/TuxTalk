@@ -16,7 +16,7 @@ import re
 
 from . import spoken_numbers
 from .undo import GERMAN_NUMBER_WORDS
-from .voice_navigation import normalize
+from .voice_navigation import german_verb_last, normalize
 
 # A verb said first, as the infinitive it is said last as.
 _VERBS_FIRST = {
@@ -41,7 +41,11 @@ _CLICKS = {"klick": "click", "klicken": "click", "linksklick": "left click",
 # The app kinds app_finder knows by their English word.
 _APP_KINDS = {"e mail": "email", "email": "email", "mail": "email", "dateien": "files",
               "dateimanager": "files", "rechner": "calculator", "taschenrechner": "calculator"}
-_ARTICLE = r"(?:(?:den|die|das|dem|ein|eine|einen) )?"
+# A German article before an app's name, as the English one: app_finder
+# lets a loose match ("Datei" for Dateien) count only for a bare name, so
+# "eine Datei öffnen" is typed, as "open a file" is.
+_ARTICLES = {"den": "the", "die": "the", "das": "the", "dem": "the", "ein": "a", "eine": "a",
+             "einen": "a"}
 
 # German phrase -> English phrase, for commands that take no name or number.
 _FIXED = {
@@ -124,9 +128,12 @@ def _number(words: str) -> str | None:
 
 
 def _app(words: str) -> str:
-    """An app's name as said, without its article, an app kind in English."""
-    name = re.sub(rf"^{_ARTICLE}", "", words)
-    return _APP_KINDS.get(name, name)
+    """An app's name as said, an app kind in English, after its article in
+    English."""
+    first, _, rest = words.partition(" ")
+    article, name = (_ARTICLES[first], rest) if first in _ARTICLES and rest else ("", words)
+    name = _APP_KINDS.get(name, name)
+    return f"{article} {name}" if article else name
 
 
 def _with_number(template: str):
@@ -154,7 +161,6 @@ _RULES = [
     (r"(links|rechts|hoch|rauf|runter)(?: (.+))?", lambda m: _nudge(m[1], m[2])),
     (r"alle (.+) schließen", lambda m: f"close all {_app(m[1])}"),
     (r"zu (.+) wechseln", lambda m: f"switch to {_app(m[1])}"),
-    (r"zu (.+) gehen", lambda m: f"go to {m[1]}"),
     (r"(.+) (schließen|minimieren|maximieren|wiederherstellen)",
      lambda m: f"{_WINDOW_VERBS[m[2]]} {_app(m[1])}"),
     (r"(?:weiteren|weiteres|noch (?:ein|einen|eine)) (.+) (?:öffnen|starten|aufrufen)",
@@ -163,12 +169,30 @@ _RULES = [
     (r"(.+) (öffnen|aufrufen|starten)",
      lambda m: f"{'start' if m[2] == 'starten' else 'open'} {_app(m[1])}"),
 ]
-_WINDOW_VERBS = {"schließen": "close", "minimieren": "minimize", "maximieren": "maximize",
+_WINDOW_VERBS = {"schliessen": "close", "minimieren": "minimize", "maximieren": "maximize",
                  "wiederherstellen": "restore"}
-_COMPILED = [(re.compile(pattern), build) for pattern, build in _RULES]
-# A web search, read from the words as said so their capitals stay.
-_SEARCH = re.compile(r"^\s*(?:im\s+web\s+suchen|suche\s+im\s+web|websuche|suche\s+nach)"
-                     r"\s*[,:]?\s+(?P<words>.+?)[\s.!?]*$", re.IGNORECASE)
+
+
+def _swiss(text: str) -> str:
+    """*text* as Swiss German writes it, ss for ß: what's said is read so, and
+    the tables are, so "Fenster schließen" and "Fenster schliessen" match."""
+    return text.replace("ß", "ss")
+
+
+_FIXED = {_swiss(said): english for said, english in _FIXED.items()}
+_VERBS_FIRST = {_swiss(form): _swiss(verb) for form, verb in _VERBS_FIRST.items()}
+_COMPILED = [(re.compile(_swiss(pattern)), build) for pattern, build in _RULES]
+# A web address, read from the words as said: its dots, slashes and a
+# path's capitals stay ("geh zu example.com/Reset"). "Punkt" is its dot.
+_GO_TO = re.compile(
+    r"^\s*(?:bitte\s+)?(?:geh(?:e)?\s+zu\s+(?P<first>.+?)|zu\s+(?P<last>.+?)\s+gehen)"
+    r"(?:\s+bitte)?[\s.!?]*$", re.IGNORECASE)
+# A web search, read from the words as said so their capitals stay. Not
+# "suche nach ...", which starts everyday sentences ("Suche nach einer
+# Wohnung in Berlin.").
+_SEARCH = re.compile(
+    r"^\s*(?:websuche|im\s+(?:web|internet)\s+suchen|suche\s+im\s+(?:web|internet))"
+    r"\s*[,:]?\s+(?P<words>.+?)[\s.!?]*$", re.IGNORECASE)
 
 
 def _scroll(direction: str, count: str | None) -> str | None:
@@ -188,21 +212,15 @@ def _nudge(direction: str, steps: str | None) -> str | None:
     return None if number is None else f"{_DIRECTIONS[direction]} {number}".strip()
 
 
-def _verb_last(said: str) -> str:
-    """*said* (normalized) without "bitte", a verb said first moved last."""
-    words = [w for w in said.split() if w != "bitte"]
-    if len(words) > 1 and words[0] in _VERBS_FIRST:
-        words = [*words[1:], _VERBS_FIRST[words[0]]]
-    return " ".join(words)
-
-
 def to_english(text: str) -> str | None:
     """The English command the German dictation *text* is, or None when it
-    is no German command. A web address keeps "punkt" as "dot"
-    ("geh zu youtube punkt com" is "go to youtube dot com")."""
+    is no German command ("geh zu youtube Punkt com" is "go to youtube dot
+    com")."""
     if m := _SEARCH.match(text):
         return f"web search {m.group('words')}"
-    said = _verb_last(normalize(text))
+    if m := _GO_TO.match(text):
+        return "go to " + re.sub(r"(?i)\s*\bpunkt\b\s*", " dot ", m["first"] or m["last"])
+    said = german_verb_last(_swiss(normalize(text)), _VERBS_FIRST)
     if not said:
         return None
     if english := _FIXED.get(said):
@@ -211,5 +229,5 @@ def to_english(text: str) -> str | None:
         if m := pattern.fullmatch(said):
             english = build(m)
             if english:
-                return re.sub(r"\bpunkt\b", "dot", english)
+                return english
     return None

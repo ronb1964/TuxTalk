@@ -65,10 +65,9 @@ def _inline(*said, result, note="", german=()):
     return Command(said, result, "inline", note, german)
 
 
-def _literal(word, result, *said, german=()):
+def _literal(word, result, *said):
     """The command that types *word* itself; *said* adds other ways to say it."""
-    return Command((f"literal {word}", *said), f'"{word}" (not {result})', "literal",
-                   german=german)
+    return Command((f"literal {word}", *said), f'"{word}" (not {result})', "literal")
 
 
 SECTIONS = (
@@ -94,7 +93,8 @@ SECTIONS = (
         _inline(result="“ (closing, in German)",
                 german=("Anführungszeichen oben", "Anführungszeichen zu")),
         _inline("hyphen", "dash", result="-", german=("Bindestrich",)),
-        _inline("em dash", result="—", german=("Gedankenstrich",)),
+        _inline("em dash", result="—"),
+        _inline(result="– (a space each side)", german=("Gedankenstrich",)),
         _inline("dot dot dot", "ellipsis", result="…",
                 german=("Punkt Punkt Punkt", "Auslassungspunkte")),
     )),
@@ -130,9 +130,11 @@ SECTIONS = (
                  "from Select and Move, Apps and Windows, Keys and Web or Sound and "
                  "System types its words too (<b>literal open Firefox</b>).",
             commands=(
-                _literal("period", ".", "the word period",
-                         german=("wörtlich Punkt", "das Wort Punkt")),
-                _literal("comma", ",", "the word comma", german=("wörtlich Komma",)),
+                _literal("period", ".", "the word period"),
+                _literal("comma", ",", "the word comma"),
+                Command((), '"Punkt" (not .)', "literal",
+                        german=("wörtlich Punkt", "das Wort Punkt")),
+                Command((), '"Komma" (not ,)', "literal", german=("wörtlich Komma",)),
                 _literal("press tab", "a tab character"),
                 _literal("new line", "a line break", "the word new line"),
                 _literal("question mark", "?"),
@@ -321,7 +323,7 @@ SECTIONS = (
         Command(("go to youtube dot com",), "opens the address; in a browser, in that tab",
                 "action", german=("geh zu youtube Punkt com",)),
         Command(("web search cheap tires",), "your browser's own search, in a new tab",
-                "action", german=("suche nach günstige Reifen",)),
+                "action", german=("Websuche günstige Reifen",)),
     )),
     Section("Sound and Music", SOUND, labs=LABS_ACTIONS, commands=(
         Command(("volume up", "volume down", "volume up 3", "turn down the volume"),

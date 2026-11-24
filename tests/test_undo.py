@@ -294,7 +294,7 @@ def test_two_sentences_ending_in_closing_quotes():
 
 
 def test_deleting_a_sentence_keeps_the_space_before_the_next_dictation():
-    """Ron, 2026-10-17: "delete last sentence", then dictating again gave
+    """"delete last sentence", then dictating again, gave
     "message.The power". Each dictation ends with its own space and starts
     with none, so the space after the sentence before must stay."""
     typed = "One thing popped in my head after Mio's message. The power saving feature to. "
@@ -345,3 +345,9 @@ def test_german_sentences_about_deleting_stay_text(said):
 def test_german_undo_waits_for_german_commands():
     """With the command language English, German words are dictation."""
     assert detect_undo_command("das letzte Wort löschen") is None
+
+
+def test_deleting_the_last_sentence_stops_at_a_german_closing_quote():
+    """„Hallo.“ ends a sentence; without “ as a closer the whole text went."""
+    text = "Er sagte „Hallo.“ Danach ging er. "
+    assert text[:len(text) - calculate_undo_length(text, "sentence", 1)] == "Er sagte „Hallo.“ "

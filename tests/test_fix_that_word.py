@@ -87,7 +87,7 @@ def test_the_voice_window_shows_only_the_newest_dictation(monkeypatch):
     assert built["before_show"] is explain.place_over_active_window
 
 
-# --- fixing it in the text (Ron, 2026-10-14) ----------------------------------------------
+# --- fixing it in the text -------------------------------------------------------------
 
 @pytest.fixture
 def typed(monkeypatch, tmp_path):
@@ -186,7 +186,7 @@ def test_in_another_window_it_only_saves_the_fix(opened, typed, monkeypatch):
 
 
 def test_fix_in_text_swaps_only_the_word(monkeypatch):
-    """It retyped the whole dictation; only the word should change (Ron)."""
+    """It retyped the whole dictation; only the word should change."""
     from tuxtalk import fix_word_dialog as fw
     pressed, typed_text = [], []
 

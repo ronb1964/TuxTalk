@@ -31,10 +31,11 @@ _EDIT_WORDS = frozenset("""make change turn remove delete take add put replace r
     capitalise uppercase lowercase bold italicize underline swap move cut drop
     spell format convert please can could""".split())
 # German, with voice commands in German: "bearbeite das, mach es kürzer",
-# or the verb last, "das bearbeiten, ...". The instruction goes to the AI as
-# any instruction the exact rules below don't know does.
+# or the verb last, "das bearbeiten, ...". Not "ändere das", a sentence on
+# its own too. The instruction goes to the AI as any instruction the exact
+# rules below don't know does.
 _GERMAN_SPOKEN_EDIT = re.compile(
-    r"^\s*(?:bitte\s+)?(?:(?:bearbeite|bearbeit|ändere|änder)\s+das|das\s+(?:bearbeiten|ändern))"
+    r"^\s*(?:bitte\s+)?(?:bearbeite?\s+das|das\s+bearbeiten)"
     r"\b(?P<pause>[\s]*[,.:;!?-])?\s*(?P<rest>.*?)\s*$", re.IGNORECASE | re.DOTALL)
 _GERMAN_EDIT_WORDS = frozenset({
     "mach", "mache", "ändere", "änder", "schreib", "schreibe", "entferne", "entfern", "lösche",
@@ -363,7 +364,11 @@ def split_steps(instruction: str) -> list:
 _RELAYOUT = re.compile(
     r"\b(?:lists?|bulleted|numbered|join|combine|merge|one line|single line|paragraphs?"
     r"|shorten|shorter|summar\w*|condense|e-?mail|letter|split|separate|sentences|sort"
-    r"|alphabeti\w*|reorder|poem|haiku|into|table|outline)\b")
+    r"|alphabeti\w*|reorder|poem|haiku|into|table|outline"
+    # The same in German ("mach es kürzer", "als Liste").
+    r"|liste|aufzählung|nummeriert\w*|zusammen\w*|verbinde\w*|eine zeile|absätze?"
+    r"|kürzer|kürze\w*|brief|aufteile\w*|trenne\w*|sätze|sortier\w*"
+    r"|alphabetisch\w*|gedicht|tabelle|gliederung)\b")
 
 
 def keeps_lines(instruction: str) -> bool:

@@ -17,8 +17,9 @@ before 0.15.0, so older entries use that name.
   warte") aren't in German yet.
 - Remove filler words takes German's "äh" and "ähm" too, and keeps a
   German doubled article that's meant ("die Frau, die die Zeitung liest").
-  Send each dictation automatically holds the Enter after a German
-  dictation cut off on "und" or "aber", as it does after "and".
+  With voice commands in German, Send each dictation automatically holds
+  the Enter after a dictation cut off on "und" or "weil", as it does after
+  "and".
 - Pick any dictation key you like: the hold and toggle lists in
   Preferences → General end in "Other key or combination…", where you
   press the keys, such as Alt+D, Ctrl+Shift+K or F13 to F24. TuxTalk

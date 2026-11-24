@@ -174,7 +174,8 @@ _NO_SUCH_DESKTOP = re.compile(
 
 _SEARCH = re.compile(r"^\s*web\s+search\s*[,:]?\s+(?P<words>.+?)[\s.!?]*$", re.IGNORECASE)
 _GO_TO = re.compile(r"^\s*(?:go\s+to|open)\s+(?P<rest>.+)$", re.IGNORECASE)
-_LITERAL = re.compile(r"^\s*(?:literal|wörtlich)\s+(?P<rest>.+)$", re.IGNORECASE)
+_LITERAL = re.compile(r"^\s*literal\s+(?P<rest>.+)$", re.IGNORECASE)
+_GERMAN_LITERAL = re.compile(r"^\s*(?:literal|wörtlich)\s+(?P<rest>.+)$", re.IGNORECASE)
 
 ADDRESS_ENDINGS = frozenset({
     "com", "org", "net", "io", "gov", "edu", "app", "dev", "co", "uk", "de", "ca", "au",
@@ -311,7 +312,7 @@ def _from_german(text: str, navigation: bool, actions: bool, grid: bool):
 def literal_words(raw: str, *, navigation: bool, actions: bool, grid: bool = False,
                   lang: str = "en") -> str:
     """The words to type for "literal <command>", else *raw* unchanged."""
-    m = _LITERAL.match(raw)
+    m = (_GERMAN_LITERAL if lang == "de" else _LITERAL).match(raw)
     if m and parse(m.group("rest"), navigation=navigation, actions=actions, grid=grid,
                    lang=lang):
         return m.group("rest")

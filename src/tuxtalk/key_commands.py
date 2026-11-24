@@ -45,18 +45,27 @@ US_LETTER_KEYS = dict(zip("abcdefghijklmnopqrstuvwxyz",
 # tab". Speech engines often capitalise and punctuate it ("... noon. Press
 # Enter."), and a short pause after "press" comes out as a comma ("press,
 # tab"). "literal" or "the word" before it types the words.
-_TRAILING = re.compile(
-    r"(?P<lead>^|[\s,;:.!?]+)"
-    r"(?P<literal>(?:literal|the\s+words?)\s+)?"
-    r"(?:press|hit),?\s+(?:the\s+)?(?P<key>enter|return|tab)(?:\s+key)?"
-    r"[\s.!?,]*$",
-    re.IGNORECASE,
-)
+_LITERAL = r"(?:literal|the\s+words?)"
+# With German on, either language's word for it does, before either's
+# command: "literal Enter drücken" asked for the words as surely.
+_GERMAN_LITERAL = r"(?:literal|the\s+words?|wörtlich|das\s+wort|die\s+wörter)"
+
+
+def _english_trailing(literal: str) -> re.Pattern:
+    """The English command at the end, with *literal* the words that keep it
+    words."""
+    return re.compile(
+        r"(?P<lead>^|[\s,;:.!?]+)"
+        rf"(?P<literal>{literal}\s+)?"
+        r"(?:press|hit),?\s+(?:the\s+)?(?P<key>enter|return|tab)(?:\s+key)?"
+        r"[\s.!?,]*$",
+        re.IGNORECASE,
+    )
+
 
 # German: "Enter drücken", "Eingabe drücken", "Tab-Taste drücken", the verb
-# last as most say it, or first ("drück Enter"). "wörtlich" or "das Wort"
-# before it types the words.
-_GERMAN_LEAD = r"(?P<lead>^|[\s,;:.!?]+)(?P<literal>(?:wörtlich|das\s+wort|die\s+wörter)\s+)?"
+# last as most say it, or first ("drück Enter").
+_GERMAN_LEAD = rf"(?P<lead>^|[\s,;:.!?]+)(?P<literal>{_GERMAN_LITERAL}\s+)?"
 _GERMAN_KEY = r"(?P<key>enter|eingabe|return|tab|tabulator)(?:[\s-]?taste)?"
 _GERMAN_TRAILING = (
     re.compile(_GERMAN_LEAD + r"(?:die\s+)?" + _GERMAN_KEY + r",?\s+drücken[\s.!?,]*$",
@@ -65,7 +74,9 @@ _GERMAN_TRAILING = (
                + r"[\s.!?,]*$", re.IGNORECASE),
 )
 # Each language's patterns, its own first; English is understood in every one.
-_TRAILING_BY_LANGUAGE = {"en": (_TRAILING,), "de": (*_GERMAN_TRAILING, _TRAILING)}
+_TRAILING = _english_trailing(_LITERAL)
+_TRAILING_BY_LANGUAGE = {"en": (_TRAILING,),
+                         "de": (*_GERMAN_TRAILING, _english_trailing(_GERMAN_LITERAL))}
 _TAB_NAMES = frozenset({"tab", "tabulator"})
 
 
@@ -102,33 +113,35 @@ def split_key_command(raw: str, lang: str = "en") -> tuple[str, str]:
 # Not "with" or "of": a sentence can end on either ("to play around with",
 # "what it's made of"), and holding back a finished message looks as if
 # sending were off.
-# German's are here too, but not "das" or "der", which can end a whole
-# sentence ("Ich weiß das."), nor "die", which can end an English one.
 _UNFINISHED = frozenset({
     "and", "but", "or", "because", "the", "a", "an", "if",
     "my", "your", "our", "their", "um", "uh",
-    "und", "aber", "oder", "weil", "dass", "wenn", "ein", "eine", "einen", "den", "dem",
-    "des", "mein", "dein", "unser", "äh", "ähm",
 })
+# German's, with voice commands in German. Not "aber", "oder" or "ein", which
+# end whole sentences ("Ich will aber!", "Du kommst, oder?", "Ich lade dich
+# ein."), nor an article that can be a pronoun ("Ich weiß das.").
+_GERMAN_UNFINISHED = _UNFINISHED | {"und", "weil", "dass", "eine", "einen", "des", "mein",
+                                     "dein", "unser", "äh", "ähm"}
 
 
-def ends_unfinished(text: str) -> str:
-    """The word a cut-off dictation ends on ("and"), or "" when it looks whole."""
+def ends_unfinished(text: str, lang: str = "en") -> str:
+    """The word a cut-off dictation ends on ("and"), or "" when it looks
+    whole; with *lang* "de" German's words count too ("und")."""
     words = text.split()
     if not words:
         return ""
-    last = words[-1].strip(".,;:!?\"'“”‘’").lower()
-    return last if last in _UNFINISHED else ""
+    last = words[-1].strip(".,;:!?\"'“”„‘’").lower()
+    return last if last in (_GERMAN_UNFINISHED if lang == "de" else _UNFINISHED) else ""
 
 
-def auto_send(words: str, why_not: str) -> tuple[bool, str]:
+def auto_send(words: str, why_not: str, lang: str = "en") -> tuple[bool, str]:
     """For "Send each dictation automatically": (whether these words are
     sent, the word they were cut off on or "").
 
     *why_not* is window_classes.why_no_automatic_enter's answer for the
     window: where it gives a reason nothing is sent, but a cut-off dictation
     is still reported, since it gets no period either."""
-    cut_off = ends_unfinished(words)
+    cut_off = ends_unfinished(words, lang)
     if why_not:
         logger.info(f"Not sending: {why_not}")
         return False, cut_off

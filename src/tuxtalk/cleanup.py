@@ -21,11 +21,11 @@ _FILLER = r"(?:u+m+|u+h+m*|erm|ä+h+m*|ö+h+m*)"
 
 # Words that are correctly doubled in ordinary English: "I know that that is
 # true", "she had had enough", "what it is is...", "very very", "so so"; and
-# German's article after a relative pronoun ("die Frau, die die Zeitung liest",
-# "das Kind, das das Buch hat"). The AI's corrections are held to the same
-# list (correction_safety).
+# in German, an article after a relative pronoun ("die Frau, die die Zeitung
+# liest", "das Kind, das das Buch hat") and "ob sie sie kennt". The AI's
+# corrections are held to the same list (correction_safety).
 LEGIT_DOUBLES = {"that", "had", "is", "do", "very", "so", "bye", "no", "yeah", "ha", "really",
-                 "far", "long", "die", "das", "der", "den", "dem"}
+                 "far", "long", "die", "das", "der", "den", "dem", "sie"}
 
 # Numbers are read out digit by digit ("five five five", "4 4 7 1"), so a
 # repeated number is a phone number or PIN, never a stutter. The AI's
@@ -36,6 +36,8 @@ NUMBER_WORDS = {
     "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
     "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
     "hundred", "thousand", "million", "billion", "point", "double", "triple",
+    "null", "eins", "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun",
+    "zehn", "elf", "zwölf", "hundert", "tausend",
 }
 
 # Pronouns that are capitalized anywhere, so a capital says nothing about them.

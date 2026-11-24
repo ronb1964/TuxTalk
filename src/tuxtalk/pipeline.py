@@ -426,7 +426,7 @@ def _key_to_press(raw: str, said: str, job: _Job):
     if said or not live.press_enter_after or job.chunk_role == "middle":
         return said, "", ""
     why_not = why_no_automatic_enter(focused_window.acts_as(focused_window.window_class()))
-    sending, cut_off = auto_send(raw, why_not)
+    sending, cut_off = auto_send(raw, why_not, live.command_language)
     # Only where it would have sent does a cut-off say why it wasn't.
     return ("ENTER" if sending else ""), cut_off, ("" if why_not else cut_off)
 
@@ -563,7 +563,7 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
         last_dictation.unsay(job.message, said_before)
     last_dictation.remember_shown(rs.state.last_inserted_text, chunked, outcome == "ok",
                                   job.message)
-    job.message.ends_on = ends_unfinished(words.raw)
+    job.message.ends_on = ends_unfinished(words.raw, live.command_language)
     if outcome == "ok":
         _keep_for_the_sentence(words, text, audio_f32, job)
     _after_the_words(outcome, words.said, words.press, words.space_left_off, job.chunk_role,

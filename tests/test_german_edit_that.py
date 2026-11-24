@@ -8,7 +8,7 @@ from tuxtalk.voice_edit_rules import spoken_edit
 @pytest.mark.parametrize("said, instruction", [
     ("Bearbeite das, mach es kürzer.", "mach es kürzer."),
     ("Das bearbeiten. Übersetze es ins Englische", "Übersetze es ins Englische"),
-    ("Ändere das", ""),
+    ("Bearbeite das", ""),
     ("bearbeite das mach es formeller", "mach es formeller"),
     # English stays understood.
     ("Edit that, make it shorter", "make it shorter"),
@@ -19,6 +19,7 @@ def test_a_german_edit_instruction_is_found(said, instruction):
 
 @pytest.mark.parametrize("said", [
     "Bearbeite das Dokument bis morgen.",
+    "Ändere das.",
     "Ändere das Passwort regelmäßig.",
 ])
 def test_a_german_sentence_starting_the_same_way_stays_text(said):
@@ -27,3 +28,14 @@ def test_a_german_sentence_starting_the_same_way_stays_text(said):
 
 def test_german_waits_for_german_commands():
     assert spoken_edit("Bearbeite das, mach es kürzer.") is None
+
+
+@pytest.mark.parametrize("instruction", ["mach es kürzer", "als Liste", "fasse es zusammen"])
+def test_a_german_instruction_that_lays_the_text_out_anew_is_known(instruction):
+    from tuxtalk.voice_edit_rules import keeps_lines
+    assert not keeps_lines(instruction)
+
+
+def test_an_english_instruction_with_in_still_keeps_its_lines():
+    from tuxtalk.voice_edit_rules import keeps_lines
+    assert keeps_lines("fix the spelling in this")

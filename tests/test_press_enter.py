@@ -59,6 +59,9 @@ def test_split_press_enter(raw, expected):
     # Only the very end counts, and "wörtlich" types the words.
     ("Enter drücken und weiter", ("Enter drücken und weiter", "")),
     ("Schreib wörtlich Enter drücken", ("Schreib Enter drücken", "")),
+    # Either language's literal word keeps either language's command words.
+    ("literal Enter drücken", ("Enter drücken", "")),
+    ("wörtlich press enter", ("press enter", "")),
 ])
 def test_german_press_enter_and_tab_with_german_commands_on(raw, expected):
     assert split_key_command(raw, "de") == expected
@@ -66,12 +69,21 @@ def test_german_press_enter_and_tab_with_german_commands_on(raw, expected):
 
 @pytest.mark.parametrize("text, word", [
     ("Ich wollte noch sagen und", "und"),
-    ("Wir treffen uns, aber", "aber"),
+    ("Das liegt daran, weil", "weil"),
     ("Ich weiß das.", ""),
+    ("Du kommst morgen, oder?", ""),
+    ("Ich lade dich ein.", ""),
+    ("Ich will aber!", ""),
 ])
 def test_a_german_dictation_cut_off_holds_the_automatic_enter(text, word):
     from tuxtalk.key_commands import ends_unfinished
-    assert ends_unfinished(text) == word
+    assert ends_unfinished(text, "de") == word
+
+
+@pytest.mark.parametrize("text", ["I live in a den.", "See you, Des.", "Ich wollte und"])
+def test_with_english_commands_german_words_never_hold_the_enter(text):
+    from tuxtalk.key_commands import ends_unfinished
+    assert ends_unfinished(text) == ""
 
 
 def test_german_press_enter_waits_for_german_commands():

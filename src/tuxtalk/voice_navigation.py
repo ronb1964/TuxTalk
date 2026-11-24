@@ -54,17 +54,19 @@ def normalize(text: str) -> str:
 # "markiere den letzten Satz" is read as "den letzten satz markieren", so
 # each German rule is written once, the verb last.
 _GERMAN_VERBS = {"markier": "markieren", "markiere": "markieren", "markieren": "markieren",
-                 "wähle": "markieren", "geh": "gehen", "gehe": "gehen", "gehen": "gehen",
+                 "wähl": "markieren", "wähle": "markieren", "wählen": "markieren",
+                 "geh": "gehen", "gehe": "gehen", "gehen": "gehen",
                  "spring": "gehen", "springe": "gehen", "springen": "gehen"}
 
 
-def _german_order(said: str) -> str:
-    """*said* (normalized) with its German verb last and no "bitte"."""
+def german_verb_last(said: str, verbs: dict) -> str:
+    """*said* (normalized) without "bitte", with a verb of *verbs* ({form:
+    infinitive}) said first moved last, and one said last as its infinitive."""
     words = [w for w in said.split() if w != "bitte"]
-    if len(words) > 1 and words[0] in _GERMAN_VERBS:
-        words = [*words[1:], _GERMAN_VERBS[words[0]]]
-    elif words and words[-1] in _GERMAN_VERBS:
-        words[-1] = _GERMAN_VERBS[words[-1]]
+    if len(words) > 1 and words[0] in verbs:
+        words = [*words[1:], verbs[words[0]]]
+    elif words and words[-1] in verbs:
+        words[-1] = verbs[words[-1]]
     return " ".join(words)
 
 
@@ -111,7 +113,7 @@ _RULES = [
 ]
 _COMPILED = [(re.compile(rf"^(?:{pattern})$"), build) for pattern, build in _RULES]
 
-# German, the verb last (_german_order); a moving command may end in "gehen".
+# German, the verb last (german_verb_last); a moving command may end in "gehen".
 _WORDS = r"(?:wort|wörter|worte)"
 _GO = r"(?: gehen)?"
 _GERMAN_LINE = r"(?:(?:die|diese) )?(?:aktuelle )?zeile"
@@ -151,7 +153,7 @@ _GERMAN_RULES = [
      lambda n: ("", (((), "RIGHT"),), (), ("char", 1, False))),
     (rf"{_GERMAN_N}zeilen? (?:nach oben|hoch|rauf){_GO}", lambda n: ("", (((), "UP"),), ())),
     (rf"{_GERMAN_N}zeilen? (?:nach unten|runter){_GO}", lambda n: ("", (((), "DOWN"),), ())),
-    (r"(?:markierung|auswahl) (?:aufheben|löschen|entfernen)",
+    (r"markierung (?:aufheben|löschen|entfernen)|auswahl (?:aufheben|entfernen)",
      lambda n: ("", (((), "RIGHT"),), ())),
 ]
 _GERMAN_COMPILED = [(re.compile(rf"^(?:{pattern})$"), build) for pattern, build in _GERMAN_RULES]
@@ -163,7 +165,8 @@ def parse(text: str, lang: str = "en"):
     said = normalize(text)
     if not said:
         return None
-    if lang == "de" and (command := _match(_german_order(said), _GERMAN_COMPILED)):
+    if lang == "de" and (command := _match(german_verb_last(said, _GERMAN_VERBS),
+                                           _GERMAN_COMPILED)):
         return command
     return _match(said, _COMPILED)
 
@@ -257,8 +260,9 @@ def plan(command: Command, left=None, right: str = ""):
     return Plan(list(command.first) + list(command.keys) * command.count)
 
 
-# Marks that end a word in a sentence but aren't part of it.
-_WORD_END_MARKS = ".,;:!?\u2026\"'\u201d\u2019)]"
+# Marks that end a word in a sentence but aren't part of it; \u201c is
+# German's closing quote.
+_WORD_END_MARKS = ".,;:!?\u2026\"'\u201d\u201c\u2019)]"
 
 
 def chords(command: Command, last_text: str):

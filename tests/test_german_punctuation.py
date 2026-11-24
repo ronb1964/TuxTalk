@@ -100,3 +100,55 @@ def test_without_smart_quotes_german_quotes_are_plain(monkeypatch):
         "Er sagte Anführungszeichen unten Hallo Anführungszeichen oben", smart_quotes=False,
         auto_period=True, auto_space=False, ai=False, settings=live_settings)
     assert text == 'Er sagte "Hallo".'
+
+
+@pytest.mark.parametrize("said, typed", [
+    # A mark said after a noun or a pronoun is a mark.
+    ("Wie war die Woche Fragezeichen", "Wie war die Woche?"),
+    ("Was machst du am Wochenende Fragezeichen", "Was machst du am Wochenende?"),
+    ("Ich trinke das Wasser Punkt", "Ich trinke das Wasser."),
+    ("Kommst du mit Fragezeichen", "Kommst du mit?"),
+    ("Was ist das Fragezeichen", "Was ist das?"),
+    ("Das kann nicht wahr sein Punkt", "Das kann nicht wahr sein."),
+    # Two marks with the engine's pause between them are both marks.
+    ("Liebe Anna Komma, neue Zeile, wie geht es dir",
+     f"Liebe Anna,{LINE_BREAK}Wie geht es dir."),
+    ("Max Gedankenstrich Moritz", "Max – Moritz."),
+    ("Gänsefüsschen auf Test Gänsefüsschen zu", "„Test“."),
+])
+def test_more_german_marks_said_as_commands(said, typed):
+    assert normalize_text(said, lang="de") == typed
+
+
+# Ordinary German sentences: every mark word in them is a word.
+@pytest.mark.parametrize("said", [
+    "Das Fragezeichen ist falsch.",
+    "Das sind unsere Fragezeichen.",
+    "Seine Fragezeichen sind berechtigt.",
+    "Ein ganz wichtiger Punkt.",
+    "Punkt für Punkt gehen wir vor.",
+    "Ohne Auslassungspunkte geht es auch.",
+    "Um Punkt zwanzig Uhr gehen wir.",
+    "Punkt dreizehn Uhr treffen wir uns.",
+    "Wir brauchten 12 Komma 5 Liter.",
+    "Er setzte einen Doppelpunkt und machte weiter.",
+    "Hier fehlt ein Bindestrich zwischen den Wörtern.",
+    "Ich mag die neue Zeile im Gedicht.",
+    "Setz einen neuen Absatz nach dem Titel.",
+    "Mit diesem Semikolon bin ich nicht einverstanden.",
+])
+def test_ordinary_german_sentences_stay_text(said):
+    assert normalize_text(said, lang="de") == said
+
+
+def test_a_german_quote_the_engine_wrote_keeps_the_space_after_it():
+    assert normalize_text("Er sagte „Hallo“ und ging") == "Er sagte „Hallo“ und ging."
+
+
+@pytest.mark.parametrize("said, cleaned", [
+    ("ob sie sie kennt", "ob sie sie kennt"),
+    ("Die Nummer ist zwei zwei fünf fünf", "Die Nummer ist zwei zwei fünf fünf"),
+])
+def test_german_words_meant_twice_stay(said, cleaned):
+    from tuxtalk.cleanup import clean_fillers_and_repeats
+    assert clean_fillers_and_repeats(said) == cleaned
