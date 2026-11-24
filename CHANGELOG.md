@@ -18,7 +18,8 @@ before 0.15.0, so older entries use that name.
   lists show the German words first. A new install set up for German
   starts with German commands on, and its last setup screen says so in
   German. The words came from hmsgde and jskvbinmv on #49: thank you both.
-  Self-corrections ("nein warte") aren't in German yet.
+  Self-corrections ("nein warte") aren't in German yet. A mark the speech
+  model writes as two words ("Frage Zeichen", "Doppel Punkt") is the mark too.
 - Remove filler words takes German's "äh" and "ähm" too, and keeps a
   German doubled article that's meant ("die Frau, die die Zeitung liest").
   With voice commands in German, Send each dictation automatically holds
@@ -50,7 +51,9 @@ before 0.15.0, so older entries use that name.
   computer could make the engine unload its model or load a file.
 - "No space" joins an email name however the speech model writes it:
   "john Nospace doe at gmail dot com" and "no-space" type johndoe@gmail.com
-  too. Thanks to Jim Orcheson (#48).
+  too. Thanks to Jim Orcheson (#48). An address said after "new line" or
+  "new paragraph" goes in after the line break with no full stop, as one said
+  alone does, and so does a quoted snippet for your address.
 - With Numbers set to digits, "one" and "two" become digits where they
   number or count something: "number 1", "test 2", "page 1 of 2", "2 cats".
   They stay words elsewhere: "this one", "one of them", "I want one".
