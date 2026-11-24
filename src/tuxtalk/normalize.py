@@ -256,7 +256,7 @@ _SINGLE_WORD_REPLACEMENTS = [
 _GERMAN_MARK_WORDS = (r"komma|beistrich|punkt|fragezeichen|ausrufe?zeichen|ausrufungszeichen|"
                       r"doppelpunkt|semikolon|strichpunkt|apostroph|hochkomma|hochstrich|"
                       r"bindestrich|gedankenstrich|zeilenumbruch|neue\s+zeile|"
-                      r"neue[nr]?\s+absatz")
+                      r"neue[nr]?\s+absatz|anführungszeichen|gänsefüßchen")
 _RE_GERMAN_HELD = re.compile(r"__LITDE_(\w+?)__")
 # Words before a mark that make it a thing talked about: an article, a
 # pronoun, "kein", "mit" or "ohne", or an article joined to its preposition
@@ -307,9 +307,18 @@ _GERMAN_PROTECT_PATTERNS = [
     re.compile(r"(\b)(punkt)(?=\s+für\s+punkt\b)", re.IGNORECASE),
 ]
 
+# A German closing quote, “, is English's opening one, which the spacing
+# rules treat as one: it stands in as this until they have run.
+_GERMAN_CLOSE = "\x02"
+
 # Phrases first, as in English: "Punkt Punkt Punkt" before "Punkt",
-# "eckige Klammer auf" before "Klammer auf".
+# "eckige Klammer auf" before "Klammer auf". German quotes are „…“, each
+# taking the spaces and the engine's pause comma on its inner side.
 _GERMAN_MARKS = [
+    (re.compile(r"\b(?:anführungszeichen|gänsefüßchen)\s+(?:auf|unten)\b[,.]?\s*",
+                re.IGNORECASE), "\u201e"),
+    (re.compile(r"[,\s]*\b(?:anführungszeichen|gänsefüßchen)\s+(?:zu|oben)\b", re.IGNORECASE),
+     _GERMAN_CLOSE),
     (re.compile(r"[,\s]*\b(?:neue\s+zeile|zeilenumbruch)\b[,.:;\s]*", re.IGNORECASE),
      LINE_BREAK),
     (re.compile(r"[,.\s]*\bneue[nr]?\s+absatz\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK * 2),
@@ -366,7 +375,7 @@ _PUNCTUATION_TIDY = [
 ]
 
 # --- _space_sentences ---
-_RE_SPACE_AFTER_ENDER = re.compile(r"([.?!…])(?!\s|$|[\u201d\)\]\}])")
+_RE_SPACE_AFTER_ENDER = re.compile(r"([.?!…])(?!\s|$|[\u201d\x02\)\]\}])")
 _RE_EM_DASH_SPACE = re.compile(r"\s*—\s*")
 
 # --- _tidy_line_spaces ---
@@ -383,7 +392,7 @@ _RE_TRAILING_COMMA = re.compile(r",$")
 # full stop straight after it ("the plan:."). Closing quotes and brackets
 # after the mark are stepped over, since the full stop is later moved inside
 # a closing quote ("Hello.”" is finished, not "Hello.”.").
-_RE_ENDS_PUNCTUATED = re.compile(r"[.?!…:;][\"'”’)\]}]*$")
+_RE_ENDS_PUNCTUATED = re.compile(r"[.?!…:;][\"'”“’)\]}]*$")
 # Negative lookbehind: don't capitalize after single-letter abbreviations
 # ("e.g. that" / "U.S. economy" must not become "e.g. That" / "U.S. Economy").
 _RE_CAP_AFTER_ENDER = re.compile(r"(?<![A-Za-z]\.[A-Za-z])([.?!…]\s+)([a-zäöü])")
@@ -591,7 +600,7 @@ def _fix_email_spacing(text: str) -> str:
 # --- Guards for _space_sentences and _cap_first ---
 # Characters that can precede the first word of a line without being the word:
 # straight and smart quotes, and opening brackets.
-_LINE_OPENERS = "\"'“‘([{"
+_LINE_OPENERS = "\"'“„‘([{"
 
 # An email address, URL, or bare domain at the start of a line. These are
 # written the way the user said them, so sentence capitalization leaves them be.
@@ -910,7 +919,7 @@ def normalize_text(text: str, auto_period: bool = True, lang: str = "en") -> str
     # Times before the spacing and capitals, which would otherwise read the
     # "m." of "a. m." as a sentence end ("meet at 9 a. m. Tomorrow").
     text = _join_letter_numbers(format_times(text))
-    text = _space_sentences(text)
+    text = _space_sentences(text).replace(_GERMAN_CLOSE, "\u201c")
     text = _tidy_line_spaces(text)
     # Before the capitals, so they see "I'm" already right.
     text = _RE_STANDALONE_I.sub("I", text)

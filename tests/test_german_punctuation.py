@@ -75,3 +75,28 @@ def test_german_mark_words_wait_for_german_commands():
 def test_german_fillers_go_and_meant_doubles_stay(said, cleaned):
     from tuxtalk.cleanup import clean_fillers_and_repeats
     assert clean_fillers_and_repeats(said) == cleaned
+
+
+@pytest.mark.parametrize("said, typed", [
+    ("Er sagte Anführungszeichen unten Hallo Anführungszeichen oben und ging",
+     "Er sagte „Hallo“ und ging."),
+    ("Er sagte, Anführungszeichen auf, Hallo, Anführungszeichen zu.", "Er sagte, „Hallo“."),
+    ("Gänsefüßchen auf Test Punkt Gänsefüßchen zu dann weiter", "„Test.“ dann weiter."),
+    # Talked about, the word stays.
+    ("Setz die Anführungszeichen richtig", "Setz die Anführungszeichen richtig."),
+])
+def test_german_quotes_are_typed_the_german_way(said, typed):
+    assert normalize_text(said, lang="de") == typed
+
+
+def test_english_quotes_stay_english_with_german_commands_on():
+    assert normalize_text("He said open quote hello close quote", lang="de") == "He said “hello.”"
+
+
+def test_without_smart_quotes_german_quotes_are_plain(monkeypatch):
+    from tuxtalk import dictation_text, live_settings
+    monkeypatch.setattr(live_settings, "command_language", "de")
+    text = dictation_text.prepare_text(
+        "Er sagte Anführungszeichen unten Hallo Anführungszeichen oben", smart_quotes=False,
+        auto_period=True, auto_space=False, ai=False, settings=live_settings)
+    assert text == 'Er sagte "Hallo".'
