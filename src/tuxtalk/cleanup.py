@@ -14,6 +14,8 @@ tab" is a real tab character by then, so these rules only ever touch spaces.
 """
 import re
 
+from .undo import GERMAN_NUMBER_PATTERN
+
 # Hesitation sounds, English and German ("äh", "ähm", "öhm"). Deliberately
 # narrow: "hmm" is often meant ("Hmm, not sure"), "er" is too close to real
 # text, and "you know"/"like" depend on meaning, so none of those are touched.
@@ -39,6 +41,13 @@ NUMBER_WORDS = {
     "null", "eins", "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun",
     "zehn", "elf", "zwölf", "hundert", "tausend",
 }
+# German writes its bigger numbers as one word, too many to list.
+_RE_GERMAN_NUMBER = re.compile(GERMAN_NUMBER_PATTERN)
+
+
+def is_number_word(word: str) -> bool:
+    """Whether *word* (lower case) is a number said in words, English or German."""
+    return word in NUMBER_WORDS or bool(_RE_GERMAN_NUMBER.fullmatch(word))
 
 # Pronouns that are capitalized anywhere, so a capital says nothing about them.
 _ALWAYS_CAPITAL = {"i", "i'm", "i'll", "i've", "i'd"}
@@ -104,7 +113,7 @@ def _collapse_repeats(text: str) -> str:
         if phrase.lower() in LEGIT_DOUBLES:
             return m.group(0)
         words = phrase.lower().split()
-        if any(c.isdigit() for c in phrase) or any(w in NUMBER_WORDS for w in words):
+        if any(c.isdigit() for c in phrase) or any(is_number_word(w) for w in words):
             return m.group(0)
         if _is_name(m):
             return m.group(0)

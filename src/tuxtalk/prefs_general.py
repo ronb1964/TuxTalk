@@ -180,7 +180,8 @@ class GeneralTab(Tab):
             "Recommended: F8 (default). Avoid: F1, F5, F11, F12.\n"
             "F-keys that need Fn held? Right Ctrl, Right Alt, Scroll Lock and\n"
             "Left Ctrl+Space don't. Other key or combination… takes another key\n"
-            "that types nothing, or Ctrl, Alt or Super with a letter, such as Alt+D.")
+            "that types nothing, or Ctrl, Alt or the Windows key with a letter or\n"
+            "an F-key, such as Alt+D.")
         # Last in each list: any other key, or a combination (Alt+D), pressed.
         hotkeys = [*dropdown_entries(), (_OTHER_KEY, "Other key or combination…")]
         self.hotkey_combo = self._hotkey_combo(self.hotkey_label, hotkeys)

@@ -46,6 +46,14 @@ GERMAN_NUMBER_WORDS = {
     'zwei': 2, 'drei': 3, 'vier': 4, 'fünf': 5,
     'sechs': 6, 'sieben': 7, 'acht': 8, 'neun': 9, 'zehn': 10,
 }
+# Any German number said in words, as one word: "dreizehn", "zwanzig",
+# "dreiundzwanzig", "zweihundert" (lower case; not "ein", the article).
+GERMAN_NUMBER_PATTERN = (
+    r"(?:null|eins|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf"
+    r"|(?:drei|vier|fünf|sech|sieb|acht|neun)zehn"
+    r"|(?:(?:ein|zwei|drei|vier|fünf|sechs|sieben|acht|neun)und)?"
+    r"(?:zwanzig|dreißig|vierzig|fünfzig|sechzig|siebzig|achtzig|neunzig)"
+    r"|[a-zäöüß]*(?:hundert|tausend)[a-zäöüß]*)")
 GERMAN_UNITS = {'wort': 'word', 'wörter': 'word', 'worte': 'word',
                  'satz': 'sentence', 'sätze': 'sentence',
                  'absatz': 'paragraph', 'absätze': 'paragraph'}

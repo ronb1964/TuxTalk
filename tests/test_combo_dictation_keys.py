@@ -203,10 +203,11 @@ def test_a_keyboard_option_set_while_tuxtalk_runs_is_read_again(monkeypatch):
             self.target()
     monkeypatch.setattr(hotkeys.threading, "Thread", NowThread)
     monkeypatch.setattr(keyboard_layout, "level3_keys", lambda: frozenset({LALT}))
+    monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("us", "", ""))
     watch = hotkeys._Level3Watch()
     assert watch.poll(watch.due - 1) is None            # not due yet
     assert watch.poll(watch.due) is None                # said once
-    assert watch.poll(watch.due) == frozenset({LALT})   # and again
+    assert watch.poll(watch.due) == (frozenset({LALT}), ("us", "", ""))   # and again
 
 
 def test_a_layout_change_read_while_running_tells_the_helper_again(monkeypatch):
@@ -224,8 +225,11 @@ def test_a_layout_change_read_while_running_tells_the_helper_again(monkeypatch):
     keys = Hotkeys(D, None, "", None, None, combos=(ALT_D,))
     asked = []
     helper = SimpleNamespace(watch=lambda specs: asked.append(list(specs)))
-    answers = iter([frozenset({LALT}), frozenset({LALT}), frozenset(), frozenset()])
-    watch = SimpleNamespace(poll=lambda now: next(answers))
+    us = ("us", "", "")
+    monkeypatch.setattr(hotkey_keys.Hotkeys, "from_settings", classmethod(lambda cls, cfg: keys))
+    answers = iter([(frozenset({LALT}), us), (frozenset({LALT}), us), (frozenset(), us),
+                    (frozenset(), us)])
+    watch = SimpleNamespace(poll=lambda now: next(answers), built_for=None)
     for _ in range(4):
         hotkeys._recheck_layout(watch, cfg, [helper], keys, 0.0)
     assert len(asked) == 2      # once per change, not once per read
@@ -244,11 +248,41 @@ def test_the_layout_is_believed_after_two_reads_alike(monkeypatch):
     monkeypatch.setattr(hotkeys.threading, "Thread", NowThread)
     reads = iter([frozenset({LALT}), frozenset(), frozenset()])
     monkeypatch.setattr(keyboard_layout, "level3_keys", lambda: next(reads))
+    monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("us", "", ""))
     watch = hotkeys._Level3Watch()
-    watch.last = frozenset({LALT})
-    assert watch.poll(watch.due) == frozenset({LALT})
+    watch.last = (frozenset({LALT}), ("us", "", ""))
+    assert watch.poll(watch.due) == (frozenset({LALT}), ("us", "", ""))
     assert watch.poll(watch.due) is None                # a different answer, once
-    assert watch.poll(watch.due) == frozenset()
+    assert watch.poll(watch.due) == (frozenset(), ("us", "", ""))
+
+
+def test_a_switched_layout_moves_a_combo_to_its_letters_new_key(monkeypatch):
+    """Alt+Y kept the US Y key after switching to German, where Y is
+    another key: the intended key did nothing, and the old one dictated
+    and reached the app too, until a restart."""
+    monkeypatch.setattr(hotkeys, "_combo_presses", combo_keys.Presses())
+    monkeypatch.setattr(hotkeys, "_said_typing_keys", ())
+    monkeypatch.setattr(modifier_hotkeys, "_noted", ([], frozenset()))
+    us_y, de_y = ecodes.KEY_Y, ecodes.KEY_Z     # German swaps Y and Z
+    made_on = {"layout": ("us", "", "")}
+
+    def from_settings(cls, cfg):
+        code = us_y if made_on["layout"][0] == "us" else de_y
+        return Hotkeys(code, None, "", None, None,
+                       combos=(combo_keys.ComboKey(code, (frozenset({LALT}),), "A"),))
+    monkeypatch.setattr(hotkey_keys.Hotkeys, "from_settings", classmethod(from_settings))
+    cfg = Cfg()
+    cfg.hotkey = "Alt+Y"
+    keys = from_settings(Hotkeys, cfg)
+    asked = []
+    helper = SimpleNamespace(watch=lambda specs: asked.append(list(specs)))
+    watch = SimpleNamespace(poll=lambda now: (frozenset(), made_on["layout"]),
+                            built_for=("us", "", ""))
+    assert hotkeys._recheck_layout(watch, cfg, [helper], keys, 0.0).hold_key == us_y
+    made_on["layout"] = ("de", "", "")
+    keys = hotkeys._recheck_layout(watch, cfg, [helper], keys, 0.0)
+    assert keys.hold_key == de_y
+    assert any(f"A:{de_y}" in specs for specs in asked)
 
 
 def test_an_error_on_one_key_event_doesnt_lose_the_release_read_with_it(

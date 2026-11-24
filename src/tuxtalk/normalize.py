@@ -5,6 +5,7 @@ line-break marker, and the result gets tidy punctuation, spacing and capitals.
 import re
 
 from .spoken_quotes import CLOSING, OPENING, mark_spoken_quotes
+from .undo import GERMAN_NUMBER_PATTERN
 
 # A line break in a dictation ("new line"). Typed, it's a Shift+Enter: a plain
 # Enter would send a chat message or run a terminal's half-typed command.
@@ -96,10 +97,11 @@ _LITERAL_PATTERNS = [
       LITERAL_REPLACEMENTS["press tab"])]
 
 # An article before a mark word makes it a thing talked about. A capital A
-# counts only where a sentence, a line or a quotation starts: elsewhere it's
+# counts only where a sentence, a line (a dictated line break, LINE_BREAK, ends
+# in §) or a quotation starts: elsewhere it's
 # a letter ("Part A colon introduction" is "Part A: introduction").
 _ARTICLE = (r"\b(?:a|an|the|another|An|The|Another)"
-            r"|(?:^|(?<=[.!?:]\s)|(?<=\n)|(?<=[\u201c\"]))A")
+            r"|(?:^|(?<=[.!?:]\s)|(?<=\n)|(?<=\xa7)|(?<=[\u201c\"]))A")
 # "this", "that", "no" or "one" before a mark makes it a thing talked about
 # when more of the sentence follows ("remove this comma from it", "that comma
 # is wrong"); at the end of a phrase, or before a word that starts a new
@@ -258,47 +260,39 @@ _GERMAN_MARK_WORDS = (r"komma|beistrich|punkt|fragezeichen|ausrufe?zeichen|ausru
                       r"bindestrich|gedankenstrich|zeilenumbruch|neue\s+zeile|"
                       r"neue[nr]?\s+absatz|anführungszeichen|gänsefü(?:ß|ss)chen|auslassungspunkte")
 _RE_GERMAN_HELD = re.compile(r"__LITDE_(\w+?)__")
-# Words before a mark that make it a thing talked about ("auf den Punkt",
-# "komm zum Punkt", "eine Zahl ohne Komma"): an article, an inflected
-# possessive or "kein", "ohne", or an article joined to its preposition.
+# Said with German commands on, a mark word is the mark, as in Dragon, and
+# "wörtlich" before it types the word. Rules can't parse German, so only
+# the clear cases keep it a word ("Ich sehe das Fragezeichen" is typed "Ich
+# sehe das?"):
+# - right after an article that is never a clause's last word ("auf den
+#   Punkt", "kein Komma", "zum Punkt"), or "ein", "kein" or a possessive
+#   with an adjective ending as such adjectives do ("ein großes
+#   Fragezeichen", "ein ganz wichtiger Punkt");
+# - after der, die, das, mit, sein, ihr, ein or ohne, which end clauses too
+#   ("Was ist das Fragezeichen", "Kommst du mit Fragezeichen"), only with
+#   more of the sentence after it, maybe with an adjective between; after
+#   Komma that more isn't a conjunction ("Es könnte sein Komma dass er kommt");
+# - "mit", "ohne" and "ein" before a mark other than the sentence's end
+#   ("mit Bindestrich", "ohne Komma"), unless a conjunction follows a
+#   "mit" or "ein" ("Kommst du mit Komma oder bleibst du");
+# - in numbers and times, compounds and the rhyme below.
 _GERMAN_ARTICLE = (r"\b(?i:den|dem|des|"
                    r"(?:ein|kein|mein|dein|unser|eur|sein|ihr)(?:e|en|em|er|es)|"
-                   r"(?:kein|mein|dein|unser|euer)|"
+                   r"kein|mein|dein|unser|euer|"
                    r"dies(?:e|en|em|er|es)|jed(?:e|en|em|er|es)|"
                    r"am|im|zum|zur|beim|vom|ins|ans)\s+")
-# "ein", "ohne" and "mit" can also end a clause ("Kommst du mit Fragezeichen",
-# "Schalte das Licht ein Punkt"): before a question mark, exclamation mark
-# or full stop, or before a conjunction or "bitte" ("Kommst du mit Komma
-# oder bleibst du"), the mark after one is said for the mark.
-_GERMAN_CONJUNCTION = r"(?i:und|oder|aber|dass|ob|weil|wenn|bitte)\b"
-_GERMAN_PARTICLE = (r"\b(?i:ein|ohne|mit)\s+"
-                    r"(?!(?i:fragezeichen|ausrufe?zeichen|ausrufungszeichen|punkt)\b)")
-# These end a clause as often as they start a noun ("Was ist das
-# Fragezeichen", "Das kann nicht wahr sein Punkt"): a mark after one is a
-# word only when more of the sentence follows, more than a conjunction or
-# "bitte" ("Es könnte sein Komma dass er kommt").
-_GERMAN_CLAUSE_END = r"\b(?i:der|die|das|sein|ihr|ein|ohne|mit)\s+"
-_GERMAN_MORE = rf"(?=\s+(?!{_GERMAN_CONJUNCTION})[^\W\d_])"
-# An adjective between them and the mark, written small (a capital word
-# there is a noun: "die Woche Fragezeichen" is a question about the week),
-# maybe after a word for how much ("ganz", "sehr"). Its ending must fit the
-# article: after a bare ein, kein or a possessive it ends -er or -es ("ein
-# ganz wichtiger Punkt", "sein letzter Punkt"), after der, die or das -e
-# ("der letzte Punkt"), endings no verb or adverb at a clause's end has but
-# the few listed, so it stands wherever it is. Any other ending, after any
-# article, can be the verb or adverb that ends the clause ("Kannst du das
-# machen Fragezeichen", "Ich weiß das alles Punkt"), so it counts only with
-# more of the sentence after.
 _GERMAN_DEGREE = r"(?:(?i:ganz|sehr|so|zu|recht|ziemlich|besonders|wirklich|echt)\s+)?"
-_GERMAN_BARE = r"\b(?i:ein|kein|mein|dein|unser|euer|sein|ihr)\s+"
-_GERMAN_STRONG_ADJECTIVE = rf"{_GERMAN_DEGREE}(?-i:[a-zäöüß]+(?:er|es))\s+"
-_GERMAN_DEFINITE = r"\b(?i:der|die|das)\s+"
-_GERMAN_WEAK_ADJECTIVE = (rf"{_GERMAN_DEGREE}(?-i:(?!(?:gerne|heute|lange|alleine|gerade|bitte|"
-                          r"schade|ebenfalls|eine|keine|die|diese)\s)[a-zäöüß]+e)\s+")
-_GERMAN_ANY_ADJECTIVE = rf"{_GERMAN_DEGREE}(?-i:[a-zäöüß]+(?:e|en|er|es|em))\s+"
-# A number, in digits or in words ("zwölf", "zwanzig", "einhundert").
-_GERMAN_NUMBER = (r"(?:\d+|(?i:ein|eins|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|"
-                  r"elf|zwölf|null|[a-zäöüß]*(?:zehn|zig|ßig|hundert|tausend))\b)")
+_GERMAN_STRONG = (rf"\b(?i:ein|kein|mein|dein|unser|euer)\s+{_GERMAN_DEGREE}"
+                  r"(?-i:[a-zäöüß]+(?:er|es))\s+")
+_GERMAN_CLAUSE_END = r"\b(?i:der|die|das|mit|sein|ihr|ein|ohne)\s+"
+# An adjective written small between one and a mark that more of the
+# sentence follows ("der springende Punkt bei der Sache"), but not before
+# Komma: there it's the verb that ends a clause ("Wenn wir das machen Komma
+# dann klappt es").
+_GERMAN_ADJECTIVE = rf"{_GERMAN_DEGREE}(?-i:[a-zäöüß]+(?:e|en))\s+"
+_GERMAN_CONJUNCTION = r"(?i:und|oder|aber|dass|ob|weil|wenn|bitte)\b"
+_GERMAN_SENTENCE_END = r"(?i:fragezeichen|ausrufe?zeichen|ausrufungszeichen|punkt)\b"
+_GERMAN_NUMBER = rf"(?:\d+|(?i:{GERMAN_NUMBER_PATTERN})\b)"
 
 
 def _hold_german(m: re.Match) -> str:
@@ -335,19 +329,21 @@ _GERMAN_PROTECT_PATTERNS = [
     re.compile(rf"\b(?:wörtlich|das\s+wort)\s+()({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
     # "Komma-Fehler": a mark word starting a compound.
     re.compile(rf"(\b)({_GERMAN_MARK_WORDS})(?=-\w)", re.IGNORECASE),
-    re.compile(rf"({_GERMAN_ARTICLE})({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
-    re.compile(rf"({_GERMAN_PARTICLE})({_GERMAN_MARK_WORDS})\b(?!\s+{_GERMAN_CONJUNCTION})",
-               re.IGNORECASE),
-    re.compile(rf"({_GERMAN_BARE}{_GERMAN_STRONG_ADJECTIVE})({_GERMAN_MARK_WORDS})\b",
-               re.IGNORECASE),
-    re.compile(rf"({_GERMAN_DEFINITE}{_GERMAN_WEAK_ADJECTIVE})({_GERMAN_MARK_WORDS})\b",
-               re.IGNORECASE),
-    re.compile(rf"((?:{_GERMAN_ARTICLE}|{_GERMAN_CLAUSE_END})(?:{_GERMAN_ANY_ADJECTIVE})?)"
-               rf"({_GERMAN_MARK_WORDS})\b{_GERMAN_MORE}", re.IGNORECASE),
+    re.compile(rf"({_GERMAN_ARTICLE}|{_GERMAN_STRONG})({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
+    re.compile(rf"(\b(?i:ohne)\s+)(?!(?i:fragezeichen|ausrufe?zeichen|ausrufungszeichen)\b)"
+               rf"({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
+    re.compile(rf"(\b(?i:mit|ein)\s+)(?!{_GERMAN_SENTENCE_END})({_GERMAN_MARK_WORDS})\b"
+               rf"(?!\s+{_GERMAN_CONJUNCTION})", re.IGNORECASE),
+    re.compile(rf"({_GERMAN_CLAUSE_END})(komma|beistrich)\b(?=\s+(?!{_GERMAN_CONJUNCTION})"
+               r"[^\W\d_])", re.IGNORECASE),
+    re.compile(rf"({_GERMAN_CLAUSE_END}(?:{_GERMAN_ADJECTIVE})?)"
+               rf"((?!komma\b|beistrich\b){_GERMAN_MARK_WORDS})\b(?=\s+[^\W\d_])", re.IGNORECASE),
     # "Punkt 12 Uhr", "um Punkt zwölf", "um Punkt halb acht": the time.
     re.compile(rf"(\b)(punkt)(?=\s+(?:{_GERMAN_NUMBER}|(?i:halb|viertel)\b))", re.IGNORECASE),
-    # "drei Komma fünf" is 3,5 (the engines mostly write it so already).
-    re.compile(rf"((?<!\w){_GERMAN_NUMBER}\s+)(komma)(?=\s+{_GERMAN_NUMBER})", re.IGNORECASE),
+    # "drei Komma fünf", "ein Komma fünf" are 3,5 and 1,5 (the engines mostly
+    # write them so already).
+    re.compile(rf"((?<!\w)(?:{_GERMAN_NUMBER}|(?i:ein)\b)\s+)(komma)(?=\s+{_GERMAN_NUMBER})",
+               re.IGNORECASE),
 ]
 
 # A German closing quote, “, is English's opening one, which the spacing

@@ -88,11 +88,10 @@ _FIXED = {
     "alle fenster anzeigen": "show all windows",
     **dict.fromkeys(("nächster desktop", "nächsten desktop"), "next desktop"),
     **dict.fromkeys(("vorheriger desktop", "vorherigen desktop"), "previous desktop"),
-    **dict.fromkeys(("lauter", "lautstärke hoch", "lautstärke lauter", "lautstärke rauf"),
-                    "volume up"),
-    **dict.fromkeys(("leiser", "lautstärke runter", "lautstärke leiser"), "volume down"),
-    **dict.fromkeys(("ton aus", "stumm", "stumm schalten", "ton stumm schalten"),
-                    "mute the sound"),
+    # Not "lauter", "leiser" or "stumm" alone: everyday answers ("Lauter!").
+    **dict.fromkeys(("lautstärke hoch", "lautstärke lauter", "lautstärke rauf"), "volume up"),
+    **dict.fromkeys(("lautstärke runter", "lautstärke leiser"), "volume down"),
+    **dict.fromkeys(("ton aus", "stumm schalten", "ton stumm schalten"), "mute the sound"),
     **dict.fromkeys(("ton an", "ton ein"), "unmute the sound"),
     **dict.fromkeys(("musik pausieren", "die musik pausieren", "musik anhalten",
                      "musik stoppen"), "pause music"),
@@ -136,29 +135,33 @@ def _app(words: str) -> str:
     return f"{article} {name}" if article else name
 
 
-def _with_number(template: str):
-    """A rule's builder that puts the number its first group says in *template*."""
-    def build(m):
-        number = _number(m[1]) if m[1] else ""
-        return None if number is None else template.format(number).strip()
-    return build
+def _numbered(template: str, said: str | None) -> str | None:
+    """*template* with the number *said* says in its {} (nothing, when none
+    was said), or None when *said* is no number."""
+    number = _number(said) if said else ""
+    return None if number is None else template.format(number).strip()
 
+
+_WINDOW_VERBS = {"schließen": "close", "minimieren": "minimize", "maximieren": "maximize",
+                 "wiederherstellen": "restore"}
 
 # German phrase -> English phrase, for commands with a number, a direction or
 # a name in them; the first that matches all of the words counts.
 _RULES = [
     (r"(?:(?!nach )(.+?) )?(?:nach )?(unten|runter|oben|hoch) scrollen",
-     lambda m: _scroll(m[2], m[1])),
+     lambda m: _numbered(f"scroll {_DIRECTIONS[m[2]]} {{}}", m[1])),
     (r"fenster nach (?:(oben|unten) )?(links|rechts|oben|unten)",
      lambda m: "snap " + " ".join(_PLACES[w] for w in (m[1], m[2]) if w)),
-    (r"zu desktop (.+) wechseln", _with_number("switch to desktop {}")),
-    (r"fenster auf desktop (.+?)(?: verschieben)?", _with_number("move window to desktop {}")),
-    (r"lautstärke (?:hoch|lauter|rauf) (.+)", _with_number("volume up {}")),
-    (r"lautstärke (?:runter|leiser) (.+)", _with_number("volume down {}")),
-    (r"(?:nummer )?(.+)", _with_number("{}")),
+    (r"zu desktop (.+) wechseln", lambda m: _numbered("switch to desktop {}", m[1])),
+    (r"fenster auf desktop (.+?)(?: verschieben)?",
+     lambda m: _numbered("move window to desktop {}", m[1])),
+    (r"lautstärke (?:hoch|lauter|rauf) (.+)", lambda m: _numbered("volume up {}", m[1])),
+    (r"lautstärke (?:runter|leiser) (.+)", lambda m: _numbered("volume down {}", m[1])),
+    (r"(?:nummer )?(.+)", lambda m: _numbered("{}", m[1])),
     (rf"({'|'.join(_CLICKS)})(?: (?:auf )?(?:nummer )?(.+))?",
-     lambda m: _click(m[1], m[2])),
-    (r"(links|rechts|hoch|rauf|runter)(?: (.+))?", lambda m: _nudge(m[1], m[2])),
+     lambda m: _numbered(f"{_CLICKS[m[1]]} {{}}", m[2])),
+    (r"(links|rechts|hoch|rauf|runter)(?: (.+))?",
+     lambda m: _numbered(f"{_DIRECTIONS[m[1]]} {{}}", m[2])),
     (r"alle (.+) schließen", lambda m: f"close all {_app(m[1])}"),
     (r"zu (.+) wechseln", lambda m: f"switch to {_app(m[1])}"),
     (r"(.+) (schließen|minimieren|maximieren|wiederherstellen)",
@@ -169,8 +172,6 @@ _RULES = [
     (r"(.+) (öffnen|aufrufen|starten)",
      lambda m: f"{'start' if m[2] == 'starten' else 'open'} {_app(m[1])}"),
 ]
-_WINDOW_VERBS = {"schließen": "close", "minimieren": "minimize", "maximieren": "maximize",
-                 "wiederherstellen": "restore"}
 
 
 def _swiss(words: dict) -> dict:
@@ -196,23 +197,6 @@ _SCHEME = re.compile(r"((?i:https?://)?)(.*)", re.DOTALL)
 _SEARCH = re.compile(
     r"^\s*(?:websuche|im\s+(?:web|internet)\s+suchen|suche\s+im\s+(?:web|internet))"
     r"\s*[,:]?(?:\s+nach)?\s+(?P<words>.+?)[\s.!?]*$", re.IGNORECASE)
-
-
-def _scroll(direction: str, count: str | None) -> str | None:
-    number = _number(count) if count else ""
-    if number is None:
-        return None
-    return f"scroll {_DIRECTIONS[direction]} {number}".strip()
-
-
-def _click(word: str, cell: str | None) -> str | None:
-    number = _number(cell) if cell else ""
-    return None if number is None else f"{_CLICKS[word]} {number}".strip()
-
-
-def _nudge(direction: str, steps: str | None) -> str | None:
-    number = _number(steps) if steps else ""
-    return None if number is None else f"{_DIRECTIONS[direction]} {number}".strip()
 
 
 def to_english(text: str) -> str | None:

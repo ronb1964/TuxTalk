@@ -69,6 +69,7 @@ def sound_key(letters):
 
 
 _APOSTROPHES = "'’"
+_NO_APOSTROPHES = str.maketrans("", "", _APOSTROPHES)
 
 
 def _joinable(core, word, hyphens=True):
@@ -131,7 +132,7 @@ def fix_spelling(text, words, hyphens=True):
                 # to the mishearing, so it may sit inside the match.
                 word = sounds.get(sound_key(joined)) if len(joined) >= MIN_SOUND_LETTERS else None
                 if word is None or not all(
-                        _joinable(t[3].replace("'", "").replace("’", ""), word, hyphens)
+                        _joinable(t[3].translate(_NO_APOSTROPHES), word, hyphens)
                         for t in group):
                     continue
             core_start = group[0][0] + len(group[0][2])

@@ -330,7 +330,7 @@ SECTIONS = (
     Section("Sound and Music", SOUND, labs=LABS_ACTIONS, commands=(
         Command(("volume up", "volume down", "volume up 3", "turn down the volume"),
                 "louder or quieter; a number for more steps", "action",
-                german=("lauter", "leiser", "Lautstärke hoch drei")),
+                german=("Lautstärke hoch", "Lautstärke runter", "Lautstärke hoch drei")),
         Command(("mute sound", "unmute sound"), "turns the sound off or on", "action",
                 german=("Ton aus", "Ton an")),
         Command(("pause music", "play music", "resume the music"),

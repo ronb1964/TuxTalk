@@ -262,7 +262,8 @@ def _still_selected(expected, where) -> bool:
 
 def _selection_now(where):
     """What's selected in *where* now, copied again with Ctrl+C there (only
-    there); None when it couldn't be copied. What this copy found on the
+    there): "" when nothing is, None when the clipboard couldn't be used, so
+    the notice can say which. What this copy found on the
     clipboard (the edit's own copy) goes back at once, no paste being under
     way; the edit's restore runs after it (edit_selection) and puts back the
     user's clipboard over it."""
@@ -273,7 +274,7 @@ def _selection_now(where):
     except clipboard.ClipboardUnavailable:
         return None
     if selected is None:
-        return None         # copy_selection put the clipboard back itself
+        return ""           # copy_selection put the clipboard back itself
     put_back()
     return selected
 

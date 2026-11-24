@@ -503,6 +503,23 @@ def test_a_selection_changed_while_the_ai_worked_is_left_alone(edit_env, monkeyp
     assert edit_env["notices"] == [edit_notices.NOTICES["selection_changed"]]
 
 
+def test_a_selection_clicked_away_while_the_ai_worked_says_it_changed(edit_env, monkeypatch):
+    """Clicking away (nothing selected any more) said the clipboard couldn't
+    be used, which wasn't so: the selection changed, and the rewrite waits in
+    Recent Dictations."""
+    answer = edit_env["engine"].edit
+
+    def click_away_meanwhile(text, instruction):
+        edit_env["selection"]["text"] = ""
+        return answer(text, instruction)
+    monkeypatch.setattr(edit_env["engine"], "edit", click_away_meanwhile)
+    run_edit()
+    from tuxtalk import edit_notices
+    assert edit_env["typed"] == []
+    assert edit_env["history"] == ["We completed the electrical work today."]
+    assert edit_env["notices"] == [edit_notices.NOTICES["selection_changed"]]
+
+
 @pytest.mark.parametrize("meanwhile", ["we finished the electrical today.",
                                        "    We finished the electrical today."])
 def test_a_case_or_indent_changed_meanwhile_is_left_alone(edit_env, monkeypatch, meanwhile):

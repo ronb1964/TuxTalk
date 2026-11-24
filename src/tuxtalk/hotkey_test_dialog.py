@@ -553,7 +553,7 @@ class HotkeyTestDialog:
         try:
             save_changes(hotkey=hold, toggle_hotkey=toggle)
         except Exception as e:
-            # save_config refuses to write when the settings file could
+            # save_changes refuses to write when the settings file could
             # not be read; onboarding still moves on.
             logger.error(f"Could not save hotkey choice: {e}")
 

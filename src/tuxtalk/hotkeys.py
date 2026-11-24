@@ -608,7 +608,7 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
             _forget_lost_presses(devices, keys)
             logger.info("Applied settings change without restarting")
 
-        _recheck_layout(level3_watch, cfg, devices, keys, current_time)
+        keys = _recheck_layout(level3_watch, cfg, devices, keys, current_time)
 
         dead_devices = _read_key_events(devices, keys, held_modifiers, cfg, svc, current_time)
         if dead_devices:
@@ -723,22 +723,26 @@ def _log_ctrl_space_clashes(keys: "hotkey_keys.Hotkeys") -> None:
 
 
 class _Level3Watch:
-    """The keys the keyboard options make AltGr (keyboard_layout.level3_keys),
-    read again beside the hotkey loop every LAYOUT_RECHECK_S while it's
-    idle: an option set while TuxTalk runs can make a combo's modifier type
-    characters, and the desktop can take seconds to answer."""
+    """The keys the keyboard options make AltGr (keyboard_layout.level3_keys)
+    and the layout itself (active_layout), read again beside the hotkey loop
+    every LAYOUT_RECHECK_S while it's idle: an option set while TuxTalk runs
+    can make a combo's modifier type characters, a switched layout moves a
+    combo's letter to another key (Alt+Y on US and German), and the desktop
+    can take seconds to answer."""
 
     def __init__(self):
         self.due = time.time() + LAYOUT_RECHECK_S     # _watch has just read them
         self.found = None       # set by the reading thread, taken by poll
         self.last = None        # the read before, which a new answer must match
         self.failed = False
+        self.built_for = None   # the layout the hotkey loop's keys were made on
 
-    def poll(self, now) -> frozenset | None:
-        """The keys read since the last call when the read before said the
-        same, or None; starts a read when due. Two in a row: a desktop slow
-        to answer once gives the system's layout instead (active_layout),
-        which would switch a combo on and off with a notice each time."""
+    def poll(self, now) -> tuple | None:
+        """(AltGr keys, layout) read since the last call when the read before
+        said the same, or None; starts a read when due. Two in a row: a
+        desktop slow to answer once gives the system's layout instead
+        (active_layout), which would switch a combo on and off with a notice
+        each time."""
         if now >= self.due:
             self.due = now + LAYOUT_RECHECK_S
             threading.Thread(target=self._read, daemon=True).start()
@@ -749,9 +753,9 @@ class _Level3Watch:
         return found if agreed else None
 
     def _read(self) -> None:
-        from .keyboard_layout import level3_keys
+        from .keyboard_layout import active_layout, level3_keys
         try:
-            self.found = level3_keys()
+            self.found = (level3_keys(), active_layout())
             self.failed = False
         except Exception as e:      # a bug of TuxTalk's own: the hotkeys go on as they are
             if not self.failed:
@@ -760,16 +764,26 @@ class _Level3Watch:
 
 
 def _recheck_layout(level3_watch, cfg: Settings, devices, keys: "hotkey_keys.Hotkeys",
-                    now: float) -> None:
+                    now: float) -> "hotkey_keys.Hotkeys":
     """While idle with a combo dictation key, apply a changed answer of
-    *level3_watch* (_Level3Watch): the combos, the helper's watch list and
-    the modifier-key check follow it. The desktop's claims don't change, so
-    they aren't made again (KDE lets go of the keys while it does)."""
+    *level3_watch* (_Level3Watch): a switched layout makes the keys again
+    from the settings (a combo's letter may sit elsewhere now), and the
+    combos, the helper's watch list and the modifier-key check follow. The
+    desktop's claims name letters, not keys, so they aren't made again (KDE
+    lets go of the keys while it does). The keys to use from now on."""
     if not _letter_combos(keys) or rs.state.is_recording:
-        return
-    level3 = level3_watch.poll(now)
-    if level3 is not None and level3 != _combo_presses.level3:
-        _follow_combos(cfg, devices, keys, level3)
+        return keys
+    found = level3_watch.poll(now)
+    if found is None:
+        return keys
+    level3, layout = found
+    now_keys = keys
+    if layout != level3_watch.built_for:
+        level3_watch.built_for = layout
+        now_keys = hotkey_keys.Hotkeys.from_settings(cfg)
+    if now_keys != keys or level3 != _combo_presses.level3:
+        _follow_combos(cfg, devices, now_keys, level3)
+    return now_keys
 
 
 def _letter_combos(keys: "hotkey_keys.Hotkeys") -> bool:

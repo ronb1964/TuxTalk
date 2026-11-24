@@ -46,7 +46,7 @@ from tuxtalk.german_commands import to_english
     ("Datei speichern", "save the file"),
     ("Auswahl kopieren", "copy the selection"),
     ("Escape drücken", "press escape"),
-    ("Lauter", "volume up"),
+    ("Lautstärke hoch", "volume up"),
     ("Lautstärke runter", "volume down"),
     ("Lautstärke hoch drei", "volume up 3"),
     ("Ton aus", "mute the sound"),
@@ -88,6 +88,8 @@ def test_a_german_command_means_its_english_one(german, english):
     "Ich gehe nach Hause.",
     "Wir haben gestern Firefox geöffnet und dann lange gearbeitet.",
     "Das war ein schöner Tag.",
+    "Lauter!",
+    "Leiser.",
 ])
 def test_german_sentences_are_no_command(said):
     assert to_english(said) is None

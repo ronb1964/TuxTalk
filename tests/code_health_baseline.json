@@ -11,12 +11,6 @@
   "correction_safety.py::_deletion_allowed": {
    "decisions": 16
   },
-  "correction_safety.py::_is_restated_correction": {
-   "decisions": 18
-  },
-  "word_spelling.py::fix_spelling": {
-   "decisions": 28
-  },
   "kwin_hotkeys.py::_app_shortcut_clashes": {
    "decisions": 19
   },
@@ -40,6 +34,9 @@
   },
   "voice_edit_rules.py::mechanical_edit": {
    "decisions": 18
+  },
+  "word_spelling.py::fix_spelling": {
+   "decisions": 28
   },
   "x11_hotkeys.py::claim": {
    "decisions": 16

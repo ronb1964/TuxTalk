@@ -34,7 +34,8 @@ def fake_edit_world(monkeypatch):
     def copy_selection(send_copy, **_):
         def put_back(also=()):
             seen["put_back"] += 1
-        return selection["text"], put_back
+        # As clipboard.copy_selection says nothing is selected: no text.
+        return selection["text"] or None, put_back
     monkeypatch.setattr(cb, "copy_selection", copy_selection)
     monkeypatch.setattr(delivery, "inject_text",
                         lambda text, mode, one_block=False, **kw: seen["typed"].append(text) or "ok")

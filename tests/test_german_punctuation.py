@@ -159,7 +159,6 @@ def test_more_german_marks_said_as_commands(said, typed):
     "Mit diesem Semikolon bin ich nicht einverstanden.",
     "Das ist ein wichtiger Punkt.",
     "Da steht ein großes Fragezeichen.",
-    "Das war sein letzter Punkt.",
     "Der Komma-Fehler ist ärgerlich.",
     "Punkt-Abzug gibt es.",
     "Das schreibt man mit Bindestrich.",
@@ -168,8 +167,6 @@ def test_more_german_marks_said_as_commands(said, typed):
     "Wir treffen uns um Punkt halb acht.",
     "Eine Zahl ohne Komma.",
     "Kein Komma hier.",
-    "Das ist der letzte Punkt.",
-    "Das ist die richtige neue Zeile.",
     "Punkt, Komma, Strich.",
 ])
 def test_ordinary_german_sentences_stay_text(said):
@@ -183,7 +180,46 @@ def test_a_german_quote_the_engine_wrote_keeps_the_space_after_it():
 @pytest.mark.parametrize("said, cleaned", [
     ("ob sie sie kennt", "ob sie sie kennt"),
     ("Die Nummer ist zwei zwei fünf fünf", "Die Nummer ist zwei zwei fünf fünf"),
+    ("Die Zahlen sind dreizehn dreizehn.", "Die Zahlen sind dreizehn dreizehn."),
+    ("Die Zahlen sind zwanzig zwanzig.", "Die Zahlen sind zwanzig zwanzig."),
+    ("Die Zahlen sind dreiundzwanzig dreiundzwanzig.",
+     "Die Zahlen sind dreiundzwanzig dreiundzwanzig."),
 ])
 def test_german_words_meant_twice_stay(said, cleaned):
     from tuxtalk.cleanup import clean_fillers_and_repeats
     assert clean_fillers_and_repeats(said) == cleaned
+
+
+# From the release review: clauses that end in a verb, and mark words joined by
+# "und", come out the same way every time.
+@pytest.mark.parametrize("said, typed", [
+    ("ob ich das schaffe Fragezeichen", "Ob ich das schaffe?"),
+    ("dass ich das mache Punkt", "Dass ich das mache."),
+    ("ob ich die nehme Fragezeichen", "Ob ich die nehme?"),
+    ("Ich sage es ihr später Punkt", "Ich sage es ihr später."),
+    ("Wenn Sie das brauchen Komma melden Sie sich", "Wenn Sie das brauchen, melden Sie sich."),
+    ("Wenn wir das machen Komma dann klappt es", "Wenn wir das machen, dann klappt es."),
+    ("Das ist gut Punkt ein Freund kommt", "Das ist gut. Ein Freund kommt."),
+    ("Ich komme mit Punkt", "Ich komme mit."),
+])
+def test_a_clause_ending_in_a_verb_takes_the_mark(said, typed):
+    assert normalize_text(said, lang="de") == typed
+
+
+@pytest.mark.parametrize("said", [
+    "Ich habe ein Fragezeichen und ein Ausrufezeichen gesehen.",
+    "Eine Zahl ohne Komma und ohne Punkt.",
+    "Schreib das mit Bindestrich und ohne Leerzeichen.",
+    "Das ist die richtige neue Zeile für dich.",
+    "Punkt eins der Tagesordnung.",
+])
+def test_mark_words_as_nouns_mid_sentence_stay_words(said):
+    assert normalize_text(said, lang="de") == said
+
+
+def test_a_mark_word_ending_the_dictation_is_the_mark():
+    """What rules can't tell from a command: the command wins, and
+    "wörtlich" types the word."""
+    assert normalize_text("Das ist der letzte Punkt", lang="de") == "Das ist der letzte."
+    assert normalize_text("Das ist der letzte wörtlich Punkt", lang="de") == (
+        "Das ist der letzte Punkt.")

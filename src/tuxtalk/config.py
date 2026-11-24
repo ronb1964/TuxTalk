@@ -1,7 +1,7 @@
 """TuxTalk's settings on disk: loading, recovering and saving config.toml
-under its lock, which settings apply live and which restart dictation, the
-data folders and the snippets file. The fields themselves and the values
-each accepts are settings_schema.py's."""
+under its lock, the data folders and the snippets file. The fields
+themselves, the values each accepts and which apply without a restart are
+settings_schema.py's."""
 from __future__ import annotations
 import contextlib
 import dataclasses
@@ -116,8 +116,12 @@ _repair_attempted = False
 
 # Config cache — avoids re-reading TOML from disk when file hasn't changed.
 # The tray polls load_config() every 1 second; this reduces disk I/O to near zero.
+# The settings and their file's stamp are read and stored together under
+# _cache_lock: two threads loading at once could otherwise leave the older
+# settings cached under the newer stamp, served until the file next changed.
 _config_cache = None
 _config_stamp = None
+_cache_lock = threading.Lock()
 
 # True when the last load_config() could not READ an existing settings file.
 # Guards save_config() so the defaults handed out during the failure are never
@@ -282,9 +286,11 @@ def load_config() -> Settings:
     # before saving it; on the shared cached object an unsaved or failed change
     # would show in the tray and be written by the next unrelated save.
     current_stamp = file_stamp(CONFIG_PATH)
+    with _cache_lock:
+        cached, cached_stamp = _config_cache, _config_stamp
     # No file yet: the cache if there is one.
-    if _config_cache is not None and current_stamp in (None, _config_stamp):
-        return dataclasses.replace(_config_cache)
+    if cached is not None and current_stamp in (None, cached_stamp):
+        return dataclasses.replace(cached)
 
     _config_read_failed = False
 
@@ -306,7 +312,7 @@ def load_config() -> Settings:
             # rewriting them would destroy settings that only needed a chmod.
             logger.error(f"Could not read {CONFIG_PATH}: {e}; using defaults for now, "
                          "the file left untouched")
-            s = dataclasses.replace(_config_cache) if _config_cache else defaults()
+            s = dataclasses.replace(cached) if cached else defaults()
             # Hand out defaults so the app keeps running, but mark them as
             # never-loaded: save_config() must refuse to write them back over
             # a file it could not read, or any later save (the daily update
@@ -328,11 +334,11 @@ def load_config() -> Settings:
                 current_stamp = None
 
     s = repaired(s)
-    _config_cache = s
     # Only now is the cache known to reflect the file. On a failed read
     # current_stamp is None, so the next call re-reads instead of serving
     # defaults from a cache that looks up to date.
-    _config_stamp = current_stamp
+    with _cache_lock:
+        _config_cache, _config_stamp = s, current_stamp
     return dataclasses.replace(s)
 
 

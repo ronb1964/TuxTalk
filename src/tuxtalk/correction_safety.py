@@ -15,7 +15,7 @@ import re
 import unicodedata
 from collections import Counter
 
-from .cleanup import LEGIT_DOUBLES, NUMBER_WORDS
+from .cleanup import LEGIT_DOUBLES, is_number_word
 
 # The fillers the AI is told it may delete (ai_cleanup's prompt), and no others: "hmm"
 # carries meaning ("hmm, that sounds right"). A "like" it drops isn't always a
@@ -180,7 +180,7 @@ def _deletion_allowed(run, src, start):
 
 
 def _is_number(word):
-    return word[0].isdigit() or word in NUMBER_WORDS
+    return word[0].isdigit() or is_number_word(word)
 
 
 def _merges_two_numbers(kept, dropped, restated):
@@ -292,22 +292,28 @@ def _is_restated_correction(src, out):
                             or out[len(out) - len(after):] != after
                             or (set(wrong) | set(new)) & _CUE_WORDS):
                         continue
-                    for x_start in range(len(restated) - len(new) + 1):
-                        if restated[x_start:x_start + len(new)] != new:
-                            continue
-                        # Same place: the same word before both, or both
-                        # start their clause ("email ..." / "text ...").
-                        if before:
-                            placed = x_start > 0 and restated[x_start - 1] == before[-1]
-                        else:
-                            placed = x_start == 0
-                        # Never the replaced words: "Call Bob and Sue, scratch
-                        # that, call Jim and Bob" is not "Call Jim and Sue".
-                        rest = restated[:x_start] + restated[x_start + len(new):]
-                        if placed and set(rest) <= set(before + after) | STAND_INS:
-                            return True
+                    if any(restated[x:x + len(new)] == new
+                           and _swap_fits(restated, x, new, before, after, wrong)
+                           for x in range(len(restated) - len(new) + 1)):
+                        return True
             break   # longest cue at this position tried; move on
     return False
+
+
+def _swap_fits(restated, x_start, new, before, after, wrong):
+    """Whether *new*, found at *x_start* of the *restated* clause, can stand
+    in for *wrong* between *before* and *after* of the first wording: in
+    the same place, every other restated word already said, and no value
+    or sign lost with *wrong*."""
+    # Same place: the same word before both, or both start their clause
+    # ("email ..." / "text ...").
+    placed = (x_start > 0 and restated[x_start - 1] == before[-1]) if before else x_start == 0
+    # Never the replaced words: "Call Bob and Sue, scratch that, call Jim
+    # and Bob" is not "Call Jim and Sue".
+    rest = restated[:x_start] + restated[x_start + len(new):]
+    # And no value or sign lost: "Pay ₹50, no wait, pay 60" is not "Pay 60".
+    return (placed and set(rest) <= set(before + after) | STAND_INS
+            and _values_survive(before, wrong, restated))
 
 
 def _keeps_a_dropped_negation(src, out):

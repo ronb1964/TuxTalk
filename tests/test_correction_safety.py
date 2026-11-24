@@ -181,6 +181,9 @@ def test_unsafe_edits_are_rejected(said, edited):
     ("The low is - 5, no wait, - 6.", "The low is 6."),
     ("Set x < 5, no wait, 6.", "Set x 6."),
     ("Pay $50, no wait, 60.", "Pay 60."),
+    # The whole clause said again: the swapped words may not take a sign.
+    ("Pay ₹50, no wait, pay 60.", "Pay 60."),
+    ("Set x < 5, no wait, set x 6.", "Set x 6."),
 ])
 def test_a_changed_or_dropped_sign_is_not_safe(said, edited):
     """Signs and other scripts count as words, so a changed currency or a
