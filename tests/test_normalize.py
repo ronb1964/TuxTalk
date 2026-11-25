@@ -1204,3 +1204,20 @@ def test_a_curly_i_contraction_keeps_its_capital(first):
     write became "i’m"."""
     from tuxtalk.normalize import safe_to_lowercase_first_word
     assert not safe_to_lowercase_first_word(f"{first} here.")
+
+
+# --- the engine's own period after a spoken mark (CODE_HEALTH 138) ----------------------
+
+@pytest.mark.parametrize("said, typed", [
+    # A pause after "comma" is written as a period: the said comma wins.
+    ("Dear Anna comma. New line. How are you", f"Dear Anna,{LINE_BREAK}How are you."),
+    ("Dear Anna comma. How are you", "Dear Anna, How are you."),
+    ("Bring these semicolon. Snacks and drinks", "Bring these; Snacks and drinks."),
+    ("Note colon. Bring snacks", "Note: Bring snacks."),
+    # Nothing after it: the period the engine ended on stays.
+    ("Dear Anna comma.", "Dear Anna."),
+    # Talking about a comma is still words.
+    ("It's a comma. Then a period", "It's a comma. Then a period."),
+])
+def test_a_spoken_mark_isnt_lost_to_the_engine_s_period_after_it(said, typed):
+    assert normalize_text(said) == typed

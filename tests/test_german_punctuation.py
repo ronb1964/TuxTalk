@@ -312,3 +312,14 @@ def test_die_woerter_in_a_sentence_stays():
     Wörter" is no such command, and isn't lost."""
     assert normalize_text("Ich kenne die Wörter Punkt und Komma", lang="de").startswith(
         "Ich kenne die Wörter")
+
+
+@pytest.mark.parametrize("said, typed", [
+    ("Liebe Anna Komma. Neue Zeile. Wie geht es dir", f"Liebe Anna,{LINE_BREAK}Wie geht es dir."),
+    ("Hinweis Doppelpunkt. Snacks mitbringen", "Hinweis: Snacks mitbringen."),
+    ("Liebe Anna Komma.", "Liebe Anna."),
+])
+def test_a_spoken_mark_isnt_lost_to_the_engine_s_period_after_it(said, typed):
+    """CODE_HEALTH 138: the period the engine writes for a pause after "Komma"
+    ate the comma ("Liebe Anna.")."""
+    assert normalize_text(said, lang="de") == typed

@@ -236,11 +236,18 @@ _MULTI_WORD_REPLACEMENTS = [
     (re.compile(r"\bclose\s+brace\b", re.IGNORECASE), "}"),
 ]
 
+# A pause after a spoken mark is often written as the engine's own mark
+# right after it ("Dear Anna comma. New line"). The said mark takes it when
+# more follows, words or a spoken line break (converted before these):
+# tidied, the engine's period would win and the comma be lost ("Dear Anna.").
+# Ending the dictation, the period stays the engine's.
+_ENGINE_MARK_AFTER = r"(?:{own}|\.(?=\s+\w|\s*" + re.escape(LINE_BREAK) + r"))?"
+
 # --- _spoken_marks_to_symbols: single words ---
 _SINGLE_WORD_REPLACEMENTS = [
-    (re.compile(r"\bcomma\b,?", re.IGNORECASE), ","),
-    (re.compile(r"\bsemicolon\b;?", re.IGNORECASE), ";"),
-    (re.compile(r"\bcolon\b:?", re.IGNORECASE), ":"),
+    (re.compile(r"\bcomma\b" + _ENGINE_MARK_AFTER.format(own=","), re.IGNORECASE), ","),
+    (re.compile(r"\bsemicolon\b" + _ENGINE_MARK_AFTER.format(own=";"), re.IGNORECASE), ";"),
+    (re.compile(r"\bcolon\b" + _ENGINE_MARK_AFTER.format(own=":"), re.IGNORECASE), ":"),
     (re.compile(r"\bperiod\b\.?", re.IGNORECASE), "."),
     (re.compile(r"\bapostrophe\b", re.IGNORECASE), "'"),
     # "em dash" MUST run before the bare hyphen/dash rule — otherwise
@@ -411,10 +418,13 @@ _GERMAN_MARKS = [
     (re.compile(r"\beckige\s+klammer\s+zu\b", re.IGNORECASE), "]"),
     (re.compile(r"\bklammer\s+auf\b", re.IGNORECASE), "("),
     (re.compile(r"\bklammer\s+zu\b", re.IGNORECASE), ")"),
-    (re.compile(r"\b(?:komma|beistrich)\b,?", re.IGNORECASE), ","),
-    (re.compile(r"\b(?:semikolon|strichpunkt)\b;?", re.IGNORECASE), ";"),
+    (re.compile(r"\b(?:komma|beistrich)\b" + _ENGINE_MARK_AFTER.format(own=","),
+                re.IGNORECASE), ","),
+    (re.compile(r"\b(?:semikolon|strichpunkt)\b" + _ENGINE_MARK_AFTER.format(own=";"),
+                re.IGNORECASE), ";"),
     # "Doppel Punkt" ending a dictation is "doubles" and a full stop.
-    (re.compile(r"\bdoppel(?:punkt|\s+punkt(?!\W*$))\b:?", re.IGNORECASE), ":"),
+    (re.compile(r"\bdoppel(?:punkt|\s+punkt(?!\W*$))\b" + _ENGINE_MARK_AFTER.format(own=":"),
+                re.IGNORECASE), ":"),
     (re.compile(r"\bpunkt\b\.?", re.IGNORECASE), "."),
     (re.compile(r"\b(?:apostroph|hochkomma|hochstrich)\b", re.IGNORECASE), "'"),
     # German's dash between words is the en dash, with a space each side;

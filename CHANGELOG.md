@@ -5,6 +5,11 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- A spoken "comma" followed by a pause isn't lost any more: the speech
+  engine often writes a period for the pause ("Dear Anna comma. New line"),
+  and TuxTalk kept that period and dropped your comma ("Dear Anna."). Now
+  the mark you said wins, for "semicolon" and "colon" too, and in German
+  ("Komma", "Semikolon", "Doppelpunkt").
 - Keystroke Typing (No Clipboard), a new choice in Preferences → Advanced →
   Fine-tuning → Text Injection: TuxTalk types your words and never puts them
   on the clipboard, not even for a character your keyboard layout can't
