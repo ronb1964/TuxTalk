@@ -89,6 +89,8 @@ def test_each_german_phrase_listed_works_with_german_commands_on(kind, phrase, r
         symbol = result.split(" ")[0]
         if len(symbol) == 1:
             assert typed.count(symbol) == 2 + (symbol == ".")
+        elif result.startswith(("tab character", "three spaces")):
+            assert typed.count("\t" if result.startswith("tab") else "   ") == 2
         elif "line break" in result:
             breaks = 2 if result.startswith("double") else 1
             assert typed.count(normalize.LINE_BREAK) == 2 * breaks
@@ -111,7 +113,9 @@ def test_each_german_phrase_listed_works_with_german_commands_on(kind, phrase, r
         assert command_phrases.parse(phrase, navigation=False, actions=True, grid=True,
                                      lang="de")
     elif kind == "exact":
-        assert _done_in_code(phrase, "de", _EDITED_DE)
+        assert _DONE_IN_CODE_DE[phrase] == (
+            "DELETE" if voice_edit_rules.is_delete(phrase, "de")
+            else voice_edit_rules.mechanical_edit(_EDITED_DE, phrase, "de"))
     elif kind == "format":
         assert voice_edit_rules.formatting(phrase, "de") in (["bold"], ["italic"],
                                                             ["underline"])
@@ -143,6 +147,19 @@ _DONE_IN_CODE = {
 
 # The same in German, with the word its "das Wort Test entfernen" takes out.
 _EDITED_DE = "eins, zwei Test\n    - drei"
+_DONE_IN_CODE_DE = {
+    "alles in Großbuchstaben": "EINS, ZWEI TEST\n    - DREI",
+    "alles in Kleinbuchstaben": "eins, zwei test\n    - drei",
+    "jedes Wort großschreiben": "Eins, Zwei Test\n    - Drei",
+    "das einrücken": "    eins, zwei Test\n        - drei",
+    "Einzug verkleinern": "eins, zwei Test\n- drei",
+    "als Aufzählung": "- eins, zwei Test\n    - drei",
+    "als nummerierte Liste": "1. eins, zwei Test\n    2. drei",
+    "die Kommas entfernen": "eins zwei Test\n    - drei",
+    "das Wort Test entfernen": "eins, zwei\n    - drei",
+    "die Aufzählungszeichen entfernen": "eins, zwei Test\n    drei",
+    "das löschen": "DELETE",
+}
 
 
 def _done_in_code(phrase, lang="en", edited=_EDITED):
@@ -446,9 +463,11 @@ def test_every_edit_done_in_code_is_listed():
 def test_every_edit_done_in_code_has_a_german_phrase_listed():
     """German's list shows each exact edit too: every rule some German
     phrase listed is read as."""
-    listed = [german_edits.to_english(voice_edit_rules._norm(p))
-              for s in commands_reference.SECTIONS for c in s.commands if c.kind == "exact"
-              for p in c.german]
+    said = [voice_edit_rules._norm(p) for s in commands_reference.SECTIONS
+            for c in s.commands if c.kind == "exact" for p in c.german]
+    listed = [german_edits.to_english(p) or (f"remove the word {german_edits.word_to_remove(p)}"
+                                             if german_edits.word_to_remove(p) else None)
+              for p in said]
     rules = (voice_edit_rules._UPPER, voice_edit_rules._LOWER, voice_edit_rules._TITLE,
              voice_edit_rules._REMOVE_MARKS, voice_edit_rules._BULLETED,
              voice_edit_rules._NUMBERED, voice_edit_rules._INDENT, voice_edit_rules._UNINDENT,
@@ -463,7 +482,7 @@ def test_every_command_has_its_german_or_says_why_not():
     it, or what it shows then (or its section's note) says why there's none:
     20 rows had neither and nobody noticed until the list was read in German."""
     bare = [c.said[0] for s in commands_reference.SECTIONS for c in s.commands
-            if c.said and not c.german and "German" not in c.german_result + s.note]
+            if c.said and not c.german and "English only" not in c.german_result + s.note]
     assert bare == []
 
 
@@ -516,3 +535,17 @@ def test_with_english_commands_the_cards_show_no_german(monkeypatch):
     section = next(s for s in commands_reference.SECTIONS if s.title == "Punctuation")
     text = commands_cards.spoken(section)
     assert "Komma" not in text and "Anführungszeichen" not in text
+
+
+def test_with_german_commands_the_window_says_english_keeps_working(monkeypatch):
+    """With German on, the English words after the German looked left over."""
+    from gi.repository import Gtk
+    from tuxtalk import config, voice_commands_dialog
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(command_language="de"))
+    monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)
+    monkeypatch.setattr(Gtk.Window, "present", lambda self: None)
+    dialog = voice_commands_dialog.show_voice_commands_dialog()
+    try:
+        assert voice_commands_dialog.INTRO_GERMAN in _labels(dialog)
+    finally:
+        dialog.destroy()

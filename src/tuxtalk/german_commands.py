@@ -181,10 +181,15 @@ def _swiss(words: dict) -> dict:
     return {**words, **{said.replace("ß", "ss"): meant for said, meant in words.items()}}
 
 
+def swiss_pattern(pattern: str) -> str:
+    """*pattern* matching ss where it has ß."""
+    return pattern.replace("ß", "(?:ß|ss)")
+
+
 _FIXED = _swiss(_FIXED)
 _VERBS_FIRST = _swiss(_VERBS_FIRST)
 _WINDOW_VERBS = _swiss(_WINDOW_VERBS)
-_COMPILED = [(re.compile(pattern.replace("ß", "(?:ß|ss)")), build) for pattern, build in _RULES]
+_COMPILED = [(re.compile(swiss_pattern(pattern)), build) for pattern, build in _RULES]
 # A web address, read from the words as said: its dots, slashes and a
 # path's capitals stay ("geh zu example.com/Reset"). "Punkt" is its dot.
 _GO_TO = re.compile(

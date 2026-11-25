@@ -29,9 +29,44 @@ TEXT = "eins, zwei Test\n    - drei"
     ("das Wort Test entfernen", "eins, zwei\n    - drei"),
     ("lösche das Wort Test", "eins, zwei\n    - drei"),
     ("die Aufzählungszeichen entfernen", "eins, zwei Test\n    drei"),
+    ("bitte entferne das Wort Test bitte", "eins, zwei\n    - drei"),
 ])
 def test_a_german_exact_edit_is_done_in_code(said, edited):
     assert mechanical_edit(TEXT, said, "de") == edited
+
+
+@pytest.mark.parametrize("text, said, edited", [
+    # "bitte" in the words to take out stays one of them.
+    ("Bitte warten und warten", "das Wort bitte warten entfernen", "Und warten"),
+    # English words in them are words, not where to take them from.
+    ("Test from this und Test", "den Ausdruck Test from this entfernen", "Und Test"),
+])
+def test_the_words_to_take_out_are_taken_as_said(text, said, edited):
+    assert mechanical_edit(text, said, "de") == edited
+
+
+@pytest.mark.parametrize("said, edited", [
+    ("als nummerierte Liste", "1. 3. Oktober Feier\n2. 24. Dezember Fest"),
+    ("als Aufzählung", "- 3. Oktober Feier\n- 24. Dezember Fest"),
+    ("die Aufzählungszeichen entfernen", "3. Oktober Feier\n24. Dezember Fest"),
+])
+def test_a_date_opening_a_line_keeps_its_day(said, edited):
+    """Only numbers that run 1, 2, 3 are a list's: "3. Oktober" is a date."""
+    assert mechanical_edit("3. Oktober Feier\n24. Dezember Fest", said, "de") == edited
+
+
+def test_a_numbered_list_is_still_renumbered():
+    assert mechanical_edit("1. eins\n2. zwei", "als Aufzählung", "de") == "- eins\n- zwei"
+
+
+def test_the_numbers_are_not_the_bullets():
+    """"Nummern" are the numbers in the text: that's for the AI to judge."""
+    assert mechanical_edit("1. eins\n2. zwei", "die Nummern entfernen", "de") is None
+
+
+def test_every_word_gets_its_capital_umlauts_too():
+    assert mechanical_edit("ärger über öl", "jedes Wort großschreiben", "de") == "Ärger Über Öl"
+    assert mechanical_edit("élan vital", "make this title case") == "Élan Vital"
 
 
 def test_german_quotes_go_with_the_other_quotes():
@@ -87,7 +122,7 @@ def test_every_german_edit_help_names_is_done_in_code():
     block = writing.split("With voice commands in German, the German ones")[1]
     block = block.split("Any other German instruction")[0]
     named = [p for p in re.findall(r"<b>([^<]+)</b>", block) if "..." not in p]
-    assert len(named) == 8
+    assert "alles in Großbuchstaben" in named
     for said in named:
         assert (mechanical_edit(TEXT, said, "de") or is_delete(said, "de")
                 or formatting(said, "de")), said

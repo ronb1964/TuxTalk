@@ -24,6 +24,11 @@ WIDTH, HEIGHT = 900, 640
 INTRO = ("Hold your dictation key, say the command, let go. The commands are English "
          "words, whatever language you dictate in, or German as well with Voice commands "
          "in set to Deutsch in Preferences → General → Change model, device or language.")
+# With German on, each row shows its German words first and then the English
+# ones, which still work: say so, or the English looks left over.
+INTRO_GERMAN = ("Hold your dictation key, say the command, let go. Voice commands are in "
+                "German and English: each row shows the German words first, and the English "
+                "ones after them work just the same, so either language does it.")
 SNIPPETS = ("<b>Snippets</b>: say a short phrase, get the full text. Add your own in "
             "<b>Preferences → Words</b>; wrap the text in <b>\"quotes\"</b> to type it "
             "exactly as written.")
@@ -52,7 +57,8 @@ def show_voice_commands_dialog():
     content.set_margin_bottom(8)
     content.set_margin_start(12)
     content.set_margin_end(12)
-    content.pack_start(cards.paragraph(INTRO), False, False, 0)
+    intro = INTRO_GERMAN if commands_cards.german_commands() else INTRO
+    content.pack_start(cards.paragraph(intro), False, False, 0)
     tabs = _group_tabs()
     content.pack_start(tabs, True, True, 0)
 

@@ -37,8 +37,9 @@ class Command(NamedTuple):
     under that (both Pango markup: <b>tab</b>); *german*, the ways to say it
     with voice commands in German, and *german_result* what it does then, if
     that differs (German's quotes are „…“). One with no English ways is
-    German's alone. One with no German ways says why in its *german_result*
-    or its section's note (tests/test_commands_reference.py checks)."""
+    German's alone. One with no German ways says why it's English only in
+    its *german_result* or its section's note (tests/test_commands_reference.py
+    checks)."""
     said: tuple
     result: str
     kind: str
@@ -71,11 +72,9 @@ def _inline(*said, result, note="", german=(), german_result=""):
 def _literal(word, result, *said, german=""):
     """The command that types *word* itself; *said* adds other ways to say
     it, and *german* names the German word that "wörtlich" types."""
-    if not german:
-        return Command((f"literal {word}", *said), f'"{word}" (not {result})', "literal")
     return Command((f"literal {word}", *said), f'"{word}" (not {result})', "literal",
-                   german=(f"wörtlich {german}", f"das Wort {german}"),
-                   german_result=f'"{german}" (not {result})')
+                   german=(f"wörtlich {german}", f"das Wort {german}") if german else (),
+                   german_result=f'"{german}" (not {result})' if german else "")
 
 
 SECTIONS = (
@@ -134,7 +133,8 @@ SECTIONS = (
                 "Help → Writing → Filling in a form has the steps",
                 ("Tab drücken", "Tab-Taste drücken")),
         _inline("soft break", "soft line", result="three spaces",
-                german=("weicher Umbruch",)),
+                german_result="three spaces, in English only: German's „weicher "
+                              "Zeilenumbruch“ is a line break here, as in a word processor"),
         Command(("press enter", "hit enter"), "at the end: types it, then presses Enter",
                 "key", "It sends a chat message or runs a command. <b>literal press enter</b> "
                        "types the words", ("Enter drücken", "Eingabe drücken")),
@@ -199,7 +199,8 @@ SECTIONS = (
         Command(("make this all caps", "make this lower case", "make this title case",
                  "indent this", "unindent this"), "the same way, done exactly, without the AI",
                 "exact", german=("alles in Großbuchstaben", "alles in Kleinbuchstaben",
-                                 "jedes Wort großschreiben", "das einrücken", "das ausrücken")),
+                                 "jedes Wort großschreiben", "das einrücken",
+                                 "Einzug verkleinern")),
         Command(("make this a bulleted list", "make this a numbered list"),
                 "each line a point, without the AI", "exact",
                 "One paragraph goes to the AI, which decides where the points are",

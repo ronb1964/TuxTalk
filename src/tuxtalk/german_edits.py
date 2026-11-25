@@ -5,6 +5,8 @@ Großbuchstaben", "die Kommas entfernen" or "das löschen" is read as the
 English one it means ("make this all caps", "remove the commas", "delete
 this"), and voice_edit_rules does it exactly, as it does the English. Only
 for matching: the AI, when the edit needs it, still gets the words as said.
+The words of "das Wort ... entfernen" are the user's own, so they are found
+apart (word_to_remove), never read as part of a command.
 
 Like german_commands, most instructions put the verb last ("die Kommas
 entfernen"); one said first ("entferne die Kommas") is read with the verb
@@ -14,6 +16,7 @@ rules don't know does.
 """
 import re
 
+from .german_commands import swiss_pattern
 from .voice_navigation import german_verb_last
 
 # A verb said first, as the infinitive it is said last as.
@@ -57,10 +60,8 @@ _RULES = [
     (r"(?:jedes wort|alle wörter|jeden anfangsbuchstaben|alle anfangsbuchstaben)"
      r" groß(?: ?schreiben| machen)?", lambda m: "make this title case"),
     (rf"{_ALL}({'|'.join(_MARKS)}) {_TAKE_OUT}", lambda m: f"remove the {_MARKS[m[1]]}"),
-    (rf"{_ALL}(?:aufzählungszeichen|spiegelstriche|nummerierung|nummern) {_TAKE_OUT}",
+    (rf"{_ALL}(?:aufzählungszeichen|spiegelstriche|nummerierung) {_TAKE_OUT}",
      lambda m: "remove the bullets"),
-    (rf"(?:das wort|den begriff|den ausdruck|die wörter) (.+) {_TAKE_OUT}",
-     lambda m: f"remove the word {m[1]}"),
     (rf"{_TARGET}(?:als |zu |in )?(?:eine[nr]? )?nummerierte[nr]? liste(?: daraus)?{_MAKE}"
      rf"|{_TARGET}nummerieren", lambda m: "make this a numbered list"),
     (rf"{_TARGET}(?:als |zu |in )?(?:eine[nr]? )?(?:aufzählung|stichpunkte|stichpunktliste"
@@ -84,7 +85,23 @@ _RULES = [
 
 
 # Swiss spelling, ss for ß, matched too ("Grossbuchstaben").
-_COMPILED = [(re.compile(pattern.replace("ß", "(?:ß|ss)")), build) for pattern, build in _RULES]
+_COMPILED = [(re.compile(swiss_pattern(pattern)), build) for pattern, build in _RULES]
+
+
+# "das Wort Test entfernen" or "entferne das Wort Test", with "bitte" before
+# or after the command, never taken from the words themselves.
+_WORDS = r"(?:das wort|den begriff|den ausdruck|die wörter)"
+_REMOVE_FIRST = r"(?:entferne?|lösche?|streiche?)"
+_WORD_TO_REMOVE = re.compile(
+    rf"(?:bitte )?(?:{_REMOVE_FIRST} {_WORDS} (?P<first>.+?)|{_WORDS} (?P<last>.+?) {_TAKE_OUT})"
+    r"(?: bitte)?")
+
+
+def word_to_remove(said: str) -> str | None:
+    """The words "das Wort Test entfernen" takes out ("test"), from *said*
+    as to_english takes it, or None when it isn't that edit."""
+    m = _WORD_TO_REMOVE.fullmatch(said)
+    return (m["first"] or m["last"]) if m else None
 
 
 def to_english(said: str) -> str | None:

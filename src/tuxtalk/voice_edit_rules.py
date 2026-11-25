@@ -125,6 +125,20 @@ _REMOVE_BULLETS = re.compile(rf"^{_REMOVE}\s+(?:all\s+)?(?:of\s+)?(?:the\s+)?"
                              rf"{_FROM}$")
 # A list line's marker: "- ", "* ", "• ", "2. ", "10) ".
 _BULLET = re.compile(r"^(?:[-*\u2022\u2013]|\d+[.)])\s+")
+_SYMBOL_BULLET = re.compile(r"^[-*\u2022\u2013]\s+")
+_NUMBER_MARKER = re.compile(r"^\s*(\d+)[.)]\s")
+
+
+def _list_marker(text: str) -> re.Pattern:
+    """What marks a list line of *text*: a number only when the numbered
+    lines run 1, 2, 3 or the list has bullets too, so lines opening with a
+    date ("3. Oktober") keep their day."""
+    lines = text.split("\n")
+    numbers = [int(m[1]) for line in lines if (m := _NUMBER_MARKER.match(line))]
+    if numbers == list(range(1, len(numbers) + 1)):
+        return _BULLET
+    bullets = any(_SYMBOL_BULLET.match(line.lstrip()) for line in lines)
+    return _BULLET if bullets else _SYMBOL_BULLET
 _BULLETED = re.compile(rf"^(?:{_LEAD}|add\s+|use\s+)?(?:an?\s+)?"
                        r"(?:bullet(?:ed)?(?: point)?s?(?: list)?"
                        r"|bullet points|list with bullets)$")
@@ -230,7 +244,7 @@ def _capitalise_first(segment: str):
 def _title(body: str) -> str:
     """Title Case: every word's first letter in upper case."""
     # Not after an apostrophe: "don't" must not become "Don'T".
-    return re.sub(r"(?<![\w'’])([a-z])", lambda m: m.group(1).upper(), body)
+    return re.sub(r"(?<![\w'’])([^\W\d_])", lambda m: m.group(1).upper(), body)
 
 
 def mechanical_edit(text: str, instruction: str, lang: str = "en"):
@@ -248,23 +262,33 @@ def mechanical_edit(text: str, instruction: str, lang: str = "en"):
     if m:
         return _remove_marks(text, _MARKS[m.group(1)])
     lines = [line for line in text.split("\n") if line.strip()]
+    marker = _list_marker(text)
     # A list of lines is made exactly. One paragraph into points needs the AI,
     # which decides where the points are.
     if len(lines) > 1 and _BULLETED.match(said):
-        return _per_line(text, lambda body: "- " + _BULLET.sub("", body))
+        return _per_line(text, lambda body: "- " + marker.sub("", body))
     if len(lines) > 1 and _NUMBERED.match(said):
         count = iter(range(1, len(lines) + 1))
-        return _per_line(text, lambda body: f"{next(count)}. " + _BULLET.sub("", body))
+        return _per_line(text, lambda body: f"{next(count)}. " + marker.sub("", body))
     if _INDENT.match(said):
         return "\n".join(INDENT + line if line.strip() else line for line in text.split("\n"))
     if _UNINDENT.match(said):
         return "\n".join(_one_level_less(line) for line in text.split("\n"))
     if _REMOVE_BULLETS.match(said):
-        return _per_line(text, lambda body: _BULLET.sub("", body))
-    m = _REMOVE_WORD.match(said)
-    if m:
-        return _remove_phrase(text, m.group(1))
+        return _per_line(text, lambda body: marker.sub("", body))
+    if words := _words_to_remove(instruction, said, lang):
+        return _remove_phrase(text, words)
     return None
+
+
+def _words_to_remove(instruction: str, said: str, lang: str):
+    """What "remove the word testing" (*said*, as _said made it) takes out,
+    or None; in German the words of "das Wort Test entfernen", found in
+    *instruction* as said, so none of them is read as a command."""
+    if lang == "de" and (words := german_edits.word_to_remove(_norm(instruction))):
+        return words
+    m = _REMOVE_WORD.match(said)
+    return m.group(1) if m else None
 
 
 def _one_level_less(line: str) -> str:
@@ -312,7 +336,8 @@ _COLOURS = {"red", "blue", "green", "yellow", "orange", "purple", "black", "whit
 def formatting(instruction: str, lang: str = "en"):
     """None for an instruction about the words. Otherwise the shortcut kinds
     asked for, in order (["bold", "italic"]), or CANT_FORMAT for formatting no
-    shortcut does (font, size, colour); *lang* "de" knows "fett" and "kursiv"."""
+    shortcut does (font, size, colour); *lang* "de" knows "fett", "kursiv" and
+    "unterstreichen"."""
     said = _said(instruction, lang)
     said = re.sub(r"\b(?:strike ?through|strike ?out|cross(?:ed)? out)\b", "strikethrough", said)
     said = re.sub(r"\b(\d+)\s*-?\s*(?:pt|points?)\b", r"\1 point", said)     # "14pt", "14-point"

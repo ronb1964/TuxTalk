@@ -501,7 +501,8 @@ up to three. Each one has to start like a command (make, remove, add, change...)
 "make it shorter and simpler" is still one change.
 
 Bold, italics, underline and delete press keys in the app, so they can't be combined with
-other changes: do those as an edit of their own.
+other changes: do those as an edit of their own. In German, two changes said together go
+to the AI as one: say each exact change (Großbuchstaben, Kommas) as an edit of its own.
 
 ### Bold, italics and underline
 Say <b>make this bold</b>, <b>italicize this</b> or <b>underline this</b> in LibreOffice and

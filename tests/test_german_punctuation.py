@@ -275,11 +275,18 @@ def test_a_mark_word_ending_the_dictation_is_the_mark():
     ("Max Geviert Strich Moritz", "Max — Moritz."),
     # Mid-sentence, "Tab drücken" types a tab, as "press tab" does.
     ("Name Tab drücken Vorname", "Name\tVorname."),
-    ("Hallo weicher Umbruch Welt", "Hallo   Welt."),
+    # Three commands with pauses between them, not the rhyme's run of words.
+    ("Liebe Anna Komma, neue Zeile, Tab drücken, wie geht es dir",
+     f"Liebe Anna,{LINE_BREAK}\tWie geht es dir."),
+    # A word processor's soft line break is Shift+Enter: TuxTalk's line break.
+    ("Erste Zeile weicher Zeilenumbruch zweite Zeile", f"Erste Zeile.{LINE_BREAK}Zweite Zeile."),
     # "wörtlich" types the words themselves, the verb small as German writes it.
     ("Schreib wörtlich Tab drücken bitte", "Schreib Tab drücken bitte."),
     ("Schreib wörtlich Geviertstrich", "Schreib Geviertstrich."),
     ("Schreib das Wort neue Zeile", "Schreib neue Zeile."),
+    # English's words for it too, as at the end of a dictation (key_commands).
+    ("Schreib literal Tab drücken bitte", "Schreib Tab drücken bitte."),
+    ("Schreib die Wörter Tab drücken", "Schreib Tab drücken."),
 ])
 def test_german_dash_tab_and_soft_break_said_as_commands(said, typed):
     assert normalize_text(said, lang="de") == typed
@@ -289,6 +296,12 @@ def test_german_dash_tab_and_soft_break_said_as_commands(said, typed):
     # Said about the key, as "press the tab key" is in English.
     "Du musst die Tab-Taste drücken, um weiterzukommen.",
     "Ein Geviertstrich ist länger als ein Bindestrich.",
+    "Du musst Tab drücken, um weiterzukommen.",
+    "Man kann einfach Tab drücken.",
+    "Mit Alt Tab drücken wechselst du das Fenster.",
+    "Mit Alt+Tab drücken wechselst du das Fenster.",
+    "Er wollte einen weichen Zeilenumbruch.",
+    "Hier wäre weicher Umbruch sinnvoll.",
     "Er wollte einen weichen Umbruch.",
 ])
 def test_german_sentences_about_dashes_tabs_and_breaks_stay_text(said):
