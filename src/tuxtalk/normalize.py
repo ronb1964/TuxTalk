@@ -272,9 +272,9 @@ _DE_ELLIPSIS = r"auslassungs\s?punkte"
 _DE_NEW_LINE = r"(?:neue\s+zeile|(?:weiche[rn]?\s+)?zeilen\s?umbruch)"
 _DE_NEW_PARAGRAPH = r"neue[nr]?\s+absatz"
 _DE_EM_DASH = r"geviert\s?strich"
-# Mid-sentence a tab character, as "press tab" is; at the end it presses Tab
-# (key_commands). "Tab-Taste drücken" mid-sentence is someone talking about
-# the key, as "press the tab key" is.
+# At the end it presses Tab (key_commands); mid-sentence it is ordinary German
+# ("du könntest Tab drücken, um ..."), so it is a mark word only to be held:
+# "wörtlich Tab drücken" types the words.
 _DE_TAB = r"tab(?:ulator)?\s+drücken"
 # The marks and breaks; with Tab, every word a German command holds as a word.
 _GERMAN_PUNCTUATION_WORDS = (rf"komma|beistrich|punkt|{_DE_QUESTION}|{_DE_EXCLAIM}|"
@@ -282,8 +282,9 @@ _GERMAN_PUNCTUATION_WORDS = (rf"komma|beistrich|punkt|{_DE_QUESTION}|{_DE_EXCLAI
                              rf"hochstrich|{_DE_HYPHEN}|gedankenstrich|{_DE_EM_DASH}|"
                              rf"{_DE_NEW_LINE}|{_DE_NEW_PARAGRAPH}|{_DE_QUOTES}|{_DE_ELLIPSIS}")
 _GERMAN_MARK_WORDS = rf"{_GERMAN_PUNCTUATION_WORDS}|{_DE_TAB}"
-# Before a German mark word, what types the word itself, English's too.
-GERMAN_LITERAL = r"(?:literal|the\s+words?|wörtlich|das\s+wort|die\s+wörter)"
+# Before a German mark word, what types the word itself, English's "literal"
+# too. Not "die Wörter": "Ich kenne die Wörter Punkt und Komma" keeps them.
+_GERMAN_LITERAL = r"(?:literal|wörtlich|das\s+wort)"
 _RE_GERMAN_HELD = re.compile(r"__LITDE_(\w+?)__")
 # Said with German commands on, a mark word is the mark, as in Dragon, and
 # "wörtlich" before it types the word. Rules can't parse German, so only
@@ -319,12 +320,6 @@ _GERMAN_ADJECTIVE = (rf"{_GERMAN_DEGREE}(?-i:(?!(?:hier|immer|wieder|später|lie
 _GERMAN_CONJUNCTION = r"(?i:und|oder|aber|dass|ob|weil|wenn|bitte)\b"
 _GERMAN_SENTENCE_END = rf"(?i:{_DE_QUESTION}|{_DE_EXCLAIM}|punkt)\b"
 _GERMAN_NUMBER = rf"(?:\d+|(?i:{GERMAN_NUMBER_PATTERN})\b)"
-# Before "Tab drücken", a word that makes it something talked about: a modal
-# verb ("du musst Tab drücken"), "man", or a key held with it ("Alt+Tab").
-_GERMAN_TALKED_ABOUT_TAB = (
-    r"(?:muss|musst|müssen|müsst|musste|kann|kannst|können|könnt|soll|sollst|sollen|"
-    r"sollt|sollte|solltest|darf|darfst|dürfen|will|willst|wollen|möchte|möchtest|man|"
-    r"einfach|nur|mal)\s+|(?:alt|strg|ctrl|umschalt|shift|super)(?:\s*\+\s*|\s+)")
 
 
 def _hold_german(m: re.Match) -> str:
@@ -348,7 +343,6 @@ def _give_back_german(m: re.Match) -> str:
 # ("Punkt, Punkt, Komma, Strich" in the children's rhyme) are words; two
 # can be commands said with a pause ("Komma, neue Zeile"). So are the
 # rhyme's two before "Strich", "Punkt für Punkt" and "null Komma nichts".
-# Only the punctuation words: "Komma, neue Zeile, Tab drücken" is three commands.
 _RE_GERMAN_MARK_RUN = re.compile(
     rf"\b(?:{_GERMAN_PUNCTUATION_WORDS})(?:,\s+(?:{_GERMAN_PUNCTUATION_WORDS})\b){{2,}}"
     r"|\bpunkt\s+für\s+punkt\b|\bnull\s+komma\s+nichts\b"
@@ -365,7 +359,7 @@ def _hold_german_run(m: re.Match) -> str:
 
 _GERMAN_PROTECT_PATTERNS = [
     # "wörtlich Komma", "das Wort Punkt": the word itself, without "wörtlich".
-    re.compile(rf"\b{GERMAN_LITERAL}\s+()({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
+    re.compile(rf"\b{_GERMAN_LITERAL}\s+()({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
     # "Komma-Fehler": a mark word starting a compound.
     re.compile(rf"(\b)({_GERMAN_MARK_WORDS})(?=-\w)", re.IGNORECASE),
     re.compile(rf"({_GERMAN_ARTICLE}|{_GERMAN_STRONG})({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
@@ -380,7 +374,6 @@ _GERMAN_PROTECT_PATTERNS = [
     # "Er hat den letzten Punkt vergessen", "Mit dem neuen Komma ist es besser".
     re.compile(rf"({_GERMAN_ARTICLE}{_GERMAN_ADJECTIVE})({_GERMAN_MARK_WORDS})\b"
                r"(?=\s+[^\W\d_])", re.IGNORECASE),
-    re.compile(rf"(\b(?i:{_GERMAN_TALKED_ABOUT_TAB}))({_DE_TAB})\b", re.IGNORECASE),
     # "Punkt 12 Uhr", "um Punkt zwölf", "um Punkt halb acht": the time.
     re.compile(rf"(\b)(punkt)(?=\s+(?:{_GERMAN_NUMBER}|(?i:halb|viertel|ein\s+uhr)\b))",
                re.IGNORECASE),
@@ -408,7 +401,6 @@ _GERMAN_MARKS = [
     (re.compile(rf"[,\s]*\b{_DE_NEW_LINE}\b[,.:;\s]*", re.IGNORECASE),
      LINE_BREAK),
     (re.compile(rf"[,.\s]*\b{_DE_NEW_PARAGRAPH}\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK * 2),
-    (re.compile(rf"[, ]*\b{_DE_TAB}\b[,.:; ]*", re.IGNORECASE), "\t"),
     (re.compile(rf"\bpunkt\s+punkt\s+punkt\b|\b{_DE_ELLIPSIS}\b", re.IGNORECASE), "…"),
     (re.compile(_ENGINE_PERIOD + rf"\b{_DE_EXCLAIM}\b", re.IGNORECASE),
      "!"),

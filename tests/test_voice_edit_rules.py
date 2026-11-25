@@ -294,3 +294,15 @@ def test_at_most_three_steps():
     from tuxtalk.voice_edit_rules import split_steps
     said = "make it formal and remove the commas and add a title and make it all caps"
     assert split_steps(said) == [said]
+
+
+@pytest.mark.parametrize("text, renumbered", [
+    ("4. Milk\n5. Bread", "1. Milk\n2. Bread"),
+    ("1. Milk\n1. Bread", "1. Milk\n2. Bread"),
+    ("1. Fruit\n   1. Apples\n2. Bread", "1. Fruit\n   2. Apples\n3. Bread"),
+])
+def test_any_numbered_list_is_renumbered(text, renumbered):
+    """Whatever its numbers were: the second half of a list, Markdown's
+    all-ones, or nested."""
+    assert r.mechanical_edit(text, "make this a numbered list") == renumbered
+    assert "4." not in r.mechanical_edit(text, "remove the numbering")

@@ -174,7 +174,7 @@ _RULES = [
 ]
 
 
-def _swiss(words: dict) -> dict:
+def swiss_words(words: dict) -> dict:
     """*words* ({said: meant}) with each said word's Swiss spelling too, ss
     for ß ("schliessen"). Only the command's own words: an app's name is
     found as it was said."""
@@ -186,9 +186,9 @@ def swiss_pattern(pattern: str) -> str:
     return pattern.replace("ß", "(?:ß|ss)")
 
 
-_FIXED = _swiss(_FIXED)
-_VERBS_FIRST = _swiss(_VERBS_FIRST)
-_WINDOW_VERBS = _swiss(_WINDOW_VERBS)
+_FIXED = swiss_words(_FIXED)
+_VERBS_FIRST = swiss_words(_VERBS_FIRST)
+_WINDOW_VERBS = swiss_words(_WINDOW_VERBS)
 _COMPILED = [(re.compile(swiss_pattern(pattern)), build) for pattern, build in _RULES]
 # A web address, read from the words as said: its dots, slashes and a
 # path's capitals stay ("geh zu example.com/Reset"). "Punkt" is its dot.

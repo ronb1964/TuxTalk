@@ -16,7 +16,7 @@ rules don't know does.
 """
 import re
 
-from .german_commands import swiss_pattern
+from .german_commands import swiss_pattern, swiss_words
 from .voice_navigation import german_verb_last
 
 # A verb said first, as the infinitive it is said last as.
@@ -46,7 +46,7 @@ _MARKS = {
     "apostrophe": "apostrophes", "bindestriche": "hyphens", "gedankenstriche": "dashes",
     "striche": "dashes", "klammern": "brackets", "satzzeichen": "punctuation",
 }
-_MARKS.update({said.replace("ß", "ss"): meant for said, meant in _MARKS.items()})
+_MARKS = swiss_words(_MARKS)
 _SHORTCUTS = {"fett": "bold", "kursiv": "italic", "unterstrichen": "underlined"}
 _SHORTCUT = rf"(?:in )?(?:{'|'.join(_SHORTCUTS)})"
 
@@ -93,7 +93,8 @@ _COMPILED = [(re.compile(swiss_pattern(pattern)), build) for pattern, build in _
 _WORDS = r"(?:das wort|den begriff|den ausdruck|die wörter)"
 _REMOVE_FIRST = r"(?:entferne?|lösche?|streiche?)"
 _WORD_TO_REMOVE = re.compile(
-    rf"(?:bitte )?(?:{_REMOVE_FIRST} {_WORDS} (?P<first>.+?)|{_WORDS} (?P<last>.+?) {_TAKE_OUT})"
+    rf"(?:bitte )?(?:{_REMOVE_FIRST} (?:bitte )?{_WORDS} (?P<first>.+?)"
+    rf"|{_WORDS} (?P<last>.+?) {_TAKE_OUT})"
     r"(?: bitte)?")
 
 

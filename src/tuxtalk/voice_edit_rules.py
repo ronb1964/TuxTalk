@@ -123,22 +123,11 @@ _REMOVE_MARKS = re.compile(rf"^{_REMOVE}\s+(?:all\s+)?(?:of\s+)?(?:the\s+)?"
 _REMOVE_BULLETS = re.compile(rf"^{_REMOVE}\s+(?:all\s+)?(?:of\s+)?(?:the\s+)?"
                              r"(?:bullets?|bullet points|numbering|list (?:markers|numbers))"
                              rf"{_FROM}$")
-# A list line's marker: "- ", "* ", "• ", "2. ", "10) ".
-_BULLET = re.compile(r"^(?:[-*\u2022\u2013]|\d+[.)])\s+")
-_SYMBOL_BULLET = re.compile(r"^[-*\u2022\u2013]\s+")
-_NUMBER_MARKER = re.compile(r"^\s*(\d+)[.)]\s")
-
-
-def _list_marker(text: str) -> re.Pattern:
-    """What marks a list line of *text*: a number only when the numbered
-    lines run 1, 2, 3 or the list has bullets too, so lines opening with a
-    date ("3. Oktober") keep their day."""
-    lines = text.split("\n")
-    numbers = [int(m[1]) for line in lines if (m := _NUMBER_MARKER.match(line))]
-    if numbers == list(range(1, len(numbers) + 1)):
-        return _BULLET
-    bullets = any(_SYMBOL_BULLET.match(line.lstrip()) for line in lines)
-    return _BULLET if bullets else _SYMBOL_BULLET
+# A list line's marker: "- ", "* ", "• ", "2. ", "10) ". Not a German date
+# opening the line ("3. Oktober"): the day stays.
+_MONTHS = (r"januar|jänner|februar|feber|märz|april|mai|juni|juli|august|september|oktober"
+           r"|november|dezember")
+_BULLET = re.compile(rf"^(?:[-*\u2022\u2013]|\d+[.)](?!\s+(?i:{_MONTHS})\b))\s+")
 _BULLETED = re.compile(rf"^(?:{_LEAD}|add\s+|use\s+)?(?:an?\s+)?"
                        r"(?:bullet(?:ed)?(?: point)?s?(?: list)?"
                        r"|bullet points|list with bullets)$")
@@ -262,20 +251,19 @@ def mechanical_edit(text: str, instruction: str, lang: str = "en"):
     if m:
         return _remove_marks(text, _MARKS[m.group(1)])
     lines = [line for line in text.split("\n") if line.strip()]
-    marker = _list_marker(text)
     # A list of lines is made exactly. One paragraph into points needs the AI,
     # which decides where the points are.
     if len(lines) > 1 and _BULLETED.match(said):
-        return _per_line(text, lambda body: "- " + marker.sub("", body))
+        return _per_line(text, lambda body: "- " + _BULLET.sub("", body))
     if len(lines) > 1 and _NUMBERED.match(said):
         count = iter(range(1, len(lines) + 1))
-        return _per_line(text, lambda body: f"{next(count)}. " + marker.sub("", body))
+        return _per_line(text, lambda body: f"{next(count)}. " + _BULLET.sub("", body))
     if _INDENT.match(said):
         return "\n".join(INDENT + line if line.strip() else line for line in text.split("\n"))
     if _UNINDENT.match(said):
         return "\n".join(_one_level_less(line) for line in text.split("\n"))
     if _REMOVE_BULLETS.match(said):
-        return _per_line(text, lambda body: marker.sub("", body))
+        return _per_line(text, lambda body: _BULLET.sub("", body))
     if words := _words_to_remove(instruction, said, lang):
         return _remove_phrase(text, words)
     return None

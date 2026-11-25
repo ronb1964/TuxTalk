@@ -30,6 +30,7 @@ TEXT = "eins, zwei Test\n    - drei"
     ("lösche das Wort Test", "eins, zwei\n    - drei"),
     ("die Aufzählungszeichen entfernen", "eins, zwei Test\n    drei"),
     ("bitte entferne das Wort Test bitte", "eins, zwei\n    - drei"),
+    ("entferne bitte das Wort Test", "eins, zwei\n    - drei"),
 ])
 def test_a_german_exact_edit_is_done_in_code(said, edited):
     assert mechanical_edit(TEXT, said, "de") == edited
@@ -45,13 +46,17 @@ def test_the_words_to_take_out_are_taken_as_said(text, said, edited):
     assert mechanical_edit(text, said, "de") == edited
 
 
+def test_a_numbered_list_that_starts_at_three_is_renumbered():
+    assert mechanical_edit("3. Milch\n4. Brot", "als nummerierte Liste", "de") == "1. Milch\n2. Brot"
+
+
 @pytest.mark.parametrize("said, edited", [
     ("als nummerierte Liste", "1. 3. Oktober Feier\n2. 24. Dezember Fest"),
     ("als Aufzählung", "- 3. Oktober Feier\n- 24. Dezember Fest"),
     ("die Aufzählungszeichen entfernen", "3. Oktober Feier\n24. Dezember Fest"),
 ])
 def test_a_date_opening_a_line_keeps_its_day(said, edited):
-    """Only numbers that run 1, 2, 3 are a list's: "3. Oktober" is a date."""
+    """"3. Oktober" opening a line is a date, not a list's number."""
     assert mechanical_edit("3. Oktober Feier\n24. Dezember Fest", said, "de") == edited
 
 

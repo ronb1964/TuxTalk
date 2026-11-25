@@ -23,7 +23,6 @@ sending half a sentence can't be taken back (auto_send).
 import re
 
 from .logger import setup_logger
-from .normalize import GERMAN_LITERAL
 
 logger = setup_logger(__name__)
 
@@ -47,9 +46,9 @@ US_LETTER_KEYS = dict(zip("abcdefghijklmnopqrstuvwxyz",
 # Enter."), and a short pause after "press" comes out as a comma ("press,
 # tab"). "literal" or "the word" before it types the words.
 _LITERAL = r"(?:literal|the\s+words?)"
-# With German on, either language's word for it does (normalize's
-# GERMAN_LITERAL), before either's command: "literal Enter drücken" asked for
-# the words as surely.
+# With German on, either language's word for it does, before either's
+# command: "literal Enter drücken" asked for the words as surely.
+_GERMAN_LITERAL = r"(?:literal|the\s+words?|wörtlich|das\s+wort|die\s+wörter)"
 
 
 def _english_trailing(literal: str) -> re.Pattern:
@@ -66,7 +65,7 @@ def _english_trailing(literal: str) -> re.Pattern:
 
 # German: "Enter drücken", "Eingabe drücken", "Tab-Taste drücken", the verb
 # last as most say it, or first ("drück Enter").
-_GERMAN_LEAD = rf"(?P<lead>^|[\s,;:.!?]+)(?P<literal>{GERMAN_LITERAL}\s+)?"
+_GERMAN_LEAD = rf"(?P<lead>^|[\s,;:.!?]+)(?P<literal>{_GERMAN_LITERAL}\s+)?"
 _GERMAN_KEY = r"(?P<key>enter|eingabe|return|tab|tabulator)(?:[\s-]?taste)?"
 _GERMAN_TRAILING = (
     re.compile(_GERMAN_LEAD + r"(?:die\s+)?" + _GERMAN_KEY + r",?\s+drücken[\s.!?,]*$",
@@ -77,7 +76,7 @@ _GERMAN_TRAILING = (
 # Each language's patterns, its own first; English is understood in every one.
 _TRAILING = _english_trailing(_LITERAL)
 _TRAILING_BY_LANGUAGE = {"en": (_TRAILING,),
-                         "de": (*_GERMAN_TRAILING, _english_trailing(GERMAN_LITERAL))}
+                         "de": (*_GERMAN_TRAILING, _english_trailing(_GERMAN_LITERAL))}
 _TAB_NAMES = frozenset({"tab", "tabulator"})
 
 

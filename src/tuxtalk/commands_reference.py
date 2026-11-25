@@ -126,7 +126,8 @@ SECTIONS = (
         _inline("new paragraph", "paragraph break", result="double line break",
                 note="a space in a terminal", german=("neuer Absatz",)),
         _inline("press tab", result="tab character (just <b>tab</b> is the word)",
-                german=("Tab drücken",)),
+                german_result="tab character, in English only: mid-sentence „Tab drücken“ "
+                              "is everyday German („du könntest Tab drücken, um ...“)"),
         Command(("press tab", "press the tab key"),
                 "at the end: presses the Tab key, to the next box in a form (in Claude "
                 "Desktop, four spaces)", "key",

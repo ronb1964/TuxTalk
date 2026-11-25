@@ -273,11 +273,6 @@ def test_a_mark_word_ending_the_dictation_is_the_mark():
 @pytest.mark.parametrize("said, typed", [
     ("Max Geviertstrich Moritz", "Max — Moritz."),
     ("Max Geviert Strich Moritz", "Max — Moritz."),
-    # Mid-sentence, "Tab drücken" types a tab, as "press tab" does.
-    ("Name Tab drücken Vorname", "Name\tVorname."),
-    # Three commands with pauses between them, not the rhyme's run of words.
-    ("Liebe Anna Komma, neue Zeile, Tab drücken, wie geht es dir",
-     f"Liebe Anna,{LINE_BREAK}\tWie geht es dir."),
     # A word processor's soft line break is Shift+Enter: TuxTalk's line break.
     ("Erste Zeile weicher Zeilenumbruch zweite Zeile", f"Erste Zeile.{LINE_BREAK}Zweite Zeile."),
     # "wörtlich" types the words themselves, the verb small as German writes it.
@@ -286,9 +281,8 @@ def test_a_mark_word_ending_the_dictation_is_the_mark():
     ("Schreib das Wort neue Zeile", "Schreib neue Zeile."),
     # English's words for it too, as at the end of a dictation (key_commands).
     ("Schreib literal Tab drücken bitte", "Schreib Tab drücken bitte."),
-    ("Schreib die Wörter Tab drücken", "Schreib Tab drücken."),
 ])
-def test_german_dash_tab_and_soft_break_said_as_commands(said, typed):
+def test_german_dash_and_line_break_said_as_commands(said, typed):
     assert normalize_text(said, lang="de") == typed
 
 
@@ -299,7 +293,8 @@ def test_german_dash_tab_and_soft_break_said_as_commands(said, typed):
     "Du musst Tab drücken, um weiterzukommen.",
     "Man kann einfach Tab drücken.",
     "Mit Alt Tab drücken wechselst du das Fenster.",
-    "Mit Alt+Tab drücken wechselst du das Fenster.",
+    "Du könntest Tab drücken, um weiterzukommen.",
+    "Wenn du Tab drücken willst, geht es weiter.",
     "Er wollte einen weichen Zeilenumbruch.",
     "Hier wäre weicher Umbruch sinnvoll.",
     "Er wollte einen weichen Umbruch.",
@@ -309,4 +304,11 @@ def test_german_sentences_about_dashes_tabs_and_breaks_stay_text(said):
 
 
 def test_tab_and_dash_words_wait_for_german_commands():
-    assert normalize_text("Name Tab drücken Geviertstrich") == "Name Tab drücken Geviertstrich."
+    assert normalize_text("Name Geviertstrich") == "Name Geviertstrich."
+
+
+def test_die_woerter_in_a_sentence_stays():
+    """Only "wörtlich", "das Wort" and "literal" type the mark's word; "die
+    Wörter" is no such command, and isn't lost."""
+    assert normalize_text("Ich kenne die Wörter Punkt und Komma", lang="de").startswith(
+        "Ich kenne die Wörter")

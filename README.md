@@ -532,7 +532,6 @@ With **Voice commands in** set to Deutsch, most commands above can be said in Ge
 | "Gedankenstrich" / "Geviertstrich" | – (a space each side) / — |
 | "neue Zeile" / "neuer Absatz" | Line break / double line break |
 | "Enter drücken" / "Tab drücken" (at the end) | Presses the key |
-| "Tab drücken" (mid-sentence) | Tab character |
 | "das letzte Wort löschen" / "alles löschen" | Undo, as above |
 | "Wort korrigieren" | Opens Fix a Word |
 | "wörtlich Punkt" | Types the word "Punkt" |
