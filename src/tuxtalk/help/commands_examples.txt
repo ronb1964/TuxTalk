@@ -1,7 +1,2 @@
 <b>Usage Examples:</b>
-Say: <i>Hello world comma how are you question mark</i>
-Result: Hello world, how are you?
-
-Say: <i>First sentence period new line Second sentence exclamation point</i>
-Result: First sentence.
-Second sentence!
+{examples_commands}

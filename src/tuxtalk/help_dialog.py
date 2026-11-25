@@ -78,7 +78,7 @@ def _add_sections(notebook, sections, found):
             # intro (a test keeps it so).
             commands = help_outline.parse(markup)
             page = commands_cards.all_groups_page(
-                commands.title, commands.parts[0].intro, help_text.COMMANDS_EXAMPLES, cards_here)
+                commands.title, commands.parts[0].intro, help_text.commands_examples(), cards_here)
         else:
             page = help_pages.page(markup, title, _on_link, cards_here)
         found.update({(title, *key): widgets for key, widgets in cards_here.items()})

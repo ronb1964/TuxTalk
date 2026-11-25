@@ -11,6 +11,7 @@ In a terminal a dictation starts without a capital and ends without a period, so
 IDEs…) no period is added at the end. Everywhere else, chat apps included,
 punctuation is as usual. (Preferences → Advanced → Fine-tuning → Plain text in
 terminals and code editors.)
+{examples_terminal}
 
 ### Running a command
 Hold <b>{hold}</b>, say <b>git status, press enter</b>, let go: the command is typed and

@@ -1,0 +1,113 @@
+# Help's "you say → you get" examples. A page shows a group where it says
+# {examples_<group>}, one line an example (help_text.examples). Every one is
+# run through the real text path by tests/test_help_examples.py and has to
+# come out as written here, so Help can't promise what TuxTalk doesn't do.
+#
+#   say      what you say, as the speech model writes it (names capitalised)
+#   get      what's typed; "\n" a line break, "\n\n" a new paragraph
+#   press    the key pressed after it ("Enter")
+#   when     the setting it needs, as Help names it; settings, that setting
+#            as the test turns it on (field names of settings_schema.Settings)
+#   lang     "de" for German voice commands; app "terminal" for a terminal
+#   ai       "correction" or "tone": the AI's answer varies, so Help says
+#            "something like" and the test checks only that it's recognised
+
+[[example]]
+group = "basics"
+say = "see you tomorrow comma bring snacks period"
+get = "See you tomorrow, bring snacks."
+
+[[example]]
+group = "basics"
+say = "is the van ready question mark"
+get = "Is the van ready?"
+
+[[example]]
+group = "paragraphs"
+say = "Dear Anna comma new line thanks for the quote period new paragraph see you Monday"
+get = "Dear Anna,\nThanks for the quote.\n\nSee you Monday."
+
+[[example]]
+group = "quotes"
+say = "she said quote hello unquote and left"
+get = "She said “hello” and left."
+
+[[example]]
+group = "numbers"
+say = "twenty-five chickens"
+get = "25 chickens."
+when = "Numbers set to digits"
+settings = { numbers_as_digits = true }
+
+[[example]]
+group = "numbers"
+say = "meet at seven thirty"
+get = "Meet at 7:30."
+when = "Numbers set to digits"
+settings = { numbers_as_digits = true }
+
+[[example]]
+group = "addresses"
+say = "john at gmail dot com"
+get = "john@gmail.com"
+
+[[example]]
+group = "addresses"
+say = "john dot doe at gmail dot com"
+get = "john.doe@gmail.com"
+
+[[example]]
+group = "cleaner"
+say = "um so the the van is ready"
+get = "So the van is ready."
+when = "Remove \"um\" on"
+settings = { remove_fillers = true }
+
+[[example]]
+group = "cleaner"
+say = "meet at three, no wait, four"
+get = "Meet at four."
+when = "Fix self-corrections with AI on"
+ai = "correction"
+
+[[example]]
+group = "tone"
+say = "tell him the cabinets are a week late, make that formal"
+get = "Please inform him that the cabinets will be delayed by a week."
+ai = "tone"
+
+[[example]]
+group = "send"
+say = "see you at noon, press enter"
+get = "See you at noon."
+press = "Enter"
+
+[[example]]
+group = "terminal"
+say = "git status"
+get = "git status"
+app = "terminal"
+
+[[example]]
+group = "terminal"
+say = "git status, press enter"
+get = "git status"
+press = "Enter"
+app = "terminal"
+
+[[example]]
+group = "commands"
+say = "Hello world comma how are you question mark"
+get = "Hello world, how are you?"
+
+[[example]]
+group = "commands"
+say = "First sentence period new line Second sentence exclamation point"
+get = "First sentence.\nSecond sentence!"
+
+[[example]]
+group = "german"
+say = "Liebe Anna Komma neue Zeile wie geht es dir Fragezeichen"
+get = "Liebe Anna,\nWie geht es dir?"
+when = "Voice commands in set to Deutsch"
+lang = "de"

@@ -7,6 +7,7 @@
 
 Say punctuation as you go: <b>period</b>, <b>comma</b>, <b>question mark</b>,
 <b>new line</b>. Help's Commands tab has them all.
+{examples_basics}
 
 ### Without holding a key
 Tap <b>{toggle}</b> to start, talk as long as you like, and tap it again to stop.

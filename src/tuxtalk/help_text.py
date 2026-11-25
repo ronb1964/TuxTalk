@@ -39,7 +39,7 @@ REPORT_LINK = "tuxtalk:report"
 # The section that opens with a Report a Problem button (help_dialog).
 PROBLEMS_TITLE = "Problems"
 # Help's Commands tab is drawn as cards (commands_cards): its intro here, the
-# cards from commands_reference, then COMMANDS_EXAMPLES.
+# cards from commands_reference, then commands_examples().
 COMMANDS_TITLE = "Commands"
 
 
@@ -260,7 +260,7 @@ def _values():
             "FEEDBACK_URL": FEEDBACK_URL, "ISSUES_URL": ISSUES_URL, "REPORT_LINK": REPORT_LINK,
             "ENGINE_SIZE_TEXT": ENGINE_SIZE_TEXT, "AI_SIZE_TEXT": AI_SIZE_TEXT,
             "AI_MEMORY_TEXT": AI_MEMORY_TEXT,
-            "CUDA_SIZE_TEXT": CUDA_SIZE_TEXT}
+            "CUDA_SIZE_TEXT": CUDA_SIZE_TEXT, **examples()}
 
 
 # Each page's words live in help/<name>.txt, Pango markup with the marks
@@ -275,8 +275,40 @@ def page(name: str) -> str:
         return f.read().removesuffix("\n")
 
 
-# The Commands tab's examples under its cards (help_dialog).
-COMMANDS_EXAMPLES = page("commands_examples")
+def commands_examples() -> str:
+    """The Commands tab's examples, under its cards (help_dialog)."""
+    return page("commands_examples").format(**examples())
+
+
+def examples() -> dict:
+    """{"examples_<group>": its lines} from help/examples.toml, for the pages:
+    a line an example, what's said and what's typed, each of them checked by
+    tests/test_help_examples.py against what TuxTalk really types."""
+    from .config import load_toml_file
+    groups = {}
+    for example in load_toml_file(os.path.join(_PAGES, "examples.toml"))["example"]:
+        groups.setdefault(f"examples_{example['group']}", []).append(_example_line(example))
+    return {name: "\n".join(lines) for name, lines in groups.items()}
+
+
+def _example_line(example: dict) -> str:
+    """One example as a list item: “what you say” → what's typed, with the
+    setting it needs, "something like" for the AI's and the key pressed."""
+    typed = _typed(example["get"])
+    if example.get("ai"):
+        typed = f"something like {typed}"
+    if example.get("press"):
+        typed += f", then {example['press']}"
+    when = f"With {GLib.markup_escape_text(example['when'])}: " if example.get("when") else ""
+    return f"  • {when}\u201c<i>{GLib.markup_escape_text(example['say'])}</i>\u201d → {typed}"
+
+
+def _typed(text: str) -> str:
+    """What's typed, in a typewriter font, its line breaks named."""
+    def lines(paragraph):
+        return " <i>(new line)</i> ".join(f"<tt>{GLib.markup_escape_text(line)}</tt>"
+                                          for line in paragraph.split("\n"))
+    return " <i>(new paragraph)</i> ".join(lines(p) for p in text.split("\n\n"))
 
 # Commands right after Start Here: once someone can dictate, "what can I
 # say?" comes next. Problems last.

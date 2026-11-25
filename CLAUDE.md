@@ -22,7 +22,10 @@ worktrees and notes that name it still work; don't delete the link.
 
 - `src/tuxtalk/`: the app (its own README.md maps the modules)
 - `src/tuxtalk/help/`: Help's words, a plain text file a page (help_text.py
-  fills in the keys and install-specific parts); a new page is a new file
+  fills in the keys and install-specific parts); a new page is a new file.
+  `examples.toml` holds Help's "you say → you get" examples, each one run
+  through the real text path by tests/test_help_examples.py: a new feature
+  gets an example there, in the group its page shows
 - `tests/`: the suite; `tests/vm/` is the VM release harness
 - `gnome-extension/`: the GNOME Shell extension
 - `packaging/`: deb, rpm, flatpak, licenses, the emoji font script

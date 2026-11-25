@@ -51,9 +51,10 @@ def _symbols(text):
 
 def symbols_in_source():
     """Every symbol in the string literals of TuxTalk's code and in Help's
-    pages (help/*.txt): what its windows can show. Docstrings don't count."""
+    files (help/: its pages and examples): what its windows can show.
+    Docstrings don't count."""
     found = set()
-    for path in sorted((SRC / "help").glob("*.txt")):
+    for path in sorted((SRC / "help").glob("*.*")):
         found |= _symbols(path.read_text(encoding="utf-8"))
     for path in sorted(SRC.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))

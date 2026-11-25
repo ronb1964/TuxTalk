@@ -5,6 +5,14 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- Help shows what to say and what you get, right where each thing is
+  explained: "see you tomorrow comma bring snacks period" → See you
+  tomorrow, bring snacks. There are examples for punctuation, new lines and
+  paragraphs, quotes, numbers, email addresses, removing "um", sending a
+  message, terminals, the tone word and German commands. Every example is
+  checked against what TuxTalk really types, so Help can't promise
+  something it doesn't do. Help's words also moved into a text file per
+  page, so Help can keep growing without the code growing with it.
 - A spoken "comma" followed by a pause isn't lost any more: the speech
   engine often writes a period for the pause ("Dear Anna comma. New line"),
   and TuxTalk kept that period and dropped your comma ("Dear Anna."). Now
