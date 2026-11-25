@@ -74,7 +74,7 @@ CONFIG_NAMES = ("config.toml", "custom_commands.toml", custom_words.FILE_NAME, "
                 "config.toml.lock",
                 "kde-hotkeys.json", "explained.json", ".launchers-renamed",
                 rename_migration.NOTICE_FILE, LOG_FILE_NAME, "talktype.log",
-                a11y_switch.FILE_NAME)
+                a11y_switch.FILE_NAME, ai_download.OFFERED_FILE)
 # Of those names, the ones TuxTalk makes as folders; it writes the rest as
 # files. A folder of the user's named config.toml isn't TuxTalk's. Each of
 # its own folders goes whole, downloads and all; one that is a link (an
@@ -138,7 +138,8 @@ HF_REPOS = tuple(sorted({_hub_folder(repo) for repo in (
     *model_helper.MODEL_REPOS.values(),
     *(f"Systran/faster-whisper-{m}" for m in settings_schema.OLD_MODEL_NAMES if m != "large"),
     parakeet_engine.V3_REPO, whisper_vulkan.MODEL_REPO,
-    *whisper_vulkan.MODEL_REPOS.values(), ai_download.MODEL_REPO)}))
+    *whisper_vulkan.MODEL_REPOS.values(), ai_download.MODEL_REPO,
+    ai_download.OLD_MODEL_REPO)}))
 
 # The runtime folder's files that hold dictated text, as glob patterns:
 # Recent Dictations, the temp file a save of it killed part-way leaves
@@ -765,11 +766,12 @@ def _shown(path, home):
 def _shared_what(plan):
     """What the shared cache holds of TuxTalk's, in words, and whether that's
     more than one thing."""
-    ai = _hub_folder(ai_download.MODEL_REPO)
+    # The model before 0.26 too, kept until the current one is downloaded.
+    ai = {_hub_folder(ai_download.MODEL_REPO), _hub_folder(ai_download.OLD_MODEL_REPO)}
     names = {path.name for path in plan.shared}
-    if names == {ai}:
+    if names and names <= ai:
         return "the AI model", False
-    return ("speech models and the AI model" if ai in names else "speech models"), True
+    return ("speech models and the AI model" if names & ai else "speech models"), True
 
 
 def shared_label(plan):

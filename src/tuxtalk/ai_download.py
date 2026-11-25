@@ -1,9 +1,10 @@
 """The local AI's files: llama.cpp's prebuilt llama-server (the Vulkan build,
 which also carries every CPU variant: it uses the graphics card when there
-is one and the processor otherwise) and the Qwen2.5-1.5B-Instruct model
-(Apache 2.0, Q4_K_M). What they are, where they live, and their downloads,
-made only when the user turns on a feature that needs them, so TuxTalk's
-package does not grow. ai_server runs them.
+is one and the processor otherwise) and the Qwen3.5-4B model (Apache 2.0,
+Q4_K_M, Unsloth's build: Qwen publishes no GGUF of its own). What they are,
+where they live, and their downloads, made only when the user turns on a
+feature that needs them, so TuxTalk's package does not grow. ai_server runs
+them.
 """
 import os
 
@@ -20,9 +21,19 @@ LLAMA_URL = f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMA_TAG
 LLAMA_SHA256 = "376b003154a33bf1139302f66865fcd3dd0ce19a9b5b956dcc8b52b0962515ea"
 LLAMA_SIZE_MB = 30
 
-MODEL_REPO = "Qwen/Qwen2.5-1.5B-Instruct-GGUF"
-MODEL_FILE = "qwen2.5-1.5b-instruct-q4_k_m.gguf"
-MODEL_SIZE_MB = 1117
+MODEL_REPO = "unsloth/Qwen3.5-4B-GGUF"
+MODEL_FILE = "Qwen3.5-4B-Q4_K_M.gguf"
+MODEL_SIZE_MB = 2741
+# The model before 0.26. Asked to change a sentence's tone, it changed what
+# about 8 in 100 meant ("I was under a van" became "under the influence");
+# the 4B model kept nearly all of them. Still used where it's downloaded and
+# the new one isn't yet, so an update never turns the AI off, until the new
+# one arrives and this is deleted (remove_old_model).
+OLD_MODEL_REPO = "Qwen/Qwen2.5-1.5B-Instruct-GGUF"
+OLD_MODEL_FILE = "qwen2.5-1.5b-instruct-q4_k_m.gguf"
+# In the config folder once the start-up question offering the current model
+# to someone on the old one was asked (startup_notices): it's asked once.
+OFFERED_FILE = "better-ai-model-offered"
 
 
 def _size_text(mb):
@@ -32,6 +43,10 @@ def _size_text(mb):
 
 LLAMA_SIZE_TEXT = _size_text(LLAMA_SIZE_MB)
 MODEL_SIZE_TEXT = _size_text(MODEL_SIZE_MB)
+# What the server holds while the AI is on, measured with a 4096-token
+# context: 3.1 GB of memory on the processor, or 2.9 GB of the graphics
+# card's and 0.8 GB of memory with one.
+MEMORY_TEXT = "3 GB"
 # What turning the AI on downloads, its engine included: the size every
 # window and Help give.
 DOWNLOAD_SIZE_TEXT = _size_text(MODEL_SIZE_MB + LLAMA_SIZE_MB)
@@ -52,9 +67,29 @@ def server_binary():
 
 
 def model_path():
-    """Local path of the downloaded model, or None."""
+    """Local path of the model to run: the current one, else the one before
+    it while that is all there is (OLD_MODEL_REPO); None when neither is."""
     from .download_utils import cached_hub_file
-    return cached_hub_file(MODEL_REPO, MODEL_FILE)
+    return (cached_hub_file(MODEL_REPO, MODEL_FILE)
+            or cached_hub_file(OLD_MODEL_REPO, OLD_MODEL_FILE))
+
+
+def better_model_waiting() -> bool:
+    """Whether the AI runs on the model before 0.26 because the current one
+    hasn't been downloaded: Preferences and the start-up question offer it."""
+    from .download_utils import cached_hub_file
+    return (cached_hub_file(MODEL_REPO, MODEL_FILE) is None
+            and cached_hub_file(OLD_MODEL_REPO, OLD_MODEL_FILE) is not None)
+
+
+def remove_old_model() -> None:
+    """Delete the model before 0.26 once the current one is downloaded, so
+    its 1.1 GB doesn't stay on the disk."""
+    from .download_utils import cached_hub_file, remove_cached_repo
+    if (cached_hub_file(MODEL_REPO, MODEL_FILE) is not None
+            and cached_hub_file(OLD_MODEL_REPO, OLD_MODEL_FILE) is not None
+            and remove_cached_repo(OLD_MODEL_REPO)):
+        logger.info("Removed the AI model before 0.26; the new one is downloaded")
 
 
 def is_installed() -> bool:
@@ -113,6 +148,15 @@ def make_engine_download_func():
 
 
 def make_model_download_func():
-    """DownloadTask function: fetch the AI model into the Hugging Face cache."""
+    """DownloadTask function: fetch the AI model into the Hugging Face cache,
+    then delete the model before it."""
     from .model_helper import make_model_download_func as _hf_download
-    return _hf_download("ai-cleanup", repo_id=MODEL_REPO, only_files=(MODEL_FILE,))
+    fetch = _hf_download("ai-cleanup", repo_id=MODEL_REPO, only_files=(MODEL_FILE,))
+
+    def download(progress_callback, cancel_event):
+        """Fetch the model; once it's here, the one before it goes."""
+        done = fetch(progress_callback, cancel_event)
+        if done:
+            remove_old_model()
+        return done
+    return download

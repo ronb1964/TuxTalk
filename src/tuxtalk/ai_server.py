@@ -195,8 +195,10 @@ class AIServer:
 
     def _post(self, messages, max_tokens, timeout, what):
         """Send a chat request; the answer's text, or None on any problem."""
+        # Qwen3.5 thinks aloud before answering unless told not to: slower,
+        # and the thinking would count against max_tokens.
         body = {"messages": messages, "temperature": 0, "max_tokens": max_tokens,
-                "cache_prompt": True}
+                "cache_prompt": True, "chat_template_kwargs": {"enable_thinking": False}}
         request = urllib.request.Request(
             f"http://127.0.0.1:{self._port}/v1/chat/completions",
             data=json.dumps(body).encode(),

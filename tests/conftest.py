@@ -1005,6 +1005,7 @@ def tray_main(monkeypatch):
             done.append("makes the tray")
 
         _auto_start_service = step("starts the service")
+        restart_if_on = step("restarts the service")
         quit_app = step("quits")
         quit_on_sigterm = step("quits on SIGTERM")
 

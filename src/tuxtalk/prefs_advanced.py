@@ -131,13 +131,13 @@ class AdvancedTab(Tab):
         self.ai_corrections_check.set_tooltip_text(
             "When you correct yourself mid-sentence (\u201cno wait\u201d, \u201cI mean\u201d, "
             "\u201cscratch that\u201d),\n"
-            "a small AI model keeps only what you meant.\n\n"
+            "the AI keeps only what you meant.\n\n"
             "Runs entirely on this computer, using your graphics card if you have one.\n"
             "Only sentences with a correction phrase are sent to it, and its answer is\n"
             "checked: if it changed anything besides the correction, your words are\n"
             "typed exactly as spoken instead.\n\n"
             f"Needs a one-time download of about {ai_download.DOWNLOAD_SIZE_TEXT} and roughly "
-            "1.5 GB of memory while on.")
+            f"{ai_download.MEMORY_TEXT} of memory while on.")
         self.ai_corrections_check.connect("toggled", self._on_ai_corrections_toggled)
         grid.attach(self.ai_corrections_check, 0, row, 2, 1)
         row += 1
@@ -148,7 +148,32 @@ class AdvancedTab(Tab):
         ai_note.set_opacity(0.7)
         grid.attach(ai_note, 0, row, 2, 1)
         row += 1
+        if ai_download.better_model_waiting():
+            row = self._build_better_model_offer(grid, row)
         return row
+
+    def _build_better_model_offer(self, grid, row):
+        """The line offering the AI model of 0.26 to someone still on the one
+        before it (shown only then); returns the next row."""
+        from tuxtalk import ai_download
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        label = Gtk.Label(xalign=0, wrap=True)
+        label.set_text("A better AI model is ready: it keeps your meaning far better when it "
+                       f"rewrites. One-time download of {ai_download.MODEL_SIZE_TEXT}; "
+                       "the old one is deleted after.")
+        button = Gtk.Button(label="Download the better AI")
+        button.connect("clicked", self._on_better_model_clicked, box)
+        box.pack_start(label, True, True, 0)
+        box.pack_start(button, False, False, 0)
+        grid.attach(box, 0, row, 2, 1)
+        return row + 1
+
+    def _on_better_model_clicked(self, _button, box):
+        """Download the better model, then restart the service onto it."""
+        from tuxtalk.download_progress_dialog import download_better_ai_model
+        if download_better_ai_model(self.win.window):
+            box.hide()
+            self.win.restart_service()
 
     def _build_fine_tuning(self, grid, row):
         """Fine-tuning, closed: formatting, inserting text, accessibility and privacy;
@@ -449,7 +474,7 @@ class AdvancedTab(Tab):
             "dictation key already has Shift in it (Ctrl+Shift+K).\n"
             "Or end a dictation with a tone, “..., make that formal”, and it's typed\n"
             "already rewritten (also professional, friendlier, casual, polite).\n\n"
-            "Uses the same small AI as self-corrections (one shared "
+            "Uses the same AI as self-corrections (one shared "
             f"{ai_download.DOWNLOAD_SIZE_TEXT} download),\n"
             "on this computer. Simple, clear changes work best.")
         self.voice_editing_check.connect("toggled", self._on_voice_editing_toggled)
@@ -706,7 +731,7 @@ class AdvancedTab(Tab):
 
         response = show_message(
             self.window, Gtk.MessageType.QUESTION, question,
-            f"This downloads a small AI model ({ai_download.MODEL_SIZE_TEXT}) and the "
+            f"This downloads an AI model ({ai_download.MODEL_SIZE_TEXT}) and the "
             f"llama.cpp engine that runs it ({ai_download.LLAMA_SIZE_TEXT}). It is a "
             "one-time download.\n\n"
             "Everything runs on this computer. Your dictation is never sent anywhere.",

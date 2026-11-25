@@ -14,6 +14,16 @@ before 0.15.0, so older entries use that name.
   sent automatically, since the AI can get the meaning wrong, and one that
   drops a number (a date, a price) isn't used: the words are typed as said.
   The tone word came out of the AI writing poll on #42.
+- A better AI: self-corrections, voice editing and the tone word now use
+  Qwen3.5-4B instead of Qwen2.5-1.5B. On 100 tone rewrites the old one
+  changed the meaning of about 8 ("I was under a van all morning" made
+  formal came out "under the influence"), the new one of about 1; it got
+  19 of 20 self-corrections right against 15. It's a bigger download (2.7
+  GB instead of 1.1) and needs about 3 GB of memory while on, and without
+  a graphics card a rewrite takes a second or two. If you have the AI on,
+  TuxTalk asks once whether to download it, and Preferences → Advanced
+  offers it after; until then the old one keeps working, and it's deleted
+  once the new one is here.
 
 ## [0.25.0] - 2026-11-24
 

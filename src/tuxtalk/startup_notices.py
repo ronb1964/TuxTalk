@@ -58,10 +58,12 @@ def handle_old_talktype_flatpak(stop=None, notify=None):
         logger.warning(f"Could not check for the pre-rename Flatpak: {e}")
 
 
-def show_after_start():
+def show_after_start(restart_service):
     """"Update Complete!" if this start follows an update, then the rename
-    notice, never on top of it, then the accessibility switch kept on or
-    asked about (offer_a11y_switch_at_start). False, for its GLib timer."""
+    notice, never on top of it, then the better AI model offered, then the
+    accessibility switch kept on or asked about (offer_a11y_switch_at_start).
+    *restart_service* puts the service on a model just downloaded. False,
+    for its GLib timer."""
     try:
         _show_update_complete_once()
     except Exception as e:
@@ -70,6 +72,10 @@ def show_after_start():
         _show_rename_notice_once()
     except Exception as e:
         logger.warning(f"Could not show the rename notice: {e}")
+    try:
+        _offer_better_ai_model_once(restart_service)
+    except Exception as e:
+        logger.warning(f"Could not offer the better AI model: {e}")
     try:
         offer_a11y_switch_at_start()
     except Exception as e:
@@ -132,6 +138,38 @@ def _show_update_complete_once():
                  "TuxTalk has restarted with the new version.",
                  keep_above=True, markup=True)
 
+
+
+BETTER_AI_TITLE = "A better AI for TuxTalk"
+BETTER_AI_BODY = (
+    "TuxTalk's AI now uses a bigger model that keeps your meaning far better when it "
+    "fixes a self-correction or rewrites your text. It's a one-time download of {size}, "
+    "and the old model is deleted afterwards.\n\n"
+    "Until then the one you have keeps working. Later, it's in Preferences, Advanced.")
+
+
+def _offer_better_ai_model_once(restart_service):
+    """Ask once, for someone with the AI on and only the model before 0.26
+    downloaded, whether to fetch the current one now; then restart the
+    service onto it. Asked or not, Preferences offers it until it's there.
+    Not Now is the default: the question can come up mid-dictation."""
+    from . import ai_download, config
+    marker = os.path.join(os.path.dirname(config.CONFIG_PATH), ai_download.OFFERED_FILE)
+    cfg = config.load_config()
+    if (os.path.exists(marker) or not (cfg.ai_corrections or cfg.voice_editing)
+            or not ai_download.better_model_waiting()):
+        return
+    answer = show_message(None, Gtk.MessageType.QUESTION, BETTER_AI_TITLE,
+                          BETTER_AI_BODY.format(size=ai_download.MODEL_SIZE_TEXT),
+                          [("Not Now", Gtk.ResponseType.CANCEL),
+                           ("Download", Gtk.ResponseType.OK)],
+                          keep_above=True, default=Gtk.ResponseType.CANCEL, take_focus=False)
+    with open(marker, "w"):
+        pass
+    from .download_progress_dialog import download_better_ai_model
+    if answer == Gtk.ResponseType.OK and download_better_ai_model():
+        logger.info("Downloaded the better AI model; restarting the service onto it")
+        restart_service()
 
 def _show_rename_notice_once():
     """'TalkType is now TuxTalk', once, after this start converted an old

@@ -524,9 +524,9 @@ can't be changed by voice.
   • Quick, clear changes to your own text work best: tone, length, grammar, lists.
   • Several lines stay several lines. If the AI runs them together when you didn't
     ask for that, TuxTalk does the edit again one line at a time.
-  • It's a small AI that runs on your computer, not a big online one. Asked for
-    something large, like "write a whole email from this one line", it can make
-    up details. Always read the result.
+  • It's an AI that runs on your computer, far smaller than the big online ones.
+    Asked for something large, like "write a whole email from this one line", it
+    can make up details. Always read the result.
   • "Shorten this" works on text that has a point to keep. A sentence that only
     talks about itself has nothing to cut down to.
   • Up to about 3,000 characters at a time (roughly a page).
@@ -536,7 +536,7 @@ can't be changed by voice.
   • The rewrite is also saved in <b>Recent Dictations</b>, and Paste Last
     Dictation types it again.
   • It doesn't work in a terminal: there's no selection there to replace.
-  • It uses the same small AI as <b>Fix self-corrections with AI</b>: one download of
+  • It uses the same AI as <b>Fix self-corrections with AI</b>: one download of
     about {AI_SIZE_TEXT}, shared. Everything runs on this computer; nothing is sent online.
 
 ### If nothing happens

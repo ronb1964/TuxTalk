@@ -616,9 +616,9 @@ def main():
     tray = DictationTray()
     tray.quit_on_sigterm()
 
-    # "Update Complete!", the rename notice and the accessibility question,
-    # once the tray is up.
-    GLib.timeout_add(500, startup_notices.show_after_start)
+    # "Update Complete!", the rename notice, the better AI model and the
+    # accessibility question, once the tray is up.
+    GLib.timeout_add(500, startup_notices.show_after_start, tray.restart_if_on)
 
     # A first-run hotkey test that was killed mid-way leaves GNOME's Alt+F8 and
     # Alt+F7 cleared; put them back.

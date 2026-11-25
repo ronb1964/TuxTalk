@@ -1,7 +1,7 @@
 """The local AI: self-corrections and voice editing (TuxTalk Labs).
 RELEASE_CHECKLIST.md: "AI self-corrections", "Voice editing".
 
-The AI engine and model are copied in from this computer (1.1 GB, the
+The AI engine and model are copied in from this computer (2.7 GB, the
 pinned commit hub_pins names) rather than downloaded in each VM.
 """
 import subprocess
@@ -13,9 +13,9 @@ from vmlib import TOOLS
 
 SECTION = "AI features"
 LLAMA_TAG = "b11200"
-MODEL_REPO_DIR = "models--Qwen--Qwen2.5-1.5B-Instruct-GGUF"
-MODEL_COMMIT = "91cad51170dc346986eccefdc2dd33a9da36ead9"
-MODEL_FILE = "qwen2.5-1.5b-instruct-q4_k_m.gguf"
+MODEL_REPO_DIR = "models--unsloth--Qwen3.5-4B-GGUF"
+MODEL_COMMIT = "e87f176479d0855a907a41277aca2f8ee7a09523"
+MODEL_FILE = "Qwen3.5-4B-Q4_K_M.gguf"
 LOCAL_ENGINE = Path.home() / ".local/share/TuxTalk-dev/ai-engine" / LLAMA_TAG
 LOCAL_MODEL = (Path.home() / ".cache/huggingface/hub" / MODEL_REPO_DIR / "snapshots"
                / MODEL_COMMIT / MODEL_FILE)

@@ -458,6 +458,21 @@ def run_downloads(parent, title, description, tasks, arrived=lambda: True):
     return None
 
 
+
+def download_better_ai_model(parent=None) -> bool:
+    """Download the AI model of 0.26 for a user still on the one before it
+    (ai_download.better_model_waiting), in the download window over
+    *parent*; the old one is deleted once it's here. True when it arrived.
+    The caller restarts the service, which keeps the old model until then."""
+    from . import ai_download
+    return run_downloads(
+        parent, "Downloading the better AI",
+        "One-time download. Everything runs on this computer, and the old model is "
+        "deleted afterwards.",
+        [DownloadTask("AI model", ai_download.MODEL_SIZE_TEXT,
+                      ai_download.make_model_download_func())],
+        arrived=lambda: not ai_download.better_model_waiting()) is True
+
 def show_cuda_download_dialog(parent=None, on_success_callback=None):
     """Download TuxTalk's CUDA libraries in the download window (Preferences'
     Device choice), then say how it went.
