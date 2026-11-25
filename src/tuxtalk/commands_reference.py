@@ -220,7 +220,10 @@ SECTIONS = (
         Command(("see you then, make that formal", "make that friendlier"),
                 "at the end: typed already in that tone; alone: changes what was just typed",
                 "tone", "Also professional, casual and polite. Never sent automatically: "
-                "read it first"),
+                "read it first",
+                german_result="at the end: typed already in that tone; alone: changes what was "
+                              "just typed. In English only, like changing your mind: the AI's "
+                              "German isn't tested yet"),
     )),
     Section("Select and Move", EDITING, labs=LABS_SELECT, commands=(
         Command(("select that", "select the last sentence", "select the last 3 words",

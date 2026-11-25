@@ -24,6 +24,20 @@ before 0.15.0, so older entries use that name.
   TuxTalk asks once whether to download it, and Preferences → Advanced
   offers it after; until then the old one keeps working, and it's deleted
   once the new one is here.
+- German for every command in the Voice Commands list, with voice commands
+  in German: voice editing's exact changes ("alles in Großbuchstaben", "die
+  Kommas entfernen", "das Wort ... entfernen", "als Aufzählung", "das
+  einrücken", "das löschen", "fett machen"), "Geviertstrich" for —,
+  "weicher Zeilenumbruch" for a line break, and "wörtlich" before "Tab
+  drücken". A few stay English, and the list says why when German is on:
+  changing your mind and the tone word (the AI's German isn't tested yet),
+  "quote unquote", and "press tab" mid-sentence, which are everyday German
+  phrases. With German on, the window says the English words work too. 0.25
+  left 20 of the list's 97 rows without German; a test now fails on a
+  command added without German or a reason.
+- Voice editing: a line starting with a date ("3. Oktober") keeps it when
+  made into a list, and "capitalize each word" capitalises ä, ö, ü and
+  accented letters too.
 
 ## [0.25.0] - 2026-11-24
 
