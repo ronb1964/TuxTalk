@@ -29,6 +29,7 @@ from . import (
     voice_actions,
     voice_commands,
     voice_edit,
+    voice_edit_rules,
 )
 from . import live_settings as live
 from . import notify as notify_module
@@ -174,22 +175,7 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             # sentence's final mark may be gone from the screen.
             job.message.sentence_audio = []
             return
-        raw, said = split_key_command(as_words, live.command_language)
-        key = _key_to_press(raw, said, job)
-        if _nothing_to_type(raw, said, in_password, job):
-            return
-        around = _read_cursor(job)
-        words = _shape_text(raw, said, key, job)
-        if words is None:
-            return
-        # Before _still_wanted: hearing the whole sentence takes a moment too.
-        words = _end_of_sentence(words, audio_f32, job)
-        if not _still_wanted(words, job):
-            return
-        words = _fit_to_cursor(words, around, job)
-        _tell_done(words.text, job)
-        if words.text:
-            _deliver(words, audio_f32, job)
+        _type_the_words(as_words, in_password, audio_f32, job)
     except Exception as e:
         # The error's text can quote the words: the notice shows it to the
         # user, and the log leaves it out.
@@ -204,6 +190,42 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             # After the words, never before them: keyboard options changed
             # since the start count from the next press of the key.
             modifier_hotkeys.read_compose_keys()
+
+
+def _type_the_words(as_words: str, in_password: bool, audio_f32, job: _Job) -> None:
+    """A dictation that wasn't a command: its words shaped and typed, then
+    the key said after them. A tone said at their end ("..., make that
+    formal") rewrites a whole dictation before it's typed; in Type at pause,
+    whose earlier phrases are on screen already, it changes the recording
+    there once this last phrase is in, as "edit that" does, and nothing
+    sends it then."""
+    raw, said = split_key_command(as_words, live.command_language)
+    raw, tone = _tone_said(raw, job)
+    on_screen = bool(tone) and job.chunk_role is not None
+    if on_screen:
+        said = ""
+    # The AI can change what a sentence means ("under a van" made formal
+    # came out "under the influence"), so a rewrite is never sent before the
+    # user has read it: no automatic Enter. A key said with the tone is theirs.
+    key = ("", "", "") if tone and not said else _key_to_press(raw, said, job)
+    if _nothing_to_type(raw, said, in_password, job):
+        return
+    around = _read_cursor(job)
+    words = _shape_text(raw, said, key, job)
+    if words is None:
+        return
+    if tone and not on_screen:
+        words = _restyled(words, tone, job)
+    # Before _still_wanted: hearing the whole sentence takes a moment too.
+    words = _end_of_sentence(words, audio_f32, job)
+    if not _still_wanted(words, job):
+        return
+    words = _fit_to_cursor(words, around, job)
+    _tell_done(words.text, job)
+    if words.text:
+        _deliver(words, audio_f32, job)
+    if on_screen and not job.message.cancelled:
+        voice_edit.edit_last_dictation(tone, job.beeps_on, job.injection_mode, job.message)
 
 
 def _nothing_to_type(raw: str, said: str, in_password: bool, job: _Job) -> bool:
@@ -413,6 +435,34 @@ def _ran_as_command(raw: str, job: _Job) -> bool:
     # itself, and must undo its own selection after one.
     return voice_edit.handle_spoken_edit(raw, job.chunk_role, job.beeps_on,
                                          job.injection_mode, job.message)
+
+
+def _tone_said(raw: str, job: _Job) -> tuple[str, str]:
+    """(the words, the change a tone said at their end asks for, "" for
+    none): "Thanks for the help, make that friendlier" (TuxTalk Labs, with
+    voice editing on). Not in a phrase typed at a pause mid-recording: the
+    message isn't over."""
+    if not live.voice_editing or job.chunk_role == "middle":
+        return raw, ""
+    found = voice_edit_rules.tone_at_end(raw)
+    if found is None:
+        return raw, ""
+    logger.info("A tone was said at the end of the dictation")
+    return found
+
+
+def _restyled(words: _Words, instruction: str, job: _Job) -> _Words:
+    """A whole dictation that ended in a tone, rewritten in it before it's
+    typed; as spoken when the AI can't (voice_edit.restyle tells the user).
+    The spaces _shape_text put around the words stay where they were."""
+    core = words.text.strip(" ")
+    if not core:
+        return words
+    result = voice_edit.restyle(core, instruction, job.beeps_on)
+    if result is None:
+        return words
+    start = words.text.index(core)
+    return words._replace(text=words.text[:start] + result + words.text[start + len(core):])
 
 
 def _key_to_press(raw: str, said: str, job: _Job):

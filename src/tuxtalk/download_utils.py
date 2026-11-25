@@ -427,6 +427,20 @@ def _repo_folder(repo):
     return os.path.join(constants.HF_HUB_CACHE, repo_folder_name(repo_id=repo, repo_type="model"))
 
 
+def remove_cached_repo(repo: str) -> bool:
+    """Delete Hugging Face *repo* from the cache, every file of it: a model
+    TuxTalk no longer uses. True when it's gone (or was never there)."""
+    folder = _repo_folder(repo)
+    try:
+        shutil.rmtree(folder)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning(f"Could not delete {repo} from the download cache: {e}")
+        return False
+    return True
+
+
 # A mark beside a model file whose SHA256 check (model_helper) is still owed.
 # Hugging Face puts a file in the cache before it can be checked, so the mark
 # is made before the file is fetched and removed once it passes: a file whose

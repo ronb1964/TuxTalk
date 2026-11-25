@@ -48,6 +48,8 @@ NOTICES = {
                          "With Send each dictation automatically on, tap the dictation "
                          "hotkey during the countdown to keep it, then say \u201cedit "
                          "that\u201d.",
+    "tone_not_changed": "TuxTalk couldn't change the tone, so your words are typed as you "
+                        "said them.",
 }
 
 
@@ -78,4 +80,5 @@ LABELS = {
     "already_sent": "Already sent, nothing to edit",
     "not_the_dictation": "Text changed since, nothing done",
     "already_sent_auto": "Already sent. Tap the hotkey sooner",
+    "tone_not_changed": "Tone not changed, typed as said",
 }

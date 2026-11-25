@@ -340,7 +340,7 @@ rm -f ~/AppImages/TuxTalk.AppImage ~/AppImages/TalkType.AppImage
 rm -f ~/.config/autostart/tuxtalk.desktop ~/.local/share/applications/tuxtalk.desktop
 rm -f ~/.local/share/icons/hicolor/*/apps/tuxtalk.png
 rm -rf ~/.local/share/TuxTalk ~/.config/tuxtalk
-rm -rf ~/.cache/huggingface/hub/models--Systran--faster-whisper-* ~/.cache/huggingface/hub/models--istupakov--parakeet-tdt-0.6b-v3-onnx ~/.cache/huggingface/hub/models--ggml-org--parakeet-GGUF ~/.cache/huggingface/hub/models--ggerganov--whisper.cpp ~/.cache/huggingface/hub/models--Qwen--Qwen2.5-1.5B-Instruct-GGUF
+rm -rf ~/.cache/huggingface/hub/models--Systran--faster-whisper-* ~/.cache/huggingface/hub/models--istupakov--parakeet-tdt-0.6b-v3-onnx ~/.cache/huggingface/hub/models--ggml-org--parakeet-GGUF ~/.cache/huggingface/hub/models--ggerganov--whisper.cpp ~/.cache/huggingface/hub/models--Qwen--Qwen2.5-1.5B-Instruct-GGUF ~/.cache/huggingface/hub/models--unsloth--Qwen3.5-4B-GGUF
 gnome-extensions uninstall talktype@ronb1964.github.io
 ```
 

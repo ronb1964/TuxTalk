@@ -328,6 +328,37 @@ def _rewritten(selected, instruction, beeps_on):
     return result
 
 
+def restyle(text: str, instruction: str, beeps_on: bool):
+    """*text*, a dictation that ended in a tone ("..., make that formal"),
+    rewritten as *instruction* says before it is typed; None to type it as
+    spoken, after telling the user. The AI's answer is used only when it
+    keeps every number and isn't padded out with made-up details
+    (voice_edit_rules.restyle_keeps_facts)."""
+    from . import ai_cleanup
+    ai = live.ai_engine
+    result, why = None, ""
+    if len(text) > ai_cleanup.MAX_EDIT_CHARS:
+        why = "too long"
+    elif ai is None or not ai.is_ready():
+        why = "the AI is off" if ai is None else "the AI is still starting"
+    else:
+        result = ai.edit(text, instruction)
+        if result is not None:
+            if live.swiss_spelling:
+                result = swiss_spelling(result)
+            result = dictation_text.numbers_to_digits(result, live)
+        if result is None or result.split() == text.split():
+            why, result = "no change", None
+        elif not voice_edit_rules.restyle_keeps_facts(text, result):
+            why, result = "the rewrite lost a number or added too much", None
+    if result is None:
+        logger.info(f"Tone not changed ({why}); typing the words as spoken")
+        notices.edit_problem("tone_not_changed", beeps_on)
+        return None
+    logger.info("Tone changed before typing")
+    return result
+
+
 def _apply_steps(selected, steps, beeps_on):
     """Make each change of *steps* to *selected* in turn, in code where it
     can be (voice_edit_rules.mechanical_edit) and by the AI where not: the
@@ -675,7 +706,6 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     is also what happens when nothing was just typed to edit."""
     if not live.voice_editing:
         return False
-    from . import voice_navigation as nav
     waiting, message.edit_waiting = message.edit_waiting, None
     if waiting is not None:
         instruction, target = raw, waiting
@@ -686,10 +716,32 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
         target = voice_commands.spoken_edit_target()
         if not target:
             return voice_commands.refused_as_sent(beeps_on)
+    _edit_target(instruction, target, chunk_role, beeps_on, injection_mode, message)
+    return True
+
+
+def edit_last_dictation(instruction: str, beeps_on: bool, injection_mode: str,
+                        message) -> None:
+    """A tone said at the end of a Type at pause recording ("..., make that
+    formal"): every phrase of it on screen is changed as "edit that, make it
+    more formal" would change it, once its last phrase is typed."""
+    target = voice_commands.spoken_edit_target()
+    if not target:
+        if not voice_commands.refused_as_sent(beeps_on):
+            logger.info("Tone not changed: nothing of the recording on screen to change")
+        return
+    _edit_target(instruction, target, "last", beeps_on, injection_mode, message)
+
+
+def _edit_target(instruction, target, chunk_role, beeps_on, injection_mode, message):
+    """Select *target*, the text TuxTalk just typed, and change it as
+    *instruction* says ("edit that, ..."); a notice when it can't be. Not
+    changed as asked, the message is marked so no automatic Enter sends it."""
+    from . import voice_navigation as nav
     logger.info(f"Voice command: edit that ({len(target)} characters)")
     if not keyboard_output.is_wayland_session():
         notices.edit_problem("needs_wayland", beeps_on)
-        return True
+        return
     # Taken before selecting: the select keys, Delete or the rewrite go only
     # into this window, and it must be the one the text was typed into. A
     # click into another document (during the pause, or just now) would have
@@ -697,11 +749,11 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     where = focused_window.look()
     if keyboard_output.not_where_typed(where[0], where):
         notices.edit_problem("focus_moved", beeps_on)
-        return True
+        return
     focused_class = where[0]
     if is_terminal_class(focused_window.acts_as(focused_class)):
         notices.edit_problem("terminal", beeps_on)
-        return True
+        return
     if not instruction.strip():
         if chunk_role == "middle":
             # "edit that", then a pause: the next phrase says what to change.
@@ -710,7 +762,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
         else:
             notices.edit_problem("edit_that_what", beeps_on)
             message.add("failed", None)     # asked to change it: not sent as it is
-        return True
+        return
     plan = nav.plan(nav.parse("select that"), target, "")
     try:
         selected = plan is not None and keyboard_output.output_backend().press_keys(
@@ -727,7 +779,6 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
         notices.edit_problem("shortcut_failed", beeps_on)
     elif edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
                         time.time(), message, expected=target, window=where[1]):
-        return True
+        return
     # Not changed as asked: no automatic Enter sends it as it was.
     message.add("failed", None)
-    return True

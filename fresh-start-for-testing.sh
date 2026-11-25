@@ -83,6 +83,7 @@ TALKTYPE_MODEL_REPOS=(
     "models--ggml-org--parakeet-GGUF"
     "models--ggerganov--whisper.cpp"
     "models--Qwen--Qwen2.5-1.5B-Instruct-GGUF"
+    "models--unsloth--Qwen3.5-4B-GGUF"
 )
 if [ -d ~/.cache/huggingface/hub ]; then
     for repo in "${TALKTYPE_MODEL_REPOS[@]}"; do

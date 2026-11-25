@@ -473,6 +473,21 @@ With hands-free (double-tap {toggle}) and Type at pause, you can say a message, 
 over, say <b>edit that, make it friendlier</b>, then <b>press enter</b> to send it, all
 without touching the keyboard.
 
+### A tone at the end: "make that formal"
+Say the message the way it comes, and end it with the tone you want, all in one go:
+  1. Hold <b>{hold}</b>.
+  2. Say <b>tell him the cabinets are a week late, make that formal</b>.
+  3. Let go. It's typed already rewritten, without "make that formal".
+The tones: <b>formal</b>, <b>professional</b>, <b>friendlier</b>, <b>casual</b> and
+<b>polite</b> ("make that more formal" works too). Said on its own right after a dictation,
+<b>make that friendlier</b> changes what was just typed, the way "edit that" does.
+
+Read it before you send it: the AI can get the meaning wrong, so a rewritten message is
+never sent automatically. Press Enter, or end with <b>press enter</b> when you trust it.
+If the AI can't do it, your words are typed as you said them, and TuxTalk says so.
+"Meet at three, make that four" is still a correction; to correct a tone word itself
+("wear something casual, make that formal"), say <b>no wait, formal</b> instead.
+
 ### What to say
 Say it in your own words; there's no fixed list. Some that work well:
   • <b>make this more formal</b>  •  <b>make it friendlier</b>
@@ -516,9 +531,9 @@ can't be changed by voice.
   • Quick, clear changes to your own text work best: tone, length, grammar, lists.
   • Several lines stay several lines. If the AI runs them together when you didn't
     ask for that, TuxTalk does the edit again one line at a time.
-  • It's a small AI that runs on your computer, not a big online one. Asked for
-    something large, like "write a whole email from this one line", it can make
-    up details. Always read the result.
+  • It's an AI that runs on your computer, far smaller than the big online ones.
+    Asked for something large, like "write a whole email from this one line", it
+    can make up details. Always read the result.
   • "Shorten this" works on text that has a point to keep. A sentence that only
     talks about itself has nothing to cut down to.
   • Up to about 3,000 characters at a time (roughly a page).
@@ -528,7 +543,7 @@ can't be changed by voice.
   • The rewrite is also saved in <b>Recent Dictations</b>, and Paste Last
     Dictation types it again.
   • It doesn't work in a terminal: there's no selection there to replace.
-  • It uses the same small AI as <b>Fix self-corrections with AI</b>: one download of
+  • It uses the same AI as <b>Fix self-corrections with AI</b>: one download of
     about {AI_SIZE_TEXT}, shared. Everything runs on this computer; nothing is sent online.
 
 ### If nothing happens
