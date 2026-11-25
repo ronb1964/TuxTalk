@@ -910,6 +910,7 @@ class Gone:
 sys.meta_path.insert(0, Gone())
 plan = uninstall.find(Path.home(), "system")
 uninstall.undo_desktop_changes(plan)
+uninstall.stop_file_logging()
 uninstall.remove_files(plan, True, False)
 uninstall._refresh_menus()
 print(",".join(Gone.missed))

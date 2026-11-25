@@ -469,10 +469,12 @@ def test_a_quoted_key_written_by_hand_survives_a_save(config_path):
     """Preferences keeps keys it doesn't know; written back without its
     quotes, "my note" made the file unreadable, and the next read restored
     the backup, losing the change just applied."""
-    config_path.write_text('hotkey = "F6"\n"my note" = "hello"\nlist = [1, "a"]\n')
+    # A list of one type: the toml package Python 3.10 reads with follows
+    # TOML 0.5, which refuses a mixed one like [1, "a"].
+    config_path.write_text('hotkey = "F6"\n"my note" = "hello"\nlist = [1, 2]\n')
     config.rewrite_config(lambda on_disk: {**on_disk, "beeps": False})
     saved = config.load_toml_file(str(config_path))
-    assert saved == {"hotkey": "F6", "my note": "hello", "list": [1, "a"], "beeps": False}
+    assert saved == {"hotkey": "F6", "my note": "hello", "list": [1, 2], "beeps": False}
 
 
 def test_a_small_change_keeps_keys_this_version_doesnt_know(config_path):
