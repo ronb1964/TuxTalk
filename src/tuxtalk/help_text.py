@@ -487,9 +487,14 @@ The tones: <b>formal</b>, <b>professional</b>, <b>friendlier</b>, <b>casual</b> 
 <b>make that friendlier</b> changes what was just typed, the way "edit that" does.
 
 Read it before you send it: the AI can get the meaning wrong, so a rewritten message is
-never sent automatically. Press Enter, or end with <b>press enter</b> when you trust it
-(with Type at pause, say <b>press enter</b> as a dictation of its own once it reads right).
-If the AI can't do it, your words are typed as you said them, and TuxTalk says so.
+never sent automatically, even with <b>Send each dictation automatically</b> on: the
+countdown doesn't start and it waits for you. Press Enter yourself, or end with
+<b>press enter</b> when you trust it.
+With Type at pause, what you said before the last pause is on screen already, so the
+tone rewrites the whole message there, as "edit that" does; say <b>press enter</b> as a
+dictation of its own once it reads right.
+If the AI can't do it, or its rewrite drops a number you said (a date, a price, a phone
+number), your words are typed as you said them, and TuxTalk says so.
 "Meet at three, make that four" is still a correction; to correct a tone word itself
 ("wear something casual, make that formal"), say <b>no wait, formal</b> instead, with
 <b>Fix self-corrections with AI</b> on. The tones are English words, also with voice
