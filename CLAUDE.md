@@ -44,6 +44,20 @@ worktrees and notes that name it still work; don't delete the link.
 ### Step 1: Code Changes
 - Make and test code changes in `/home/ron/Projects/TuxTalk/src/`
 - NEVER edit files in `.claude/worktrees/` — Ron's dev version runs from the main project
+- **Every change updates what users read in the same commit**: Help
+  (`help_text.py`), the Voice Commands list (`commands_reference.py`, in
+  English and German), tooltips, the README, the website (`docs/*.html`)
+  and CHANGELOG's [Unreleased]. The commit message names them in a line
+  `Docs: CHANGELOG.md, help_text.py, ...`, or says `Docs: none, <why>` for
+  a change no user can notice. `.githooks/docs_in_commit.py` refuses the
+  commit otherwise, and checks the files named are really in it. It runs
+  on every commit from this clone and its worktrees (`git config
+  core.hooksPath .githooks`). Never commit with `--no-verify` without
+  Ron's OK. Ron, 2026-11-25, the fourth time he asked: "You need to ensure
+  this never happens again." 0.23 needed a rebuild for 12 stale texts; 0.25
+  shipped 20 Voice Commands rows with no German; 0.26's tone word and new
+  model were committed with the About window, Help and README out of date.
+  Step 1c still reads everything in full before a build.
 
 ### Step 1b: The Code Health Gate, Two Reviews, Then Fix
 Ron, 2026-10-23: "When I asked that our app be something a human coder would
