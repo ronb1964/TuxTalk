@@ -61,6 +61,14 @@ If it's still there a few seconds later, `kill -9` with the same number ends it 
 
 The single-instance lock is released when the process ends, so there's no lock file to delete.
 
+## Committing
+
+A change to the app updates what users read in the same commit (Help, the Voice Commands list, the README, the website, CHANGELOG's [Unreleased]) and its message says so in a line like `Docs: CHANGELOG.md, help_text.py`, or `Docs: none, <why>` when no user can notice it. A hook checks that, and that the files named are in the commit. Turn it on once in your clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## Running the tests
 
 Swap 3.14 for your Python version (`python3 --version` shows it):
