@@ -487,6 +487,12 @@ These are done exactly, without the AI, so they always come out right:
   • <b>remove the word ...</b> (a word or a few words, everywhere in the selection)
   • <b>make this a bulleted list</b> or <b>a numbered list</b> (several lines: one point per line)
   • <b>indent this</b>  •  <b>remove the indent</b>  •  <b>delete this</b>
+With voice commands in German, the German ones are done exactly too:
+  • <b>alles in Großbuchstaben</b>  •  <b>alles in Kleinbuchstaben</b>
+  • <b>die Kommas entfernen</b>  •  <b>das Wort ... entfernen</b>
+  • <b>als Aufzählung</b>  •  <b>das einrücken</b>  •  <b>das löschen</b>
+  • <b>fett machen</b>  •  <b>kursiv machen</b>
+Any other German instruction goes to the AI, as any instruction in your own words does.
 
 ### Two or three changes at once
 Join changes with "and" or "then": <b>make this formal and remove the commas</b>, or
@@ -1023,9 +1029,9 @@ There are two kinds:
 The commands are English words, whatever language you dictate in. Most can be said
 in German too: Preferences → General → Change model, device or language, then set
 <b>Voice commands in</b> to Deutsch, and say <b>Komma</b>, <b>neue Zeile</b>,
-<b>Enter drücken</b>, <b>das letzte Wort löschen</b> or <b>Wort korrigieren</b>.
-English commands keep working. Changing your mind mid-sentence ("no wait") stays
-English.
+<b>Enter drücken</b>, <b>das letzte Wort löschen</b> or <b>Wort korrigieren</b>,
+and with voice editing, <b>alles in Großbuchstaben</b>. English commands keep working.
+Changing your mind mid-sentence ("no wait") stays English.
 
 The same list, a tab per group, is in the TuxTalk menu → Voice Commands..., or, with
 <b>Apps, windows, keys and the mouse by voice</b> ticked in TuxTalk Labs, say

@@ -35,13 +35,16 @@ LABS_ACTIONS = "Apps, windows, keys and the mouse by voice"
 class Command(NamedTuple):
     """The ways to say one command (plain text), what it does, and a note
     under that (both Pango markup: <b>tab</b>); *german*, the ways to say it
-    with voice commands in German. One with no English ways is German's
-    alone (its quotes)."""
+    with voice commands in German, and *german_result* what it does then, if
+    that differs (German's quotes are „…“). One with no English ways is
+    German's alone. One with no German ways says why in its *german_result*
+    or its section's note (tests/test_commands_reference.py checks)."""
     said: tuple
     result: str
     kind: str
     note: str = ""
     german: tuple = ()
+    german_result: str = ""
 
 
 class Section(NamedTuple):
@@ -61,13 +64,18 @@ APPS, KEYS, SOUND = "Apps and Windows", "Keys and Web", "Sound and System"
 GROUPS = (DICTATION, FIXING, EDITING, APPS, KEYS, SOUND)
 
 
-def _inline(*said, result, note="", german=()):
-    return Command(said, result, "inline", note, german)
+def _inline(*said, result, note="", german=(), german_result=""):
+    return Command(said, result, "inline", note, german, german_result)
 
 
-def _literal(word, result, *said):
-    """The command that types *word* itself; *said* adds other ways to say it."""
-    return Command((f"literal {word}", *said), f'"{word}" (not {result})', "literal")
+def _literal(word, result, *said, german=""):
+    """The command that types *word* itself; *said* adds other ways to say
+    it, and *german* names the German word that "wörtlich" types."""
+    if not german:
+        return Command((f"literal {word}", *said), f'"{word}" (not {result})', "literal")
+    return Command((f"literal {word}", *said), f'"{word}" (not {result})', "literal",
+                   german=(f"wörtlich {german}", f"das Wort {german}"),
+                   german_result=f'"{german}" (not {result})')
 
 
 SECTIONS = (
@@ -82,18 +90,24 @@ SECTIONS = (
         _inline("apostrophe", result="'", german=("Apostroph", "Hochkomma")),
         _inline("quote", result="quotes around what's between: quote hi quote → “hi”",
                 note='Said as a word ("a quote for the job", "to quote him") it stays '
-                     'the word; a lone one otherwise is a plain "'),
-        _inline("open quote", "begin quote", result="“"),
+                     'the word; a lone one otherwise is a plain "',
+                german_result="quotes around what's between, in English only: in German, "
+                              "<b>Anführungszeichen auf</b> … <b>Anführungszeichen zu</b>"),
+        _inline("open quote", "begin quote", result="“",
+                german=("Anführungszeichen unten", "Anführungszeichen auf"),
+                german_result="„ (“ when said in English)"),
         _inline("close quote", "end quote", "unquote", result="”",
                 note='"unquote" and "end quote" with no quote open stay the words '
-                     '("the end quote")'),
+                     '("the end quote")',
+                german=("Anführungszeichen oben", "Anführungszeichen zu"),
+                german_result="“ (German's closing quote; ” when said in English)"),
         _inline("quote unquote", result="“next word”",
-                note="a quote unquote expert → a “expert”"),
-        _inline(result="„", german=("Anführungszeichen unten", "Anführungszeichen auf")),
-        _inline(result="“ (closing, in German)",
-                german=("Anführungszeichen oben", "Anführungszeichen zu")),
+                note="a quote unquote expert → a “expert”",
+                german_result="“next word”, in English only: German says „in "
+                              "Anführungszeichen“ in everyday speech, so say "
+                              "<b>Anführungszeichen auf</b> … <b>Anführungszeichen zu</b>"),
         _inline("hyphen", "dash", result="-", german=("Bindestrich",)),
-        _inline("em dash", result="—"),
+        _inline("em dash", result="—", german=("Geviertstrich",)),
         _inline(result="– (a space each side)", german=("Gedankenstrich",)),
         _inline("dot dot dot", "ellipsis", result="…",
                 german=("Punkt Punkt Punkt", "Auslassungspunkte")),
@@ -112,13 +126,15 @@ SECTIONS = (
                 german=("neue Zeile", "Zeilenumbruch")),
         _inline("new paragraph", "paragraph break", result="double line break",
                 note="a space in a terminal", german=("neuer Absatz",)),
-        _inline("press tab", result="tab character (just <b>tab</b> is the word)"),
+        _inline("press tab", result="tab character (just <b>tab</b> is the word)",
+                german=("Tab drücken",)),
         Command(("press tab", "press the tab key"),
                 "at the end: presses the Tab key, to the next box in a form (in Claude "
                 "Desktop, four spaces)", "key",
                 "Help → Writing → Filling in a form has the steps",
                 ("Tab drücken", "Tab-Taste drücken")),
-        _inline("soft break", "soft line", result="three spaces"),
+        _inline("soft break", "soft line", result="three spaces",
+                german=("weicher Umbruch",)),
         Command(("press enter", "hit enter"), "at the end: types it, then presses Enter",
                 "key", "It sends a chat message or runs a command. <b>literal press enter</b> "
                        "types the words", ("Enter drücken", "Eingabe drücken")),
@@ -131,15 +147,12 @@ SECTIONS = (
                  "System types its words too (<b>literal open Firefox</b>). With voice "
                  "commands in German, <b>wörtlich</b> does the same (<b>wörtlich Punkt</b>).",
             commands=(
-                _literal("period", ".", "the word period"),
-                _literal("comma", ",", "the word comma"),
-                Command((), '"Punkt" (not .)', "literal",
-                        german=("wörtlich Punkt", "das Wort Punkt")),
-                Command((), '"Komma" (not ,)', "literal", german=("wörtlich Komma",)),
-                _literal("press tab", "a tab character"),
-                _literal("new line", "a line break", "the word new line"),
-                _literal("question mark", "?"),
-                _literal("exclamation point", "!"),
+                _literal("period", ".", "the word period", german="Punkt"),
+                _literal("comma", ",", "the word comma", german="Komma"),
+                _literal("press tab", "a tab character", german="Tab drücken"),
+                _literal("new line", "a line break", "the word new line", german="neue Zeile"),
+                _literal("question mark", "?", german="Fragezeichen"),
+                _literal("exclamation point", "!", german="Ausrufezeichen"),
             )),
     Section("Undo", FIXING, commands=(
         Command(("delete last word", "undo last word", "remove last word"),
@@ -181,18 +194,24 @@ SECTIONS = (
     Section("Editing by Voice", EDITING, labs=LABS_EDIT, commands=(
         Command(("make this more formal", "fix the grammar", "make it friendlier"),
                 "the AI rewrites the selected text: hold Shift with your dictation key as "
-                "you say it", "instruction", "Help → Writing has the details"),
+                "you say it", "instruction", "Help → Writing has the details",
+                ("mach es förmlicher", "korrigiere die Grammatik", "mach es freundlicher")),
         Command(("make this all caps", "make this lower case", "make this title case",
                  "indent this", "unindent this"), "the same way, done exactly, without the AI",
-                "exact"),
+                "exact", german=("alles in Großbuchstaben", "alles in Kleinbuchstaben",
+                                 "jedes Wort großschreiben", "das einrücken", "das ausrücken")),
         Command(("make this a bulleted list", "make this a numbered list"),
                 "each line a point, without the AI", "exact",
-                "One paragraph goes to the AI, which decides where the points are"),
+                "One paragraph goes to the AI, which decides where the points are",
+                ("als Aufzählung", "als nummerierte Liste")),
         Command(("remove the commas", "remove the word testing", "remove the bullets",
-                 "delete this"), "takes out just that, or the whole selection", "exact"),
+                 "delete this"), "takes out just that, or the whole selection", "exact",
+                german=("die Kommas entfernen", "das Wort Test entfernen",
+                        "die Aufzählungszeichen entfernen", "das löschen")),
         Command(("make this bold", "make this italic", "underline this"),
                 "presses the app's own shortcut, in LibreOffice and other word processors",
-                "format", "Font, size and colour can't be changed by voice"),
+                "format", "Font, size and colour can't be changed by voice",
+                ("fett machen", "kursiv machen", "unterstreichen")),
         Command(("edit that, make it shorter",), "right after dictating, no keys: changes it",
                 "edit", german=("bearbeite das, mach es kürzer",)),
     )),
@@ -228,7 +247,8 @@ SECTIONS = (
         Command(("open another Firefox", "open new Firefox"), "starts a second one", "action",
                 german=("weiteren Firefox öffnen",)),
         Command(("open Firefox Flatpak", "open Firefox Snap", "open Firefox AppImage"),
-                "that copy of it, when you have more than one", "action"),
+                "that copy of it, when you have more than one", "action",
+                german=("Firefox Flatpak öffnen", "Firefox Snap öffnen")),
         Command(("open the browser", "open email", "open files", "open the text editor",
                  "open the terminal"), "the app your desktop uses for that", "action",
                 german=("den Browser öffnen", "E-Mail öffnen", "Dateien öffnen")),

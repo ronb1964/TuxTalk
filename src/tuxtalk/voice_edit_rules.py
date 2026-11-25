@@ -12,9 +12,13 @@ a bookmark, in a browser it can open the bookmarks). Font, size and colour
 can't be done at all, and the user is told so.
 
 Every pattern here matches the whole instruction, so anything longer
-("remove the word testing and make it formal") still goes to the AI.
+("remove the word testing and make it formal") still goes to the AI. With
+voice commands in German, the German wording of these edits counts too
+(german_edits).
 """
 import re
+
+from . import german_edits
 
 # --- "edit that, ..." said in a dictation ------------------------------------------------
 
@@ -73,6 +77,14 @@ def _norm(instruction: str) -> str:
     return re.sub(r"\s+please$", "", s)
 
 
+def _said(instruction: str, lang: str) -> str:
+    """*instruction* tidied (_norm); with *lang* "de", a German edit done
+    in code as the English one it means ("die Kommas entfernen" is "remove
+    the commas")."""
+    said = _norm(instruction)
+    return (german_edits.to_english(said) or said) if lang == "de" else said
+
+
 _TARGET = (r"(?:this|it|that|these|everything|all of (?:this|it)|the (?:whole )?(?:text|selection"
            r"|selected text|words?|sentences?|lines?|thing)"
            r"|(?:these|those|each|every) (?:lines?|sentences?))")
@@ -98,11 +110,11 @@ _TITLE = re.compile(rf"^(?:{_LEAD}title case|capitali[sz]e (?:the first letter o
 _MARKS = {
     "commas": ",", "periods": ".", "full stops": ".", "dots": ".",
     "exclamation points": "!", "exclamation marks": "!", "question marks": "?",
-    "semicolons": ";", "colons": ":", "quotes": "\"“”",
-    "quotation marks": "\"“”", "apostrophes": "'’",
+    "semicolons": ";", "colons": ":", "quotes": "\"“”„",
+    "quotation marks": "\"“”„", "apostrophes": "'’",
     "dashes": "-–—", "hyphens": "-–—",
     "brackets": "()[]", "parentheses": "()",
-    "punctuation": ",.!?;:\"“”–—",
+    "punctuation": ",.!?;:\"“”„–—",
 }
 _REMOVE = r"(?:remove|delete|take out|get rid of|drop|strip(?: out)?|lose|cut)"
 _FROM = rf"(?:\s+(?:from|in|out of)\s+{_TARGET})?(?:\s+everywhere)?"
@@ -221,10 +233,11 @@ def _title(body: str) -> str:
     return re.sub(r"(?<![\w'’])([a-z])", lambda m: m.group(1).upper(), body)
 
 
-def mechanical_edit(text: str, instruction: str):
+def mechanical_edit(text: str, instruction: str, lang: str = "en"):
     """*text* changed exactly as *instruction* asks, for the jobs done in code,
-    or None for everything that goes to the AI."""
-    said = _norm(instruction)
+    or None for everything that goes to the AI; *lang* "de" knows the German
+    wording too."""
+    said = _said(instruction, lang)
     if _UPPER.match(said):
         return text.upper()
     if _LOWER.match(said):
@@ -266,10 +279,11 @@ _DELETE = re.compile(rf"^(?:delete|remove|erase|clear|get rid of|take out)\s+"
                      rf"(?:{_TARGET}|all|it all|all of that)$")
 
 
-def is_delete(instruction: str) -> bool:
-    """"Delete this": the selection goes, with the Delete key. Sent to the AI,
-    it can come back as "None.", which would replace the text."""
-    return bool(_DELETE.match(_norm(instruction)))
+def is_delete(instruction: str, lang: str = "en") -> bool:
+    """"Delete this" ("das löschen" with *lang* "de"): the selection goes,
+    with the Delete key. Sent to the AI, it can come back as "None.", which
+    would replace the text."""
+    return bool(_DELETE.match(_said(instruction, lang)))
 
 
 # --- formatting --------------------------------------------------------------------------
@@ -295,11 +309,11 @@ _COLOURS = {"red", "blue", "green", "yellow", "orange", "purple", "black", "whit
             "grey", "pink", "brown"}
 
 
-def formatting(instruction: str):
+def formatting(instruction: str, lang: str = "en"):
     """None for an instruction about the words. Otherwise the shortcut kinds
     asked for, in order (["bold", "italic"]), or CANT_FORMAT for formatting no
-    shortcut does (font, size, colour)."""
-    said = _norm(instruction)
+    shortcut does (font, size, colour); *lang* "de" knows "fett" and "kursiv"."""
+    said = _said(instruction, lang)
     said = re.sub(r"\b(?:strike ?through|strike ?out|cross(?:ed)? out)\b", "strikethrough", said)
     said = re.sub(r"\b(\d+)\s*-?\s*(?:pt|points?)\b", r"\1 point", said)     # "14pt", "14-point"
     words = said.split()

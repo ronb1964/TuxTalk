@@ -269,10 +269,16 @@ _DE_QUOTES = r"(?:anführungs\s?zeichen|gänsefü(?:ß|ss)chen)"
 _DE_ELLIPSIS = r"auslassungs\s?punkte"
 _DE_NEW_LINE = r"(?:neue\s+zeile|zeilen\s?umbruch)"
 _DE_NEW_PARAGRAPH = r"neue[nr]?\s+absatz"
+_DE_EM_DASH = r"geviert\s?strich"
+# Mid-sentence a tab character, as "press tab" is; at the end it presses Tab
+# (key_commands). "Tab-Taste drücken" mid-sentence is someone talking about
+# the key, as "press the tab key" is.
+_DE_TAB = r"tab(?:ulator)?\s+drücken"
+_DE_SOFT_BREAK = r"weiche[nr]?\s+umbruch"
 _GERMAN_MARK_WORDS = (rf"komma|beistrich|punkt|{_DE_QUESTION}|{_DE_EXCLAIM}|{_DE_COLON}|"
                       rf"semikolon|strichpunkt|apostroph|hochkomma|hochstrich|{_DE_HYPHEN}|"
-                      rf"gedankenstrich|{_DE_NEW_LINE}|{_DE_NEW_PARAGRAPH}|{_DE_QUOTES}|"
-                      rf"{_DE_ELLIPSIS}")
+                      rf"gedankenstrich|{_DE_EM_DASH}|{_DE_NEW_LINE}|{_DE_NEW_PARAGRAPH}|"
+                      rf"{_DE_QUOTES}|{_DE_ELLIPSIS}|{_DE_TAB}|{_DE_SOFT_BREAK}")
 _RE_GERMAN_HELD = re.compile(r"__LITDE_(\w+?)__")
 # Said with German commands on, a mark word is the mark, as in Dragon, and
 # "wörtlich" before it types the word. Rules can't parse German, so only
@@ -315,11 +321,15 @@ def _hold_german(m: re.Match) -> str:
     return m.group(1) + "__LITDE_" + "_".join(m.group(2).split()) + "__"
 
 
+# The words of a held phrase that German writes small: the adjectives of
+# "neue Zeile", "neuen Absatz" and "weicher Umbruch", and the verb of "Tab drücken".
+_GERMAN_SMALL = ("neue", "weiche", "drücken")
+
+
 def _give_back_german(m: re.Match) -> str:
-    """A held German word as it was said, its nouns with a capital: every
-    word but the adjective of "neue Zeile" and "neuen Absatz"."""
-    return " ".join(word if word.lower().startswith("neue") else word[:1].upper() + word[1:]
-                    for word in m.group(1).split("_"))
+    """A held German word as it was said, its nouns with a capital."""
+    return " ".join(word if word.lower().startswith(_GERMAN_SMALL)
+                    else word[:1].upper() + word[1:] for word in m.group(1).split("_"))
 
 
 # Three or more mark words in a row with the engine's commas between them
@@ -383,6 +393,8 @@ _GERMAN_MARKS = [
     (re.compile(rf"[,\s]*\b{_DE_NEW_LINE}\b[,.:;\s]*", re.IGNORECASE),
      LINE_BREAK),
     (re.compile(rf"[,.\s]*\b{_DE_NEW_PARAGRAPH}\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK * 2),
+    (re.compile(rf"[,.\s]*\b{_DE_SOFT_BREAK}\b[,.\s]*", re.IGNORECASE), _SOFT_BREAK),
+    (re.compile(rf"[, ]*\b{_DE_TAB}\b[,.:; ]*", re.IGNORECASE), "\t"),
     (re.compile(rf"\bpunkt\s+punkt\s+punkt\b|\b{_DE_ELLIPSIS}\b", re.IGNORECASE), "…"),
     (re.compile(_ENGINE_PERIOD + rf"\b{_DE_EXCLAIM}\b", re.IGNORECASE),
      "!"),
@@ -399,7 +411,9 @@ _GERMAN_MARKS = [
     (re.compile(r"\bdoppel(?:punkt|\s+punkt(?!\W*$))\b:?", re.IGNORECASE), ":"),
     (re.compile(r"\bpunkt\b\.?", re.IGNORECASE), "."),
     (re.compile(r"\b(?:apostroph|hochkomma|hochstrich)\b", re.IGNORECASE), "'"),
-    # German's dash between words is the en dash, with a space each side.
+    # German's dash between words is the en dash, with a space each side;
+    # the em dash, rare in German, is the Geviertstrich.
+    (re.compile(rf"\b{_DE_EM_DASH}\b", re.IGNORECASE), "\u2014"),
     (re.compile(r" *\bgedankenstrich\b *", re.IGNORECASE), " – "),
     (re.compile(rf" *\b{_DE_HYPHEN}\b *", re.IGNORECASE), "-"),
 ]

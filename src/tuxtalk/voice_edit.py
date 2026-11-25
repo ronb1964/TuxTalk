@@ -287,9 +287,9 @@ def _edit_with_keys(instruction, focused_class, window, beeps_on, message):
     """Deleting and formatting, which need no AI and press keys only: what
     the edit returned, or _NOT_A_KEY_EDIT for a rewrite. Esc a moment
     before stops the keys at the first (keyboard_output.until_cancelled)."""
-    if voice_edit_rules.is_delete(instruction):
+    if voice_edit_rules.is_delete(instruction, live.command_language):
         return _delete_selection(focused_class, window, beeps_on, message)
-    fmt = voice_edit_rules.formatting(instruction)
+    fmt = voice_edit_rules.formatting(instruction, live.command_language)
     if fmt == voice_edit_rules.CANT_FORMAT:
         notices.edit_problem("cant_format", beeps_on)
         return None
@@ -336,7 +336,7 @@ def _apply_steps(selected, steps, beeps_on):
     ai = live.ai_engine
     text = selected
     for step in steps:
-        done = voice_edit_rules.mechanical_edit(text, step)
+        done = voice_edit_rules.mechanical_edit(text, step, live.command_language)
         if done is not None:
             logger.info("Voice edit done in code, without the AI"
                         + (f" ({live.loggable(step)})" if len(steps) > 1 else ""))

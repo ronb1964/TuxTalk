@@ -268,3 +268,32 @@ def test_a_mark_word_ending_the_dictation_is_the_mark():
     assert normalize_text("Das ist der letzte Punkt", lang="de") == "Das ist der letzte."
     assert normalize_text("Das ist der letzte wörtlich Punkt", lang="de") == (
         "Das ist der letzte Punkt.")
+
+
+@pytest.mark.parametrize("said, typed", [
+    ("Max Geviertstrich Moritz", "Max — Moritz."),
+    ("Max Geviert Strich Moritz", "Max — Moritz."),
+    # Mid-sentence, "Tab drücken" types a tab, as "press tab" does.
+    ("Name Tab drücken Vorname", "Name\tVorname."),
+    ("Hallo weicher Umbruch Welt", "Hallo   Welt."),
+    # "wörtlich" types the words themselves, the verb small as German writes it.
+    ("Schreib wörtlich Tab drücken bitte", "Schreib Tab drücken bitte."),
+    ("Schreib wörtlich Geviertstrich", "Schreib Geviertstrich."),
+    ("Schreib das Wort neue Zeile", "Schreib neue Zeile."),
+])
+def test_german_dash_tab_and_soft_break_said_as_commands(said, typed):
+    assert normalize_text(said, lang="de") == typed
+
+
+@pytest.mark.parametrize("said", [
+    # Said about the key, as "press the tab key" is in English.
+    "Du musst die Tab-Taste drücken, um weiterzukommen.",
+    "Ein Geviertstrich ist länger als ein Bindestrich.",
+    "Er wollte einen weichen Umbruch.",
+])
+def test_german_sentences_about_dashes_tabs_and_breaks_stay_text(said):
+    assert normalize_text(said, lang="de") == said
+
+
+def test_tab_and_dash_words_wait_for_german_commands():
+    assert normalize_text("Name Tab drücken Geviertstrich") == "Name Tab drücken Geviertstrich."

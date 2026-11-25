@@ -50,6 +50,11 @@ def _phrases(command, german: bool) -> tuple:
     return (*command.german, *command.said) if german else command.said
 
 
+def _result(command, german: bool) -> str:
+    """What *command* does, as said in German with *german*."""
+    return (command.german_result if german else "") or command.result
+
+
 def _row(command, say_width, german):
     """One command: the ways to say it, bold, beside what it does (and its
     note under that); None for a German-only command with English shown."""
@@ -63,7 +68,7 @@ def _row(command, say_width, german):
     say.set_valign(Gtk.Align.START)
     say_width.add_widget(say)
     does = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-    does.pack_start(cards.label(command.result, "tt-does"), False, False, 0)
+    does.pack_start(cards.label(_result(command, german), "tt-does"), False, False, 0)
     if command.note:
         does.pack_start(cards.label(command.note, "tt-note"), False, False, 0)
     row = Gtk.Box(spacing=16)
@@ -76,7 +81,7 @@ def _row(command, say_width, german):
 def spoken(section, german=False):
     """What a screen reader says on *section*'s card: each command, what it
     does, and the notes, the text the card shows."""
-    lines = [f"{', '.join(_phrases(c, german))}: {cards.plain(c.result)}"
+    lines = [f"{', '.join(_phrases(c, german))}: {cards.plain(_result(c, german))}"
              + (f". {cards.plain(c.note)}" if c.note else "") for c in section.commands
              if _phrases(c, german)]
     if section.note:

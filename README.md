@@ -529,11 +529,14 @@ With **Voice commands in** set to Deutsch, most commands above can be said in Ge
 | "Punkt" | . |
 | "Fragezeichen" / "Ausrufezeichen" | ? / ! |
 | "Anführungszeichen unten" … "Anführungszeichen oben" | „ … “ |
+| "Gedankenstrich" / "Geviertstrich" | – (a space each side) / — |
 | "neue Zeile" / "neuer Absatz" | Line break / double line break |
 | "Enter drücken" / "Tab drücken" (at the end) | Presses the key |
+| "Tab drücken" (mid-sentence) | Tab character |
 | "das letzte Wort löschen" / "alles löschen" | Undo, as above |
 | "Wort korrigieren" | Opens Fix a Word |
 | "wörtlich Punkt" | Types the word "Punkt" |
+| "alles in Großbuchstaben" / "die Kommas entfernen" (voice editing) | Done exactly, without the AI |
 
 The same words in an ordinary sentence stay words: "auf den Punkt", "Punkt 12 Uhr", "drei Komma fünf". The Labs commands work in German too ("den letzten Satz markieren", "Firefox öffnen", "Fenster schließen", "Mausraster"), with their Labs setting on. The Voice Commands window shows the German words first once Deutsch is on. Changing your mind mid-sentence ("no wait") stays English.
 

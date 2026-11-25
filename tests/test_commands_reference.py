@@ -11,9 +11,9 @@ import gi
 import pytest
 
 from tuxtalk import (ai_cleanup, app_commands, app_finder, command_phrases, commands_cards,
-                     commands_reference, explain, help_outline, help_text, key_commands,
-                     mouse_phrases, normalize, spoken_quotes, undo, voice_commands,
-                     voice_edit_rules, voice_navigation)
+                     commands_reference, explain, german_edits, help_outline, help_text,
+                     key_commands, mouse_phrases, normalize, spoken_quotes, undo,
+                     voice_commands, voice_edit_rules, voice_navigation)
 
 PHRASES = [(c.kind, phrase) for s in commands_reference.SECTIONS for c in s.commands
            for phrase in c.said]
@@ -72,8 +72,8 @@ def test_each_listed_phrase_is_recognised(kind, phrase, monkeypatch):
         assert not _done_in_code(phrase) and voice_edit_rules.formatting(phrase) is None
 
 
-GERMAN = [(c.kind, phrase, c.result) for s in commands_reference.SECTIONS for c in s.commands
-          for phrase in c.german]
+GERMAN = [(c.kind, phrase, c.german_result or c.result) for s in commands_reference.SECTIONS
+          for c in s.commands for phrase in c.german]
 
 
 @pytest.mark.parametrize("kind,phrase,result", GERMAN)
@@ -110,6 +110,13 @@ def test_each_german_phrase_listed_works_with_german_commands_on(kind, phrase, r
     elif kind == "mouse":
         assert command_phrases.parse(phrase, navigation=False, actions=True, grid=True,
                                      lang="de")
+    elif kind == "exact":
+        assert _done_in_code(phrase, "de", _EDITED_DE)
+    elif kind == "format":
+        assert voice_edit_rules.formatting(phrase, "de") in (["bold"], ["italic"],
+                                                            ["underline"])
+    elif kind == "instruction":
+        assert not _done_in_code(phrase, "de") and voice_edit_rules.formatting(phrase, "de") is None
     else:
         assert kind == "literal"
         word = re.sub(r"^(wörtlich|das Wort) ", "", phrase)
@@ -134,10 +141,14 @@ _DONE_IN_CODE = {
 }
 
 
-def _done_in_code(phrase):
+# The same in German, with the word its "das Wort Test entfernen" takes out.
+_EDITED_DE = "eins, zwei Test\n    - drei"
+
+
+def _done_in_code(phrase, lang="en", edited=_EDITED):
     """An edit made in code, not by the AI: a change to the text, or Delete."""
-    changed = voice_edit_rules.mechanical_edit(_EDITED, phrase)
-    return changed is not None or voice_edit_rules.is_delete(phrase)
+    changed = voice_edit_rules.mechanical_edit(edited, phrase, lang)
+    return changed is not None or voice_edit_rules.is_delete(phrase, lang)
 
 
 def test_a_symbol_comes_out_as_the_symbol_listed():
@@ -430,6 +441,30 @@ def test_every_edit_done_in_code_is_listed():
     assert missing == []
     shortcuts = {k for p in _listed("format") for k in voice_edit_rules.formatting(p)}
     assert shortcuts == set(voice_edit_rules._SHORTCUTS.values())
+
+
+def test_every_edit_done_in_code_has_a_german_phrase_listed():
+    """German's list shows each exact edit too: every rule some German
+    phrase listed is read as."""
+    listed = [german_edits.to_english(voice_edit_rules._norm(p))
+              for s in commands_reference.SECTIONS for c in s.commands if c.kind == "exact"
+              for p in c.german]
+    rules = (voice_edit_rules._UPPER, voice_edit_rules._LOWER, voice_edit_rules._TITLE,
+             voice_edit_rules._REMOVE_MARKS, voice_edit_rules._BULLETED,
+             voice_edit_rules._NUMBERED, voice_edit_rules._INDENT, voice_edit_rules._UNINDENT,
+             voice_edit_rules._REMOVE_BULLETS, voice_edit_rules._REMOVE_WORD,
+             voice_edit_rules._DELETE)
+    missing = [rule.pattern for rule in rules if not any(rule.match(p) for p in listed if p)]
+    assert missing == []
+
+
+def test_every_command_has_its_german_or_says_why_not():
+    """With voice commands in German, each row shows a German way to say
+    it, or what it shows then (or its section's note) says why there's none:
+    20 rows had neither and nobody noticed until the list was read in German."""
+    bare = [c.said[0] for s in commands_reference.SECTIONS for c in s.commands
+            if c.said and not c.german and "German" not in c.german_result + s.note]
+    assert bare == []
 
 
 def test_every_undo_and_fix_a_word_command_is_listed():

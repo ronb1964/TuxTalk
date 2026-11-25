@@ -112,6 +112,11 @@ Code reviews read code, not prose; this is its own step, BEFORE the build.
    AppStream file, and the CHANGELOG's section for this release. It also
    says what's MISSING: each new feature or setting must be findable in
    Help and the README. Grep the old wording of anything renamed or removed.
+   It reads the Voice Commands window in every command language (Deutsch
+   too), not only English: a command added in English needs its German row,
+   or a reason shown in German (tests/test_commands_reference.py's
+   `test_every_command_has_its_german_or_says_why_not` fails without one;
+   0.25 shipped 20 rows with no German and no reason).
 2. Every finding is fixed before the build, or Ron says why not. A text
    inside src/tuxtalk found after the build means a rebuild: that is the
    cost this step exists to avoid.
