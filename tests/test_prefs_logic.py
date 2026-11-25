@@ -50,8 +50,7 @@ def opened(tmp_path, monkeypatch):
     from tuxtalk import config as C
     path = tmp_path / "config.toml"
     for name, value in (("CONFIG_PATH", str(path)), ("_config_cache", None),
-                        ("_config_stamp", None), ("_repair_attempted", False),
-                        ("_config_read_failed", False)):
+                        ("_config_stamp", None), ("_repair_attempted", False)):
         monkeypatch.setattr(C, name, value)
 
     def open_with(text, backup=None):

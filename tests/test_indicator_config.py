@@ -62,7 +62,7 @@ def test_sensitivity_out_of_range_is_reported():
 def test_float_sensitivity_round_trips_as_a_float(tmp_path, monkeypatch):
     """A float field must survive save/reload as a float, not a string."""
     monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.toml"))
-    config.save_config(config.Settings(indicator_sensitivity=1.3))
+    config.save_changes(indicator_sensitivity=1.3)
     loaded = config.load_config().indicator_sensitivity
     assert loaded == 1.3 and isinstance(loaded, float)
 

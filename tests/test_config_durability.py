@@ -6,6 +6,7 @@ file, onboarding does not re-run to fix it. The user is left with a tray icon
 that does nothing and no explanation.
 """
 
+import dataclasses
 import os
 import pathlib
 
@@ -23,8 +24,13 @@ def config_path(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "_config_stamp", None)
     # Per-process latches: real processes start fresh, tests must too.
     monkeypatch.setattr(config, "_repair_attempted", False)
-    monkeypatch.setattr(config, "_config_read_failed", False)
     return path
+
+
+def _write(settings):
+    """A settings file holding all of *settings*, as an earlier save left it."""
+    config.write_text_atomic(config.CONFIG_PATH,
+                             settings_schema.settings_text(dataclasses.asdict(settings)))
 
 
 # --- atomic writes ---------------------------------------------------------
@@ -34,7 +40,7 @@ def test_save_never_leaves_a_truncated_file(config_path, monkeypatch):
     every setting including the hotkey."""
     settings = config.Settings()
     settings.model = "large-v3"
-    config.save_config(settings)
+    _write(settings)
     original = config_path.read_text()
     assert "large-v3" in original
 
@@ -45,7 +51,7 @@ def test_save_never_leaves_a_truncated_file(config_path, monkeypatch):
     settings.model = "tiny"
     with monkeypatch.context() as m, pytest.raises(OSError):
         m.setattr(config.os, "fsync", no_space)
-        config.save_config(settings)
+        _write(settings)
 
     assert config_path.read_text() == original, "the previous settings were destroyed"
     leftovers = [p.name for p in config_path.parent.iterdir() if ".tmp" in p.name]
@@ -55,11 +61,11 @@ def test_save_never_leaves_a_truncated_file(config_path, monkeypatch):
 def test_save_keeps_a_backup_of_the_previous_settings(config_path):
     first = config.Settings()
     first.model = "base"
-    config.save_config(first)
+    _write(first)
 
     second = config.Settings()
     second.model = "large-v3"
-    config.save_config(second)
+    _write(second)
 
     backup = config_path.with_suffix(config_path.suffix + ".bak")
     assert backup.exists(), "no backup written"
@@ -71,7 +77,7 @@ def test_saved_settings_round_trip(config_path):
     settings.model = "small"
     settings.auto_period = False
     settings.auto_timeout_minutes = 9
-    config.save_config(settings)
+    _write(settings)
 
     loaded = config.load_config()
 
@@ -85,7 +91,7 @@ def test_saved_settings_round_trip(config_path):
 def test_a_corrupt_config_is_moved_aside_not_silently_reset(config_path):
     good = config.Settings()
     good.model = "small"
-    config.save_config(good)
+    _write(good)
 
     config_path.write_text("this is not valid toml {{{")
     config._config_cache = None
@@ -101,11 +107,11 @@ def test_a_corrupt_config_is_restored_from_backup(config_path):
     # Deliberately not the default model, or this would pass vacuously.
     good = config.Settings()
     good.model = "tiny"
-    config.save_config(good)
+    _write(good)
     # A second save moves the first into .bak
     second = config.Settings()
     second.model = "base"
-    config.save_config(second)
+    _write(second)
 
     config_path.write_text("garbage {{{")
     config._config_cache = None
@@ -121,10 +127,10 @@ def test_an_empty_config_is_treated_as_damaged(config_path):
     including a blank hotkey, which kills dictation with no message."""
     good = config.Settings()
     good.model = "tiny"
-    config.save_config(good)
+    _write(good)
     second = config.Settings()
     second.model = "base"
-    config.save_config(second)
+    _write(second)
 
     config_path.write_text("")
     config._config_cache = None
@@ -189,7 +195,7 @@ def test_a_removed_setting_in_an_old_config_is_dropped_quietly(config_path):
     config_path.write_text('model = "small"\nindicator_backing = "strong"\n')
     loaded = config.load_config()
     assert loaded.model == "small"
-    config.save_config(loaded)
+    _write(loaded)
     assert "indicator_backing" not in config_path.read_text()
     assert config.load_config().model == "small"
 
@@ -299,10 +305,10 @@ def test_recovered_settings_are_written_back_to_disk(config_path):
     user the same alarming warning forever."""
     good = config.Settings()
     good.model = "tiny"
-    config.save_config(good)
+    _write(good)
     second = config.Settings()
     second.model = "base"
-    config.save_config(second)
+    _write(second)
 
     config_path.write_text("garbage {{{")
     config._config_cache = None
@@ -318,10 +324,10 @@ def test_recovered_settings_are_written_back_to_disk(config_path):
 def test_a_damaged_config_is_quarantined_once_not_every_launch(config_path, monkeypatch):
     good = config.Settings()
     good.model = "tiny"
-    config.save_config(good)
+    _write(good)
     second = config.Settings()
     second.model = "base"
-    config.save_config(second)
+    _write(second)
 
     config_path.write_text("garbage {{{")
 
@@ -349,10 +355,10 @@ def test_repairing_a_damaged_config_does_not_destroy_the_good_backup(config_path
     right when it is needed."""
     good = config.Settings()
     good.model = "tiny"
-    config.save_config(good)
+    _write(good)
     second = config.Settings()
     second.model = "base"
-    config.save_config(second)
+    _write(second)
 
     config_path.write_text("garbage {{{")
     config._config_cache = None
@@ -369,7 +375,7 @@ def test_a_later_save_still_refreshes_the_backup_normally(config_path):
     """Repair must not permanently freeze the backup."""
     first = config.Settings()
     first.model = "tiny"
-    config.save_config(first)
+    _write(first)
 
     config_path.write_text("garbage {{{")
     config._config_cache = None
@@ -379,7 +385,7 @@ def test_a_later_save_still_refreshes_the_backup_normally(config_path):
     for model in ("medium", "small"):
         later = config.Settings()
         later.model = model
-        config.save_config(later)
+        _write(later)
 
     backup = config_path.with_suffix(config_path.suffix + ".bak")
     assert config.parse_toml_text(backup.read_text())["model"] == "medium"
@@ -389,10 +395,10 @@ def test_repair_failure_does_not_crash_the_app(config_path, monkeypatch):
     """A read-only config directory must not take the tray down."""
     good = config.Settings()
     good.model = "tiny"
-    config.save_config(good)
+    _write(good)
     second = config.Settings()
     second.model = "base"
-    config.save_config(second)
+    _write(second)
     config_path.write_text("garbage {{{")
     config._config_cache = None
     config._config_stamp = None
@@ -414,7 +420,7 @@ def test_concurrent_saves_do_not_collide(tmp_path):
     Preferences) and all of them save settings.
 
     Each needs its own temp file, or they truncate each other's half-written
-    file and then fail to rename it, raising FileNotFoundError out of save_config.
+    file and then fail to rename it, raising FileNotFoundError out of the save.
     """
     import threading
 
@@ -509,8 +515,8 @@ def test_an_emptied_file_is_restored_before_a_small_save(config_path):
     """The update check's save read an emptied file as no settings and wrote
     its one key: the hold key was blank and dictation stopped, the backup
     with F6 never used."""
-    config.save_config(config.Settings(hotkey="F6"))
-    config.save_config(config.Settings(hotkey="F6"))     # F6 in the .bak too
+    _write(config.Settings(hotkey="F6"))
+    _write(config.Settings(hotkey="F6"))     # F6 in the .bak too
     config_path.write_text("")
     config.record_update_check("2026-11-22")
     assert config.load_config().hotkey == "F6"
@@ -519,7 +525,7 @@ def test_an_emptied_file_is_restored_before_a_small_save(config_path):
 def test_a_file_emptied_again_is_not_saved_over_with_one_key(config_path):
     """The repair runs once per process, so the service, running for days,
     saved its one key over a second emptying."""
-    config.save_config(config.Settings(hotkey="F6"))
+    _write(config.Settings(hotkey="F6"))
     config_path.write_text("")
     config.load_config()                 # the one repair this process gets
     config_path.write_text("")
@@ -537,13 +543,12 @@ def test_a_read_error_while_recovering_leaves_the_file_alone(config_path, monkey
         reads.append(path)
         raise ValueError("Invalid statement") if len(reads) == 1 else OSError(5, "I/O error")
     monkeypatch.setattr(config, "load_toml_file", damaged_then_unreadable)
-    recovered = config.load_config()
+    config.load_config()
     assert config_path.read_text() == 'model = "medium"\n'
     assert not list(config_path.parent.glob("config.toml.corrupt-*"))
     # Nor may a later save write the backup's settings over it.
-    recovered.model = "tiny"
     with pytest.raises(config.ConfigNotLoadedError):
-        config.save_config(recovered)
+        config.save_changes(model="tiny")
     assert config_path.read_text() == 'model = "medium"\n'
 
 
@@ -580,7 +585,7 @@ def test_an_unreadable_config_is_never_overwritten(config_path):
     good.model = "large-v3"
     good.device = "cuda"
     good.hotkey = "F8"
-    config.save_config(good)
+    _write(good)
     original = config_path.read_text()
     backup = config_path.with_suffix(config_path.suffix + ".bak")
     if backup.exists():
@@ -601,10 +606,10 @@ def test_repair_is_skipped_when_the_damaged_file_cannot_be_quarantined(config_pa
     """If the only copy of the user's content cannot be preserved, leave it."""
     good = config.Settings()
     good.model = "tiny"
-    config.save_config(good)
+    _write(good)
     second = config.Settings()
     second.model = "base"
-    config.save_config(second)
+    _write(second)
     config_path.write_text("garbage {{{")
 
     def cannot_copy(*args, **kwargs):
@@ -626,7 +631,7 @@ def test_a_setting_containing_a_quote_survives_a_save(config_path):
     produces a file that parses."""
     s = config.Settings()
     s.mic = 'Blue Yeti "Nano" USB'
-    config.save_config(s)
+    _write(s)
 
     config._config_cache = None
     config._config_stamp = None
@@ -636,7 +641,7 @@ def test_a_setting_containing_a_quote_survives_a_save(config_path):
 def test_a_setting_containing_a_backslash_survives_a_save(config_path):
     s = config.Settings()
     s.mic = r"Mic\Device"
-    config.save_config(s)
+    _write(s)
 
     config._config_cache = None
     config._config_stamp = None
@@ -676,10 +681,10 @@ def test_repair_happens_once_even_without_a_cache_reset(config_path):
     """The tray's real call pattern: one long-lived process polling every second."""
     good = config.Settings()
     good.model = "tiny"
-    config.save_config(good)
+    _write(good)
     second = config.Settings()
     second.model = "base"
-    config.save_config(second)
+    _write(second)
     config_path.write_text("garbage {{{")
     config._config_cache = None
     config._config_stamp = None
@@ -708,7 +713,7 @@ def test_a_transient_read_error_does_not_pin_the_process_to_defaults(config_path
     """
     settings = config.Settings()
     settings.model = "large-v3"
-    config.save_config(settings)
+    _write(settings)
     config._config_cache = None
     config._config_stamp = None
 
@@ -732,14 +737,14 @@ def test_a_transient_read_error_does_not_pin_the_process_to_defaults(config_path
 
 def test_an_unreadable_config_is_not_overwritten_with_defaults(config_path,
                                                                monkeypatch):
-    """The tray's update check calls save_config(load_config()) five seconds
-    after launch. If the config could not be READ, load_config returns
-    defaults, and saving them must not destroy a file whose contents are good.
+    """The tray's update check saves five seconds after launch. If the config
+    could not be READ, load_config returns defaults, and a save then must not
+    destroy a file whose contents are good.
     """
     settings = config.Settings()
     settings.model = "large-v3"
     settings.hotkey = "F8"
-    config.save_config(settings)
+    _write(settings)
     good = config_path.read_text()
     config._config_cache = None
     config._config_stamp = None
@@ -752,9 +757,9 @@ def test_an_unreadable_config_is_not_overwritten_with_defaults(config_path,
     loaded = config.load_config()
     assert loaded.model == config.Settings.model  # defaults, as designed
 
-    # The tray writes that back; this must not destroy the file.
+    # A save now (the tray's daily update check) must not destroy the file.
     with pytest.raises(config.ConfigNotLoadedError):
-        config.save_config(loaded)
+        config.save_changes(last_update_check="2026-11-25")
 
     assert config_path.read_text() == good, "unreadable config was overwritten"
 
@@ -765,7 +770,7 @@ def test_saving_still_works_once_the_config_can_be_read_again(config_path,
     on must not leave the app permanently unable to save."""
     settings = config.Settings()
     settings.model = "large-v3"
-    config.save_config(settings)
+    _write(settings)
     config._config_cache = None
     config._config_stamp = None
 
@@ -784,8 +789,7 @@ def test_saving_still_works_once_the_config_can_be_read_again(config_path,
     recovered = config.load_config()
     assert recovered.model == "large-v3"
 
-    recovered.model = "medium"
-    config.save_config(recovered)          # must not raise
+    config.save_changes(model="medium")    # must not raise
     assert "medium" in config_path.read_text()
 
 
@@ -794,9 +798,8 @@ def test_saving_a_fresh_install_is_never_blocked(config_path):
     assert not config_path.exists()
     config._config_cache = None
     config._config_stamp = None
-    loaded = config.load_config()
-    loaded.model = "medium"
-    config.save_config(loaded)
+    config.load_config()
+    config.save_changes(model="medium")
     assert "medium" in config_path.read_text()
 
 
@@ -818,7 +821,7 @@ def test_any_string_round_trips_as_valid_toml(value):
 def test_a_setting_with_a_carriage_return_survives_a_save(config_path):
     settings = config.Settings()
     settings.mic = "USB\r\nMic"
-    config.save_config(settings)
+    _write(settings)
     config._config_cache = None
     assert config.load_config().mic == "USB\r\nMic"
     assert not list(config_path.parent.glob("config.toml.corrupt-*"))
@@ -851,7 +854,7 @@ def test_a_typing_delay_from_ydotool_days_does_not_slow_the_new_keyboard(config_
     for old in (12, 25):
         config_path.write_text(f'model = "small"\ntyping_delay = {old}\n')
         assert config.load_config().key_delay == config.Settings().key_delay
-    config.save_config(config.load_config())
+    _write(config.load_config())
     assert "typing_delay" not in config_path.read_text()
 
 
@@ -883,7 +886,7 @@ def test_changing_a_loaded_object_without_saving_changes_nothing_else(config_pat
     """load_config() gives each caller its own copy, so a change that was
     never saved doesn't show up everywhere or get written by the next
     unrelated save."""
-    config.save_config(config.Settings(model="small"))
+    _write(config.Settings(model="small"))
     first = config.load_config()
     first.model = "large-v3"
     assert config.load_config().model == "small"
@@ -905,8 +908,8 @@ def test_a_terminal_user_is_told_their_settings_were_replaced(config_path, capsy
     """Started from a terminal, TuxTalk says there that it set a damaged
     settings file aside and what it uses instead; the log isn't where a
     terminal user looks."""
-    config.save_config(config.Settings())
-    config.save_config(config.Settings())           # the first save becomes the backup
+    _write(config.Settings())
+    _write(config.Settings())           # the first save becomes the backup
     config_path.write_text("garbage {{{")
     config._config_cache, config._config_stamp = None, 0.0
     config.load_config()

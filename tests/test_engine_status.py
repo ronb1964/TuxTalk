@@ -83,7 +83,6 @@ def loads(monkeypatch):
                         lambda d, on_fallback=None: "parakeet on vulkan")
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
     monkeypatch.setattr(config, "load_config", config.Settings)
-    monkeypatch.setattr(config, "save_config", lambda cfg: None)
 
     def load(model, device, cuda_fails=False):
         def download(name, device, **k):
@@ -146,7 +145,6 @@ def test_a_cuda_load_that_fails_says_which_card_was_picked(monkeypatch, picked, 
     monkeypatch.setattr(cuda_helper, "ctranslate2_has_cuda", lambda: True)
     monkeypatch.setattr(graphics_cards, "cuda_index", lambda key: 1 if key else 0)
     monkeypatch.setattr(config, "load_config", config.Settings)
-    monkeypatch.setattr(config, "save_config", lambda cfg: None)
     notices = []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: notices.append(a))
 

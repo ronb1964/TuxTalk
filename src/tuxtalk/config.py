@@ -123,11 +123,6 @@ _config_cache = None
 _config_stamp = None
 _cache_lock = threading.Lock()
 
-# True when the last load_config() could not READ an existing settings file.
-# Guards save_config() so the defaults handed out during the failure are never
-# written over a file whose contents may be perfectly good.
-_config_read_failed = False
-
 # Set once a recovery was kept in memory, so its warning isn't logged again
 # at every one of the tray's once-a-second reads.
 _warned_in_memory = False
@@ -275,7 +270,7 @@ def file_stamp(path):
 
 def load_config() -> Settings:
     """The current settings, read from disk only when the file has changed."""
-    global _config_cache, _config_stamp, _config_read_failed
+    global _config_cache, _config_stamp
 
     # Return cached config if the file hasn't been modified.
     # The stamp is recorded only AFTER a successful read (see the end of this
@@ -291,8 +286,6 @@ def load_config() -> Settings:
     # No file yet: the cache if there is one.
     if cached is not None and current_stamp in (None, cached_stamp):
         return dataclasses.replace(cached)
-
-    _config_read_failed = False
 
     s = defaults()
     if os.path.exists(CONFIG_PATH):
@@ -313,12 +306,9 @@ def load_config() -> Settings:
             logger.error(f"Could not read {CONFIG_PATH}: {e}; using defaults for now, "
                          "the file left untouched")
             s = dataclasses.replace(cached) if cached else defaults()
-            # Hand out defaults so the app keeps running, but mark them as
-            # never-loaded: save_config() must refuse to write them back over
-            # a file it could not read, or any later save (the daily update
-            # check's, say) would turn a chmod problem into the loss of every
-            # setting.
-            _config_read_failed = True
+            # Defaults so the app keeps running, never written over the file:
+            # every save reads it afresh (rewrite_config) and refuses one it
+            # can't read. Not cached, so the next load tries the file again.
             current_stamp = None
         except Exception as e:
             # Genuinely unparseable content. Preserve the damaged file and fall
@@ -328,9 +318,8 @@ def load_config() -> Settings:
             logger.error(f"Settings file is damaged: {e}")
             s, looked = _recover_damaged_config()
             if not looked:
-                # Recovered in memory only: like a failed read, nothing may
-                # save these over the file, and the next load tries it again.
-                _config_read_failed = True
+                # Recovered in memory only: like a failed read, not cached,
+                # and the next load tries the file again.
                 current_stamp = None
 
     s = repaired(s)
@@ -444,25 +433,6 @@ def locked():
         os.close(fd)
 
 
-def save_config(s: Settings) -> None:
-    """Write every setting in *s* to config.toml: the whole settings, as a
-    repair or a test sets them. A change of a few goes through save_changes,
-    which reads the file afresh and keeps what it doesn't change.
-
-    Refuses to write when the last load_config() could not read an existing
-    settings file: what it returned were defaults, and writing those back
-    destroys the real settings. Losing an update-check timestamp is a far
-    better outcome than losing the user's hotkey, model and device.
-    """
-    with locked():
-        if _config_read_failed and os.path.exists(CONFIG_PATH):
-            raise ConfigNotLoadedError(
-                f"Refusing to overwrite {CONFIG_PATH}: it could not be read, so the "
-                f"settings in memory are defaults rather than the user's own."
-            )
-        write_text_atomic(CONFIG_PATH, settings_text(dataclasses.asdict(s)))
-
-
 def save_changes(**changes) -> Settings:
     """Change the settings named in *changes* and nothing else, keys this
     version doesn't know kept too: read afresh, changed and written under
@@ -528,8 +498,8 @@ def get_data_dir():
 CUSTOM_COMMANDS_PATH = os.path.join(_config_home(), CONFIG_DIR, "custom_commands.toml")
 
 # True when the last load_custom_commands() could not read an existing file.
-# Same guard as _config_read_failed: an empty dict produced by a read failure
-# must never be written back over the user's real commands.
+# An empty dict produced by a read failure must never be written back over
+# the user's real commands.
 _commands_read_failed = False
 
 def load_custom_commands() -> dict[str, str]:

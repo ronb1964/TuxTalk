@@ -23,7 +23,6 @@ SCRIPT = textwrap.dedent("""
 
     cfg = types.SimpleNamespace(model="small", device="cpu", notify=True)
     config.load_config = lambda: cfg
-    config.save_config = lambda c: None
     model_helper.is_model_cached_fast = lambda model: True
     shown = []
     notify.notify = lambda title, body: shown.append(title + " | " + body)

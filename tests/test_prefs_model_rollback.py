@@ -415,7 +415,6 @@ class TestWhatStillRunsIsForgottenOnceItChanges:
         stub.download_result = False
         assert stub.save_before_restart() is True
         monkeypatch.setattr(config, "load_config", config.Settings)
-        monkeypatch.setattr(config, "save_config", lambda cfg: None)
         assert prefs_cls.save_now(stub, {"model": "large-v3", "device": "cuda"}) is True
         stub.config["model"] = "base"
         prefs_cls.on_apply(stub, None)                  # its download cancelled

@@ -714,7 +714,6 @@ def _no_real_settings(monkeypatch, tmp_path_factory, request):
     monkeypatch.setattr(config, "get_data_dir", lambda: str(folder / "TuxTalk"))
     monkeypatch.setattr(config, "_config_cache", None)
     monkeypatch.setattr(config, "_config_stamp", None)
-    monkeypatch.setattr(config, "_config_read_failed", False)
 
 
 class FakeKeyboard:

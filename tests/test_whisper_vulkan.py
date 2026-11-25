@@ -341,9 +341,7 @@ def test_no_engine_update_when_checking_for_updates_at_start_is_off(tmp_path, mo
     from tuxtalk import config
     monkeypatch.setattr(wv, "ENGINE_BUILD", 2)
     _installed_build(tmp_path, monkeypatch, 1)
-    cfg = config.load_config()
-    cfg.auto_check_updates = False
-    config.save_config(cfg)
+    config.save_changes(auto_check_updates=False)
     fetched = _download_build(monkeypatch)
     assert wv.update_in_background() is None and fetched == []
     assert wv.is_engine_installed("small")
@@ -841,7 +839,6 @@ def test_the_speed_check_times_the_picked_card(monkeypatch, card, saved, timed):
     monkeypatch.setattr(vsd.wv, "speed_check", lambda model, dev, cancel: (1.0, 5.0))
     monkeypatch.setattr(vsd, "message", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
-    monkeypatch.setattr("tuxtalk.config.save_config", lambda c: None)
     monkeypatch.setattr(vsd, "_wait_dialog", lambda parent, work: work())
     vsd.run_speed_check(None, "small", card)
     assert asked == [timed]

@@ -129,11 +129,11 @@ def test_settings_has_language_mode_and_launch_at_login():
     assert s.launch_at_login is False
 
 
-def test_save_config_includes_language_mode(tmp_path, monkeypatch):
-    import tuxtalk.config as cfg
-    monkeypatch.setattr(cfg, "CONFIG_PATH", str(tmp_path / "config.toml"))
-    cfg.save_config(Settings(language_mode="manual"))
-    text = (tmp_path / "config.toml").read_text()
+def test_a_whole_settings_file_includes_language_mode():
+    import dataclasses
+
+    from tuxtalk.settings_schema import settings_text
+    text = settings_text(dataclasses.asdict(Settings(language_mode="manual")))
     assert 'language_mode = "manual"' in text
     assert 'launch_at_login = false' in text
 

@@ -327,7 +327,6 @@ def _run_dialog(monkeypatch, evdev_paths, during, denied=(), hotkeys=("F8", "F9"
 
     monkeypatch.setattr(config, "load_config",
                         lambda: SimpleNamespace(hotkey=hotkeys[0], toggle_hotkey=hotkeys[1]))
-    monkeypatch.setattr(config, "save_config", lambda c: None)
     monkeypatch.setattr(gnome_keybindings, "disable_for_hotkey_test", lambda: None)
     monkeypatch.setattr(gnome_keybindings, "restore", lambda saved: None)
     monkeypatch.setattr(service_launcher, "stop_dictation_service", lambda force=False: None)

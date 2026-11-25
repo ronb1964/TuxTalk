@@ -84,9 +84,7 @@ def test_downloading_the_ai_for_voice_editing_leaves_self_corrections_off(prefs_
             return {"AI engine": {"success": True}, "AI model": {"success": True}}
     monkeypatch.setattr(download_progress_dialog, "UnifiedDownloadDialog", Download)
     from tuxtalk import config
-    saved = config.load_config()
-    saved.ai_corrections = True
-    config.save_config(saved)
+    config.save_changes(ai_corrections=True)
     window = prefs_window(ai_corrections=True)
     advanced = window.advanced_tab
     assert not advanced.ai_corrections_check.get_active()
