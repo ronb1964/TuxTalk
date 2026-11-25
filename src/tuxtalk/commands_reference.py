@@ -13,7 +13,8 @@ shown by an example each, and what to tell the AI can be worded any way.
 Each command is checked by its *kind*: "inline" (normalize_text turns it into
 punctuation or formatting mid-sentence), "key" (a closing "press enter",
 split_key_command), "undo" (detect_undo_command), "fix" (Fix a Word's
-phrases), "edit" ("edit that, ..."), "select" (voice_navigation),
+phrases), "edit" ("edit that, ..."), "tone" (a tone said at the end of a
+dictation, or alone after one), "select" (voice_navigation),
 "correction" (a self-correction the AI acts on, found by its pattern),
 "instruction" (an example of what to tell the AI; any wording works),
 "exact" (an edit done in code, voice_edit_rules), "format" (a word
@@ -195,6 +196,10 @@ SECTIONS = (
                 "format", "Font, size and colour can't be changed by voice"),
         Command(("edit that, make it shorter",), "right after dictating, no keys: changes it",
                 "edit", german=("bearbeite das, mach es kürzer",)),
+        Command(("see you then, make that formal", "make that friendlier"),
+                "at the end: typed already in that tone; alone: changes what was just typed",
+                "tone", "Also professional, casual and polite. Never sent automatically: "
+                "read it first"),
     )),
     Section("Select and Move", EDITING, labs=LABS_SELECT, commands=(
         Command(("select that", "select the last sentence", "select the last 3 words",

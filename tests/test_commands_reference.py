@@ -49,6 +49,8 @@ def test_each_listed_phrase_is_recognised(kind, phrase, monkeypatch):
         assert opened[0][0] == "tuxtalk.fix_word_dialog"
     elif kind == "edit":
         assert voice_edit_rules.spoken_edit(phrase)
+    elif kind == "tone":
+        assert voice_edit_rules.tone_at_end(phrase) or voice_edit_rules.spoken_edit(phrase)
     elif kind == "select":
         assert voice_navigation.parse(phrase) is not None
     elif kind == "action":

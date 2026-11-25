@@ -49,7 +49,8 @@ def spoken_edit(raw: str, lang: str = "en"):
     "" for "edit that" alone (the next phrase says what); None when the
     dictation doesn't start with "edit that", or what follows it reads as
     a sentence ("edit that file"). With *lang* "de", "bearbeite das, ..."
-    too."""
+    too. A tone said alone ("make that formal") gives its instruction
+    ("make this more formal"), as "edit that, make it more formal" would."""
     german = ((_GERMAN_SPOKEN_EDIT, _GERMAN_EDIT_WORDS),) if lang == "de" else ()
     for pattern, words in (*german, (_SPOKEN_EDIT, _EDIT_WORDS)):
         m = pattern.match(raw or "")
@@ -60,7 +61,65 @@ def spoken_edit(raw: str, lang: str = "en"):
             return rest
         first = re.sub(r"[^\w]", "", rest.split()[0].lower())
         return rest if first in words else None
-    return None
+    alone = _TONE_ALONE.match(raw or "")
+    return _TONES[alone.group("tone").lower()] if alone else None
+
+
+# --- "..., make that formal" at the end of a dictation ----------------------------------
+
+# A tone said as the last words of a dictation rewrites the rest before it is
+# typed. A fixed list of tones, never "make that <anything>": "meet at three,
+# make that four" is a self-correction. Each maps to the wording the AI's
+# examples and Help already use. The phrase must follow a comma or sentence
+# end, so "let's make that formal" stays a sentence.
+_TONES = {
+    "formal": "make this more formal",
+    "professional": "make it sound more professional",
+    "friendly": "make it friendlier", "friendlier": "make it friendlier",
+    "warmer": "make it friendlier",
+    "casual": "make it more casual", "relaxed": "make it more casual",
+    "polite": "make this more polite", "politer": "make this more polite",
+}
+_TONE = (r"make\s+that\s+(?:sound\s+)?(?:a\s+(?:bit|little)\s+)?(?:more\s+)?"
+         rf"(?P<tone>{'|'.join(_TONES)})\s*[.!?]*\s*$")
+_TONE_AT_END = re.compile(
+    r"^(?P<message>.*?\w.*?)(?P<pause>[,;:]|[.!?]|\s[-–—])\s+" + _TONE,
+    re.IGNORECASE | re.DOTALL)
+# Said alone, right after a dictation, it changes what was just typed, as
+# "edit that, make it more formal" does (spoken_edit).
+_TONE_ALONE = re.compile(r"^\s*" + _TONE, re.IGNORECASE)
+
+
+def tone_at_end(raw: str):
+    """(the message, the AI's instruction) for a dictation ending in a tone
+    ("Tell him Thursday, make that formal." gives "Tell him Thursday" and
+    "make this more formal"); None when it doesn't end in one. A sentence end
+    before the phrase stays with the message, a comma or dash doesn't."""
+    m = _TONE_AT_END.match(raw or "")
+    if m is None:
+        return None
+    message = m.group("message").rstrip()
+    if m.group("pause") in ".!?":
+        message += m.group("pause")
+    return message, _TONES[m.group("tone").lower()]
+
+
+_THOUSANDS = re.compile(r"(?<=\d)[,.](?=\d{3}\b)")
+
+
+def _numbers(text: str) -> set:
+    """The digit runs in *text*, "1,500" read as 1500."""
+    return set(re.findall(r"\d+", _THOUSANDS.sub("", text)))
+
+
+def restyle_keeps_facts(before: str, after: str) -> bool:
+    """Whether *after*, the AI's rewrite of *before* in another tone, can be
+    typed in its place: every number kept (a date, a price, a phone number
+    dropped is the harm that matters), not empty, and not padded out to
+    several times the length (made-up details)."""
+    if not after.strip() or not _numbers(before) <= _numbers(after):
+        return False
+    return len(after) <= max(3 * len(before), len(before) + 80)
 
 
 # --- the instruction, tidied ------------------------------------------------------------
