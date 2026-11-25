@@ -6,7 +6,7 @@ import pytest
 from tuxtalk import config, window_classes
 from tuxtalk import dictation_text
 from tuxtalk import live_settings as live
-from tuxtalk.normalize import plain_for_app
+from tuxtalk.normalize import LINE_BREAK, plain_for_app
 
 
 @pytest.mark.parametrize("text, kind, expected", [
@@ -19,6 +19,11 @@ from tuxtalk.normalize import plain_for_app
     ("One. Two. ", "code", "One. Two "),               # only the last period goes
     ("Hello world. ", "", "Hello world. "),            # anywhere else: unchanged
     ("", "terminal", ""),
+    (f"Echo{LINE_BREAK}PATH is set", "terminal", f"echo{LINE_BREAK}PATH is set"),
+    (f"Echo hi{LINE_BREAK}I think", "terminal", f"echo hi{LINE_BREAK}I think"),  # "I" stays
+    (f"Echo{LINE_BREAK}I, too", "terminal", f"echo{LINE_BREAK}I, too"),
+    ("A test", "terminal", "a test"),
+    ("I think so", "terminal", "I think so"),
 ])
 def test_plain_for_app(text, kind, expected):
     assert plain_for_app(text, kind) == expected
@@ -48,6 +53,18 @@ def _prepare(monkeypatch, raw, kind):
 
 def test_a_terminal_gets_no_capital_and_no_period(monkeypatch):
     assert _prepare(monkeypatch, "git status", "terminal") == "git status "
+
+
+def test_in_a_terminal_the_word_after_a_spoken_new_line_is_small_too(monkeypatch):
+    """A terminal gets the line break as a space, so the next word carries
+    on the command: "git status git log", not "git status Git log"."""
+    assert _prepare(monkeypatch, "Git status new line git log.", "terminal") == (
+        "git status" + LINE_BREAK + "git log ")
+
+
+def test_in_a_code_editor_a_new_line_keeps_its_capital(monkeypatch):
+    assert _prepare(monkeypatch, "total price new line next item", "code") == (
+        "Total price" + LINE_BREAK + "Next item ")
 
 
 def test_a_code_editor_gets_no_period(monkeypatch):

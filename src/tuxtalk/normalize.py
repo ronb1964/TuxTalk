@@ -1030,18 +1030,30 @@ def plain_for_app(text: str, kind: str) -> str:
     """*text* as a terminal or code editor wants it ("Plain text in terminals
     and code editors"): no period at the very end (the engines add one
     themselves), and in a terminal no capital at the start, so "git status"
-    isn't typed as "Git status.". Periods between sentences, an ellipsis, a
-    question mark and an all-caps word ("PATH") stay. Any other *kind*
-    leaves the text as it is."""
+    isn't typed as "Git status.", nor after a spoken line break, which a
+    terminal gets as a space ("git status git log"). Periods between
+    sentences, an ellipsis, a question mark and an all-caps word ("PATH")
+    stay. Any other *kind* leaves the text as it is."""
     if kind not in ("terminal", "code") or not text:
         return text
     body = text.rstrip(" ")
     tail = text[len(body):]
     if body.endswith(".") and not body.endswith(".."):
         body = body[:-1]
-    if kind == "terminal" and body[:1].isupper() and not body[1:2].isupper():
-        body = body[0].lower() + body[1:]
+    if kind == "terminal":
+        body = LINE_BREAK.join(_small_first_letter(line) for line in body.split(LINE_BREAK))
     return body + tail
+
+
+_RE_WORD_I = re.compile(r"I\b")
+
+
+def _small_first_letter(line: str) -> str:
+    """*line* with its first letter small, unless it starts an all-caps word
+    ("PATH") or the word "I"."""
+    if line[:1].isupper() and not line[1:2].isupper() and not _RE_WORD_I.match(line):
+        return line[0].lower() + line[1:]
+    return line
 
 
 # A word that holds ß or ẞ, for swiss_spelling.
