@@ -1,0 +1,415 @@
+# Documents and Email
+
+### Punctuation and paragraphs
+Say <b>period</b>, <b>comma</b>, <b>question mark</b>, <b>new line</b>, <b>new paragraph</b>
+and so on. TuxTalk adds the capitals, and a period at the end if the speech model
+forgot one. Help's Commands tab has them all.
+
+### Into the middle of a sentence
+Click where the words should go, hold <b>{hold}</b>, say them, let go. TuxTalk looks at
+the text on either side of the cursor and fits them in: no capital in the middle of a
+sentence, a space where one is missing, and no period when more text follows.
+  • It works in apps that tell TuxTalk that text: GTK apps (most GNOME, Cinnamon
+    and Xfce apps; on GNOME with the TuxTalk extension, which tells TuxTalk
+    which app you're in), and KDE apps, Firefox, Chrome, Brave and apps built on
+    Chrome like Claude Desktop once the desktop's accessibility is on, web pages'
+    text boxes like Gmail's included. Chrome and the apps built on it need closing and opening
+    once if they were open when it went on; other apps may too. With two or more
+    Chrome windows open it may not know which one you're in, and then types as before.
+  • TuxTalk asks once before it turns accessibility on, and it stays on until you
+    turn it off: <b>Preferences → Advanced → Fine-tuning → Accessibility</b>.
+  • Anywhere else it types as before, with a capital and a period; a terminal keeps
+    its plain text.
+  • In German, where nouns have capitals, the first word keeps its capital.
+
+### Numbers
+<b>Preferences → Advanced → Numbers</b>: as the speech model writes them, as digits
+("twenty-five chickens" → 25 chickens), or digits from 10 up ("three cats",
+"25 chickens"). With digits, "seven thirty" after at becomes 7:30 and "october
+fifteenth" becomes october 15th. "One" and "two" become digits where they
+number or count something ("test 1", "number 2", "2 cats") and stay words
+elsewhere ("this one", "one of them"), as fractions do.
+
+### Email and web addresses
+Say them the way you'd say them out loud. Hold <b>{hold}</b>, say "john at gmail dot com",
+let go: john@gmail.com. "github dot com" types github.com.
+  • Said on its own, an address gets no period after it, ready for a To: box or a
+    browser's address bar.
+  • Only the word right before "at" is the name, so "john doe at gmail dot com" types
+    John doe@gmail.com. Say the marks in a longer name: hold <b>{hold}</b>, say "john dot
+    doe at gmail dot com", let go: john.doe@gmail.com. "jane underscore smith" types
+    jane_smith, "john dash doe" john-doe, and "john no space doe" johndoe.
+  • Your own address: make it a snippet (Preferences → Words → Add Snippet), then hold
+    <b>{hold}</b>, say "my email", let go: your address, with no period after it.
+
+### Taking it back
+Each of these is a dictation of its own, said right after the one it takes back.
+Hold <b>{hold}</b>, say "meet me at noon", let go: it's typed. Changed your mind?
+Hold <b>{hold}</b> again, say <b>delete last sentence</b>, let go: it's gone.
+  • <b>delete last word</b>, <b>delete last sentence</b>, <b>delete last paragraph</b>
+    remove what you just dictated.
+  • Ctrl+Z in the app works too.
+  • <b>delete everything</b> clears the whole box, text you typed yourself included.
+
+### Filling in a form
+One box at a time, each box a dictation of its own:
+  1. Click into the first box.
+  2. Hold <b>{hold}</b>, say "John Smith, press tab", let go: John Smith is typed,
+     with no period, and the cursor moves to the next box.
+  3. The next box the same way: hold <b>{hold}</b>, say "Hamilton, press tab", let go.
+  4. When every box is filled, send the form as you would by hand: click its
+     button, or press Enter. Ending a box with <b>press enter</b> types it with a
+     period, as at the end of a sentence, then presses Enter: right for a search
+     box or a message, not for a name. An email or web address said on its own
+     gets no period, with <b>press enter</b> or without.
+  • Said in the middle of a dictation, <b>press tab</b> types a tab character
+    instead, for lining things up in a document. A form box isn't the place for
+    one, so in a form keep <b>press tab</b> for the end, one box per dictation.
+  • <b>tab</b> on its own is just the word: "open a new tab". <b>literal press tab</b>
+    types the words "press tab".
+  • In Claude Desktop <b>press tab</b> types four spaces: there the Tab key would
+    jump to the Send button.
+  • In a password box TuxTalk types nothing. Type the password yourself, then hold
+    <b>{hold}</b>, say only "press tab", let go: the cursor moves to the next box.
+
+### Optional: cleaner text (Preferences → Advanced)
+  • <b>Remove "um", "uh" and accidentally repeated words.</b> Instant, nothing
+    to download.
+  • <b>Fix self-corrections with AI.</b> "meet at 3, no wait, 4" types "meet at 4".
+    The AI runs on your computer (a one-time {AI_SIZE_TEXT} download) and only sees
+    sentences with a correction phrase. If its answer changes anything besides the
+    correction, your words are typed exactly as you said them.
+  • Smart quotes, the closing period and spacing are under Fine-tuning.
+
+### TuxTalk Labs
+Labs features are experimental: they work, but they're still being refined, may
+change, and won't always get it right. Turn them on in <b>Preferences → Advanced →
+TuxTalk Labs</b>. Voice editing, select and move, and opening apps (and windows, keys
+and the mouse) are below; Type at pause and Live text are in the
+Hands-free section. Your feedback decides what gets finished:
+<a href="{FEEDBACK_URL}">TuxTalk Discussions</a>.
+
+## 🧪 Voice Editing
+Change text by saying how you want it changed.
+
+### How to use it
+1. Turn it on once: <b>Preferences → Advanced → TuxTalk Labs → Voice editing</b>. The first
+   time, it downloads the AI ({AI_SIZE_TEXT}), unless self-corrections already did.
+2. Select some text in any app: a sentence, a paragraph, a list.
+3. Hold <b>Shift</b> together with your dictation key (<b>Shift+{hold}</b>) and say what you
+   want. Let go of the keys when you're done talking.
+   (Or tap <b>Shift+{toggle}</b> to start, say it, and tap <b>Shift+{toggle}</b> again to finish.)
+   A dictation key that already has Shift in it (like Ctrl+Shift+K) can't take another:
+   say <b>edit that</b> instead, as below.
+4. A moment later the selection is replaced with the rewritten text.
+5. Not what you wanted? Press <b>Ctrl+Z</b> in the app to get your original back.
+
+### Without the keys: "edit that"
+Right after a dictation, say the change as your next one, all in one go: hold <b>{hold}</b>,
+say <b>edit that, make it shorter</b>, let go. TuxTalk selects what it just typed and
+rewrites it, with no Shift needed. Saying only "edit that" gets a reminder to say what to
+change, and "edit that file tonight" is typed as words.
+
+With hands-free (double-tap {toggle}) and Type at pause, you can say a message, look it
+over, say <b>edit that, make it friendlier</b>, then <b>press enter</b> to send it, all
+without touching the keyboard.
+
+### A tone at the end: "make that formal"
+Say the message the way it comes, and end it with the tone you want, all in one go:
+  1. Hold <b>{hold}</b>.
+  2. Say <b>tell him the cabinets are a week late, make that formal</b>.
+  3. Let go. It's typed already rewritten, without "make that formal".
+The tones: <b>formal</b>, <b>professional</b>, <b>friendlier</b>, <b>casual</b> and
+<b>polite</b> ("make that more formal" works too). Said on its own right after a dictation,
+<b>make that friendlier</b> changes what was just typed, the way "edit that" does.
+
+Read it before you send it: the AI can get the meaning wrong, so a rewritten message is
+never sent automatically, even with <b>Send each dictation automatically</b> on: the
+countdown doesn't start and it waits for you. Press Enter yourself, or end with
+<b>press enter</b> when you trust it.
+With Type at pause, what you said before the last pause is on screen already, so the
+tone rewrites the whole message there, as "edit that" does; say <b>press enter</b> as a
+dictation of its own once it reads right.
+If the AI can't do it, or its rewrite drops a number you said (a date, a price, a phone
+number), your words are typed as you said them, and TuxTalk says so.
+"Meet at three, make that four" is still a correction; to correct a tone word itself
+("wear something casual, make that formal"), say <b>no wait, formal</b> instead, with
+<b>Fix self-corrections with AI</b> on. The tones are English words, also with voice
+commands in German.
+
+### What to say
+Say it in your own words; there's no fixed list. Some that work well:
+  • <b>make this more formal</b>  •  <b>make it friendlier</b>
+  • <b>make it sound more professional</b>
+  • <b>shorten this</b>  •  <b>fix the grammar</b>  •  <b>fix the spelling</b>
+  • <b>turn this into a bullet list</b>  •  <b>make this a complete sentence</b>
+  • <b>translate this to Spanish</b> (or another language)
+
+These are done exactly, without the AI, so they always come out right:
+  • <b>make this all caps</b>  •  <b>make this lowercase</b>  •  <b>capitalize each word</b>
+  • <b>remove the commas</b> (or periods, dashes, punctuation)  •  <b>remove the bullets</b>
+  • <b>remove the word ...</b> (a word or a few words, everywhere in the selection)
+  • <b>make this a bulleted list</b> or <b>a numbered list</b> (several lines: one point per line)
+  • <b>indent this</b>  •  <b>remove the indent</b>  •  <b>delete this</b>
+With voice commands in German, the German ones are done exactly too:
+  • <b>alles in Großbuchstaben</b>  •  <b>alles in Kleinbuchstaben</b>
+  • <b>die Kommas entfernen</b>  •  <b>das Wort ... entfernen</b>
+  • <b>als Aufzählung</b>  •  <b>das einrücken</b>  •  <b>das löschen</b>
+  • <b>fett machen</b>  •  <b>kursiv machen</b>
+Any other German instruction goes to the AI, as any instruction in your own words does.
+
+### Two or three changes at once
+Join changes with "and" or "then": <b>make this formal and remove the commas</b>, or
+<b>translate this to Spanish, then make it shorter</b>. They're done one after the other,
+up to three. Each one has to start like a command (make, remove, add, change...), so
+"make it shorter and simpler" is still one change.
+
+Bold, italics, underline and delete press keys in the app, so they can't be combined with
+other changes: do those as an edit of their own. In German, two changes said together go
+to the AI as one: say each exact change (Großbuchstaben, Kommas) as an edit of its own.
+
+### Bold, italics and underline
+Say <b>make this bold</b>, <b>italicize this</b> or <b>underline this</b> in LibreOffice and
+other word processors, and TuxTalk presses the app's own Ctrl+B, Ctrl+I or
+Ctrl+U for you.
+
+Plain-text apps like KWrite and Kate have no formatting to apply. Font, size and color
+can't be changed by voice.
+
+### What it's good at, and what it isn't
+  • Quick, clear changes to your own text work best: tone, length, grammar, lists.
+  • Several lines stay several lines. If the AI runs them together when you didn't
+    ask for that, TuxTalk does the edit again one line at a time.
+  • It's an AI that runs on your computer, far smaller than the big online ones.
+    Asked for something large, like "write a whole email from this one line", it
+    can make up details. Always read the result.
+  • "Shorten this" works on text that has a point to keep. A sentence that only
+    talks about itself has nothing to cut down to.
+  • Up to about 3,000 characters at a time (roughly a page).
+
+### Good to know
+  • Your clipboard is put back afterwards, the way you left it.
+  • The rewrite is also saved in <b>Recent Dictations</b>, and Paste Last
+    Dictation types it again.
+  • It doesn't work in a terminal: there's no selection there to replace.
+  • It uses the same AI as <b>Fix self-corrections with AI</b>: one download of
+    about {AI_SIZE_TEXT}, shared, and about {AI_MEMORY_TEXT} of memory while it's on.
+    Everything runs on this computer; nothing is sent online.
+  • Updated from an older TuxTalk with the AI on? The smaller model you had keeps
+    working until you get the new one: TuxTalk asks once, and after that it's
+    <b>Download the better AI</b> in Preferences → Advanced.
+
+### If nothing happens
+TuxTalk tells you why in a notification:
+  • <i>Select the text to change first</i>: nothing was selected.
+  • <i>I didn't catch what to change</i>: it heard no instruction. Hold the keys while you talk.
+  • <i>The AI is still starting</i>: right after turning it on or starting TuxTalk, wait
+    a few seconds.
+  • <i>No change</i>: the text may already read that way ("make it formal" on a
+    sentence that's formal already). Try other words.
+  • <i>You switched windows</i>: the rewrite wasn't typed; it's in Recent Dictations.
+## 🧪 Select and Move by Voice
+Select text or move the cursor by saying so. When a dictation is <b>only</b> one of these
+commands, TuxTalk does it instead of typing it: hold <b>{hold}</b>, say only <b>select the
+last word</b>, let go. Said inside a longer sentence, the words are typed as usual.
+
+Counts go up to 10 ("three" or "3").
+
+### What you just said
+These work <b>right after you dictate</b>, on what you just said.
+  • <b>select that</b>  •  <b>select what I said</b>
+  • <b>select the last sentence</b>  •  <b>select the last word</b>
+  • <b>select the last 3 words</b>
+
+  For any other text, use the commands below (<b>select the previous 3 words</b>,
+  <b>select the line</b>) or the mouse.
+### Around the cursor
+  • <b>select all</b>  •  <b>select the line</b>
+  • <b>select the next word</b>  •  <b>select the previous 2 words</b>
+  • <b>select the next line</b>
+  • <b>select to the end of the line</b>  •  <b>select to the start of the line</b>
+  • <b>select to the end</b>  •  <b>select to the top</b>
+### Moving
+  • <b>go to the end</b>  •  <b>go to the top</b>  •  <b>go to the end of the line</b>
+  • <b>go to the start of the line</b>
+  • <b>go back 3 words</b>  •  <b>go forward a word</b>
+  • <b>next word</b>  •  <b>previous word</b>
+  • <b>go back 5 letters</b>  •  <b>go up 2 lines</b>  •  <b>go down a line</b>
+  • <b>unselect</b>
+
+### Good to know
+  • With voice editing on, Shift+{hold} understands these too, so you can do it all on one
+    key: Shift+{hold} <i>"select the last sentence"</i>, then
+    Shift+{hold} <i>"make it more formal"</i>.
+  • In KWrite and Kate, Shift+{hold} with nothing selected leaves the cursor where it
+    is once accessibility is on (<b>Preferences → Advanced → Fine-tuning →
+    Accessibility</b>; TuxTalk asks once); a KWrite or Kate already open may need
+    closing and opening once. If the cursor still jumps to the start of the line, say
+    the commands around the cursor with {hold} alone.
+  • The commands around the cursor press the usual keys (Home, End, Ctrl+arrows), so
+    they do what those keys do in each app.
+  • It doesn't work in a terminal, where those keys mean other things.
+  • After a select or move, <b>delete last word</b> won't run, since the cursor is
+    somewhere else now. Use Ctrl+Z in the app instead.
+
+## 🧪 Apps, Windows, Keys and the Mouse by Voice
+Open apps, close or switch windows, snap and move them, press everyday keys, change
+desktops and volume, control music, lock or take a screenshot, go to an address or search
+the web, all by saying it. Turn it on in
+<b>Preferences → Advanced → TuxTalk Labs → Apps, windows, keys and the mouse by voice</b>.
+
+The Commands tab lists every one of these commands.
+
+### How to use it
+Hold <b>{hold}</b>, say <b>open Firefox</b>, let go. Firefox opens, or comes to the front
+if it's already open. Nothing is typed. <b>launch</b> and <b>start</b> work like <b>open</b>,
+and the name is whatever the app is called in your menu: <b>open the calculator</b>,
+<b>open Konsole</b>.
+  • <b>open new Firefox</b> (or <b>open another Firefox</b>) always starts a second one.
+  • <b>open the browser</b>, <b>open email</b>, <b>open files</b>, <b>open the text editor</b>
+    and <b>open the terminal</b> open the app your desktop uses for that.
+  • Two copies of one app, say a Flatpak and a package from your distro: you get the
+    distro's. Say <b>open Firefox Flatpak</b> (or <b>Snap</b>, or <b>AppImage</b>) for the
+    other.
+  • <b>literal open Firefox</b> types the words "open Firefox".
+
+### Windows
+Hold <b>{hold}</b>, say <b>close Firefox</b>, let go. Nothing is typed.
+  • <b>close Firefox</b> closes its front window (the one you used last), <b>close all
+    Firefox</b> closes every one, <b>close window</b> closes the one you're in.
+  • Say the app's name as your menu shows it. For an open app, one word of it is enough:
+    <b>close Chrome</b> for Google Chrome.
+  • <b>switch to Firefox</b> brings it to the front. If Firefox isn't open, a note says
+    so; say <b>open Firefox</b> to start it.
+  • <b>minimize window</b>, <b>maximize window</b> and <b>restore window</b>.
+
+### Snapping and moving windows
+Hold <b>{hold}</b>, say <b>snap left</b>, let go. The window you're in fills that side.
+  • Halves: <b>snap left</b>, <b>snap right</b>, <b>snap top</b>, <b>snap bottom</b>
+  • Quarters: <b>snap top left</b>, <b>snap top right</b>, <b>snap bottom left</b>,
+    <b>snap bottom right</b>
+  • <b>center window</b> (or <b>centre window</b>) puts it in the middle of the screen.
+  • <b>move window to desktop two</b>, <b>move window to the next desktop</b> and
+    <b>move window to the other screen</b> send it there.
+  • <b>minimize Firefox</b>, <b>maximize Firefox</b>, <b>restore Firefox</b>: any open app by
+    name.
+
+### The mouse
+Hold <b>{hold}</b>, say <b>mouse grid</b>, let go. Numbers 1 to 9 appear over the screen.
+  • Say a number, like <b>five</b>: that part fills with a new grid. Say another to go
+    in further. Where the desktop's own zoom can be used (KDE's Zoom effect, or the
+    whole-screen magnifier on GNOME and Cinnamon), the whole desktop zooms in about
+    three times on that part, so you can see what you are aiming at. It goes back to
+    normal after the click, or when the grid closes. With two screens on KDE, its zoom
+    magnifies both screens at once, so the other one shows a magnified part of your
+    desktop until then. Moving the mouse while zoomed in moves KDE's zoom, and the
+    grid can slide out of view: say <b>cancel</b> or press Esc to close it.
+  • The pointer hides while the grid shows, so it doesn't cover a number, and comes
+    back when the grid closes. From the second grid on, thin lines mark the parts, their
+    numbers sit small in the corners, out of the way, and a dot marks where a click will
+    land.
+  • Say <b>left</b>, <b>right</b>, <b>up</b> or <b>down</b> to move the dot a little, or
+    add a number, like <b>left 3</b>, to move it more. Say a number first.
+  • Say <b>click</b> to click the middle of what the grid shows. <b>right click</b>,
+    <b>double click</b> and <b>middle click</b> work the same way.
+  • Or do both at once: <b>click five</b> clicks part 5 straight away. <b>move here</b>
+    (or <b>move five</b>) puts the pointer there without clicking.
+  • A second screen carries on the numbers from 10. <b>cancel</b> closes the grid, and so
+    does <b>Esc</b>, a minute of waiting, a click, or anything else you dictate.
+  • With no grid showing, <b>left click</b>, <b>right click</b>, <b>double click</b> and
+    <b>middle click</b> click where the pointer already is. A bare number or <b>click</b>
+    is typed as a word then. <b>literal mouse grid</b> and <b>literal left click</b> type
+    the words; while a grid shows, <b>literal five</b> and <b>literal click</b> do too.
+  • If TuxTalk can't put the pointer exactly there, nothing is clicked and a note says
+    so. On Wayland desktops the grid needs X (XWayland), which most have, and on X11
+    a desktop that draws see-through windows (compositing).
+
+### Desktops
+Hold <b>{hold}</b>, say <b>show desktop</b>, let go. Say it again and the windows come back.
+  • <b>show all windows</b> spreads them out so you can pick one.
+  • <b>next desktop</b>, <b>previous desktop</b>, <b>switch to desktop two</b> (one to nine).
+
+### Sound and music
+Hold <b>{hold}</b>, say <b>volume up</b>, let go.
+  • <b>volume up</b>, <b>volume down</b>; add a number for more: <b>volume up 3</b>.
+  • <b>mute sound</b> mutes the computer, TuxTalk's beeps too. Say <b>unmute sound</b> to undo.
+  • <b>pause music</b>, <b>play music</b>, <b>next track</b>, <b>previous track</b> control the
+    player that is playing, or the one TuxTalk paused while you talked.
+  • <b>pause music</b> pauses every player that is playing. With two players paused,
+    <b>play music</b> names them in a note and starts neither: you pick one.
+
+### Lock, screenshot and help
+Hold <b>{hold}</b>, say <b>lock screen</b>, let go. Your desktop's own lock comes up, so you
+need your password to come back. TuxTalk then checks that the computer says it's locked:
+the ready beep means it is. If that can't be confirmed, a note says so: check the screen.
+
+Hold <b>{hold}</b>, say <b>take a screenshot</b>, let go. On KDE it is saved in
+Pictures/Screenshots; elsewhere, where your desktop keeps them. GNOME may ask once.
+
+Hold <b>{hold}</b>, say <b>take a screenshot of this window</b>, let go. Just the window
+you're working in is saved. On GNOME and Pop!_OS your desktop's screenshot tool opens
+instead: choose Window in it (on GNOME, press W), click the window, then press Enter.
+Where a desktop can't take just one window, a note says so.
+
+In a hands-free or Type at pause recording, the recording indicator may show in either
+picture.
+
+Hold <b>{hold}</b>, say <b>what can I say</b>, let go. The Voice Commands window opens with
+this list.
+
+### Keys
+Hold <b>{hold}</b>, say <b>new tab</b>, let go. The key is pressed in the window you're in.
+  • Tabs: <b>new tab</b>, <b>close tab</b>, <b>next tab</b>, <b>previous tab</b>,
+    <b>reopen tab</b>
+  • Pages: <b>go back a page</b>, <b>go forward a page</b>, <b>reload the page</b> (or
+    <b>refresh the page</b>),
+    <b>page down</b>, <b>page up</b>, <b>go to the top</b>, <b>go to the bottom</b>
+  • Scrolling: <b>scroll down</b>, <b>scroll up</b>; add a number to scroll more:
+    <b>scroll down 5</b>. It scrolls what's under the mouse pointer, like your own wheel.
+  • Editing: <b>find on page</b>, <b>save the file</b>, <b>select all</b>,
+    <b>copy the selection</b>, <b>paste it</b> (or <b>paste that</b>), <b>press escape</b>
+
+### Addresses and web search
+Hold <b>{hold}</b>, say <b>go to youtube.com</b> (or <b>open youtube dot com</b>), let go.
+In a browser it uses the address bar, so it replaces the page you're on; anywhere else
+your default browser opens it.
+
+Hold <b>{hold}</b>, say <b>web search cheap tires</b>, let go: your browser's own search
+engine shows the results in a new tab, so the page you were on stays as it was, a form
+you were filling in included.
+
+Put <b>literal</b> before any of these to type the words: <b>literal new tab</b>.
+
+### Good to know
+  • Only a dictation that is just the command counts. "I opened Firefox yesterday" and
+    "open the door and come in" are typed as usual.
+  • A name that fits no app is typed as usual. The start of a name, or a close spelling,
+    counts only when you say the name alone, and the start of a name only after "open" or
+    "launch": <b>open thunder</b> opens Thunderbird, while "Open the file.", "Start work."
+    and "Start over." are typed. A sentence that says an app's whole name
+    still opens it ("Open the maps."); put <b>literal</b> first to type it. Two apps that
+    fit equally well (<b>open libre</b>): the cancel beep sounds, a note floats over your
+    window naming them, and nothing opens.
+  • Where it works: KDE Plasma 6 has everything. GNOME has it with the TuxTalk extension
+    (log out and back in once after updating). X11 desktops like Cinnamon and Xfce have all but
+    <b>show all windows</b>. On COSMIC, Sway and Hyprland, windows and desktops can't be
+    done (TuxTalk says so; use the window's own buttons), and an open app is started
+    again, which most then answer by showing the window they already have. Sound, music,
+    screenshots and the lock work there; a screenshot of just the window only on COSMIC.
+  • In a hands-free or Type at pause recording, a command ends the recording.
+  • One word alone (copy, paste, save, pause, next...) is typed as a word: people say those
+    as answers in chats.
+  • Closing asks to save unsaved work, just like clicking the X.
+  • Apps open in a terminal too. The keys are the terminal's own there, so <b>select all</b>,
+    <b>save the file</b>, <b>find on page</b>, <b>reopen tab</b>, <b>go back a page</b>,
+    <b>go forward a page</b> and <b>reload the page</b> don't apply in a terminal, the terminal
+    panel in Kate, KDevelop or Dolphin included: click into the document first. On GNOME
+    without the TuxTalk extension, TuxTalk can't tell a terminal, so those and copy, paste
+    and the tab keys aren't pressed.
+  • <b>go to</b> needs a real web address, like youtube.com. Only <b>web search</b> searches.
+  • An AppImage can be opened only if it has a menu entry (a tool like Gear Lever
+    or AppImageLauncher makes one).
+  • The command words (open, close, new tab, web search, literal…) are English, whatever
+    language you dictate in, or German with Voice commands in set to Deutsch: <b>Firefox
+    öffnen</b>, <b>Fenster schließen</b>, <b>neuer Tab</b>, <b>Mausraster</b>. App names can
+    be said as the menu shows them.

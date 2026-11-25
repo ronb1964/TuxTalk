@@ -1,0 +1,55 @@
+# Dictating in Three Steps
+
+### How to dictate
+1. Click where you want the text.
+2. Hold <b>{hold}</b> and talk.
+3. Let go: your words are typed where the cursor is.
+
+Say punctuation as you go: <b>period</b>, <b>comma</b>, <b>question mark</b>,
+<b>new line</b>. Help's Commands tab has them all.
+
+### Without holding a key
+Tap <b>{toggle}</b> to start, talk as long as you like, and tap it again to stop.
+The Hands-free section has a way to make it stop by itself when you stop talking.
+
+### How you know it's listening
+• A beep when it starts and when it stops.
+• The recording indicator, an orb on the screen while it records. Change its
+  look and place in <b>Preferences → Audio → Customize…</b>
+• If the microphone heard nothing but silence, TuxTalk says so and types nothing.
+• On GNOME, the TuxTalk extension (version 32 or newer) draws the indicator
+  itself: it's sharp on a scaled screen and sits where Preferences puts it.
+  After the extension updates, log out and back in once; until then it looks
+  as before.
+
+### Indicator follows your window
+The recording indicator shows up in the window you're dictating into, wherever
+that window is on the screen, instead of always in the same spot. It's on from
+the start.
+• It's placed each time you start talking, so it goes wherever your window is.
+• The position you pick in <b>Preferences → Audio → Customize…</b> (bottom center, top
+  right, center…) applies inside the window. The offset there is for the whole screen,
+  so it's skipped.
+• To keep it in one place on the screen, untick <b>Follows the window you're dictating
+  into</b> in that same window.
+• When TuxTalk can't tell where the window is, the indicator uses its usual
+  position from <b>Preferences → Audio → Customize…</b>.
+• Works on KDE, on GNOME with the TuxTalk extension, on Sway and Hyprland,
+  and on X11 desktops like Cinnamon and XFCE. On GNOME it moves with your
+  window while you talk. Outside GNOME, a scaled screen can put it a little off.
+
+### Music, videos and calls
+While you talk, TuxTalk pauses music and videos and plays them again after.
+<b>Preferences → Audio → Other sound while you dictate</b> can turn other sounds
+down instead (Discord calls, games), do both, or leave them alone.
+
+### Where things are
+• <b>The TuxTalk menu</b>: the tray icon, TuxTalk in GNOME's top bar, or open TuxTalk
+  again from your apps. It has Preferences, Help, Recent Dictations and Fix a Word,
+  and the line under the switch says which speech model runs, and where.
+• <b>Preferences → General</b>: your keys, Launch TuxTalk at login, and the speech
+  setup. On first run TuxTalk recommends a setup for your computer (the speech model,
+  on your graphics card if it's faster) for the language you speak. "Change model,
+  device or language" is there if you ever want something else.
+• <b>Search Help</b>: type in the box at the top of this window (or press Ctrl+F) to
+  find any card or voice command by its name, TuxTalk Labs features too.

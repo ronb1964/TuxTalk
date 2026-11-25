@@ -1,0 +1,42 @@
+# Fixing Mistakes
+
+### A word it keeps getting wrong
+  • Right after a dictation, hold <b>{hold}</b>, say only <b>fix that word</b>, let go:
+    Fix a Word opens over your window on what you just said.
+  • Or TuxTalk menu → Fix a Word..., or Preferences → Words → Fix a Word...
+  • Click the wrong word (or drag across a few), type the right spelling, then
+    click Always fix this. From then on it's fixed in every dictation, with any
+    speech model. Handy for names, brands and technical terms, like
+    "bamboo studio" → BambuStudio.
+
+### Your Words: names and terms spelled your way
+In <b>Preferences → Words</b>.
+  • Whisper models are told about them before they listen.
+  • Parakeet leans toward them while it listens, on the processor and the
+    graphics card: a name it would write as "Tuck's talk" comes out TuxTalk.
+  • Every model fixes them when they come out split up or with the wrong
+    capitals: "tux talk" → TuxTalk.
+  • Beside each word, list what TuxTalk hears instead ("clawed claw" for
+    ClaudeClaw) and it fixes that too, whatever the model.
+  • Fix a Word adds to this list: the word, and what it heard.
+
+### Snippets
+Say a short phrase and TuxTalk types the full text: "my email" →
+user@example.com. Add your own in <b>Preferences → Words → Add Snippet</b>, then hold
+<b>{hold}</b>, say the phrase, let go.
+
+{esc_tip}### Getting it back
+<b>Recent Dictations</b> in the TuxTalk menu keeps your last 20. {paste_tip}
+
+### When it mishears a lot
+  • Speak at a normal pace, with the microphone close and the room quiet.
+  • Check the microphone: <b>Preferences → Audio</b>, Start Recording, and talk. The
+    level should move well past the middle. Input Volume there is the same as your
+    desktop's microphone volume.
+  • The test also says when the room is noisy for your voice. The Tips section says
+    what helps.
+  • Use the setup TuxTalk recommends: <b>Use Recommended</b> in Preferences → General,
+    or TuxTalk menu → Performance → Recommended for this computer.
+  • Speak more than one language and it picks the wrong one? Preferences → General
+    → Change model, device or language → Language: pick yours, or "Several
+    languages" to tick the ones you speak (Whisper models).

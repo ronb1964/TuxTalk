@@ -1,0 +1,45 @@
+# Chats and Messages
+
+### Sending a message
+Hold <b>{hold}</b>, say your message ending with <b>press enter</b>, let go:
+"see you at noon, press enter" types "See you at noon." and presses Enter, which
+sends it. Hold <b>{hold}</b> and say only "press enter" to just press Enter.
+
+<b>new line</b> starts a new line and never sends anything.
+
+### Optional: send every dictation
+<b>Preferences → Advanced → Send each dictation automatically.</b> TuxTalk waits
+2 seconds (you can pick none to four) and counts down over the window, then
+presses Enter.
+  • Tap <b>{hold}</b> during the wait to hold the send. The text stays in the box,
+    to fix or to add a screenshot; press Enter yourself when you're ready.
+  • Hold <b>{hold}</b> during the wait to keep talking. It's added after a space,
+    and sent when you're done.
+  • Switch windows during the wait, and nothing is sent.
+  • In text editors, word processors and code editors it never presses Enter:
+    there, Enter only starts a new line.
+  • In a terminal it never presses Enter either, so nothing runs before you've
+    read it. End with <b>press enter</b> to run what you said.
+  • If what you said ends on a word like "and" or "the", it was probably cut
+    off, so it isn't sent (with voice commands in German, "und" or "weil" too).
+
+### 🧪 Changing it before it's sent
+With voice editing on, right after you dictate: hold <b>{hold}</b>, say <b>edit that,
+make it friendlier</b>, let go. TuxTalk selects what it just typed and rewrites it.
+A message that was already sent can't be changed, so with the automatic send:
+  1. Tap <b>{hold}</b> during the countdown, so it isn't sent.
+  2. Hold <b>{hold}</b>, say <b>edit that, make it friendlier</b>, let go.
+  3. Press Enter when it reads right.
+Or end the message itself with a tone, <b>..., make that friendlier</b>: it's typed
+already rewritten, and never sent by itself (Writing → A tone at the end).
+
+The Writing section has more.
+
+### On a call
+<b>Preferences → Audio → Other sound while you dictate → Turn everything down</b>
+lowers the call while you talk, and puts it back after. The call still hears
+your microphone, so mute yourself there.
+
+### It went into the wrong window
+{paste_tip}<b>Recent Dictations</b> in the TuxTalk menu keeps your last 20:
+hover over one to read it, click to copy it, then paste with Ctrl+V.

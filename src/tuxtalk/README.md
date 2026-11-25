@@ -32,8 +32,9 @@ is for.
   `commands_reference.py` (the table Help shows), and one file per kind of
   command (`open_app.py`, `window_actions.py`, `desktop_actions.py`,
   `web_commands.py`, `mouse_grid.py`, `voice_edit.py` and others).
-- **Help:** `help_dialog.py`, with `help_text.py` (what it says),
-  `help_pages.py` and `cards.py` (the card look), and
+- **Help:** `help_dialog.py`, with `help/*.txt` (what it says, a file a
+  page), `help_text.py` (fills them in for this computer), `help_pages.py`
+  and `cards.py` (the card look), and
   `problem_report_window.py` (Report a Problem).
 - **The portable brain:** the text rules (`normalize.py`, `spoken_numbers.py`,
   `spoken_quotes.py`, `cleanup.py`, `word_spelling.py` for Your Words,

@@ -29,8 +29,8 @@ def test_the_gnome_extension_and_every_app_file_count(staged):
 
 
 def test_naming_the_updated_texts_lets_it_in():
-    staged = [APP, "CHANGELOG.md", "src/tuxtalk/help_text.py", "README.md"]
-    assert check.problem("Tone word\n\nDocs: CHANGELOG.md, help_text.py, README.md\n",
+    staged = [APP, "CHANGELOG.md", "src/tuxtalk/help/writing.txt", "README.md"]
+    assert check.problem("Tone word\n\nDocs: CHANGELOG.md, writing.txt, README.md\n",
                          staged) == ""
 
 
@@ -58,7 +58,7 @@ def test_none_needs_a_reason(line, ok):
 
 
 def test_a_commit_of_only_texts_tests_or_scripts_needs_no_line():
-    for staged in (["README.md", "docs/index.html", "src/tuxtalk/help_text.py"],
+    for staged in (["README.md", "docs/index.html", "src/tuxtalk/help/writing.txt"],
                    ["tests/test_tone_word.py"], ["build-release.sh", "CLAUDE.md"]):
         assert check.problem("Wording\n", staged) == ""
 

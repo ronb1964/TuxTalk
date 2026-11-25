@@ -43,10 +43,18 @@ TEXT_SYMBOLS = frozenset("–—‘’‚“”„′″•…€←→−⊘▁
 _JOINERS = "‍️"
 
 
+def _symbols(text):
+    """The symbols in *text* (not letters, marks, spaces or joiners)."""
+    return {ch for ch in text if ord(ch) >= 0x2000 and ch not in _JOINERS
+            and unicodedata.category(ch)[0] not in "LMZC"}
+
+
 def symbols_in_source():
-    """Every symbol (not a letter, mark or space) in the string literals of
-    TuxTalk's code: what its windows can show. Docstrings don't count."""
+    """Every symbol in the string literals of TuxTalk's code and in Help's
+    pages (help/*.txt): what its windows can show. Docstrings don't count."""
     found = set()
+    for path in sorted((SRC / "help").glob("*.txt")):
+        found |= _symbols(path.read_text(encoding="utf-8"))
     for path in sorted(SRC.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         docstrings = {id(node.body[0].value) for node in ast.walk(tree)
@@ -56,9 +64,7 @@ def symbols_in_source():
         for node in ast.walk(tree):
             if (isinstance(node, ast.Constant) and isinstance(node.value, str)
                     and id(node) not in docstrings):
-                found.update(ch for ch in node.value
-                             if ord(ch) >= 0x2000 and ch not in _JOINERS
-                             and unicodedata.category(ch)[0] not in "LMZC")
+                found |= _symbols(node.value)
     return found
 
 

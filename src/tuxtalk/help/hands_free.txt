@@ -1,0 +1,71 @@
+# Hands-free and Long Talks
+
+### Double-tap {toggle}
+Turn it on in Preferences → General ("Double-tap {toggle} for hands-free"). Then
+double-tap the toggle key, talk, and when you stop talking the recording ends and
+your text is typed. A short high beep confirms the double-tap. Say nothing at all
+for 10 seconds and it stops without typing anything. A single tap stays a plain
+on/off toggle. The seconds box beside it sets how long a pause ends it.
+
+## 🧪 Type at Pause
+Each phrase is typed as soon as you pause, while you go on talking, instead of
+all of it when you stop. Nothing that was typed changes afterwards.
+
+Pick "Type each phrase when you pause" in <b>Preferences → Advanced → TuxTalk Labs →
+While you talk</b>. Then hold <b>{hold}</b> (or double-tap <b>{toggle}</b>), say "see you at
+noon", pause: it's typed, and you can go on talking.
+
+### How it works
+  • A pause of about a second ends a phrase, and it's typed right away.
+  • Whether that pause ends a sentence is decided once your next words are heard:
+    then a period goes in, or a comma, or the sentence just carries on.
+  • "delete last sentence" and the other commands work on the phrase before them.
+
+### Fine-tuning (under While you talk → Adjust Type at pause)
+  • <b>Pause length</b>: how long a silence ends a phrase. A dryer, a fan or a busy
+    kitchen doesn't count as talking, so the pause is still heard; other people
+    talking nearby does.
+  • <b>Punctuation from context</b>: off types each phrase as it was heard, which is
+    quicker on a slow graphics chip but puts a period at more pauses.
+  • <b>Test</b>: talk and stop now and then, and nothing is typed. The bar moves with
+    your voice and flashes green wherever a phrase would be typed. If it flashes while
+    you're still talking, make the pause longer; if it never flashes when you pause,
+    make it shorter.
+
+## 🧪 Live Text
+See what you've said so far while you're still talking, in a box by the recording
+indicator. What gets typed doesn't change.
+
+Pick "Show the words in a box" in <b>Preferences → Advanced → TuxTalk Labs →
+While you talk</b>. Then hold <b>{hold}</b>, say a few sentences, and watch them come up
+in the box; let go, and the box closes as your text is typed.
+
+### How it works
+  • It needs the speech model on a graphics card (the TuxTalk menu says where it
+    runs). On the processor the box stays closed, so your typing never waits on it,
+    and a short message says so once.
+  • The box updates about twice a second. If reading it again ever gets slow, the box
+    goes away until your next dictation, and if your graphics card is too slow
+    for it, until TuxTalk restarts (Restart Service), and a short message says so.
+    Your text is still typed as usual.
+  • It shows the words as they're heard: numbers, commands like "new line" and AI
+    corrections are worked out when the text is typed.
+  • It's that or Type at pause, not both: with both, each phrase would show in the box
+    and then be typed away at the pause.
+  • In a password field the box stays closed.
+  • It never takes the keyboard or a click, so you can keep working underneath it.
+  • On Wayland the box needs XWayland, which nearly every desktop has; without it a
+    short message says the box can't show.
+
+## Transcribe a File
+
+### Turning a recording into text (TuxTalk menu → Transcribe a File...)
+  • Turns a recording or a video into text: MP3, M4A, OGG, WAV, FLAC, MP4, MKV, WebM
+    and more.
+  • Choose a file or drop one on the window. It uses the model and device you
+    dictate with.
+  • Copy the text, save it as a text file, or save subtitles (.srt) for a video.
+  • "Show times" starts each paragraph with where it is in the file.
+  • It runs on its own, so you can keep dictating while it works. Stop keeps
+    what's done.
+  • Nothing leaves your computer.

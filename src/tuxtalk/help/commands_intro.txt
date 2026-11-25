@@ -1,0 +1,20 @@
+# Voice Commands Reference
+
+There are two kinds:
+• <b>Inside what you say</b>: punctuation and formatting, said as you talk. Hold your
+  dictation key and say "see you tomorrow comma bring snacks period".
+• <b>On their own</b>: <b>delete last sentence</b>, <b>edit that</b>…, <b>fix that word</b>. Say
+  them right after the dictation they're about, as a dictation by themselves: hold
+  your dictation key, say only the command, let go.
+
+The commands are English words, whatever language you dictate in. Most can be said
+in German too: Preferences → General → Change model, device or language, then set
+<b>Voice commands in</b> to Deutsch, and say <b>Komma</b>, <b>neue Zeile</b>,
+<b>Enter drücken</b>, <b>das letzte Wort löschen</b> or <b>Wort korrigieren</b>,
+and with voice editing, <b>alles in Großbuchstaben</b>. English commands keep working.
+Changing your mind mid-sentence ("no wait") and the tone word ("make that formal")
+stay English.
+
+The same list, a tab per group, is in the TuxTalk menu → Voice Commands..., or, with
+<b>Apps, windows, keys and the mouse by voice</b> ticked in TuxTalk Labs, say
+<b>what can I say</b>.

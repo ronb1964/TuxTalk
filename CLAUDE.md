@@ -21,6 +21,8 @@ worktrees and notes that name it still work; don't delete the link.
 ## WHERE THINGS ARE
 
 - `src/tuxtalk/`: the app (its own README.md maps the modules)
+- `src/tuxtalk/help/`: Help's words, a plain text file a page (help_text.py
+  fills in the keys and install-specific parts); a new page is a new file
 - `tests/`: the suite; `tests/vm/` is the VM release harness
 - `gnome-extension/`: the GNOME Shell extension
 - `packaging/`: deb, rpm, flatpak, licenses, the emoji font script
@@ -45,10 +47,10 @@ worktrees and notes that name it still work; don't delete the link.
 - Make and test code changes in `/home/ron/Projects/TuxTalk/src/`
 - NEVER edit files in `.claude/worktrees/` — Ron's dev version runs from the main project
 - **Every change updates what users read in the same commit**: Help
-  (`help_text.py`), the Voice Commands list (`commands_reference.py`, in
+  (`src/tuxtalk/help/*.txt`, a file a page), the Voice Commands list (`commands_reference.py`, in
   English and German), tooltips, the README, the website (`docs/*.html`)
   and CHANGELOG's [Unreleased]. The commit message names them in a line
-  `Docs: CHANGELOG.md, help_text.py, ...`, or says `Docs: none, <why>` for
+  `Docs: CHANGELOG.md, writing.txt, ...`, or says `Docs: none, <why>` for
   a change no user can notice. `.githooks/docs_in_commit.py` refuses the
   commit otherwise, and checks the files named are really in it. It runs
   on every commit from this clone and its worktrees (`git config
@@ -119,7 +121,7 @@ Code reviews read code, not prose; this is its own step, BEFORE the build.
 
 1. After Step 1b, before asking to build: a reviewer (a subagent, read-only)
    reads IN FULL every text a user sees and checks each claim against the
-   code: Help (`help_text.py`, every page), the Voice Commands lists
+   code: Help (`src/tuxtalk/help/*.txt`, every page), the Voice Commands lists
    (`commands_reference.py`), every Preferences and first-run label and
    tooltip the release touched, the README (all of it, not only "New in"),
    the website (`docs/*.html`, comparison and privacy pages included), the

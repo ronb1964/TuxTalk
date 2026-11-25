@@ -27,7 +27,7 @@ import sys
 CODE = ("src/tuxtalk/*", "gnome-extension/*")
 # What users read, wherever it lives. Changing only these needs no Docs line.
 DOCS = ("CHANGELOG.md", "README.md", "docs/*.html", "io.github.ronb1964.TuxTalk.appdata.xml",
-        "src/tuxtalk/help_text.py", "src/tuxtalk/help_pages.py",
+        "src/tuxtalk/help/*.txt", "src/tuxtalk/help_text.py", "src/tuxtalk/help_pages.py",
         "src/tuxtalk/commands_reference.py")
 _DOCS_LINE = re.compile(r"^docs:\s*(.*)$", re.IGNORECASE | re.MULTILINE)
 

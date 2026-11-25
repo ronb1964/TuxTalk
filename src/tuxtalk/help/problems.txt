@@ -1,0 +1,124 @@
+# When Something's Wrong
+
+### No key works (dictation never starts)
+{no_hotkey_block}
+
+### "No sound from the microphone"
+The microphone sent nothing but silence: it's muted, turned all the way down, or
+it's the wrong one. Check its mute switch, then <b>Preferences → Audio →
+Microphone</b> and the test beside it.
+
+### "Microphone isn't answering"
+The microphone sent no sound at all for a few seconds, so TuxTalk stopped
+waiting for it. Unplug it and plug it back in, or pick another in
+<b>Preferences → Audio → Microphone</b>. If the audio system stays stuck on it
+("Audio system stopped answering"), the next press restarts TuxTalk's dictation
+service, as <b>Restart Service</b> in the TuxTalk menu does, and you press again
+once it's back; when it can't, the message says to quit TuxTalk and start it again.
+
+### Nothing gets typed
+  • Click into a text box first, and give the app a moment to take the focus.
+  • <b>Preferences → Advanced → System check</b> opens by itself when typing needs
+    fixing; its button fixes it.
+  • {typing_para}
+
+### Letters come out wrong
+  • Capitals and small letters swapped ("hELLO"): Caps Lock is on. TuxTalk can't
+    see it, so turn it off before dictating.
+  • On COSMIC with more than one keyboard layout, TuxTalk types for the first one
+    in COSMIC's settings; with another switched on, letters come out wrong.
+  • With the key remapper kanata, TuxTalk's typing goes through kanata's rules too
+    (home-row keys can turn letters into Ctrl or Shift). Add
+    <tt>linux-dev-names-exclude ("TuxTalk virtual keyboard")</tt> to the defcfg
+    of your kanata config and restart kanata. If the config lists its keyboards
+    with <tt>linux-dev</tt>, leave TuxTalk's out of that list instead.
+
+### Too slow
+  • Use your graphics card: TuxTalk menu → Performance → Recommended for this
+    computer, or Use Recommended in Preferences → General.
+  • <b>Vulkan (any GPU)</b>: AMD, Intel or NVIDIA, a {ENGINE_SIZE_TEXT} download. It's the
+    only way to run Parakeet on the graphics card. TuxTalk checks your graphics card is
+    really faster than your processor before it switches.
+  • <b>CUDA (NVIDIA)</b>: NVIDIA only, for the Whisper models, a ~{CUDA_SIZE_TEXT} download.
+    Parakeet can't use it.
+  • If the graphics card can't start, TuxTalk uses the processor instead, and the
+    menu's line says so, for example "Parakeet on the processor (Vulkan didn't start)".
+  • <b>Power Saving</b> (on by default on laptops): after 5 minutes without dictating,
+    TuxTalk lets the speech model rest. Your keys keep working; the first dictation
+    after a break takes a few seconds longer. Preferences → General → Power Saving.
+
+### Performance presets (TuxTalk menu → Performance)
+  • <b>Recommended for this computer:</b> the setup TuxTalk picks for your graphics
+    card and language, usually Parakeet on your graphics card.
+  • <b>Lightest:</b> Whisper Base on the processor, a small download and little work.
+  • <b>Battery saver:</b> Whisper Tiny on the processor, and the speech model rests
+    after 2 idle minutes (choosing another preset puts that back).
+
+### Speech models (Preferences → General → Change model, device or language)
+Sizes are the download for the processor; on a graphics card (Vulkan) the Whisper
+models are about half that.
+  • <b>Parakeet (670 MB)</b>: NVIDIA's engine. Very accurate for English and 24 European
+    languages, and fast even without a graphics card. Not for Chinese, Japanese,
+    Korean, Arabic and other non-European languages.
+  • <b>Whisper tiny (78 MB)</b>, <b>base (148 MB)</b>, <b>small (486 MB)</b>: 99 languages,
+    faster and less accurate as they get smaller. Small is a good start on the processor.
+  • <b>Whisper medium (1.5 GB)</b> and <b>large-v3 (3.1 GB)</b>: more accurate and slower;
+    large-v3 wants a graphics card.
+
+<b>What works with what?</b>, in the same place, shows which models run on the
+processor, Vulkan and CUDA, and which of those your computer has. With more than one
+graphics card (graphics built into the processor doesn't count) and Device on CUDA or
+Vulkan, a <b>Graphics card</b> choice shows under Device: Automatic, or the card to use.
+
+### Dictation stopped working
+Choose <b>Restart Service</b> in the TuxTalk menu, or turn dictation off and on
+again there. The log is {log_path}.{kde_notice}
+
+### A settings change went wrong
+<b>Preferences → Updates &amp; Backup → Earlier settings</b> lists the copies TuxTalk
+saves by itself when it starts (your last 10 settings changes) and your own
+backups. Restore goes back to one. <b>Save Backup</b> puts your settings, snippets,
+Your Words and stats in one file, to keep or to load on another computer with
+<b>Load Backup</b>; the next backup goes to the same folder.
+
+### Updates
+  • Check for updates: the TuxTalk menu, or Preferences → Updates &amp; Backup.
+  • {update_block}
+  • <b>Config files:</b> {cfg_dir}
+  • <b>AI models:</b> {cache_dir}
+
+### Privacy
+Everything runs on your computer; nothing you say is sent anywhere. Your Stats keeps
+only numbers (words, dictations, time), never the text. Recent Dictations keeps
+your last 20 in memory, gone when you log out. The log has your words only if you
+turn on "Log transcribed text" (Preferences → Advanced → Fine-tuning), for a bug
+report; then it has what you said in a password box too, though nothing was
+typed there.
+
+### Password fields
+TuxTalk doesn't type into a password box it can recognise. Hold <b>{hold}</b> and talk
+there, let go: you
+hear the low beep, "TuxTalk doesn't type into password fields" shows over the window,
+and nothing is typed or kept in Recent Dictations. Type passwords on the keyboard.
+Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in or move on.
+  • It usually knows a password box in GTK apps (most GNOME, Cinnamon and
+    Xfce apps).
+  • In KDE apps, Firefox, Chrome, Brave and apps built on Chrome while accessibility
+    is on (a screen reader turns it on, or TuxTalk with your OK). Chrome and the apps
+    built on it need opening after it went on, and with two or more of their windows
+    open it may not tell.
+  • The desktop's own prompt, when an app asks for your admin password, counts too.
+    A terminal asking for one (sudo) doesn't tell it: there, don't dictate.
+
+### Uninstalling
+{uninstall_text}
+
+### Bug reports and feedback
+  • <b>Something not working?</b> <a href="{REPORT_LINK}">Report a problem</a> gathers
+    what helps find it: your system, your settings, and the end of TuxTalk's log
+    and of its hotkey helper's.
+    You see all of it first, then copy it, save it, or open a GitHub issue with it.
+  • <b>Report bugs:</b> <a href="{ISSUES_URL}">TuxTalk issues on GitHub</a>
+  • <b>Questions, ideas, or just how it's working for you:</b>
+    <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>
+  • <b>Log file:</b> {log_path}
