@@ -57,8 +57,9 @@ _EXAMPLES = [
 # --- Voice editing: rewrite selected text as the user says --------------------
 # On 12 test jobs (formal, shorter, grammar, bullet list, email, tone,
 # translation, a text that says "ignore all previous instructions") these
-# examples get about 10-11 right against about 8 without; Qwen3.5-2B does no
-# better. The examples are deliberately unlike the test jobs.
+# examples got about 10-11 right against about 8 without, measured on the
+# earlier Qwen2.5-1.5B (Qwen3.5-2B did no better). The examples are
+# deliberately unlike the test jobs.
 
 MAX_EDIT_CHARS = 3000
 

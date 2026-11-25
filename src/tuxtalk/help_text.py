@@ -23,6 +23,7 @@ import os
 from gi.repository import GLib
 
 from .ai_download import DOWNLOAD_SIZE_TEXT as AI_SIZE_TEXT
+from .ai_download import MEMORY_TEXT as AI_MEMORY_TEXT
 from .dictation_keys import CTRL_SPACE
 from .cuda_download import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .whisper_vulkan import ENGINE_SIZE_TEXT
@@ -254,6 +255,7 @@ def _values():
             "cfg_dir": f["cfg_dir"], "cache_dir": f["cache_dir"],
             "FEEDBACK_URL": FEEDBACK_URL, "ISSUES_URL": ISSUES_URL, "REPORT_LINK": REPORT_LINK,
             "ENGINE_SIZE_TEXT": ENGINE_SIZE_TEXT, "AI_SIZE_TEXT": AI_SIZE_TEXT,
+            "AI_MEMORY_TEXT": AI_MEMORY_TEXT,
             "CUDA_SIZE_TEXT": CUDA_SIZE_TEXT}
 
 
@@ -345,6 +347,8 @@ A message that was already sent can't be changed, so with the automatic send:
   1. Tap <b>{hold}</b> during the countdown, so it isn't sent.
   2. Hold <b>{hold}</b>, say <b>edit that, make it friendlier</b>, let go.
   3. Press Enter when it reads right.
+Or end the message itself with a tone, <b>..., make that friendlier</b>: it's typed
+already rewritten, and never sent by itself (Writing → A tone at the end).
 
 The Writing section has more.
 
@@ -483,10 +487,13 @@ The tones: <b>formal</b>, <b>professional</b>, <b>friendlier</b>, <b>casual</b> 
 <b>make that friendlier</b> changes what was just typed, the way "edit that" does.
 
 Read it before you send it: the AI can get the meaning wrong, so a rewritten message is
-never sent automatically. Press Enter, or end with <b>press enter</b> when you trust it.
+never sent automatically. Press Enter, or end with <b>press enter</b> when you trust it
+(with Type at pause, say <b>press enter</b> as a dictation of its own once it reads right).
 If the AI can't do it, your words are typed as you said them, and TuxTalk says so.
 "Meet at three, make that four" is still a correction; to correct a tone word itself
-("wear something casual, make that formal"), say <b>no wait, formal</b> instead.
+("wear something casual, make that formal"), say <b>no wait, formal</b> instead, with
+<b>Fix self-corrections with AI</b> on. The tones are English words, also with voice
+commands in German.
 
 ### What to say
 Say it in your own words; there's no fixed list. Some that work well:
@@ -544,7 +551,11 @@ can't be changed by voice.
     Dictation types it again.
   • It doesn't work in a terminal: there's no selection there to replace.
   • It uses the same AI as <b>Fix self-corrections with AI</b>: one download of
-    about {AI_SIZE_TEXT}, shared. Everything runs on this computer; nothing is sent online.
+    about {AI_SIZE_TEXT}, shared, and about {AI_MEMORY_TEXT} of memory while it's on.
+    Everything runs on this computer; nothing is sent online.
+  • Updated from an older TuxTalk with the AI on? The smaller model you had keeps
+    working until you get the new one: TuxTalk asks once, and after that it's
+    <b>Download the better AI</b> in Preferences → Advanced.
 
 ### If nothing happens
 TuxTalk tells you why in a notification:
@@ -1047,7 +1058,8 @@ in German too: Preferences → General → Change model, device or language, the
 <b>Voice commands in</b> to Deutsch, and say <b>Komma</b>, <b>neue Zeile</b>,
 <b>Enter drücken</b>, <b>das letzte Wort löschen</b> or <b>Wort korrigieren</b>,
 and with voice editing, <b>alles in Großbuchstaben</b>. English commands keep working.
-Changing your mind mid-sentence ("no wait") stays English.
+Changing your mind mid-sentence ("no wait") and the tone word ("make that formal")
+stay English.
 
 The same list, a tab per group, is in the TuxTalk menu → Voice Commands..., or, with
 <b>Apps, windows, keys and the mouse by voice</b> ticked in TuxTalk Labs, say

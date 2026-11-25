@@ -144,7 +144,8 @@ BETTER_AI_TITLE = "A better AI for TuxTalk"
 BETTER_AI_BODY = (
     "TuxTalk's AI now uses a bigger model that keeps your meaning far better when it "
     "fixes a self-correction or rewrites your text. It's a one-time download of {size}, "
-    "and the old model is deleted afterwards.\n\n"
+    "and the old model is deleted afterwards. It needs about {memory} of memory while "
+    "it's on.\n\n"
     "Until then the one you have keeps working. Later, it's in Preferences, Advanced.")
 
 
@@ -160,7 +161,8 @@ def _offer_better_ai_model_once(restart_service):
             or not ai_download.better_model_waiting()):
         return
     answer = show_message(None, Gtk.MessageType.QUESTION, BETTER_AI_TITLE,
-                          BETTER_AI_BODY.format(size=ai_download.MODEL_SIZE_TEXT),
+                          BETTER_AI_BODY.format(size=ai_download.MODEL_SIZE_TEXT,
+                                                memory=ai_download.MEMORY_TEXT),
                           [("Not Now", Gtk.ResponseType.CANCEL),
                            ("Download", Gtk.ResponseType.OK)],
                           keep_above=True, default=Gtk.ResponseType.CANCEL, take_focus=False)

@@ -160,7 +160,8 @@ class AdvancedTab(Tab):
         label = Gtk.Label(xalign=0, wrap=True)
         label.set_text("A better AI model is ready: it keeps your meaning far better when it "
                        f"rewrites. One-time download of {ai_download.MODEL_SIZE_TEXT}; "
-                       "the old one is deleted after.")
+                       "the old one is deleted after. It needs about "
+                       f"{ai_download.MEMORY_TEXT} of memory while on.")
         button = Gtk.Button(label="Download the better AI")
         button.connect("clicked", self._on_better_model_clicked, box)
         box.pack_start(label, True, True, 0)
@@ -733,7 +734,8 @@ class AdvancedTab(Tab):
             self.window, Gtk.MessageType.QUESTION, question,
             f"This downloads an AI model ({ai_download.MODEL_SIZE_TEXT}) and the "
             f"llama.cpp engine that runs it ({ai_download.LLAMA_SIZE_TEXT}). It is a "
-            "one-time download.\n\n"
+            f"one-time download, and the AI needs about {ai_download.MEMORY_TEXT} of "
+            "memory while it's on.\n\n"
             "Everything runs on this computer. Your dictation is never sent anywhere.",
             [("Cancel", Gtk.ResponseType.CANCEL), ("Download", Gtk.ResponseType.OK)],
             default=Gtk.ResponseType.OK)

@@ -1,6 +1,6 @@
 """Voice edits that don't go to the AI.
 
-The voice-editing model (Qwen2.5-1.5B) is good at rewording and poor at exact,
+The voice-editing model is good at rewording and poor at exact,
 letter-by-letter jobs: asked for all caps it can write "DRYWALL ScreWz", it
 doesn't reliably remove a comma, and "remove the word testing" can lose a
 whole line. Those jobs are done here in code, exactly.

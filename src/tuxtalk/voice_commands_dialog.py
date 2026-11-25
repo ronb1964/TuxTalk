@@ -28,7 +28,7 @@ INTRO = ("Hold your dictation key, say the command, let go. The commands are Eng
 # ones, which still work: say so, or the English looks left over.
 INTRO_GERMAN = ("Hold your dictation key, say the command, let go. Voice commands are in "
                 "German and English: each row shows the German words first, and the English "
-                "ones after them work just the same, so either language does it.")
+                "ones after them work just the same. A few rows are English only, and say so.")
 SNIPPETS = ("<b>Snippets</b>: say a short phrase, get the full text. Add your own in "
             "<b>Preferences → Words</b>; wrap the text in <b>\"quotes\"</b> to type it "
             "exactly as written.")

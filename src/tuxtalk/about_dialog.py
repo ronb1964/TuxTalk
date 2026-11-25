@@ -133,7 +133,7 @@ def _credits(content):
     credit_label = Gtk.Label()
     credit_label.set_markup(
         f'<span size="small">{PARAKEET_ATTRIBUTION}\n'
-        'AI cleanup uses llama.cpp (MIT) and Qwen2.5 by Alibaba Cloud (Apache 2.0).</span>')
+        'AI cleanup uses llama.cpp (MIT) and Qwen3.5 by Alibaba Cloud (Apache 2.0).</span>')
     credit_label.set_justify(Gtk.Justification.CENTER)
     credit_label.set_line_wrap(True)
     credit_label.set_opacity(0.7)

@@ -294,6 +294,7 @@ enough interest and I'll make it happen.
 | **Permissions** | First run asks for your admin password once, to set up the hotkey helper and let TuxTalk type into other apps. No restart needed (without systemd it uses the `input` group, and then it does) |
 | **Audio** | Working microphone |
 | **GPU (optional)** | Any NVIDIA, AMD or Intel graphics chip (Vulkan), or CUDA on NVIDIA |
+| **Memory for the AI (optional)** | About 3 GB while it's on, for self-corrections and voice editing |
 
 ### Uninstalling
 
@@ -397,14 +398,14 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Only these languages.** Tick the languages you actually speak and Whisper's auto-detect sticks to those.
 - **Any graphics card.** NVIDIA, AMD or Intel through Vulkan, a 22 MB download. On NVIDIA you can use CUDA instead. TuxTalk times your graphics chip against your processor first and only uses it if it's really faster. With more than one card, you pick which one.
 - **See the words while you talk (Labs).** A box by the recording indicator shows what you've said so far, on a graphics card. Or pick Type at pause instead, and each phrase is typed as soon as you pause.
-- **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. A separate setting with no AI drops "um", "uh" and stutters.
+- **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. A separate setting with no AI drops "um", "uh" and stutters. The AI is Qwen3.5-4B, a one-time 2.8 GB download that needs about 3 GB of memory while it's on. If you had the older, smaller model, TuxTalk offers the new one once, and Preferences, Advanced has it after that.
 - **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
 - **Voice commands in German.** Set Voice commands in to Deutsch (Preferences → General → Change model, device or language) and say "Komma", "neue Zeile", "Enter drücken" or "das letzte Wort löschen", the verb last or first. English commands keep working beside them, and the command language is its own setting, apart from the language you dictate. A new install set up for German starts with them on.
 - **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com. Said on its own, an address gets no period after it. Only the word right before "at" is the name; say the marks in a longer one: "john dot doe at gmail dot com" types john.doe@gmail.com, and "underscore" and "no space" work the same way ("john no space doe" is johndoe).
 - **Numbers as digits, if you want them.** 25 instead of twenty-five, and 7:30 and 15th too. Works in English and seven other languages.
 - **Fits the sentence at the cursor.** Dictating into the middle of a sentence carries it on, with no capital and the right spaces, where the app says what's around the cursor: GTK apps (on GNOME with the TuxTalk extension), KDE apps, Firefox, Chrome and apps built on Chrome once you let TuxTalk turn on the desktop's accessibility.
 - **Plain text in terminals.** No capital at the start and no period at the end when you dictate a command.
-- **Voice editing (Labs).** Select text, hold Shift+F8 and say how to change it. Tone and rewrites go to the AI, while caps, lists, commas and removing a word are done exactly in code. Bold, italics and underline work in LibreOffice and other word processors.
+- **Voice editing (Labs).** Select text, hold Shift+F8 and say how to change it. Tone and rewrites go to the AI, while caps, lists, commas and removing a word are done exactly in code. Bold, italics and underline work in LibreOffice and other word processors. Or end a dictation with "make that formal" (or friendlier, casual, polite, professional) and it's typed already rewritten, never sent by itself.
 - **Select and move by voice (Labs).** Say "select the last sentence" or "go to the end" on its own and TuxTalk does it instead of typing it.
 - **Open apps by voice (Labs).** "open Firefox", "open the browser", "open email". If it's already open it comes to the front, except on COSMIC, Sway and Hyprland, where it starts again.
 - **Windows, tabs and pages by voice (Labs).** "snap left", "switch to Firefox", "close window", "new tab", "go back a page", "scroll down 5", "go to youtube.com" or "web search cheap tires".

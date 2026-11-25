@@ -123,7 +123,7 @@ SECTIONS = (
     Section("Formatting", DICTATION, commands=(
         _inline("new line", "newline", "return", "line break", result="line break",
                 note="a space in a terminal, where a line break would run the line",
-                german=("neue Zeile", "Zeilenumbruch")),
+                german=("neue Zeile", "Zeilenumbruch", "weicher Zeilenumbruch")),
         _inline("new paragraph", "paragraph break", result="double line break",
                 note="a space in a terminal", german=("neuer Absatz",)),
         _inline("press tab", result="tab character (just <b>tab</b> is the word)",
@@ -222,8 +222,8 @@ SECTIONS = (
                 "tone", "Also professional, casual and polite. Never sent automatically: "
                 "read it first",
                 german_result="at the end: typed already in that tone; alone: changes what was "
-                              "just typed. In English only, like changing your mind: the AI's "
-                              "German isn't tested yet"),
+                              "just typed. In English only for now: there are no German tone "
+                              "words yet, and the English ones work with German on"),
     )),
     Section("Select and Move", EDITING, labs=LABS_SELECT, commands=(
         Command(("select that", "select the last sentence", "select the last 3 words",
