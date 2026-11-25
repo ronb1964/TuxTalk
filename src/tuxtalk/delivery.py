@@ -46,7 +46,9 @@ def determine_injection_method(injection_mode: str) -> tuple[str, str]:
     Decide between typing and pasting for this dictation.
 
     Args:
-        injection_mode: User's configured mode ("type", "paste", or "auto")
+        injection_mode: User's configured mode ("type", "type_only", "paste" or
+            "auto"; "type_only" types, and keyboard_output keeps it off the
+            clipboard)
 
     Returns:
         Tuple of (actual_mode, reason)

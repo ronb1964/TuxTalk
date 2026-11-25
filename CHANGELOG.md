@@ -5,6 +5,13 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- Keystroke Typing (No Clipboard), a new choice in Preferences → Advanced →
+  Fine-tuning → Text Injection: TuxTalk types your words and never puts them
+  on the clipboard, not even for a character your keyboard layout can't
+  type or a line break in KDE's editors, and spoken web searches keep to it
+  too. A character it can't type stops that line, and the whole dictation
+  is in Recent Dictations. Thanks to Christian Reiß, whose pull request #50
+  this comes from.
 - A tone at the end of a dictation (TuxTalk Labs, with voice editing on):
   say the message the way it comes and end with "make that formal", and
   it's typed already rewritten in that tone, in one go instead of a

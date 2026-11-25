@@ -609,6 +609,10 @@ command_language = "en"   # Voice commands in: "en", or "de" for German too
 <summary><b>Troubleshooting</b></summary>
 
 ### Text not appearing?
+- To keep your dictation off the clipboard entirely, pick **Keystroke Typing
+  (No Clipboard)** in Preferences → Advanced → Fine-tuning → Text Injection.
+  A character your keyboard layout can't type (an emoji) then stops that line,
+  and the whole dictation is still in **Recent Dictations** in the tray menu.
 - Look in `~/.config/tuxtalk/tuxtalk.log` for "Made TuxTalk's virtual keyboard".
   If it says "Can't make TuxTalk's virtual keyboard" instead, open Preferences →
   Advanced → Show system check and click Fix Typing Permissions

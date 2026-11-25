@@ -257,6 +257,11 @@ class AdvancedTab(Tab):
             "• Auto (Smart Detection): pastes on Wayland (Ctrl+Shift+V in a terminal),\n"
             "  types on X11\n"
             "• Keystroke Typing: simulates typing character-by-character (most reliable)\n"
+            "• Keystroke Typing (No Clipboard): types without ever using the clipboard,\n"
+            "  line breaks included. A character your keyboard layout can't type (an emoji)\n"
+            "  stops that line; Recent Dictations in the tray menu has the whole dictation.\n"
+            "  Voice editing still copies the text you select to read it, then puts your\n"
+            "  clipboard back.\n"
             "• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long "
             "text)\n"
             "\n"
@@ -277,6 +282,7 @@ class AdvancedTab(Tab):
 
         inject_combo.append("auto", "Auto (Smart Detection)")
         inject_combo.append("type", "Keystroke Typing")
+        inject_combo.append("type_only", "Keystroke Typing (No Clipboard)")
         inject_combo.append("paste", "Clipboard Paste")
         inject_combo.set_active_id(self.config["injection_mode"])
         inject_combo.connect("changed", lambda x: self.update_config(
@@ -305,7 +311,8 @@ class AdvancedTab(Tab):
                 "restore_clipboard", x.get_active()))
             restore_check.set_tooltip_text(
                 "Pasting a dictation puts it on the clipboard, replacing whatever you'd copied.\n"
-                "With this on, TuxTalk puts your copied item back half a second after pasting.\n\n"
+                "With this on, TuxTalk puts your copied item back half a second after pasting.\n"
+                "Keystroke Typing (No Clipboard) leaves the clipboard alone.\n\n"
                 "Leave it off if you like to re-paste a dictation that went into the wrong "
                 "window.\n"
                 "Recent Dictations in the tray menu keeps your last 20 either way.\n\n"

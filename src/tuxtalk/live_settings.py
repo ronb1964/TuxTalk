@@ -26,6 +26,12 @@ usage_stats = True
 # restore_clipboard, issue #7); refreshed with the other live settings.
 restore_clipboard = False
 
+# Keystroke Typing (No Clipboard): nothing TuxTalk types takes a detour
+# through the clipboard, not a character the layout can't type nor a line
+# break in KDE's editors (keyboard_output). Read where the typing happens, so
+# every way in (dictation, web search, Fix a Word) keeps to it.
+no_clipboard = False
+
 # Pause music and videos while recording (config pause_media, media_pause.py).
 # Off until the service reads config at startup, so tests that call the real
 # start_recording never pause anyone's music; refreshed with the live settings.
@@ -117,10 +123,11 @@ def apply(cfg):
     global auto_languages, press_enter_after
     global chunk_pause_seconds, settings, chunk_context_marks
     global log_transcripts, usage_stats, restore_clipboard, pause_media, duck_audio
-    global paste_last_hotkey
+    global paste_last_hotkey, no_clipboard
     log_transcripts = cfg.log_transcripts
     usage_stats = cfg.usage_stats
     restore_clipboard = cfg.restore_clipboard
+    no_clipboard = cfg.injection_mode.lower() == "type_only"
     pause_media = cfg.pause_media
     duck_audio = cfg.duck_audio
     paste_last_hotkey = cfg.paste_last_hotkey

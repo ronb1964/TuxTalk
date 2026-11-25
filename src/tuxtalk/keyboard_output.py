@@ -428,7 +428,10 @@ def type_text(text: str) -> bool:
     break failed after earlier lines went in: told "Couldn't type the
     dictation", the user would paste it all again over them."""
     acting = focused_window.acts_as(focused_window.window_class())
-    in_kde_editor = (acting or "").lower() in KDE_EDITOR_CLASSES_LOWER
+    # Without the clipboard, Shift+Enter: Insert Smart Newline is the editor's
+    # own behaviour, where a pasted newline would put the words on it.
+    in_kde_editor = (not live.no_clipboard
+                     and (acting or "").lower() in KDE_EDITOR_CLASSES_LOWER)
     lines = text.split(LINE_BREAK)
     # The line breaks there are pastes, and so is a line holding an emoji:
     # the user's clipboard is kept from the first and comes back after the
@@ -457,7 +460,8 @@ def type_text_raw(text: str) -> bool:
     layout (keyboard_layout). True only if it was typed.
 
     Text the layout has no keys for (an emoji, Latin text on a Ukrainian
-    layout) is pasted instead, which works on any layout. Without a virtual
+    layout) is pasted instead, which works on any layout, unless Keystroke
+    Typing (No Clipboard) is chosen (live.no_clipboard). Without a virtual
     keyboard (no access to /dev/uinput), wtype, where the desktop has one.
     Raises virtual_keyboard.StoppedPartway when the keyboard failed partway:
     some of the text is in the app, and nothing may type it again; and
@@ -469,6 +473,11 @@ def type_text_raw(text: str) -> bool:
         events = keyboard_layout.layout_key_events(text)
     except keyboard_layout.UntypableText as e:
         layout, blocker = e.args
+        if live.no_clipboard:
+            # The failure notice points to Recent Dictations, which holds it.
+            logger.info(f"The {layout} keyboard layout can't type {live.loggable(blocker)}, "
+                        "and Keystroke Typing (No Clipboard) doesn't paste it")
+            return False
         logger.info(f"The {layout} keyboard layout can't type {live.loggable(blocker)}; "
                     "pasting instead")
         if is_wayland_session():

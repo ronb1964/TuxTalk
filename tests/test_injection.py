@@ -17,7 +17,9 @@ import pytest
 from tuxtalk import focused_window
 from tuxtalk import delivery
 from tuxtalk import voice_commands
+from tuxtalk import keyboard_layout
 from tuxtalk import keyboard_output
+from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 
 
@@ -312,6 +314,74 @@ def test_injection_method_respects_user_choice_on_host(monkeypatch):
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     assert delivery.determine_injection_method("paste")[0] == "paste"
     assert delivery.determine_injection_method("type")[0] == "type"
+
+
+# --- Keystroke Typing (No Clipboard), from Christian Reiß's pull request #50 ----------------
+
+@pytest.fixture
+def untypable(monkeypatch):
+    """A layout with no keys for the text, and the pastes made instead."""
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(focused_window, "look", lambda: ("editor", None))
+    monkeypatch.setattr(focused_window, "window_class", lambda: "editor")
+    pastes = []
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda text: pastes.append(text) or True)
+    monkeypatch.setattr(keyboard_output, "paste_text_x11",
+                        lambda text: pastes.append(text) or True)
+
+    def no_keys(text):
+        raise keyboard_layout.UntypableText("us", text)
+    monkeypatch.setattr(keyboard_layout, "layout_key_events", no_keys)
+    return pastes
+
+
+@pytest.mark.parametrize("wayland_session", [True, False])
+def test_without_the_clipboard_untypable_text_is_never_pasted(untypable, monkeypatch,
+                                                              wayland_session):
+    """The dictation fails (the notice points to Recent Dictations) rather
+    than going through the clipboard; plain Keystroke Typing still pastes it."""
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: wayland_session)
+    monkeypatch.setattr(live, "no_clipboard", True)
+    assert delivery.inject_text("unsupported", "type_only") == "failed"
+    assert untypable == []
+    monkeypatch.setattr(live, "no_clipboard", False)
+    assert delivery.inject_text("unsupported", "type") == "ok"
+    assert untypable == ["unsupported"]
+
+
+def test_every_way_text_is_typed_keeps_off_the_clipboard(untypable, monkeypatch):
+    """A spoken web search and Fix a Word type through type_text, not the
+    dictation's delivery: the setting is read there, so they keep to it too."""
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
+    monkeypatch.setattr(live, "no_clipboard", True)
+    assert keyboard_output.type_text("ünsupported query") is False
+    assert untypable == []
+
+
+def test_without_the_clipboard_kde_editors_get_typed_line_breaks(monkeypatch, wayland):
+    """Normally a pasted newline, so Kate's Smart Newline doesn't copy "$"
+    onto the next line; without the clipboard, Shift+Enter instead."""
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kate")
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kate", None))
+    monkeypatch.setattr(live, "no_clipboard", True)
+    typed = []
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: typed.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter",
+                        lambda: typed.append("Shift+Enter") or True)
+    monkeypatch.setattr(keyboard_output, "paste_text",
+                        lambda text: pytest.fail("this mode must not paste"))
+    assert delivery.inject_text("first\nsecond", "type_only") == "ok"
+    assert typed == ["first", "Shift+Enter", "second"]
+
+
+def test_the_setting_turns_it_on_and_off(monkeypatch):
+    from tuxtalk.config import Settings
+    monkeypatch.setattr(live, "ai_engine", None)
+    live.apply(Settings(injection_mode="type_only"))
+    assert live.no_clipboard is True
+    live.apply(Settings(injection_mode="auto"))
+    assert live.no_clipboard is False
 
 
 def test_auto_mode_pastes_without_scanning_processes(monkeypatch):

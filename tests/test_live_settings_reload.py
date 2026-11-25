@@ -136,6 +136,7 @@ _MIRRORED = [
     ({"log_transcripts": True}, "log_transcripts", True),
     ({"usage_stats": False}, "usage_stats", False),
     ({"restore_clipboard": True}, "restore_clipboard", True),
+    ({"injection_mode": "type_only"}, "no_clipboard", True),
     ({"pause_media": False}, "pause_media", False),
     ({"duck_audio": True}, "duck_audio", True),
     ({"paste_last_hotkey": "Ctrl+Alt+V"}, "paste_last_hotkey", "Ctrl+Alt+V"),

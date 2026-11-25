@@ -61,7 +61,9 @@ OLD_MODEL_NAMES = {"tiny.en": "tiny", "base.en": "base", "small.en": "small",
 VALID_DEVICES = {"cpu", "cuda", "vulkan"}
 VALID_MODES = {"hold", "toggle"}
 
-VALID_INJECTION_MODES = {"type", "paste", "auto"}
+# "type_only" types like "type" and never falls back to the clipboard
+# (live_settings.no_clipboard), for people who don't want dictated words on it.
+VALID_INJECTION_MODES = {"type", "type_only", "paste", "auto"}
 
 # The languages voice commands can be said in, as the setting saves them and
 # Preferences shows them. English is understood in every one of them.

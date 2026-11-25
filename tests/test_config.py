@@ -104,8 +104,8 @@ def test_valid_modes():
 
 
 def test_valid_injection_modes():
-    """Test both valid injection mode types"""
-    for mode in ["type", "paste", "TYPE", "PASTE"]:  # Case insensitive
+    """Saved injection modes are accepted in either case."""
+    for mode in ["auto", "type", "type_only", "paste", "AUTO", "TYPE", "TYPE_ONLY", "PASTE"]:
         s = Settings(injection_mode=mode)
         validate_config(s)  # Should not raise
 
