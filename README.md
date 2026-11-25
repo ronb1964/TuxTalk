@@ -21,7 +21,7 @@
 <p align="center">
   <a href="https://tuxtalk.app/"><b>Website</b></a> &nbsp;&bull;&nbsp;
   <a href="#installation">Install</a> &nbsp;&bull;&nbsp;
-  <a href="#new-in-024">New in 0.24</a> &nbsp;&bull;&nbsp;
+  <a href="#new-in-025">New in 0.25</a> &nbsp;&bull;&nbsp;
   <a href="#what-it-does">What it does</a> &nbsp;&bull;&nbsp;
   <a href="#all-the-features">All the features</a> &nbsp;&bull;&nbsp;
   <a href="#how-its-made">How it's made</a> &nbsp;&bull;&nbsp;
@@ -44,19 +44,17 @@ Claude, Anthropic's AI, writes the code. I test it and use it every day, and I h
 
 ---
 
-## New in 0.24
+## New in 0.25
 
-**It fits into the sentence you're in.** Click into the middle of a sentence and dictate, and TuxTalk looks at the text on both sides of the cursor. So no capital in the middle of a sentence, a space in front if one's missing, and no period stuck in front of the next word. It works in GTK apps, KDE apps, Firefox, and Chrome and the apps built on it, like Claude Desktop. For most of those it needs your desktop's accessibility turned on, and TuxTalk asks you once before it does that. Chrome and the apps built on it have to be closed and opened again after it goes on, they only check when they start. Where an app doesn't share its text, and in terminals, it types like it always did.
+**Voice commands in German.** In Preferences, General, "Change model, device or language", set "Voice commands in" to Deutsch. Then "Komma", "Punkt", "neue Zeile", "Enter drücken" and "das letzte Wort löschen" work, with the verb at the end the way most people say it, or at the front. English commands keep working right beside them, and the command language is its own setting, so it doesn't matter what language you dictate in. A new install that's set up for German turns them on by itself. hmsgde and jskvbinmv gave me the words ([#49](https://github.com/ronb1964/TuxTalk/discussions/49)). I grew up hearing German at home, so I tested it with what I've got left, and that's how we found out Parakeet sometimes writes "Fragezeichen" as two words. That works now too. "Nein warte" for changing your mind isn't in German yet.
 
-**Help has a search box.** Type in it, press Ctrl+F, or just start typing, and you get the cards that match. Help's sorted by situation, so a feature you only knew by its name was hard to find before. Every card and every voice command is in there, with your own keys.
+**Your own dictation key.** The Hold and Toggle lists end in "Other key or combination…", where you just press the keys you want, like Alt+D or Ctrl+Shift+K, or F13 to F24 if your keyboard has them. TuxTalk won't take a key that types a letter on its own, and it tells you when your desktop already uses the one you picked. A combination needs the hotkey helper 1.17, and TuxTalk offers the update and asks for your password once.
 
-**A sharp indicator on GNOME.** Bernát Gábor rewrote it so the TuxTalk extension draws the recording indicator itself ([#37](https://github.com/ronb1964/TuxTalk/pull/37)). On a screen scaled to 150% it isn't blurry any more, and it sits where Preferences says. Check for Updates offers the new extension, and GNOME picks it up after you log out and back in. I'm on KDE now, so that one I tested in VMs.
+**"No space" in an email name works however the speech model writes it.** "john no space doe at gmail dot com" types johndoe@gmail.com, even when Parakeet writes "Nospace". And if you say "new line" first, the address still goes in with no period after it. Jim Orcheson found that one ([#48](https://github.com/ronb1964/TuxTalk/issues/48)).
 
-**Email addresses said on their own.** For a To: box or an address bar, an address doesn't get a period after it any more, and "john dot doe at gmail dot com" types john.doe@gmail.com. Jim Orcheson found that one ([#44](https://github.com/ronb1964/TuxTalk/issues/44)).
+**In a terminal, "new line" types a space.** A real line break there could run a command you'd only said half of.
 
-**Kate's terminal panel is a terminal.** In Kate, KDevelop or Dolphin it gets plain text pasted with Shift+Ctrl+V and never an Enter. It used to show "^V". And in KWrite and Kate, Shift with the dictation key doesn't throw the cursor to the start of the line any more once accessibility's on. That was the known issue in 0.23.
-
-Plus a rare crash on KDE that stopped dictation with nothing in the log, and the other person's password prompt on a shared computer no longer stops your dictation on Cinnamon or COSMIC. The [changelog](CHANGELOG.md) has the rest.
+Plus "one" and "two" turn into digits when numbers are set to digits and they're counting something ("page 1 of 2"), "full stop" and "a new line of products" stay words, and the AI's self-correction fix is only used if it keeps every symbol you said. The [changelog](CHANGELOG.md) has the rest.
 
 ---
 
