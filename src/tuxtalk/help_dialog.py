@@ -113,7 +113,8 @@ def open_section(notebook, word):
 
 class _Help:
     """An open Help window's tabs, its search box and what the box searches:
-    Help's text as it was last written for this computer."""
+    Help's text as it was last written for this computer, and the language
+    its voice commands were shown in."""
 
     def __init__(self, window, sections):
         """The parts for *window*, written from *sections* (help_text.tabs())."""
@@ -142,8 +143,9 @@ class _Help:
 
     def write(self, sections):
         """Write the tabs, and what the search box searches, from *sections*
-        (help_text.tabs()), on the tab shown; a search shown is run again."""
-        self.sections = sections
+        (help_text.tabs()), on the tab shown; a search shown is run again.
+        The Commands tab shows the voice commands in the language set now."""
+        self.written = _written(sections)
         self.entries = help_search.index(sections)
         self.found = {}
         shown = self.notebook.get_current_page()
@@ -248,12 +250,18 @@ class _Help:
 _open_help = None     # the _Help while Help is open
 
 
+def _written(sections):
+    """What Help shows from *sections*: their text and whether its voice
+    commands are German (Voice commands in), which the text doesn't say."""
+    return sections, commands_cards.german_commands()
+
+
 def _bring_forward(tab):
     """Bring the open Help forward, on *tab* when one is named (a search
     shown makes way for it), its text up to date with the settings, the
     keyboard on what's shown. Returns the window."""
     sections = help_text.tabs()
-    if sections != _open_help.sections:
+    if _written(sections) != _open_help.written:
         _open_help.write(sections)
     if tab:
         _open_help.clear_search()

@@ -71,6 +71,9 @@ before 0.15.0, so older entries use that name.
   "Das meine ich wörtlich!". To type a mark's word, say "wörtlich" at the
   start of a dictation or after a pause ("wörtlich Punkt"), or "das Wort"
   anywhere ("das Wort Punkt").
+- Help and the Voice Commands window, opened again after changing Voice
+  commands in, show the commands in the new language. They kept the old
+  one until they were closed.
 - Voice editing: a line starting with a date ("3. Oktober") keeps it when
   made into a list, and "capitalize each word" capitalises ä, ö, ü and
   accented letters too.

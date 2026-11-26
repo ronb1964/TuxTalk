@@ -171,3 +171,27 @@ def test_escape_and_close_shut_the_window(monkeypatch):
     dialog.connect("destroy", lambda _d: destroyed.append(True))
     dialog.get_widget_for_response(Gtk.ResponseType.CLOSE).clicked()
     assert destroyed == [True]
+
+
+def test_opened_again_it_shows_the_commands_in_the_language_set_now(monkeypatch):
+    """Voice commands in changed while the window was open: asking for it
+    again shows the German words, on the tab that was shown."""
+    from gi.repository import Gtk
+    from gtk_text import tree_text, widgets
+    from tuxtalk import config
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    dialog = _open_window(monkeypatch)
+    try:
+        tabs = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
+        tabs.set_current_page(2)
+        assert "Beistrich" not in " ".join(tree_text(dialog))
+        monkeypatch.setattr(config, "load_config",
+                            lambda: config.Settings(command_language="de"))
+        monkeypatch.setattr("tuxtalk.raise_window.raise_window", lambda window: None)
+        assert voice_commands_dialog.show_voice_commands_dialog() is None
+        assert "Beistrich" in " ".join(tree_text(dialog))
+        assert voice_commands_dialog.INTRO_GERMAN in " ".join(tree_text(dialog))
+        tabs = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
+        assert tabs.get_current_page() == 2
+    finally:
+        dialog.destroy()
