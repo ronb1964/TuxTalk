@@ -104,7 +104,9 @@ _RULES = [
     (r"(?:die |eine andere )?(?:schriftart|schrift|schriftgröße|schriftfarbe|textfarbe|farbe"
      r"|größe) (?:ändern|wechseln|wählen|nehmen|verwenden|vergrößern|verkleinern)",
      lambda m: "change the font"),
-    (rf"(?:die )?(?:schrift|text)?farbe (?:in|auf) ({'|'.join(_COLOURS)}) ändern",
+    # The lettering's colour only: "die Farbe in Rot ändern" may be about
+    # the words ("Die Farbe ist blau.").
+    (rf"(?:die )?(?:schrift|text)farbe (?:in|auf) ({'|'.join(_COLOURS)}) ändern",
      lambda m: f"make this {_COLOURS[m[1]]}"),
     # "streich das durch": the particle last, as German says it.
     (rf"{_TARGET}durch ?streichen", lambda m: "make this strikethrough"),

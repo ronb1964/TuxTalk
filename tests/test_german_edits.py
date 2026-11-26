@@ -106,7 +106,7 @@ def test_a_german_date_keeps_its_period_when_the_periods_go():
     "mach das rot", "in Blau", "die Schrift größer machen", "die Schrift grösser machen",
     "die Schriftart ändern", "die Farbe ändern", "die Größe ändern", "die Grösse ändern",
     "das zentrieren", "das durchstreichen", "durchstreiche das", "streich das durch",
-    "eine andere Schriftart wählen", "ändere die Farbe in Rot",
+    "eine andere Schriftart wählen", "ändere die Schriftfarbe in Rot",
 ])
 def test_german_formatting_no_shortcut_does_is_said_to_be_impossible(said):
     """Font, size and colour went to the AI, which can't change how text
@@ -170,7 +170,7 @@ def test_every_german_edit_help_names_is_done_in_code():
 
 @pytest.mark.parametrize("said", ["den Text kleiner machen", "mach das größer", "das hervorheben",
                                   "ändere rot zu blau", "ersetze rot durch blau",
-                                  "das Wort rot entfernen"])
+                                  "das Wort rot entfernen", "die Farbe in Rot ändern"])
 def test_german_requests_that_may_be_about_the_words_go_to_the_ai(said):
     """Smaller may mean shorter, and bringing out a point is the wording's job:
     only the lettering's size, a colour or the font is refused."""
@@ -190,3 +190,9 @@ def test_taking_marks_out_changes_nothing_else(lang, said):
 def test_a_german_date_keeps_its_period_written_close_or_with_the_other_marks(
         text, said, edited):
     assert mechanical_edit(text, said, "de") == edited
+
+
+@pytest.mark.parametrize("text", ["Kennung 123.Mai.", "abc3.Mai.", "am 32. Mai."])
+def test_a_number_that_cant_be_a_day_loses_its_period(text):
+    """Only a day, 1 to 31 and a word of its own, keeps its period."""
+    assert "." not in mechanical_edit(text, "die Punkte entfernen", "de")

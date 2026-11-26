@@ -100,8 +100,9 @@ before 0.15.0, so older entries use that name.
   Anführungszeichen entfernen" (and "remove the quotes") takes the Swiss
   «» and ‹› and print's »« too, and with German commands German's single
   ‚‘; "die Punkte entfernen" leaves a date's period ("am 3. Oktober");
-  and "mach das rot", "die Schriftart ändern" or "das zentrieren" say it
-  can't be done, as in English, instead of the AI answering with no change.
+  and "mach das rot", "die Schriftart ändern", "das zentrieren" or "streich
+  das durch" say it can't be done, as in English, instead of the AI
+  answering with no change.
 
 ## [0.25.0] - 2026-11-24
 

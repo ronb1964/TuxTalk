@@ -269,7 +269,7 @@ def _marks_named(name: str, lang: str) -> str:
 
 # In German a day's number ends in a period before its month ("am 3. Oktober"),
 # which taking the periods out mustn't take.
-_GERMAN_DATE_PERIOD = re.compile(rf"(?<=\d)\.(?=\s*(?i:{_MONTHS})\b)")
+_GERMAN_DATE_PERIOD = re.compile(rf"(?<!\w)(?:0?[1-9]|[12]\d|3[01])(\.)(?=\s*(?i:{_MONTHS})\b)")
 
 
 def _remove_marks(text: str, marks: str, lang: str) -> str:
@@ -282,7 +282,7 @@ def _remove_marks(text: str, marks: str, lang: str) -> str:
     keep_dates = lang == "de" and "." in marks
 
     def change(body):
-        kept = {m.start() for m in _GERMAN_DATE_PERIOD.finditer(body)} if keep_dates else set()
+        kept = {m.start(1) for m in _GERMAN_DATE_PERIOD.finditer(body)} if keep_dates else set()
         if all(m.start() in kept for m in pattern.finditer(body)):
             return body                   # a line without the mark stays as it is
         return _tidy(pattern.sub(lambda m: m.group() if m.start() in kept
