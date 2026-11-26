@@ -261,7 +261,7 @@ For a distro without a TuxTalk package, or if you'd just rather. You need Python
 3. Install this release into it. The constraints file pins the libraries to the versions I tested. Two aren't pinned, evdev and typing-extensions. Those are left to your distro, so evdev is whichever evdev package you installed in step 1. Everything pinned has a ready-made wheel, so nothing gets compiled.
 
    ```bash
-   ~/.local/share/TuxTalk/venv/bin/pip install -c https://raw.githubusercontent.com/ronb1964/TuxTalk/v0.25.0/packaging/source-install-constraints.txt https://github.com/ronb1964/TuxTalk/archive/refs/tags/v0.25.0.tar.gz
+   ~/.local/share/TuxTalk/venv/bin/pip install -c https://raw.githubusercontent.com/ronb1964/TuxTalk/v0.26.0/packaging/source-install-constraints.txt https://github.com/ronb1964/TuxTalk/archive/refs/tags/v0.26.0.tar.gz
    ```
 
 4. Link the command and start it once.

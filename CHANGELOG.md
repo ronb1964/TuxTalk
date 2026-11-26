@@ -3,7 +3,7 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [Unreleased]
+## [0.26.0] - 2026-11-25
 
 - Help shows what to say and what you get, right where each thing is
   explained: "see you tomorrow comma bring snacks period" → See you
