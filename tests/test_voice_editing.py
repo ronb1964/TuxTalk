@@ -1082,8 +1082,8 @@ def test_indenting_still_counts_as_a_change(edit_env, monkeypatch):
 # --- X11 and a clipboard that can't be used ----------------------------------------------
 
 def test_on_x11_the_selection_is_edited_as_on_wayland(edit_env, monkeypatch):
-    """X11 has no wl-copy: the selection is read through the X11 clipboard
-    (x11_clipboard.X11Selection), and the edit goes ahead (#52, Xfce)."""
+    """On X11 the edit goes ahead, with the X11 clipboard chosen to read the
+    selection (#52, Xfce); the reading itself is test_x11_clipboard's."""
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     from tuxtalk import x11_clipboard

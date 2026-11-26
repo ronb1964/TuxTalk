@@ -561,21 +561,15 @@ def test_voice_editing_reads_the_selection_and_gives_the_copy_back(x11_only):
     """The app's Ctrl+C puts the selected words on the clipboard, read
     through X11 as wl-paste reads them on Wayland (#52, Xfce); afterwards
     the user's own copy is back."""
-    apps = []
-
-    def ctrl_c():
-        # The app the selection is in copies it when it gets Ctrl+C.
-        apps.append(_app_offering({"UTF8_STRING": "the selected words"}))
-        apps[-1].__enter__()
-        return True
-    try:
+    with contextlib.ExitStack() as apps:
+        def ctrl_c():
+            # The app the selection is in copies it when it gets Ctrl+C.
+            apps.enter_context(_app_offering({"UTF8_STRING": "the selected words"}))
+            return True
         with _app_offering(_TEXT):
             text, put_back = _in_the_service(lambda: cb.copy_selection(ctrl_c, wait=3))
         assert text == "the selected words"
         _in_the_service(put_back)
-    finally:
-        for app in apps:
-            app.__exit__(None, None, None)
     assert _what_it_read(_start_reading()) == repr(("Grüße, what I copied", None))
 
 
@@ -587,3 +581,59 @@ def test_with_nothing_selected_voice_editing_finds_nothing_and_leaves_the_copy(x
         text, _put_back = _in_the_service(lambda: cb.copy_selection(lambda: True, wait=0.3))
     assert text is None
     assert _what_it_read(_start_reading()) == repr(("Grüße, what I copied", None))
+
+
+def test_a_copy_made_as_the_users_comes_back_is_kept(x11_only, monkeypatch):
+    """The app copies again between the look at the clipboard and the put
+    back: the X server refuses the older copy over it (release review,
+    Codex), so the user's newest copy is what pastes."""
+    with contextlib.ExitStack() as apps:
+        selecting = []
+
+        def ctrl_c():
+            selecting.append(apps.enter_context(
+                _app_offering({"UTF8_STRING": "the selected words"})))
+            return True
+        with _app_offering(_TEXT):
+            text, put_back = _in_the_service(lambda: cb.copy_selection(ctrl_c, wait=3))
+        looked = x11.X11Selection.snapshot
+
+        def copies_again_meanwhile(timeout=None):
+            seen = looked(timeout)
+            selecting[0].send_signal(signal.SIGUSR1)
+            assert selecting[0].stdout.readline().strip() == "again"
+            return seen
+        monkeypatch.setattr(x11.X11Selection, "snapshot", staticmethod(copies_again_meanwhile))
+        _in_the_service(put_back)
+        assert text == "the selected words"
+        assert _what_it_read(_start_reading()) == repr(("the selected words", None))
+
+
+def test_an_app_that_freezes_after_its_copy_is_given_up_on_soon(x11_only):
+    """The app took the clipboard with its Ctrl+C and stopped answering:
+    voice editing says the clipboard couldn't be used within about its
+    wait, not "nothing selected" a dozen seconds later (release review)."""
+    with contextlib.ExitStack() as apps:
+        def ctrl_c():
+            apps.enter_context(_app_offering(
+                {"UTF8_STRING": "the selected words"})).send_signal(signal.SIGSTOP)
+            return True
+        def edit():
+            try:
+                cb.copy_selection(ctrl_c, wait=0.6)
+            except cb.ClipboardUnavailable:
+                return "couldn't use the clipboard"
+            return "went on"
+        started = time.monotonic()
+        assert _in_the_service(edit) == "couldn't use the clipboard"
+        assert time.monotonic() - started < 3
+
+
+def test_the_probe_is_no_text_for_a_clipboard_manager_to_keep(x11_only):
+    """Xfce's Clipman ignores the password hint: offered as text, every
+    voice edit put a "tuxtalk-selection-probe-..." in its history. As a
+    type of its own it is nothing an app can paste or keep, and TuxTalk
+    still sees it's there."""
+    _in_the_service(lambda: x11.X11Selection.offer_probe("tuxtalk-selection-probe-1"))
+    assert _in_the_service(x11.X11Selection.text) == "tuxtalk-selection-probe-1"
+    assert _what_it_read(_start_reading()) == repr((None, b"secret"))

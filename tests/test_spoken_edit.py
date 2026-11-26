@@ -65,7 +65,6 @@ def editing(monkeypatch):
             return True
 
     monkeypatch.setattr(live, "voice_editing", True)
-    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("org.kde.kwrite", None))
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr(voice_edit, "edit_selection",
@@ -450,6 +449,10 @@ class HeldTimer:
 
     def start(self):
         HeldTimer.pending.append(self.call)
+
+    def cancel(self):
+        if self.call in HeldTimer.pending:
+            HeldTimer.pending.remove(self.call)
 
 
 def _time_passes():

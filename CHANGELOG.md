@@ -80,11 +80,14 @@ before 0.15.0, so older entries use that name.
   the rest. It read the selected text with Wayland's clipboard tools, so on
   X11 it only said it needed Wayland; it now reads it through X11's own
   clipboard, and "edit that", a tone said on its own and the tone with Type
-  at pause work there as well. Thanks to Andy for asking on #52.
+  at pause work there as well. Your clipboard is put back as on Wayland,
+  and Xfce's clipboard history doesn't fill up with TuxTalk's lookups.
+  Thanks to Andy for asking on #52.
 - Xfce, i3 or another X11 desktop started with startx after a text login
   is X11 to TuxTalk now. Such a session keeps the login's "tty" type, and
   TuxTalk took it for no desktop at all: voice commands like "new tab" and
-  spoken web searches said they couldn't tell which window had the focus.
+  spoken web searches said they couldn't tell which window had the focus,
+  and Report a Problem's form left the display blank.
 - Help and the Voice Commands window, opened again after changing Voice
   commands in, show the commands in the new language. They kept the old
   one until they were closed.

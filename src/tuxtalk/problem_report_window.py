@@ -32,7 +32,10 @@ def issue_url():
     desktop = _FORM_DESKTOPS.get(desktop_detect.get_desktop_environment())
     if desktop:
         fields["desktop"] = desktop
-    display = _FORM_DISPLAYS.get((os.environ.get("XDG_SESSION_TYPE") or "").lower())
+    # A startx session says "tty", and is X11 all the same.
+    session = "x11" if desktop_detect.is_x11_session(os.environ) else \
+        (os.environ.get("XDG_SESSION_TYPE") or "").lower()
+    display = _FORM_DISPLAYS.get(session)
     if display:
         fields["display"] = display
     return f"{ISSUE_URL}?{urllib.parse.urlencode(fields)}"

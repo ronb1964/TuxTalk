@@ -4,7 +4,6 @@ in code where an exact rule covers it (voice_edit_rules.py) and by the
 local AI where not, then type the result over the selection. The
 clipboard the selection was copied through is put back afterwards."""
 import functools
-import threading
 import time
 import unicodedata
 
@@ -176,16 +175,19 @@ def _nothing_selected(get_instruction, spoken: bool, where, beeps_on, message):
 def _put_clipboard_back(put_back, went_in):
     """Put back the clipboard the selection was copied through: at once
     when no rewrite went in (*went_in* empty), else a moment later
-    (EDIT_RESTORE_DELAY_S) so a paste still under way finishes first. The
-    rewrite that went in, whole or in part, may still be on the clipboard,
-    whole or (pasted a line at a time) its last line; that may be replaced."""
+    (EDIT_RESTORE_DELAY_S, and on X11 once the app has read a pasted
+    rewrite: clipboard.put_back_later) so a paste still under way finishes
+    first. The rewrite that went in, whole or in part, may still be on the
+    clipboard, whole or (pasted a line at a time) its last line; that may be
+    replaced."""
+    from . import clipboard
     if not went_in:
         put_back()
         return
     pasted = went_in[-1]
     also = (pasted, *pasted.split("\n"))
     if EDIT_RESTORE_DELAY_S:
-        threading.Timer(EDIT_RESTORE_DELAY_S, put_back, kwargs={"also": also}).start()
+        clipboard.put_back_later(put_back, EDIT_RESTORE_DELAY_S, also)
     else:
         put_back(also=also)
 

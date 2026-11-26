@@ -445,7 +445,11 @@ def _line_copied(copied, selections_on_primary, primary):
 
 class WaylandSelection:
     """The Wayland clipboard for copy_selection: wl-copy and wl-paste, the
-    primary selection too. x11_clipboard.X11Selection is X11's."""
+    primary selection too. x11_clipboard.X11Selection is X11's; the times
+    it needs are None here, wl-paste having time limits of its own and no
+    way to tell when a copy was made."""
+
+    schedule = staticmethod(_timer)
 
     @staticmethod
     def read():
@@ -458,9 +462,14 @@ class WaylandSelection:
         _wl_copy_sensitive(marker)
 
     @staticmethod
-    def text():
+    def text(_timeout=None):
         """The clipboard as text, None when it holds none or can't be read."""
         return _read_text()
+
+    @staticmethod
+    def snapshot():
+        """(text(), None): for clear() and write_back()."""
+        return _read_text(), None
 
     @staticmethod
     def is_empty():
@@ -471,12 +480,12 @@ class WaylandSelection:
             return False
 
     @staticmethod
-    def clear():
+    def clear(_made_at):
         """Leave the clipboard empty."""
         _wl_clear()
 
     @staticmethod
-    def write_back(saved):
+    def write_back(saved, _made_at):
         """Put a read() result back; never raises."""
         _write_back(saved)
 
@@ -487,12 +496,21 @@ class WaylandSelection:
 
 
 def _selection_board():
-    """The clipboard copy_selection reads: Wayland's wherever wl-copy has a
-    compositor to reach (a Wayland compositor nested in X11 too), else X11's."""
-    if os.environ.get("WAYLAND_DISPLAY"):
+    """The clipboard copy_selection reads: X11's in an X11 session, where the
+    apps are, even with a Wayland compositor nested in it; else Wayland's."""
+    from . import desktop_detect
+    if not desktop_detect.is_x11_session(os.environ):
         return WaylandSelection
     from .x11_clipboard import X11Selection
     return X11Selection
+
+
+def put_back_later(put_back, delay, also):
+    """put_back(also=also), a copy_selection() put_back, once *delay* has
+    passed; on X11 also once the app has read a rewrite pasted meanwhile
+    (x11_clipboard.X11Board.schedule), so a slow app isn't handed the
+    user's copy instead."""
+    _selection_board().schedule(delay, lambda: put_back(also=also))
 
 
 class ClipboardUnavailable(Exception):
@@ -515,8 +533,8 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
     selection (some move the cursor when they do). *selections_on_primary*
     says the app puts every selection on the primary selection, so with
     nothing there nothing was selected. Raises ClipboardUnavailable when the
-    marker can't be put on the clipboard. Wayland's clipboard or X11's
-    (_selection_board)."""
+    marker can't be put on the clipboard, or the app the clipboard went to
+    doesn't answer. Wayland's clipboard or X11's (_selection_board)."""
     import secrets
     sleep = sleep or time.sleep
     board = _selection_board()
@@ -530,8 +548,10 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
         only the marker, the selection or *also* (a pasted rewrite, or what
         the app copied instead of a selection) may be replaced, or nothing at
         all. A password goes back marked sensitive, as it came."""
-        current = board.text()
-        if current is None:
+        current, made_at = board.snapshot()
+        if current is _UNREADABLE:
+            replaceable = False
+        elif current is None:
             # No text: empty is safe to fill, but an image the user just
             # copied, or a clipboard that can't be read, is left alone.
             replaceable = board.is_empty()
@@ -545,25 +565,32 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
             # marker mustn't be what their next Ctrl+V pastes.
             if current == marker:
                 try:
-                    board.clear()
+                    board.clear(made_at)
                 except Exception as e:
                     logger.warning(f"Couldn't clear the clipboard: {e}")
             return
-        board.write_back(saved)
+        board.write_back(saved, made_at)
 
     try:
         board.offer_probe(marker)
     except Exception as e:
         logger.warning(f"Couldn't use the clipboard to read the selection: {e}")
         raise ClipboardUnavailable(str(e)) from e
-    copied = None
+    copied = current = None
     if send_copy():
+        # Counted for the tests' sleep, timed for an app that doesn't answer.
+        deadline = time.monotonic() + wait
         for _ in range(int(wait / _COPY_POLL_S) + 1):
-            current = board.text()
-            if current is not None and current != marker:
+            current = board.text(max(_COPY_POLL_S, deadline - time.monotonic()))
+            if current not in (None, _UNREADABLE, marker):
                 copied = current
                 break
+            if time.monotonic() >= deadline:
+                break
             sleep(_COPY_POLL_S)
+    if current is _UNREADABLE:
+        logger.warning("The app with the clipboard didn't answer; can't tell what's selected")
+        raise ClipboardUnavailable("the clipboard's owner didn't answer")
     rejected = copied
     if copied and _line_copied(copied, selections_on_primary, board.primary):
         logger.info("Ctrl+C copied a whole line with nothing selected; not a selection")

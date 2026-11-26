@@ -1,7 +1,7 @@
 """The world around a voice edit, faked, for the voice editing tests
 (test_voice_editing.py, test_spoken_edit.py)."""
 from tuxtalk import clipboard as cb
-from tuxtalk import delivery, history, keyboard_output, voice_edit
+from tuxtalk import delivery, history, voice_edit
 from tuxtalk import engine as speech_engine
 from tuxtalk import live_settings as live
 
@@ -44,7 +44,6 @@ def fake_edit_world(monkeypatch):
     monkeypatch.setattr(history, "add_entry", lambda text: seen["history"].append(text))
     monkeypatch.setattr(voice_edit, "EDIT_RESTORE_DELAY_S", 0)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
-    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     seen["engine"], seen["selection"] = engine, selection
     return seen
 

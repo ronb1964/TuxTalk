@@ -13,6 +13,7 @@ thread that offers a dictation keeps the Event its read sets
 (_dictation_read), which only it replaces and clears.
 """
 import collections
+import sys
 import threading
 import time
 
@@ -48,6 +49,8 @@ RESTORE_CAP_S = 2.0
 # Quitting waits at most this for a clipboard manager to take the user's
 # copy.
 QUIT_STORE_WAIT_S = 1.0
+# Voice editing's probe (X11Selection), in a type only TuxTalk asks for.
+_PROBE_TYPE = "application/x-tuxtalk-probe"
 # What every X11 owner offers about its copy rather than the copy itself.
 _META_TYPES = ("TARGETS", "TIMESTAMP", "MULTIPLE", "SAVE_TARGETS", "DELETE",
                "INSERT_PROPERTY", "INSERT_SELECTION", PASSWORD_HINT)
@@ -190,20 +193,15 @@ class X11Board:
         from . import gtk_loop
         if not gtk_loop.running():
             return NOTHING
-        answered, got = threading.Event(), []
-
-        def done(saved):
-            got.append(saved)
-            answered.set()
         try:
-            gtk_loop.call(_ask_owner, done, timeout=READ_WAIT_S)
+            saved = _ask("CLIPBOARD", lambda _board, done: _ask_owner(done))
         except TimeoutError:
             logger.warning("Couldn't read the clipboard to restore it later: GTK's thread was busy")
             return NOTHING
-        if not answered.wait(READ_WAIT_S):
+        if saved is _UNREADABLE:
             logger.info("The app that owns the clipboard didn't answer; not restoring it")
             return NOTHING
-        return got[0]
+        return saved
 
     @staticmethod
     def put_back(saved, over):
@@ -238,52 +236,80 @@ class X11Board:
 
 class X11Selection:
     """The X11 clipboard for clipboard.copy_selection, as WaylandSelection is
-    Wayland's: the probe offered as the service's own copy, the text the
-    app's Ctrl+C put there asked of that app, the user's copy put back with
-    X11Board's reading and offering, and PRIMARY, which every X11 app sets
-    to what it highlights. Each question to another app is given up on
-    after READ_WAIT_S, as X11Board's are."""
+    Wayland's. The probe is the service's own copy, in a type of its own that
+    no clipboard manager keeps (Xfce's Clipman ignores PASSWORD_HINT), so
+    whether it's still there is asked of this process; the text the app's
+    Ctrl+C put there is asked of that app. The user's copy goes back with
+    X11Board's reading and offering, over the copy that was looked at and
+    no newer one. PRIMARY is what every X11 app highlights. Each question
+    to another app is given up on after READ_WAIT_S at most."""
 
     read = staticmethod(X11Board.read)
+    schedule = staticmethod(X11Board.schedule)
 
     @staticmethod
     def offer_probe(marker):
-        """Offer *marker*, marked for clipboard managers to skip; raises
-        OSError when the service can't own the clipboard."""
+        """Offer *marker*; raises OSError when the service can't own the
+        clipboard."""
         from . import gtk_loop
         if not gtk_loop.running():
             raise OSError("GTK's loop isn't running to answer for the clipboard")
+        probe = _Offer(None, {_PROBE_TYPE: marker.encode("utf-8")}, True, None)
         try:
-            owned = gtk_loop.call(_own, _Offer(marker, None, True, None), timeout=READ_WAIT_S)
+            owned = gtk_loop.call(_own, probe, timeout=READ_WAIT_S)
         except TimeoutError as e:
             raise OSError("GTK's thread was busy") from e
         if not owned:
             raise OSError("the X server didn't let TuxTalk own the clipboard")
 
     @staticmethod
-    def text():
-        """The clipboard as text, None when it holds none or can't be read."""
-        text = _ask_text("CLIPBOARD")
-        return None if text is _UNREADABLE else text
+    def text(timeout=None):
+        """The clipboard as text, the probe while it's still there: None
+        when it holds no text, _UNREADABLE when its owner (or GTK's thread)
+        didn't answer within *timeout* seconds (READ_WAIT_S)."""
+        return X11Selection.snapshot(timeout)[0]
+
+    @staticmethod
+    def snapshot(timeout=None):
+        """(text() now, when that copy was made), the time for clear() and
+        write_back(), which then replace this copy and no newer one: the X
+        server refuses an owner older than the clipboard's. The time is
+        asked first, so a copy made in between is newer than it."""
+        from . import gtk_loop
+        timeout = READ_WAIT_S if timeout is None else timeout
+        try:
+            held = gtk_loop.call(_held_probe, timeout=timeout)
+            if held is not None:
+                return held
+            made_at = _ask_made_at(timeout)
+            return _ask("CLIPBOARD", _request_text, timeout), made_at
+        except TimeoutError:
+            return _UNREADABLE, None
 
     @staticmethod
     def is_empty():
         """Whether nothing at all is on it; False when it can't be read."""
-        return X11Board.read() is EMPTY
+        try:
+            types = _ask("CLIPBOARD", _request_types)
+        except TimeoutError:
+            return False
+        return types is not _UNREADABLE and not types
 
     @staticmethod
-    def clear():
+    def clear(made_at):
         """Leave the clipboard empty, unless another app has copied since
-        the probe was offered (the X server's time decides)."""
+        *made_at* (snapshot())."""
         from . import gtk_loop
-        gtk_loop.call(_put_back, EMPTY, _owned_at, timeout=READ_WAIT_S)
+        gtk_loop.call(_put_back, EMPTY, made_at, timeout=READ_WAIT_S)
 
     @staticmethod
-    def write_back(saved):
-        """Put a read() result back; never raises."""
+    def write_back(saved, made_at):
+        """Put a read() result back over the copy made at *made_at*
+        (snapshot()), never over a newer one; never raises."""
         from . import gtk_loop
         try:
-            gtk_loop.call(_put_back, saved, timeout=READ_WAIT_S)
+            if not gtk_loop.call(_put_back, saved, made_at, timeout=READ_WAIT_S):
+                logger.info("Clipboard changed during the voice edit; leaving it as it is")
         except TimeoutError:
             logger.warning("Couldn't restore the clipboard: GTK's thread was busy")
 
@@ -291,29 +317,68 @@ class X11Selection:
     def primary():
         """The highlighted text, None when nothing is, or _UNREADABLE when
         the app that has it didn't answer."""
-        return _ask_text("PRIMARY")
+        try:
+            return _ask("PRIMARY", _request_text)
+        except TimeoutError:
+            return _UNREADABLE
 
 
-def _ask_text(selection):
-    """*selection* ("CLIPBOARD" or "PRIMARY") as text, asked of its owner
-    on GTK's thread without holding it: None when it holds no text,
-    _UNREADABLE when the loop or the owner didn't answer in time."""
+def _held_probe():
+    """On GTK's thread: (the probe's text, when it was offered) while the
+    service still offers it, else None."""
+    if _offer is None or _offer.data is None or _PROBE_TYPE not in _offer.data:
+        return None
+    return _offer.data[_PROBE_TYPE].decode("utf-8"), _owned_at
+
+
+def _ask(selection, request, timeout=None):
+    """What request(board, done) hands done() for *selection* ("CLIPBOARD"
+    or "PRIMARY"), asked of its owner on GTK's thread without holding it;
+    _UNREADABLE when the owner didn't answer within *timeout* seconds
+    (READ_WAIT_S). Raises TimeoutError when GTK's thread didn't get to it."""
     from gi.repository import Gdk, Gtk
     from . import gtk_loop
-    if not gtk_loop.running():
-        return _UNREADABLE
+    timeout = READ_WAIT_S if timeout is None else timeout
     answered, got = threading.Event(), []
 
-    def ask():
-        def done(_board, text):
-            got.append(text)
-            answered.set()
-        Gtk.Clipboard.get(Gdk.Atom.intern(selection, False)).request_text(done)
-    try:
-        gtk_loop.call(ask, timeout=READ_WAIT_S)
-    except TimeoutError:
-        return _UNREADABLE
-    return got[0] if answered.wait(READ_WAIT_S) else _UNREADABLE
+    def done(answer):
+        got.append(answer)
+        answered.set()
+    started = time.monotonic()
+    gtk_loop.call(lambda: request(Gtk.Clipboard.get(Gdk.Atom.intern(selection, False)), done),
+                  timeout=timeout)
+    left = max(0.0, started + timeout - time.monotonic())
+    return got[0] if answered.wait(left) else _UNREADABLE
+
+
+def _request_text(board, done):
+    """For _ask: the selection as text, None when it holds none."""
+    board.request_text(lambda _board, text: done(text))
+
+
+def _request_types(board, done):
+    """For _ask: the types the selection's owner offers, [] with no owner."""
+    from gi.repository import Gdk
+
+    def got(_board, answer):
+        found, atoms = answer.get_targets() if answer.get_length() >= 0 else (False, [])
+        done([a.name() for a in atoms if a.name() not in _META_TYPES] if found else [])
+    board.request_contents(Gdk.Atom.intern("TARGETS", False), got)
+
+
+def _ask_made_at(timeout):
+    """The X server time the clipboard's copy was made, as its owner tells
+    it (ICCCM's TIMESTAMP); None when there is no owner or it doesn't say."""
+    from gi.repository import Gdk
+
+    def request(board, done):
+        board.request_contents(Gdk.Atom.intern("TIMESTAMP", False), lambda _board, data: done(
+            data.get_data() if data.get_length() >= 4 else None))
+    raw = _ask("CLIPBOARD", request, timeout)
+    if raw is None or raw is _UNREADABLE:
+        return None
+    # A 32-bit value, which GDK hands over as a C long: 8 bytes on 64-bit.
+    return int.from_bytes(raw[:8] if len(raw) >= 8 else raw[:4], sys.byteorder) & 0xFFFFFFFF
 
 
 def _wait_for_read(read, pasted_at, delay, cancelled):
