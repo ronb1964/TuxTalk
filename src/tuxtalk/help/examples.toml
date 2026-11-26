@@ -89,7 +89,7 @@ get = "git status"
 app = "terminal"
 
 [[example]]
-group = "terminal"
+group = "run"
 say = "git status, press enter"
 get = "git status"
 press = "Enter"

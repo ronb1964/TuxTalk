@@ -85,7 +85,10 @@ def test_each_german_phrase_listed_works_with_german_commands_on(kind, phrase, r
     monkeypatch.setattr(live_settings, "command_language", "de")
     if kind == "inline":
         typed = normalize.normalize_text(f"Apfel {phrase} Birne {phrase} Kirsche", lang="de")
-        assert phrase.lower() not in typed.lower()
+        # Every word of it used up: "weicher" left of "weicher Zeilenumbruch"
+        # would be a word typed that wasn't meant.
+        left = [word for word in phrase.lower().split() if word in typed.lower()]
+        assert not left, typed
         # What the list shows for it, once for each time it was said (the
         # closing full stop is the dictation's own).
         symbol = result.split(" ")[0]

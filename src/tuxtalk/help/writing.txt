@@ -52,15 +52,15 @@ elsewhere ("this one", "one of them"), as fractions do.
 {examples_numbers}
 
 ### Email and web addresses
-Say them the way you'd say them out loud. Hold <b>{hold}</b>, say "john at gmail dot com",
-let go: john@gmail.com. "github dot com" types github.com.
+Say them the way you'd say them out loud: hold <b>{hold}</b>, say the address, let go.
+"github dot com" types github.com.
 {examples_addresses}
   • Said on its own, an address gets no period after it, ready for a To: box or a
     browser's address bar.
   • Only the word right before "at" is the name, so "john doe at gmail dot com" types
-    John doe@gmail.com. Say the marks in a longer name: hold <b>{hold}</b>, say "john dot
-    doe at gmail dot com", let go: john.doe@gmail.com. "jane underscore smith" types
-    jane_smith, "john dash doe" john-doe, and "john no space doe" johndoe.
+    John doe@gmail.com. Say the marks in a longer name, as "john dot doe" above:
+    "jane underscore smith" types jane_smith, "john dash doe" john-doe, and "john no
+    space doe" johndoe.
   • Your own address: make it a snippet (Preferences → Words → Add Snippet), then hold
     <b>{hold}</b>, say "my email", let go: your address, with no period after it.
 
