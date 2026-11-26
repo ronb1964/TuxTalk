@@ -66,11 +66,6 @@ EXPLANATIONS = {
         "Voice editing changes words, not looks",
         "It can reword, shorten, fix the grammar or change capitals, but it can't "
         "change the font, size or color. Use the app's own menus for those."),
-    "needs_wayland": (
-        "Voice editing needs Wayland",
-        "Voice editing reads the selected text through the Wayland clipboard, which an "
-        "X11 session doesn't have. Log in to a Wayland session to use it. Dictation "
-        "itself works the same on X11."),
 }
 
 # explained.json, next to the settings: {"never": [the kinds the user ticked

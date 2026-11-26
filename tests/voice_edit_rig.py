@@ -59,6 +59,7 @@ class FakeBoard:
         self.sensitive_writes = []
 
     def install(self, monkeypatch):
+        monkeypatch.setattr(cb, "_selection_board", lambda: cb.WaylandSelection)
         monkeypatch.setattr(cb, "_wl_paste_types",
                             lambda: [] if self.data is None else [self.mime])
         monkeypatch.setattr(cb, "_wl_paste", lambda mime: self.data)

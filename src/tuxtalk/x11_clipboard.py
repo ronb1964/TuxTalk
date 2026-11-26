@@ -1,7 +1,9 @@
 """
 The dictation service's X11 clipboard: offering a dictation for pasting,
-marked so clipboard managers can skip it (offer_dictation), and putting the
-user's copy back afterwards (X11Board, for clipboard.ClipboardKeeper).
+marked so clipboard managers can skip it (offer_dictation), putting the
+user's copy back afterwards (X11Board, for clipboard.ClipboardKeeper), and
+reading the text an app's Ctrl+C copies for voice editing (X11Selection,
+for clipboard.copy_selection).
 
 X11 has no wl-copy to lean on: the service owns the clipboard itself, through
 an invisible GTK window on its GTK loop's thread (gtk_loop), and answers the
@@ -14,8 +16,8 @@ import collections
 import threading
 import time
 
-from .clipboard import (EMPTY, FILE_MANAGER_TYPES, MAX_SAVED_BYTES, NOTHING, PASSWORD_HINT,
-                        RESTORE_DELAY_S, TEXT_TYPES, best_type)
+from .clipboard import (_UNREADABLE, EMPTY, FILE_MANAGER_TYPES, MAX_SAVED_BYTES, NOTHING,
+                        PASSWORD_HINT, RESTORE_DELAY_S, TEXT_TYPES, best_type)
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -232,6 +234,86 @@ class X11Board:
     def wait_for_read(pasted_at, delay):
         """Wait as schedule() would for a paste made at *pasted_at*."""
         _wait_for_read(_dictation_read, pasted_at, delay, threading.Event())
+
+
+class X11Selection:
+    """The X11 clipboard for clipboard.copy_selection, as WaylandSelection is
+    Wayland's: the probe offered as the service's own copy, the text the
+    app's Ctrl+C put there asked of that app, the user's copy put back with
+    X11Board's reading and offering, and PRIMARY, which every X11 app sets
+    to what it highlights. Each question to another app is given up on
+    after READ_WAIT_S, as X11Board's are."""
+
+    read = staticmethod(X11Board.read)
+
+    @staticmethod
+    def offer_probe(marker):
+        """Offer *marker*, marked for clipboard managers to skip; raises
+        OSError when the service can't own the clipboard."""
+        from . import gtk_loop
+        if not gtk_loop.running():
+            raise OSError("GTK's loop isn't running to answer for the clipboard")
+        try:
+            owned = gtk_loop.call(_own, _Offer(marker, None, True, None), timeout=READ_WAIT_S)
+        except TimeoutError as e:
+            raise OSError("GTK's thread was busy") from e
+        if not owned:
+            raise OSError("the X server didn't let TuxTalk own the clipboard")
+
+    @staticmethod
+    def text():
+        """The clipboard as text, None when it holds none or can't be read."""
+        text = _ask_text("CLIPBOARD")
+        return None if text is _UNREADABLE else text
+
+    @staticmethod
+    def is_empty():
+        """Whether nothing at all is on it; False when it can't be read."""
+        return X11Board.read() is EMPTY
+
+    @staticmethod
+    def clear():
+        """Leave the clipboard empty, unless another app has copied since
+        the probe was offered (the X server's time decides)."""
+        from . import gtk_loop
+        gtk_loop.call(_put_back, EMPTY, _owned_at, timeout=READ_WAIT_S)
+
+    @staticmethod
+    def write_back(saved):
+        """Put a read() result back; never raises."""
+        from . import gtk_loop
+        try:
+            gtk_loop.call(_put_back, saved, timeout=READ_WAIT_S)
+        except TimeoutError:
+            logger.warning("Couldn't restore the clipboard: GTK's thread was busy")
+
+    @staticmethod
+    def primary():
+        """The highlighted text, None when nothing is, or _UNREADABLE when
+        the app that has it didn't answer."""
+        return _ask_text("PRIMARY")
+
+
+def _ask_text(selection):
+    """*selection* ("CLIPBOARD" or "PRIMARY") as text, asked of its owner
+    on GTK's thread without holding it: None when it holds no text,
+    _UNREADABLE when the loop or the owner didn't answer in time."""
+    from gi.repository import Gdk, Gtk
+    from . import gtk_loop
+    if not gtk_loop.running():
+        return _UNREADABLE
+    answered, got = threading.Event(), []
+
+    def ask():
+        def done(_board, text):
+            got.append(text)
+            answered.set()
+        Gtk.Clipboard.get(Gdk.Atom.intern(selection, False)).request_text(done)
+    try:
+        gtk_loop.call(ask, timeout=READ_WAIT_S)
+    except TimeoutError:
+        return _UNREADABLE
+    return got[0] if answered.wait(READ_WAIT_S) else _UNREADABLE
 
 
 def _wait_for_read(read, pasted_at, delay, cancelled):

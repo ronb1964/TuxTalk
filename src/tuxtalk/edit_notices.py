@@ -15,8 +15,6 @@ NOTICES = {
     "no_answer": "No change: the text may already read that way. Try saying it another way.",
     "terminal": "Voice editing doesn't work in a terminal: there's no selection there to "
                 "replace.",
-    "needs_wayland": "Voice editing works only in a Wayland session for now. This desktop "
-                     "is running X11.",
     "no_clipboard": "TuxTalk couldn't use the clipboard to read the selection, so nothing "
                     "was changed.",
     "window_changed": "You switched windows while the AI was working, so the rewrite "
@@ -66,7 +64,6 @@ LABELS = {
     "no_instruction": "Didn't catch what to change",
     "no_answer": "No change, try other words",
     "terminal": "Can't edit in a terminal",
-    "needs_wayland": "Voice editing needs Wayland",
     "no_clipboard": "Couldn't read the selection",
     "window_changed": "Window changed, see Recent Dictations",
     "selection_changed": "Selection changed, see Recent Dictations",

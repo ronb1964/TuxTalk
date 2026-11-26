@@ -222,8 +222,6 @@ can't be changed by voice.
   • The rewrite is also saved in <b>Recent Dictations</b>, and Paste Last
     Dictation types it again.
   • It doesn't work in a terminal: there's no selection there to replace.
-  • It needs a Wayland session for now. On X11 (Xfce, Cinnamon on X11) only a tone
-    at the end of a dictation works (not with Type at pause).
   • It uses the same AI as <b>Fix self-corrections with AI</b>: one download of
     about {AI_SIZE_TEXT}, shared, and about {AI_MEMORY_TEXT} of memory while it's on.
     Everything runs on this computer; nothing is sent online.

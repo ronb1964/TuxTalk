@@ -74,11 +74,6 @@ def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode, mess
     if silence.is_speechless_tap(audio_f32, engine.SAMPLE_RATE):
         return
 
-    if not keyboard_output.is_wayland_session():
-        # The selection is read with wl-copy / wl-paste, which have no X11
-        # side; without this every edit would say "select some text first".
-        notices.edit_problem("needs_wayland", beeps_on)
-        return
     if where is not None and focused_window.changed(where, focused_window.look()):
         notices.edit_problem("focus_moved", beeps_on)
         return
@@ -749,9 +744,6 @@ def _edit_target(instruction, target, chunk_role, beeps_on, injection_mode, mess
     changed as asked, the message is marked so no automatic Enter sends it."""
     from . import voice_navigation as nav
     logger.info(f"Voice command: edit that ({len(target)} characters)")
-    if not keyboard_output.is_wayland_session():
-        notices.edit_problem("needs_wayland", beeps_on)
-        return
     # Taken before selecting: the select keys, Delete or the rewrite go only
     # into this window, and it must be the one the text was typed into. A
     # click into another document (during the pause, or just now) would have

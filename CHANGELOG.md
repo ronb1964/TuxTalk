@@ -76,6 +76,11 @@ before 0.15.0, so older entries use that name.
   anywhere ("das Wort Punkt"). Before "Enter drücken" or "Tab drücken",
   "wörtlich" anywhere still keeps the key from being pressed, so a message
   isn't sent by mistake.
+- Voice editing (TuxTalk Labs) works on X11 too: Xfce, Cinnamon, MATE and
+  the rest. It read the selected text with Wayland's clipboard tools, so on
+  X11 it only said it needed Wayland; it now reads it through X11's own
+  clipboard, and "edit that", a tone said on its own and the tone with Type
+  at pause work there as well. Thanks to Andy for asking on #52.
 - Xfce, i3 or another X11 desktop started with startx after a text login
   is X11 to TuxTalk now. Such a session keeps the login's "tty" type, and
   TuxTalk took it for no desktop at all: voice commands like "new tab" and

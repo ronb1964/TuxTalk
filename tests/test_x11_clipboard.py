@@ -547,3 +547,43 @@ def test_gtk_too_busy_to_read_or_restore_is_logged(board, monkeypatch, caplog):
         assert x11.X11Board.read() is cb.NOTHING
         assert x11.X11Board.put_back(cb.EMPTY, "dictated words") is False
     assert caplog.text.count("GTK's thread was busy") == 2
+
+
+# --- Voice editing: the selection an app's Ctrl+C copies (X11Selection) ----------------
+
+@pytest.fixture
+def x11_only(board, monkeypatch):
+    """copy_selection on an X11 session: no Wayland display to reach."""
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+
+
+def test_voice_editing_reads_the_selection_and_gives_the_copy_back(x11_only):
+    """The app's Ctrl+C puts the selected words on the clipboard, read
+    through X11 as wl-paste reads them on Wayland (#52, Xfce); afterwards
+    the user's own copy is back."""
+    apps = []
+
+    def ctrl_c():
+        # The app the selection is in copies it when it gets Ctrl+C.
+        apps.append(_app_offering({"UTF8_STRING": "the selected words"}))
+        apps[-1].__enter__()
+        return True
+    try:
+        with _app_offering(_TEXT):
+            text, put_back = _in_the_service(lambda: cb.copy_selection(ctrl_c, wait=3))
+        assert text == "the selected words"
+        _in_the_service(put_back)
+    finally:
+        for app in apps:
+            app.__exit__(None, None, None)
+    assert _what_it_read(_start_reading()) == repr(("Grüße, what I copied", None))
+
+
+def test_with_nothing_selected_voice_editing_finds_nothing_and_leaves_the_copy(x11_only):
+    """An app with nothing selected leaves the clipboard alone on Ctrl+C:
+    the probe still being there means no selection, and the user's copy
+    goes straight back."""
+    with _app_offering(_TEXT):
+        text, _put_back = _in_the_service(lambda: cb.copy_selection(lambda: True, wait=0.3))
+    assert text is None
+    assert _what_it_read(_start_reading()) == repr(("Grüße, what I copied", None))

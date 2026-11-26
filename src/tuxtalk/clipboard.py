@@ -5,8 +5,9 @@ copy_text is a deliberate Copy (the tray's Recent Dictations, Fix a Word).
 The rest is the dictation service's paste mode: dictations offered so that
 clipboard managers can skip them on Wayland (wl-copy --sensitive),
 ClipboardKeeper putting the user's clipboard back afterwards (on Wayland
-here, on X11 through x11_clipboard), and the primary selection voice editing
-reads.
+here, on X11 through x11_clipboard), and copy_selection, which reads the
+text selected in an app for voice editing (WaylandSelection here,
+x11_clipboard.X11Selection on X11).
 """
 import functools
 import os
@@ -427,23 +428,77 @@ def _read_text():
     return text
 
 
-def _line_copied(copied, selections_on_primary):
+def _line_copied(copied, selections_on_primary, primary):
     """Whether *copied* is the whole current line a code editor (VS Code,
     JetBrains, Sublime, KDE's) copies on Ctrl+C with nothing selected,
     newline and all, rather than a selection. A real selection is also the
-    highlighted text (the primary selection); an app that may not set one
-    gets the benefit of the doubt when it's empty or unreadable."""
+    highlighted text (the primary selection, as *primary*() reads it); an
+    app that may not set one gets the benefit of the doubt when it's empty
+    or unreadable."""
     if not copied.endswith("\n"):
         return False
-    primary = _primary_to_keep()
+    primary = primary()
     if not primary:
         return selections_on_primary
     return primary is not _UNREADABLE and primary != copied
 
 
+class WaylandSelection:
+    """The Wayland clipboard for copy_selection: wl-copy and wl-paste, the
+    primary selection too. x11_clipboard.X11Selection is X11's."""
+
+    @staticmethod
+    def read():
+        """What the clipboard holds, as WaylandBoard.read() gives it."""
+        return _read_clipboard()
+
+    @staticmethod
+    def offer_probe(marker):
+        """Put *marker* on the clipboard; raises when it can't be."""
+        _wl_copy_sensitive(marker)
+
+    @staticmethod
+    def text():
+        """The clipboard as text, None when it holds none or can't be read."""
+        return _read_text()
+
+    @staticmethod
+    def is_empty():
+        """Whether nothing at all is on it; False when it can't be read."""
+        try:
+            return not _wl_paste_types()
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+    @staticmethod
+    def clear():
+        """Leave the clipboard empty."""
+        _wl_clear()
+
+    @staticmethod
+    def write_back(saved):
+        """Put a read() result back; never raises."""
+        _write_back(saved)
+
+    @staticmethod
+    def primary():
+        """The highlighted text, None, or _UNREADABLE (_primary_to_keep)."""
+        return _primary_to_keep()
+
+
+def _selection_board():
+    """The clipboard copy_selection reads: Wayland's wherever wl-copy has a
+    compositor to reach (a Wayland compositor nested in X11 too), else X11's."""
+    if os.environ.get("WAYLAND_DISPLAY"):
+        return WaylandSelection
+    from .x11_clipboard import X11Selection
+    return X11Selection
+
+
 class ClipboardUnavailable(Exception):
-    """The clipboard couldn't be used to read the selection (wl-copy failed,
-    or is missing). Not the same as nothing being selected."""
+    """The clipboard couldn't be used to read the selection (wl-copy failed
+    or is missing, or X11's wouldn't take the probe). Not the same as
+    nothing being selected."""
 
 
 def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
@@ -460,11 +515,13 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
     selection (some move the cursor when they do). *selections_on_primary*
     says the app puts every selection on the primary selection, so with
     nothing there nothing was selected. Raises ClipboardUnavailable when the
-    marker can't be put on the clipboard."""
+    marker can't be put on the clipboard. Wayland's clipboard or X11's
+    (_selection_board)."""
     import secrets
     sleep = sleep or time.sleep
+    board = _selection_board()
     _read_failures.worked("read")       # this check logs its own first failure
-    saved = _read_clipboard()
+    saved = board.read()
     marker = f"tuxtalk-selection-probe-{secrets.token_hex(8)}"
     text = None
 
@@ -473,14 +530,11 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
         only the marker, the selection or *also* (a pasted rewrite, or what
         the app copied instead of a selection) may be replaced, or nothing at
         all. A password goes back marked sensitive, as it came."""
-        current = _read_text()
+        current = board.text()
         if current is None:
             # No text: empty is safe to fill, but an image the user just
             # copied, or a clipboard that can't be read, is left alone.
-            try:
-                replaceable = not _wl_paste_types()
-            except (OSError, subprocess.SubprocessError):
-                replaceable = False
+            replaceable = board.is_empty()
         else:
             replaceable = current in {s for s in (marker, text, *also) if s is not None}
         if not replaceable:
@@ -491,27 +545,27 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
             # marker mustn't be what their next Ctrl+V pastes.
             if current == marker:
                 try:
-                    _wl_clear()
+                    board.clear()
                 except Exception as e:
                     logger.warning(f"Couldn't clear the clipboard: {e}")
             return
-        _write_back(saved)
+        board.write_back(saved)
 
     try:
-        _wl_copy_sensitive(marker)
+        board.offer_probe(marker)
     except Exception as e:
         logger.warning(f"Couldn't use the clipboard to read the selection: {e}")
         raise ClipboardUnavailable(str(e)) from e
     copied = None
     if send_copy():
         for _ in range(int(wait / _COPY_POLL_S) + 1):
-            current = _read_text()
+            current = board.text()
             if current is not None and current != marker:
                 copied = current
                 break
             sleep(_COPY_POLL_S)
     rejected = copied
-    if copied and _line_copied(copied, selections_on_primary):
+    if copied and _line_copied(copied, selections_on_primary, board.primary):
         logger.info("Ctrl+C copied a whole line with nothing selected; not a selection")
         copied = None
         if on_line_copied is not None:
