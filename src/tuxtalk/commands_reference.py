@@ -72,10 +72,12 @@ def _inline(*said, result, note="", german=(), german_result=""):
 
 def _literal(word, result, *said, german=""):
     """The command that types *word* itself; *said* adds other ways to say
-    it, and *german* names the German word that "wörtlich" types."""
+    it, and *german* names the German word that "wörtlich" types. With
+    German on the row shows both: the English ways still type *word*."""
     return Command((f"literal {word}", *said), f'"{word}" (not {result})', "literal",
                    german=(f"wörtlich {german}", f"das Wort {german}") if german else (),
-                   german_result=f'"{german}" (not {result})' if german else "")
+                   german_result=(f'"{german}" (not {result}); the English ways type "{word}"'
+                                  if german else ""))
 
 
 SECTIONS = (

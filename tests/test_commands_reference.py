@@ -131,6 +131,18 @@ def test_each_german_phrase_listed_works_with_german_commands_on(kind, phrase, r
         assert typed == f"Apfel, {word} Birne."
 
 
+@pytest.mark.parametrize("command", [c for s in commands_reference.SECTIONS for c in s.commands
+                                     if c.kind == "literal" and c.german])
+def test_with_german_on_a_literal_row_shows_what_its_english_ways_type(command):
+    """German on, a row shows "wörtlich Punkt" beside "literal period": each
+    types its own word, and the row says which."""
+    for phrase in command.said:
+        word = re.sub(r"^(literal|the word) ", "", phrase)
+        assert normalize.normalize_text(f"Apfel, {phrase} Birne", lang="de") == (
+            f"Apfel, {word} Birne.")
+        assert f'"{word}"' in command.german_result
+
+
 # What each exact edit listed makes of _EDITED: done in code, not by the AI.
 _EDITED = "one, two Testing\n    - three"
 _DONE_IN_CODE = {
