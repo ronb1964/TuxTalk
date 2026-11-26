@@ -197,6 +197,8 @@ def test_fix_in_text_swaps_only_the_word(monkeypatch):
 
         def type_text(self, text):
             typed_text.append(text)
+            # Over a selection: a paste of it leaves the primary selection alone.
+            assert keyboard_output.this_thread.over_selection
             return True
     monkeypatch.setattr(fw, "_REFOCUS_S", 0)
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())

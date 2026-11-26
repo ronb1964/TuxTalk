@@ -22,6 +22,12 @@ once it's back; when it can't, the message says to quit TuxTalk and start it aga
     fixing; its button fixes it.
   • {typing_para}
 
+### Words typed beside the selected text, not over it
+On GNOME, until the TuxTalk extension is on (log out and back in once after it's
+installed), TuxTalk can't tell which app you're in, and a dictation over selected
+text can go in beside it. Delete the selection first; voice editing replaces it as it
+should.
+
 ### Letters come out wrong
   • Capitals and small letters swapped ("hELLO"): Caps Lock is on. TuxTalk can't
     see it, so turn it off before dictating.

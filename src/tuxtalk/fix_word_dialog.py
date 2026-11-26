@@ -419,7 +419,11 @@ def fix_in_text(typed, fix, window, where=None):
             if why:
                 backend.press_keys([((), "RIGHT")] * (back + 1))      # the cursor back
                 return _left_alone(why)
-            fixed = backend.type_text(replacement)
+            # Over the selected words: a character the layout can't type is
+            # pasted, and must not take the primary selection, which a GTK
+            # app's selection goes with (keyboard_output.over_selection).
+            with keyboard_output.over_selection():
+                fixed = backend.type_text(replacement)
             done = fixed and backend.press_keys([((), "RIGHT")] * back)
         except virtual_keyboard.GaveUp as stop:
             if fixed:           # only the cursor's way back was stopped

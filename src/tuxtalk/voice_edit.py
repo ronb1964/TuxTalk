@@ -406,7 +406,8 @@ def _type_rewrite(result, injection_mode, message, beeps_on, into):
     "ok" when it all went in."""
     from . import history
     try:
-        # Esc while the rewrite gets ready to go in stops it at the first key.
+        # Esc while the rewrite gets ready to go in stops it at the first key,
+        # and its paste replaces the selection (keyboard_output.over_selection).
         with keyboard_output.until_cancelled(message), keyboard_output.over_selection():
             outcome = delivery.inject_text(result, injection_mode, one_block=True, into=into,
                                            message=message)

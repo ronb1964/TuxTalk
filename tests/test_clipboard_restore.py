@@ -277,7 +277,7 @@ def test_the_unknown_window_paste_saves_the_primary_before_setting_it(monkeypatc
 def test_a_rewrite_pasted_over_a_selection_leaves_the_primary_selection_alone(monkeypatch):
     """GNOME without TuxTalk's extension: the window is unknown, and taking
     the primary selection makes a GTK app drop its own, so a voice edit's
-    rewrite landed in front of the text instead of over it (0.26 VM run)."""
+    rewrite landed beside the text instead of over it."""
     import types
     sent = []
     wl_copy = types.SimpleNamespace(communicate=lambda input, timeout: (b"", b""),

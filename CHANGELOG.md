@@ -87,10 +87,11 @@ before 0.15.0, so older entries use that name.
   and Xfce's clipboard history doesn't fill up with TuxTalk's markers.
   Thanks to Andy for asking on #52.
 - Voice editing on GNOME without TuxTalk's extension replaces the selected
-  text with the rewrite, instead of typing the rewrite in front of it: the
-  paste also put the rewrite on the primary selection (for terminals, where
-  voice editing doesn't work anyway), and GTK apps drop their own selection
-  when another program takes it.
+  text with the rewrite, instead of leaving it there and pasting the
+  rewrite next to it, and so does Fix a Word's "Also fix it in my text"
+  for a word with a letter your keyboard can't type ("café"): the paste
+  also put the text on the primary selection (for terminals), and GTK apps
+  drop their own selection when another program takes it.
 - Xfce, i3 or another X11 desktop started with startx after a text login
   is X11 to TuxTalk now. Such a session keeps the login's "tty" type, and
   TuxTalk took it for no desktop at all: voice commands like "new tab" and
