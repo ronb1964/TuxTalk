@@ -333,3 +333,7 @@ def test_a_spoken_mark_isnt_lost_to_the_engine_s_period_after_it(said, typed):
 ])
 def test_a_greeting_keeps_its_comma_before_a_new_line(said, typed):
     assert normalize_text(said, lang="de") == typed
+
+
+def test_a_spoken_komma_before_german_quotes_isnt_lost():
+    assert normalize_text("Liebe Anna Komma. „Wie geht es?“", lang="de").startswith("Liebe Anna, „")

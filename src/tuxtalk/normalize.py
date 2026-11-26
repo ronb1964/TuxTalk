@@ -241,7 +241,8 @@ _MULTI_WORD_REPLACEMENTS = [
 # more follows, words or a spoken line break (converted before these):
 # tidied, the engine's period would win and the comma be lost ("Dear Anna.").
 # Ending the dictation, the period stays the engine's.
-_ENGINE_MARK_AFTER = r"(?:{own}|\.(?=\s+\w|\s*" + re.escape(LINE_BREAK) + r"))?"
+_ENGINE_MARK_AFTER = (r"(?:{own}|\.(?=\s+[\w\"\u201c\u201e'\u2018(\[{{]|\s*"
+                      + re.escape(LINE_BREAK) + r"))?")
 
 # --- _spoken_marks_to_symbols: single words ---
 _SINGLE_WORD_REPLACEMENTS = [
@@ -929,9 +930,12 @@ _GREETINGS = {
 def _greeting_comma(lang: str):
     """The pattern for *lang*'s greeting, its comma and the line break after it."""
     greeting, breaks = _GREETINGS["de" if lang == "de" else "en"]
+    # The name's words are any but a spoken mark: "Hi Bob semicolon, new
+    # line" has its mark already, and a comma after it would make two.
+    name_word = r"(?!(?:comma|semicolon|colon|period|komma|semikolon|doppelpunkt|punkt)\b)"
     return re.compile(rf"(^\W*|[.!?]\s+|\b(?:{breaks})\b[,.]?\s+)"
-                      rf"((?:{greeting})\b(?:\s+[^\s,.!?]+){{0,4}})\s*,\s*(?=(?:{breaks})\b)",
-                      re.IGNORECASE)
+                      rf"((?:{greeting})\b(?:\s+{name_word}[^\s,.!?]+){{0,4}})\s*,\s*"
+                      rf"(?=(?:{breaks})\b)", re.IGNORECASE)
 
 
 _GREETING_COMMA = {lang: _greeting_comma(lang) for lang in _GREETINGS}
