@@ -2,6 +2,7 @@
 does to other sound while you dictate. RELEASE_CHECKLIST.md: "Press enter",
 "Paste Last Dictation", "Turn other sounds down", "pause it".
 """
+import re
 import time
 
 from harness import Outcome, check, heard_in
@@ -218,11 +219,14 @@ def duck_audio(run):
         time.sleep(0.2)
         log = run.wait_log(mark, "Put 1 sound(s) back", timeout=30) or run.log_since(mark)
         run.vm.ssh("pkill -x pw-play", check=False)
-    down = "Turned 1 other sound(s) down" in log
-    back = "Put 1 sound(s) back" in log
+    # The phrase is played into the pretend microphone by a stream TuxTalk sees
+    # as another app's sound: when it has started first, two are turned down
+    # and one, the tone, is still there to put back.
+    down = re.search(r"Turned \d+ other sound\(s\) down", log)
+    back = re.search(r"Put [1-9]\d* sound\(s\) back", log)
     if down and back:
-        return Outcome("pass", "Log: “Turned 1 other sound(s) down”, then “Put 1 sound(s) back”")
-    return Outcome("fail", f"turned down: {down}; put back: {back}")
+        return Outcome("pass", f"Log: “{down.group()}”, then “{back.group()}”")
+    return Outcome("fail", f"turned down: {bool(down)}; put back: {bool(back)}")
 
 
 def _player(run, status):
