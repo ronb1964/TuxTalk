@@ -97,7 +97,13 @@ def ai_voice_edit(run):
             after = run.sink_text()
         log = run.log_since(mark)
     shot = run.shot("voice-edit")
-    if after and after.strip() != (before or "").strip() and "Voice edit" in log:
+    # Rewritten, not added to: the dictation was there to select, the AI's
+    # answer replaced it, the request itself wasn't typed, and the point of
+    # the message ("file") survived.
+    rewritten = after.strip().lower()
+    if (before and after and rewritten != before.strip().lower()
+            and "Voice edit result:" in log and "more formal" not in rewritten
+            and before.strip().lower() not in rewritten and "file" in rewritten):
         return Outcome("pass", "the selection was rewritten", typed=after.strip(),
                        screenshot=shot)
     return Outcome("fail", "the selection wasn't rewritten", typed=after,

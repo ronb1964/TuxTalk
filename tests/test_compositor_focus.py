@@ -293,6 +293,10 @@ def own_x11_window(monkeypatch):
     monkeypatch.setenv("DISPLAY", display)
     window = Gtk.Window()
     window.realize()
+    # Made on the X server before another process (xprop) is told its id:
+    # unflushed, the request could still be in this process, and xprop got
+    # BadWindow when other tests ran before it.
+    window.get_display().sync()
     yield window.get_window().get_xid()
     window.destroy()
 
