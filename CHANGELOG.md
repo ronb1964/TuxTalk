@@ -80,8 +80,9 @@ before 0.15.0, so older entries use that name.
   the rest. It read the selected text with Wayland's clipboard tools, so on
   X11 it only said it needed Wayland; it now reads it through X11's own
   clipboard, and "edit that", a tone said on its own and the tone with Type
-  at pause work there as well. Your clipboard is put back as on Wayland,
-  and Xfce's clipboard history doesn't fill up with TuxTalk's lookups.
+  at pause work there as well. Your clipboard is put back afterwards (on
+  X11 TuxTalk holds it until you copy something else, as Help explains),
+  and Xfce's clipboard history doesn't fill up with TuxTalk's markers.
   Thanks to Andy for asking on #52.
 - Xfce, i3 or another X11 desktop started with startx after a text login
   is X11 to TuxTalk now. Such a session keeps the login's "tty" type, and

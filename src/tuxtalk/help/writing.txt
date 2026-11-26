@@ -220,8 +220,8 @@ can't be changed by voice.
 ### Good to know
   • Your clipboard is put back afterwards, the way you left it. On X11 TuxTalk
     holds it from then on, until you copy something else: when TuxTalk quits,
-    copied text goes to your clipboard manager, but a copied picture, files or a
-    password go with it.
+    copied text goes to your clipboard manager if you have one, but a copied
+    picture, files or a password go with it.
   • The rewrite is also saved in <b>Recent Dictations</b>, and Paste Last
     Dictation types it again.
   • It doesn't work in a terminal: there's no selection there to replace.

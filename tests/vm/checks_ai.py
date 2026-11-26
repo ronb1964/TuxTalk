@@ -95,14 +95,21 @@ def ai_voice_edit(run):
         while after.strip() == (before or "").strip() and time.monotonic() < deadline:
             time.sleep(1)
             after = run.sink_text()
+        # Then until the typing is done: the same text two seconds running.
+        settled = None
+        while after != settled and time.monotonic() < deadline:
+            settled = after
+            time.sleep(2)
+            after = run.sink_text()
         log = run.log_since(mark)
     shot = run.shot("voice-edit")
     # Rewritten, not added to: the dictation was there to select, the AI's
-    # answer replaced it, the request itself wasn't typed, and the point of
-    # the message ("file") survived.
+    # answer replaced it with nothing logged as failed, the request itself
+    # wasn't typed, and the point of the message ("file") survived.
     rewritten = after.strip().lower()
     if (before and after and rewritten != before.strip().lower()
-            and "Voice edit result:" in log and "more formal" not in rewritten
+            and "Voice edit result:" in log and "failed" not in log
+            and "more formal" not in rewritten
             and before.strip().lower() not in rewritten and "file" in rewritten):
         return Outcome("pass", "the selection was rewritten", typed=after.strip(),
                        screenshot=shot)

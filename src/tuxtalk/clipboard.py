@@ -445,11 +445,15 @@ def _line_copied(copied, selections_on_primary, primary):
 
 class WaylandSelection:
     """The Wayland clipboard for copy_selection: wl-copy and wl-paste, the
-    primary selection too. x11_clipboard.X11Selection is X11's; the times
-    it needs are None here, wl-paste having time limits of its own and no
-    way to tell when a copy was made."""
+    primary selection too. x11_clipboard.X11Selection is X11's."""
 
-    schedule = staticmethod(_timer)
+    @staticmethod
+    def schedule(delay, fn):
+        """Run *fn* after *delay* seconds; returns its cancel(). Not a daemon
+        thread: quitting right after an edit still puts the clipboard back."""
+        timer = threading.Timer(delay, fn)
+        timer.start()
+        return timer.cancel
 
     @staticmethod
     def read():
@@ -462,14 +466,10 @@ class WaylandSelection:
         _wl_copy_sensitive(marker)
 
     @staticmethod
-    def text(_timeout=None):
+    def text():
         """The clipboard as text, None when it holds none or can't be read."""
         return _read_text()
 
-    @staticmethod
-    def snapshot():
-        """(text(), None): for clear() and write_back()."""
-        return _read_text(), None
 
     @staticmethod
     def is_empty():
@@ -480,12 +480,12 @@ class WaylandSelection:
             return False
 
     @staticmethod
-    def clear(_made_at):
+    def clear():
         """Leave the clipboard empty."""
         _wl_clear()
 
     @staticmethod
-    def write_back(saved, _made_at):
+    def write_back(saved):
         """Put a read() result back; never raises."""
         _write_back(saved)
 
@@ -548,7 +548,7 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
         only the marker, the selection or *also* (a pasted rewrite, or what
         the app copied instead of a selection) may be replaced, or nothing at
         all. A password goes back marked sensitive, as it came."""
-        current, made_at = board.snapshot()
+        current = board.text()
         if current is _UNREADABLE:
             replaceable = False
         elif current is None:
@@ -565,11 +565,11 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
             # marker mustn't be what their next Ctrl+V pastes.
             if current == marker:
                 try:
-                    board.clear(made_at)
+                    board.clear()
                 except Exception as e:
                     logger.warning(f"Couldn't clear the clipboard: {e}")
             return
-        board.write_back(saved, made_at)
+        board.write_back(saved)
 
     try:
         board.offer_probe(marker)
@@ -578,10 +578,11 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
         raise ClipboardUnavailable(str(e)) from e
     copied = current = None
     if send_copy():
-        # Counted for the tests' sleep, timed for an app that doesn't answer.
+        # Counted for the tests' sleep, and timed: on X11 a read of an app's
+        # copy may take up to a second or two of its own.
         deadline = time.monotonic() + wait
         for _ in range(int(wait / _COPY_POLL_S) + 1):
-            current = board.text(max(_COPY_POLL_S, deadline - time.monotonic()))
+            current = board.text()
             if current not in (None, _UNREADABLE, marker):
                 copied = current
                 break
@@ -589,7 +590,11 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None, on_line_copied=None,
                 break
             sleep(_COPY_POLL_S)
     if current is _UNREADABLE:
+        # The app took the clipboard with its Ctrl+C: the user's copy goes
+        # back over it rather than be lost with it.
         logger.warning("The app with the clipboard didn't answer; can't tell what's selected")
+        if saved is not NOTHING:
+            board.write_back(saved)
         raise ClipboardUnavailable("the clipboard's owner didn't answer")
     rejected = copied
     if copied and _line_copied(copied, selections_on_primary, board.primary):
