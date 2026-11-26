@@ -49,7 +49,9 @@ US_LETTER_KEYS = dict(zip("abcdefghijklmnopqrstuvwxyz",
 _LITERAL = r"(?:literal|the\s+words?)"
 # With German on, either language's word for it does, before either's
 # command: "literal Enter drücken" asked for the words as surely. "wörtlich"
-# only after a pause: "Ich meine das wörtlich Enter drücken" is the word.
+# mid-sentence may be the everyday word ("Ich meine das wörtlich Enter
+# drücken") or the command; pressing Enter could send a message, so there
+# nothing is pressed and the words are typed as said (split_key_command).
 _GERMAN_LITERAL = rf"(?:literal|the\s+words?|das\s+wort|die\s+wörter|{WOERTLICH})"
 
 
@@ -80,6 +82,7 @@ _TRAILING = _english_trailing(_LITERAL)
 _TRAILING_BY_LANGUAGE = {"en": (_TRAILING,),
                          "de": (*_GERMAN_TRAILING, _english_trailing(_GERMAN_LITERAL))}
 _TAB_NAMES = frozenset({"tab", "tabulator"})
+_WOERTLICH_BEFORE = re.compile(r"\bwörtlich\s*$", re.IGNORECASE)
 
 
 def split_key_command(raw: str, lang: str = "en") -> tuple[str, str]:
@@ -97,6 +100,8 @@ def split_key_command(raw: str, lang: str = "en") -> tuple[str, str]:
     if not match:
         return raw, ""
     key = "TAB" if match.group("key").lower() in _TAB_NAMES else "ENTER"
+    if lang == "de" and _WOERTLICH_BEFORE.search(raw, 0, match.start()):
+        return raw, ""
     if match.group("literal"):
         # Typed as words, without "literal", like "literal new line". A
         # "press tab" keeps it: without it normalize.py would type a tab.

@@ -73,7 +73,9 @@ before 0.15.0, so older entries use that name.
   meine ich Ausrufezeichen.", losing the word and the mark, and now types
   "Das meine ich wörtlich!". To type a mark's word, say "wörtlich" at the
   start of a dictation or after a pause ("wörtlich Punkt"), or "das Wort"
-  anywhere ("das Wort Punkt").
+  anywhere ("das Wort Punkt"). Before "Enter drücken" or "Tab drücken",
+  "wörtlich" anywhere still keeps the key from being pressed, so a message
+  isn't sent by mistake.
 - Help and the Voice Commands window, opened again after changing Voice
   commands in, show the commands in the new language. They kept the old
   one until they were closed.

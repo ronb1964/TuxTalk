@@ -152,7 +152,8 @@ SECTIONS = (
                  "commands in German, <b>das Wort</b> does the same (<b>das Wort Punkt</b>), "
                  "and <b>wörtlich</b> at the start or after a pause: in the middle of a "
                  "sentence it's the everyday word, so <b>Das meine ich wörtlich "
-                 "Ausrufezeichen</b> types \"Das meine ich wörtlich!\"",
+                 "Ausrufezeichen</b> types \"Das meine ich wörtlich!\". Before "
+                 "<b>Enter drücken</b> it never presses the key, wherever it's said",
             commands=(
                 _literal("period", ".", "the word period", german="Punkt"),
                 _literal("comma", ",", "the word comma", german="Komma"),
