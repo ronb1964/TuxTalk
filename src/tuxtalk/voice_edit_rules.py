@@ -115,6 +115,8 @@ def tone_at_end(raw: str):
 
 
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}\b)")
+# "3, 4" and "3,4" are the same list, so a rewrite may space it either way.
+_LIST_COMMA = re.compile(r"(?<=\d),\s+(?=\d)")
 # A number as written: its sign, and its decimals (a German "1,50" too), time
 # or date parts. Thousands' commas are gone by then (_THOUSANDS).
 _NUMBER = re.compile(r"[-\u2212]?\d+(?:[.,:/]\d+)*")
@@ -130,6 +132,7 @@ def _numbers(text: str) -> collections.Counter:
     "$1.50" stays 1.50 and "1,50" 1,50, "-5" keeps its sign, "ten" is 10."""
     from .spoken_numbers import to_digits
     plain = _THOUSANDS.sub("", to_digits(text, "en")).replace("\u2212", "-")
+    plain = _LIST_COMMA.sub(",", plain)
     return collections.Counter(_NUMBER.findall(plain))
 
 

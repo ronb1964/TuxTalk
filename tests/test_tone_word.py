@@ -211,6 +211,7 @@ def test_a_rewrite_that_changes_a_number_or_the_meaning_is_not_used(before, afte
 @pytest.mark.parametrize("before, after", [
     ("We cant do it for less than 2400 dollars.", "We cannot do it for less than $2,400."),
     ("I dont think we should use it.", "I do not think we should use it."),
+    ("Bring items 3,4 and 5.", "Please bring items 3, 4 and 5."),   # a list respaced
     ("Meet at 3:30.", "Could we meet at 3:30 PM?"),
 ])
 def test_a_fair_rewrite_is_still_used(before, after):

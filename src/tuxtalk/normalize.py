@@ -241,8 +241,10 @@ _MULTI_WORD_REPLACEMENTS = [
 # more follows, words or a spoken line break (converted before these):
 # tidied, the engine's period would win and the comma be lost ("Dear Anna.").
 # Ending the dictation, the period stays the engine's.
-# What opens what follows: a word, a quote of any language, a bracket.
-_OPENER = r"[\w\"\u201c\u201e'\u2018\u201a\u00ab\u00bb\u2039\u203a(\[{{]"
+# What opens what follows: a word, a quote of any language, a bracket. Not
+# » or ›: after a space they close a French quotation more often than
+# they open a German one.
+_OPENER = r"[\w\"\u201c\u201e'\u2018\u201a\u00ab\u2039(\[{{]"
 _ENGINE_MARK_AFTER = (r"(?:{own}|\.(?=\s+" + _OPENER + r"|\s*"
                       + re.escape(LINE_BREAK) + r"))?")
 

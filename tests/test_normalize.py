@@ -1252,6 +1252,11 @@ def test_a_spoken_mark_before_a_quote_or_bracket_isnt_lost(said, kept):
     assert normalize_text(said).startswith(kept)
 
 
+def test_a_closing_french_quote_isnt_taken_for_more_to_come():
+    """» after a space closes a French quotation (release re-check, Codex)."""
+    assert ": \u00bb" not in normalize_text("He said \u00abNote colon. \u00bb Then left.")
+
+
 def test_a_greeting_with_its_mark_said_gets_no_second_one():
     """"Hi Bob semicolon, new line" typed "Hi Bob;," (release review, Claude)."""
     assert normalize_text("Hi Bob semicolon, new line, see you") == f"Hi Bob;{LINE_BREAK}See you."
