@@ -218,16 +218,18 @@ class _ThisThread(threading.local):
     window it may go into, else None; whether it's a dictation, which never
     goes into a password field; the dictation Esc may cancel (a
     recording_state.Message), else None; whether its pastes keep the user's
-    clipboard (_keeping); and a last check its keys must pass right
+    clipboard (_keeping); a last check its keys must pass right
     before the first goes down, else None (a held send's space on its own
     may not go out with Alt or a dictation key down:
-    send_countdown.give_back_space)."""
+    send_countdown.give_back_space); and whether it replaces a selection
+    (over_selection)."""
     sends = 0
     into = None
     no_password_field = False
     cancel_with = None
     keep_clipboard = False
     last_check = None
+    over_selection = False
 
 
 this_thread = _ThisThread()
@@ -266,6 +268,15 @@ def until_cancelled(message):
     """Keys sent on this thread inside stop going in once Esc has cancelled
     *message*, a recording_state.Message (refuse_cancelled); None: they don't."""
     return _on_this_thread(cancel_with=message)
+
+
+def over_selection():
+    """A paste on this thread inside replaces the app's selection (a voice
+    edit's rewrite): the primary selection is left alone, since a GTK app
+    drops its own selection when another program takes it, and the rewrite
+    then lands in front of the text instead of over it. Ctrl+V pastes the
+    clipboard in every app voice editing works in."""
+    return _on_this_thread(over_selection=True)
 
 
 def esc_cancelled() -> bool:
@@ -678,11 +689,12 @@ def _hand_to_wl_copy(proc, text, errors):
 def _send_paste(text, keeping):
     """With the clipboard set, the paste key. Where the window is unknown the
     primary selection gets the text too, so the key works in a terminal as
-    well. *keeping*: the user's clipboard is being kept to put back."""
+    well, unless the paste replaces a selection (over_selection).
+    *keeping*: the user's clipboard is being kept to put back."""
     from . import clipboard
     focused_class = focused_window.acts_as(focused_window.window_class())
     primary_holds_text = False
-    if focused_class is None:
+    if focused_class is None and not this_thread.over_selection:
         if keeping:
             _clipboard_keeper.before_primary()
         primary_holds_text = clipboard.copy_to_primary(text, WL_COPY_READY_TIMEOUT_S)

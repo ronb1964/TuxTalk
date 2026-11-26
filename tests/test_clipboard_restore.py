@@ -274,6 +274,30 @@ def test_the_unknown_window_paste_saves_the_primary_before_setting_it(monkeypatc
                     "puts them back"]
 
 
+def test_a_rewrite_pasted_over_a_selection_leaves_the_primary_selection_alone(monkeypatch):
+    """GNOME without TuxTalk's extension: the window is unknown, and taking
+    the primary selection makes a GTK app drop its own, so a voice edit's
+    rewrite landed in front of the text instead of over it (0.26 VM run)."""
+    import types
+    sent = []
+    wl_copy = types.SimpleNamespace(communicate=lambda input, timeout: (b"", b""),
+                                    returncode=0, poll=lambda: 0)
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
+    monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(live, "restore_clipboard", False)
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: wl_copy)
+    monkeypatch.setattr(cb, "_sensitive_supported", lambda: False)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
+    monkeypatch.setattr(cb, "copy_to_primary", lambda text, timeout: sent.append("primary") or True)
+    monkeypatch.setattr(keyboard_output, "send_paste_keystroke",
+                        lambda cls, primary: sent.append(("paste", primary)) or True)
+    with keyboard_output.over_selection():
+        assert keyboard_output.paste_text("the rewrite") is True
+    assert sent == [("paste", False)]
+    assert keyboard_output.paste_text("a dictation") is True
+    assert sent[1:] == ["primary", ("paste", True)]
+
+
 # --- marking dictations sensitive --------------------------------------------------
 
 def test_dictations_are_marked_sensitive_when_wl_copy_can(monkeypatch):

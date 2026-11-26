@@ -86,6 +86,11 @@ before 0.15.0, so older entries use that name.
   X11 TuxTalk holds it until you copy something else, as Help explains),
   and Xfce's clipboard history doesn't fill up with TuxTalk's markers.
   Thanks to Andy for asking on #52.
+- Voice editing on GNOME without TuxTalk's extension replaces the selected
+  text with the rewrite, instead of typing the rewrite in front of it: the
+  paste also put the rewrite on the primary selection (for terminals, where
+  voice editing doesn't work anyway), and GTK apps drop their own selection
+  when another program takes it.
 - Xfce, i3 or another X11 desktop started with startx after a text login
   is X11 to TuxTalk now. Such a session keeps the login's "tty" type, and
   TuxTalk took it for no desktop at all: voice commands like "new tab" and
