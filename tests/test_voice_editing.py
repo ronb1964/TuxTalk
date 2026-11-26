@@ -1355,3 +1355,25 @@ def test_an_edits_clipboard_restore_outlives_the_dictation_worker():
         assert timer.daemon is False
     finally:
         made[0]()
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_a_rewrite_goes_in_as_a_replacement_and_the_next_delivery_does_not(monkeypatch, fails):
+    """The rewrite's paste is marked as over the selection, so the primary
+    selection is left alone (GTK drops its selection when another program
+    takes it: GNOME VMs typed the rewrite in front of the text); a delivery
+    after it, even after one that failed, is an ordinary one again."""
+    from tuxtalk import delivery, voice_edit
+    seen = []
+
+    def inject(text, mode, **_):
+        seen.append(keyboard_output.this_thread.over_selection)
+        if fails:
+            raise OSError("wl-copy went away")
+        return "ok"
+    monkeypatch.setattr(delivery, "inject_text", inject)
+    monkeypatch.setattr(voice_edit.beeps, "beep", lambda *args: None)
+    monkeypatch.setattr(voice_edit.notices, "report_undelivered", lambda *args: None)
+    voice_edit._type_rewrite("The rewrite.", "auto", rs.state.current.message, False, None)
+    assert seen == [True]
+    assert keyboard_output.this_thread.over_selection is False
