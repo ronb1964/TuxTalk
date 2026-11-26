@@ -84,7 +84,8 @@ def test_german_quotes_go_with_the_other_quotes():
 @pytest.mark.parametrize("text", ["Er sagte «Hallo».", "Er sagte ‹Hallo›.",
                                   "Er sagte ‚Hallo‘.", "Er sagte »Hallo«."])
 def test_swiss_austrian_and_single_german_quotes_go_too(text):
-    """They stayed: only "„“ were known (0.26 release review)."""
+    """German quotes are „“, or »« in print, «» and ‹› in Switzerland, and ‚‘
+    when single: each kind is a quote to take out."""
     assert mechanical_edit(text, "die Anführungszeichen entfernen", "de") == "Er sagte Hallo."
 
 
@@ -95,15 +96,17 @@ def test_english_single_quotes_stay_whole_with_the_apostrophe():
 
 
 def test_a_german_date_keeps_its_period_when_the_periods_go():
-    """"die Punkte entfernen" typed "am 3 Oktober" (0.26 release review)."""
+    """A German day's number ends in a period before its month ("am 3.
+    Oktober"): part of the date, not a sentence's end."""
     assert mechanical_edit("Wir treffen uns am 3. Oktober. Bis dann.", "die Punkte entfernen",
                            "de") == "Wir treffen uns am 3. Oktober Bis dann"
 
 
 @pytest.mark.parametrize("said", [
-    "mach das rot", "in Blau", "die Schrift größer machen", "grösser machen",
-    "die Schriftart ändern", "die Farbe ändern", "das zentrieren", "das durchstreichen",
-    "hervorheben",
+    "mach das rot", "in Blau", "die Schrift größer machen", "die Schrift grösser machen",
+    "die Schriftart ändern", "die Farbe ändern", "die Größe ändern", "die Grösse ändern",
+    "das zentrieren", "das durchstreichen", "durchstreiche das", "streich das durch",
+    "eine andere Schriftart wählen", "ändere die Farbe in Rot",
 ])
 def test_german_formatting_no_shortcut_does_is_said_to_be_impossible(said):
     """Font, size and colour went to the AI, which can't change how text
@@ -163,3 +166,27 @@ def test_every_german_edit_help_names_is_done_in_code():
     for said in named:
         assert (mechanical_edit(TEXT, said, "de") or is_delete(said, "de")
                 or formatting(said, "de")), said
+
+
+@pytest.mark.parametrize("said", ["den Text kleiner machen", "mach das größer", "das hervorheben",
+                                  "ändere rot zu blau", "ersetze rot durch blau",
+                                  "das Wort rot entfernen"])
+def test_german_requests_that_may_be_about_the_words_go_to_the_ai(said):
+    """Smaller may mean shorter, and bringing out a point is the wording's job:
+    only the lettering's size, a colour or the font is refused."""
+    assert formatting(said, "de") is None
+
+
+@pytest.mark.parametrize("lang, said", [("en", "remove the commas"), ("de", "die Punkte entfernen")])
+def test_taking_marks_out_changes_nothing_else(lang, said):
+    """Text the edit doesn't touch comes back as it was, odd characters too."""
+    assert mechanical_edit("A\x00B, c. D", said, lang).startswith("A\x00B")
+
+
+@pytest.mark.parametrize("text, said, edited", [
+    ("am 3.Oktober. Gut.", "die Punkte entfernen", "am 3.Oktober Gut"),
+    ("am 3. Oktober, gut.", "die Satzzeichen entfernen", "am 3. Oktober gut"),
+])
+def test_a_german_date_keeps_its_period_written_close_or_with_the_other_marks(
+        text, said, edited):
+    assert mechanical_edit(text, said, "de") == edited

@@ -186,6 +186,8 @@ With voice commands in German, the German ones are done exactly too:
   • <b>die Kommas entfernen</b>  •  <b>das Wort ... entfernen</b>
   • <b>als Aufzählung</b>  •  <b>das einrücken</b>  •  <b>das löschen</b>
   • <b>fett machen</b>  •  <b>kursiv machen</b>
+Asked to change the font, the size of the lettering or the color (<b>mach das rot</b>,
+<b>die Schriftart ändern</b>), TuxTalk says it can't, as in English.
 Any other German instruction goes to the AI, as any instruction in your own words does.
 
 ### Two or three changes at once

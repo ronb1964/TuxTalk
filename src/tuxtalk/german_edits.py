@@ -28,6 +28,7 @@ _VERBS_FIRST = {
     "formatiere": "formatieren", "unterstreich": "unterstreichen",
     "unterstreiche": "unterstreichen", "färb": "färben", "färbe": "färben",
     "zentrier": "zentrieren", "zentriere": "zentrieren", "änder": "ändern", "ändere": "ändern",
+    "durchstreich": "durchstreichen", "durchstreiche": "durchstreichen",
 }
 
 # What the instruction is about, if it says: "das", "alles", "den Text".
@@ -52,14 +53,15 @@ _SHORTCUTS = {"fett": "bold", "kursiv": "italic", "unterstrichen": "underlined"}
 _SHORTCUT = rf"(?:in )?(?:{'|'.join(_SHORTCUTS)})"
 # How text looks, which no keyboard shortcut changes: said in English to
 # voice_edit_rules.formatting, whose answer is that it can't be done, rather
-# than the AI's "no change" after it tried.
-_LOOKS = {"größer": "bigger", "kleiner": "smaller", "rot": "red", "blau": "blue",
-          "grün": "green", "gelb": "yellow", "orange": "orange", "lila": "purple",
-          "violett": "purple", "schwarz": "black", "weiß": "white", "grau": "gray",
-          "rosa": "pink", "pink": "pink", "braun": "brown"}
-_LOOKS = swiss_words(_LOOKS)
-_LAYOUT = {"zentrieren": "center this", "durchstreichen": "make this strikethrough",
-           "hervorheben": "highlight this"}
+# than the AI's "no change" after it tried. A size only of the lettering:
+# "den Text kleiner machen" may mean shorter, and "hervorheben" may mean to
+# bring the point out, so those go to the AI.
+_COLOURS = swiss_words({"rot": "red", "blau": "blue", "grün": "green", "gelb": "yellow",
+                        "orange": "orange", "lila": "purple", "violett": "purple",
+                        "schwarz": "black", "weiß": "white", "grau": "gray", "rosa": "pink",
+                        "pink": "pink", "braun": "brown"})
+_SIZES = swiss_words({"größer": "bigger", "kleiner": "smaller"})
+_LAYOUT = {"zentrieren": "center this", "durchstreichen": "make this strikethrough"}
 
 # German instruction (verb last) -> English instruction; the first whose
 # pattern matches all of the words counts.
@@ -95,10 +97,17 @@ _RULES = [
      lambda m: "make this " + " and ".join(_SHORTCUTS[w] for w in m[1].split()
                                            if w in _SHORTCUTS)),
     (rf"{_TARGET}unterstreichen", lambda m: "underline this"),
-    (rf"{_TARGET}(?:die schrift )?(?:in )?({'|'.join(_LOOKS)})(?: (?:machen|färben|schreiben))?",
-     lambda m: f"make this {_LOOKS[m[1]]}"),
-    (r"(?:die |eine andere )?(?:schriftart|schrift|schriftgröße|schriftfarbe|textfarbe|farbe)"
-     r" (?:ändern|wechseln|vergrößern|verkleinern)", lambda m: "change the font"),
+    (rf"{_TARGET}(?:die schrift )?(?:in )?({'|'.join(_COLOURS)})(?: (?:machen|färben|schreiben))?",
+     lambda m: f"make this {_COLOURS[m[1]]}"),
+    (rf"(?:die )?(?:schrift|buchstaben|schriftgröße) ({'|'.join(_SIZES)})(?: machen)?",
+     lambda m: f"make this {_SIZES[m[1]]}"),
+    (r"(?:die |eine andere )?(?:schriftart|schrift|schriftgröße|schriftfarbe|textfarbe|farbe"
+     r"|größe) (?:ändern|wechseln|wählen|nehmen|verwenden|vergrößern|verkleinern)",
+     lambda m: "change the font"),
+    (rf"(?:die )?(?:schrift|text)?farbe (?:in|auf) ({'|'.join(_COLOURS)}) ändern",
+     lambda m: f"make this {_COLOURS[m[1]]}"),
+    # "streich das durch": the particle last, as German says it.
+    (rf"{_TARGET}durch ?streichen", lambda m: "make this strikethrough"),
     (rf"{_TARGET}({'|'.join(_LAYOUT)})", lambda m: _LAYOUT[m[1]]),
 ]
 

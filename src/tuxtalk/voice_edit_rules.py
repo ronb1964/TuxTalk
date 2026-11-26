@@ -207,7 +207,7 @@ _MARKS = {
 # German's single quotes too, ‚so‘, with German commands on: in English ‘ is
 # a single quote's opening, whose closing ’ is also the apostrophe, so
 # taking ‘ alone would leave half a pair.
-_GERMAN_MARKS = {"quotes": "‚‘", "quotation marks": "‚‘", "punctuation": "‚‘"}
+_GERMAN_SINGLE_QUOTES = {"quotes": "‚‘", "quotation marks": "‚‘", "punctuation": "‚‘"}
 _REMOVE = r"(?:remove|delete|take out|get rid of|drop|strip(?: out)?|lose|cut)"
 _FROM = rf"(?:\s+(?:from|in|out of)\s+{_TARGET})?(?:\s+everywhere)?"
 _REMOVE_MARKS = re.compile(rf"^{_REMOVE}\s+(?:all\s+)?(?:of\s+)?(?:the\s+)?"
@@ -264,16 +264,15 @@ def _tidy(body: str) -> str:
 def _marks_named(name: str, lang: str) -> str:
     """The marks "remove the *name*" takes out; with *lang* "de" German's
     single quotes are quotes too."""
-    return _MARKS[name] + (_GERMAN_MARKS.get(name, "") if lang == "de" else "")
+    return _MARKS[name] + (_GERMAN_SINGLE_QUOTES.get(name, "") if lang == "de" else "")
 
 
 # In German a day's number ends in a period before its month ("am 3. Oktober"),
 # which taking the periods out mustn't take.
-_GERMAN_DATE_PERIOD = re.compile(rf"(?<=\d)\.(?=\s+(?i:{_MONTHS})\b)")
-_KEPT = "\x00"                            # a kept period, while the others go
+_GERMAN_DATE_PERIOD = re.compile(rf"(?<=\d)\.(?=\s*(?i:{_MONTHS})\b)")
 
 
-def _remove_marks(text: str, marks: str, lang: str = "en") -> str:
+def _remove_marks(text: str, marks: str, lang: str) -> str:
     """*text* without the punctuation *marks*, line by line; with *lang* "de"
     a German date keeps its period."""
     cls = re.escape(marks)
@@ -283,12 +282,11 @@ def _remove_marks(text: str, marks: str, lang: str = "en") -> str:
     keep_dates = lang == "de" and "." in marks
 
     def change(body):
-        if keep_dates:
-            body = _GERMAN_DATE_PERIOD.sub(_KEPT, body)
-        if not pattern.search(body):
-            return body.replace(_KEPT, ".")   # a line without the mark stays as it is
-        changed = _tidy(pattern.sub(lambda m: " " if m.group() in "-–—" else "", body))
-        return changed.replace(_KEPT, ".")
+        kept = {m.start() for m in _GERMAN_DATE_PERIOD.finditer(body)} if keep_dates else set()
+        if all(m.start() in kept for m in pattern.finditer(body)):
+            return body                   # a line without the mark stays as it is
+        return _tidy(pattern.sub(lambda m: m.group() if m.start() in kept
+                                 else " " if m.group() in "-–—" else "", body))
     return _per_line(text, change)
 
 
@@ -433,8 +431,8 @@ _COLOURS = {"red", "blue", "green", "yellow", "orange", "purple", "black", "whit
 def formatting(instruction: str, lang: str = "en"):
     """None for an instruction about the words. Otherwise the shortcut kinds
     asked for, in order (["bold", "italic"]), or CANT_FORMAT for formatting no
-    shortcut does (font, size, colour); *lang* "de" knows "fett", "kursiv" and
-    "unterstreichen"."""
+    shortcut does (font, size, colour); *lang* "de" knows German's words for
+    both ("fett", "kursiv", "mach das rot": german_edits)."""
     said = _said(instruction, lang)
     said = re.sub(r"\b(?:strike ?through|strike ?out|cross(?:ed)? out)\b", "strikethrough", said)
     said = re.sub(r"\b(\d+)\s*-?\s*(?:pt|points?)\b", r"\1 point", said)     # "14pt", "14-point"
