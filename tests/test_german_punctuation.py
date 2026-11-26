@@ -323,3 +323,13 @@ def test_a_spoken_mark_isnt_lost_to_the_engine_s_period_after_it(said, typed):
     """CODE_HEALTH 138: the period the engine writes for a pause after "Komma"
     ate the comma ("Liebe Anna.")."""
     assert normalize_text(said, lang="de") == typed
+
+
+@pytest.mark.parametrize("said, typed", [
+    ("Liebe Anna, neue Zeile, danke für das Angebot.", f"Liebe Anna,{LINE_BREAK}Danke für das Angebot."),
+    ("Sehr geehrte Frau Weber, neue Zeile, vielen Dank.",
+     f"Sehr geehrte Frau Weber,{LINE_BREAK}Vielen Dank."),
+    ("Bring Snacks mit, neue Zeile, und Getränke.", f"Bring Snacks mit.{LINE_BREAK}Und Getränke."),
+])
+def test_a_greeting_keeps_its_comma_before_a_new_line(said, typed):
+    assert normalize_text(said, lang="de") == typed

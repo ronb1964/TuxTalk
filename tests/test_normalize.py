@@ -979,8 +979,9 @@ def test_comma_before_a_line_break_is_kept(said, expected):
 
 # A comma the engine writes before a spoken "new line" is a pause, not the
 # user's comma, so it goes and the line gets its full stop, as with paragraphs.
+# A greeting's stays (test_a_greeting_keeps_its_comma_before_a_new_line).
 @pytest.mark.parametrize("said, expected", [
-    ("Dear John, new line thanks", f"Dear John.{_M}Thanks."),
+    ("Call John, new line thanks", f"Call John.{_M}Thanks."),
     ("I finished the van, new line, next I'll do the bed.",
      f"I finished the van.{_M}Next I'll do the bed."),
     ("Buy milk, newline, eggs, newline, bread.",
@@ -1220,4 +1221,22 @@ def test_a_curly_i_contraction_keeps_its_capital(first):
     ("It's a comma. Then a period", "It's a comma. Then a period."),
 ])
 def test_a_spoken_mark_isnt_lost_to_the_engine_s_period_after_it(said, typed):
+    assert normalize_text(said) == typed
+
+
+@pytest.mark.parametrize("said, typed", [
+    # Ron's two tries (2026-11-25): Parakeet wrote his spoken "comma" as ",".
+    ("Dear Anna, new line, thanks for the quote.", f"Dear Anna,{LINE_BREAK}Thanks for the quote."),
+    ("New paragraph Dear Anna, New line. Thanks for the quote.",
+     f"{LINE_BREAK}{LINE_BREAK}Dear Anna,{LINE_BREAK}Thanks for the quote."),
+    ("Hi Sam, new line, see you Monday.", f"Hi Sam,{LINE_BREAK}See you Monday."),
+    ("Hello everyone, new paragraph, here is the plan.",
+     f"Hello everyone,{LINE_BREAK}{LINE_BREAK}Here is the plan."),
+    # Not a greeting starting its line: the engine's pause comma goes, as before.
+    ("Bring snacks, new line, drinks too.", f"Bring snacks.{LINE_BREAK}Drinks too."),
+    ("I said hello, new line, then left.", f"I said hello.{LINE_BREAK}Then left."),
+])
+def test_a_greeting_keeps_its_comma_before_a_new_line(said, typed):
+    """A letter's greeting line ends in a comma, said or paused for; the
+    line-break rule took it for a pause comma and typed "Dear Anna."."""
     assert normalize_text(said) == typed

@@ -17,7 +17,10 @@ before 0.15.0, so older entries use that name.
   engine often writes a period for the pause ("Dear Anna comma. New line"),
   and TuxTalk kept that period and dropped your comma ("Dear Anna."). Now
   the mark you said wins, for "semicolon" and "colon" too, and in German
-  ("Komma", "Semikolon", "Doppelpunkt").
+  ("Komma", "Semikolon", "Doppelpunkt"). And a greeting keeps its comma
+  before a spoken new line ("Dear Anna, new line" types "Dear Anna,"), also
+  when the speech model writes your spoken "comma" as a comma itself, which
+  TuxTalk used to drop as a pause.
 - Keystroke Typing (No Clipboard), a new choice in Preferences → Advanced →
   Fine-tuning → Text Injection: TuxTalk types your words and never puts them
   on the clipboard, not even for a character your keyboard layout can't

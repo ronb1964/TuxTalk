@@ -913,11 +913,37 @@ def _protect_command_words(text: str, lang: str) -> str:
     return text
 
 
+# A greeting keeps its comma before a spoken line break ("Dear Anna, new
+# line"): a letter's greeting line ends in one, said or only paused for. The
+# engine can write a spoken "comma" as "," itself, which the line-break rule
+# would take for its pause comma and drop. The greeting starts its line: the
+# dictation, a sentence or a line break before it; a few words of name follow.
+_GREETINGS = {
+    "en": (r"dear|hi|hello|hey|good\s+(?:morning|afternoon|evening)",
+           rf"{_EN_NEW_LINE}|{_EN_NEW_PARAGRAPH}"),
+    "de": (r"liebe[rs]?|hallo|hi|hey|sehr\s+geehrte[rs]?|guten\s+(?:tag|morgen|abend)",
+           rf"{_DE_NEW_LINE}|{_DE_NEW_PARAGRAPH}|{_EN_NEW_LINE}|{_EN_NEW_PARAGRAPH}"),
+}
+
+
+def _greeting_comma(lang: str):
+    """The pattern for *lang*'s greeting, its comma and the line break after it."""
+    greeting, breaks = _GREETINGS["de" if lang == "de" else "en"]
+    return re.compile(rf"(^\W*|[.!?]\s+|\b(?:{breaks})\b[,.]?\s+)"
+                      rf"((?:{greeting})\b(?:\s+[^\s,.!?]+){{0,4}})\s*,\s*(?=(?:{breaks})\b)",
+                      re.IGNORECASE)
+
+
+_GREETING_COMMA = {lang: _greeting_comma(lang) for lang in _GREETINGS}
+
+
 def _spoken_marks_to_symbols(text: str, lang: str) -> str:
     """Spoken punctuation and breaks as symbols: "comma" is ",", "new line"
     LINE_BREAK, and with *lang* "de" "Komma" too. Quotes first, each a mark
     or the word (spoken_quotes), then the phrases before single words
-    ("question mark" before "mark")."""
+    ("question mark" before "mark"). A greeting's comma before a line break
+    is said as a word first, so it stays (_GREETINGS)."""
+    text = _GREETING_COMMA["de" if lang == "de" else "en"].sub(r"\1\2 comma ", text)
     text = mark_spoken_quotes(text)
     german = _GERMAN_MARKS if lang == "de" else ()
     for pat, repl in (*german, *_MULTI_WORD_REPLACEMENTS, *_SINGLE_WORD_REPLACEMENTS):
