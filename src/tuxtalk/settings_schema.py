@@ -135,7 +135,9 @@ class Settings:
     # after a line break); TuxTalk can't see what's typed by hand before one
     auto_space: bool = True
     auto_period: bool = True   # append a period when an utterance ends without terminal punctuation
-    # "auto" (smart detection), "type" (the virtual keyboard), or "paste" (wl-copy + Ctrl+V)
+    # "auto" (smart detection), "type" (the virtual keyboard), "type_only" (the
+    # keyboard, never the clipboard: Keystroke Typing (No Clipboard)), or
+    # "paste" (wl-copy + Ctrl+V)
     injection_mode: str = "auto"
     key_delay: int = KEY_DELAY_MS  # milliseconds after each typed key event (1-50, higher = slower)
     # Turn dictation off after a while unused, to save power. Off here; the

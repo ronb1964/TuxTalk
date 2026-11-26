@@ -39,10 +39,10 @@ def _put_ai(run):
 
 
 def _no_room(run):
-    """Why this VM can't take the AI model (1.1 GB), or None."""
+    """Why this VM can't take the AI model (2.7 GB, and its engine), or None."""
     free_kb = run.vm.ssh("df --output=avail -k ~ | tail -1", check=False).stdout.strip()
-    if free_kb.isdigit() and int(free_kb) < 1_600_000:
-        return f"only {int(free_kb) // 1024} MB free on this VM's disk for the 1.1 GB AI model"
+    if free_kb.isdigit() and int(free_kb) < 3_300_000:
+        return f"only {int(free_kb) // 1024} MB free on this VM's disk for the 2.7 GB AI model"
     return None
 
 

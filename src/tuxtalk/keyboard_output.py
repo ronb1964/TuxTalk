@@ -428,8 +428,9 @@ def type_text(text: str) -> bool:
     break failed after earlier lines went in: told "Couldn't type the
     dictation", the user would paste it all again over them."""
     acting = focused_window.acts_as(focused_window.window_class())
-    # Without the clipboard, Shift+Enter: Insert Smart Newline is the editor's
-    # own behaviour, where a pasted newline would put the words on it.
+    # KDE's editors get a pasted newline (_paste_newline), as Shift+Enter
+    # there is Insert Smart Newline; with No Clipboard they get Shift+Enter
+    # all the same, its smart newline the price of keeping off the clipboard.
     in_kde_editor = (not live.no_clipboard
                      and (acting or "").lower() in KDE_EDITOR_CLASSES_LOWER)
     lines = text.split(LINE_BREAK)

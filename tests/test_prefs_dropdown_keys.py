@@ -67,16 +67,21 @@ def _focused(combo):
     return combo
 
 
-def test_text_injection_offers_typing_without_the_clipboard(monkeypatch, prefs_window):
-    """From Christian Reiß's pull request #50: picked, saved, and shown again."""
+def test_text_injection_offers_typing_without_the_clipboard(monkeypatch, prefs_window, tmp_path):
+    """From Christian Reiß's pull request #50: picked, saved to the settings
+    file by Preferences' own save, and shown again from what was saved."""
+    from tuxtalk import config
     monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.toml"))
     label = "Keystroke Typing (No Clipboard)"
     prefs = prefs_window()
     combo = find(prefs.window, Gtk.ComboBoxText, label)
     assert combo.get_active_id() == "auto"
     combo.set_active_id("type_only")
-    assert prefs.config["injection_mode"] == "type_only"
-    reopened = prefs_window(injection_mode="type_only")
+    assert prefs.save_config()
+    saved = config.load_toml_file(config.CONFIG_PATH)["injection_mode"]
+    assert saved == "type_only"
+    reopened = prefs_window(injection_mode=saved)
     assert find(reopened.window, Gtk.ComboBoxText, label).get_active_text() == label
 
 
