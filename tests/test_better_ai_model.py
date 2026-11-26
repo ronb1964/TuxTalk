@@ -49,6 +49,25 @@ def test_the_old_model_is_deleted_only_once_the_new_one_is_here(cache):
     assert cache == {NEW}
 
 
+def test_another_apps_files_in_the_old_models_folder_are_left_alone(tmp_path, monkeypatch):
+    """The download cache is shared: a folder holding another file of the
+    same repository (another app's) isn't deleted with TuxTalk's (release
+    review, Codex). With only TuxTalk's file in it, it goes."""
+    from huggingface_hub import constants
+    monkeypatch.setattr(constants, "HF_HUB_CACHE", str(tmp_path))
+    monkeypatch.setattr(download_utils, "cached_hub_file", lambda repo, name: "/cache/" + name)
+    folder = tmp_path / "models--Qwen--Qwen2.5-1.5B-Instruct-GGUF"
+    snapshot = folder / "snapshots" / "abc"
+    snapshot.mkdir(parents=True)
+    (snapshot / ai_download.OLD_MODEL_FILE).write_text("ours")
+    (snapshot / "qwen2.5-1.5b-instruct-q8_0.gguf").write_text("another app's")
+    ai_download.remove_old_model()
+    assert folder.exists()
+    (snapshot / "qwen2.5-1.5b-instruct-q8_0.gguf").unlink()
+    ai_download.remove_old_model()
+    assert not folder.exists()
+
+
 def test_the_new_models_download_deletes_the_old_one(cache, monkeypatch):
     from tuxtalk import model_helper
 

@@ -148,7 +148,9 @@ class AdvancedTab(Tab):
         ai_note.set_opacity(0.7)
         grid.attach(ai_note, 0, row, 2, 1)
         row += 1
-        if ai_download.better_model_waiting():
+        # Only for someone using the AI: turned off, it'd be 2.7 GB for nothing.
+        ai_on = self.config.get("ai_corrections") or self.config.get("voice_editing")
+        if ai_on and ai_download.better_model_waiting():
             row = self._build_better_model_offer(grid, row)
         return row
 
