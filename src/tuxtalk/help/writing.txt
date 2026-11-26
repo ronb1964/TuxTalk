@@ -156,8 +156,8 @@ With Type at pause, what you said before the last pause is on screen already, so
 tone rewrites the whole message there, as "edit that" does; say <b>press enter</b> as a
 dictation of its own once it reads right.
 If the AI can't do it, or its rewrite changes a number you said (a date, a price, a phone
-number), drops a "not" or adds things you didn't say, your words are typed as you
-said them.
+number), drops a "not" or pads it out far beyond what you said, your words are
+typed as you said them.
 Your words as you said them are always in <b>Recent Dictations</b> too, rewrite or not.
 "Meet at three, make that four" is still a correction, and so is a tone after
 <b>no wait</b>: with <b>Fix self-corrections with AI</b> on, "the dress code is casual,
@@ -220,7 +220,7 @@ can't be changed by voice.
     Dictation types it again.
   • It doesn't work in a terminal: there's no selection there to replace.
   • It needs a Wayland session for now. On X11 (Xfce, Cinnamon on X11) only a tone
-    at the end of a dictation works.
+    at the end of a dictation works (not with Type at pause).
   • It uses the same AI as <b>Fix self-corrections with AI</b>: one download of
     about {AI_SIZE_TEXT}, shared, and about {AI_MEMORY_TEXT} of memory while it's on.
     Everything runs on this computer; nothing is sent online.

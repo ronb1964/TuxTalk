@@ -95,8 +95,8 @@ _TONE_AT_END = re.compile(
 # A correction cue alone just before the tone: "casual. No, make that formal",
 # "casual, wait, make that formal". After a word ("the answer is no") it's
 # part of the message.
-_BARE_CUE = re.compile(r"(?:^|[.!?,;:])\s*(?:oh\s+)?(?:no|wait|actually|sorry)"
-                       r"(?:,?\s+(?:no|wait))?\s*$", re.IGNORECASE)
+_BARE_CUE = re.compile(r"(?:^|[.!?,;:]|\s[-\u2013\u2014])\s*(?:oh\s+)?(?:no|wait|actually|sorry)"
+                       r"(?:,?\s+(?:no|wait|actually))?\s*$", re.IGNORECASE)
 # Said alone, right after a dictation, it changes what was just typed, as
 # "edit that, make it more formal" does (spoken_edit).
 _TONE_ALONE = re.compile(r"^\s*" + _TONE, re.IGNORECASE)
@@ -123,10 +123,9 @@ def tone_at_end(raw: str):
 
 
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}\b)")
-# "3, 4" and "3,4" are the same list, so a rewrite may space it either way.
-_LIST_COMMA = re.compile(r"(?<=\d),\s+(?=\d)")
 # A number as written: its sign, and its decimals (a German "1,50" too), time
-# or date parts. Thousands' commas are gone by then (_THOUSANDS).
+# or date parts. Thousands' commas are gone by then (_THOUSANDS). "3,40" and
+# "3, 40" differ: one amount or two, so a rewrite that respaces it is refused.
 _NUMBER = re.compile(r"[-\u2212]?\d+(?:[.,:/]\d+)*")
 # A "not" in any spelling the engine writes, "don't" and "dont" alike.
 _NEGATION = re.compile(
@@ -140,7 +139,6 @@ def _numbers(text: str) -> collections.Counter:
     "$1.50" stays 1.50 and "1,50" 1,50, "-5" keeps its sign, "ten" is 10."""
     from .spoken_numbers import to_digits
     plain = _THOUSANDS.sub("", to_digits(text, "en")).replace("\u2212", "-")
-    plain = _LIST_COMMA.sub(",", plain)
     return collections.Counter(_NUMBER.findall(plain))
 
 
