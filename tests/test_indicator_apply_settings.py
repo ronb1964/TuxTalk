@@ -70,9 +70,10 @@ class TestApplySettings:
 
     def test_animation_response_moves_the_orb(self, indicator):
         """The orb, the default style, ignored the slider."""
+        indicator.set_audio_level(0.01)
         indicator.set_audio_level(0.3)
-        _apply(indicator, "center", "medium", 0, 0, sensitivity=2.0)
-        assert indicator._orb_level == pytest.approx(0.6)
+        _apply(indicator, "center", "medium", 0, 0, sensitivity=0.5)
+        assert indicator._orb_level == pytest.approx(0.5)
 
     def test_style_and_animation_response_change_live(self, indicator):
         _apply(indicator, "center", "medium", 0, 0, style="radial", sensitivity=1.5)

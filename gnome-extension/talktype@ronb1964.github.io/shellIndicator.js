@@ -120,19 +120,17 @@ function mix(a, b, t) {
     return a.map((v, i) => v + (b[i] - v) * t);
 }
 
-// The classic cyan keeps the orb's hand-tuned gradient (null palette).
+// The classic cyan orb's own colors (indicator_styles.CLASSIC_ORB).
+const CLASSIC_ORB = {
+    outer: CYAN, inner: [0.5, 0.9, 1.0], near: [0.7, 0.95, 1.0], far: [0.4, 0.6, 1.0],
+};
+
+// indicator_styles.orb_palette_for.
 function orbPalette(rgb) {
     if (rgb.every((v, i) => Math.abs(v - CYAN[i]) <= 0.03))
-        return null;
+        return CLASSIC_ORB;
     const white = [1, 1, 1];
-    const edge = mix(rgb, [0, 0, 0], 0.15);
-    return {
-        glow: rgb,
-        core: [[0.0, white, 1.0], [0.4, mix(rgb, white, 0.55), 0.9], [0.7, rgb, 0.6],
-            [0.9, edge, 0.3], [1.0, edge, 0.0]],
-        near: mix(rgb, white, 0.5),
-        far: rgb,
-    };
+    return {outer: rgb, inner: mix(rgb, white, 0.55), near: mix(rgb, white, 0.5), far: rgb};
 }
 
 function foreground(rgb, intensity, alpha = null) {
@@ -466,52 +464,41 @@ export class ShellIndicator {
         this._drawTimer(cr, x + 32 * scale, y, elapsed);
     }
 
+    // RecordingIndicator.draw_orb: solid shapes only, since a gradient that
+    // fades to transparent reads as out of focus on a scaled monitor.
     _drawOrbCore(cr, x, y, baseSize) {
         const palette = this._palette;
+        const level = this._recording ? this._level : 0;
         const size = this._recording ? baseSize : baseSize * (1 + 0.1 * Math.sin(this._pulse));
-        const glow = palette ? palette.glow : CYAN;
-        for (let i = 0; i < 3; i++) {
-            const radius = size * (1.5 - i * 0.15);
-            const strength = this._recording ? this._level : 1;
-            const gradient = new Cairo.RadialGradient(x, y, size * 0.5, x, y, radius);
-            gradient.addColorStopRGBA(0, ...glow, 0.4 * strength * (1 - i * 0.3));
-            gradient.addColorStopRGBA(1, ...glow, 0);
-            cr.setSource(gradient);
-            cr.arc(x, y, radius, 0, 2 * Math.PI);
-            cr.fill();
-        }
-        const core = new Cairo.RadialGradient(x, y, 0, x, y, size * 1.3);
-        const stops = palette ? palette.core : [[0, [1, 1, 1], 1], [0.4, [0.5, 0.9, 1], 0.9],
-            [0.7, [0.2, 0.6, 0.9], 0.6], [0.9, [0.2, 0.5, 0.8], 0.3], [1, [0.2, 0.5, 0.8], 0]];
-        for (const [stop, color, alpha] of stops)
-            core.addColorStopRGBA(stop, ...color, alpha);
-        cr.setSource(core);
-        cr.arc(x, y, size * 1.3, 0, 2 * Math.PI);
+        cr.setSourceRGBA(...palette.outer, 0.35 + 0.5 * level);
+        cr.setLineWidth(1.5 * this._settings.scale);
+        cr.arc(x, y, size * (1.05 + 0.3 * level), 0, 2 * Math.PI);
+        cr.stroke();
+        cr.setSourceRGBA(...palette.outer, 1);
+        cr.arc(x, y, size * 0.85, 0, 2 * Math.PI);
+        cr.fill();
+        cr.setSourceRGBA(...palette.inner, 1);
+        cr.arc(x, y, size * 0.45, 0, 2 * Math.PI);
         cr.fill();
     }
 
+    // RecordingIndicator.draw_particles.
     _drawParticles(cr, cx, cy, baseRadius) {
         const palette = this._palette;
-        const extend = this._recording ? this._level : 0;
-        const distance = 0.7 + 0.7 * extend;
+        const scale = this._settings.scale;
+        const level = this._recording ? this._level : 0;
+        const distance = baseRadius * (0.7 + 0.18 * level);
+        cr.setSourceRGBA(...mix(palette.near, palette.far, level), 0.7 + 0.3 * level);
         for (let i = 0; i < 16; i++) {
             const angle = i * 2 * Math.PI / 16;
-            const px = cx + baseRadius * distance * Math.cos(angle);
-            const py = cy + baseRadius * distance * Math.sin(angle);
-            const size = this._recording
-                ? 4 + this._level * 2
-                : 4 * (1 + 0.15 * Math.sin(this._particlePulse + i * 0.4));
-            const [r, g, b] = palette
-                ? mix(palette.near, palette.far, extend)
-                : [0.7 - extend * 0.3, 0.95 - extend * 0.35, 1.0];
-            const alpha = this._recording ? 0.6 + this._level * 0.3 : 0.6;
-            const gradient = new Cairo.RadialGradient(px, py, 0, px, py, size * 1.5);
-            gradient.addColorStopRGBA(0, r, g, b, alpha);
-            gradient.addColorStopRGBA(1, r * 0.7, g * 0.7, b * 0.7, 0);
-            cr.setSource(gradient);
-            cr.arc(px, py, size * 1.5, 0, 2 * Math.PI);
-            cr.fill();
+            const radius = this._recording
+                ? (1.6 + 0.8 * level) * scale
+                : 1.6 * scale * (1 + 0.15 * Math.sin(this._particlePulse + i * 0.4));
+            cr.newSubPath();
+            cr.arc(cx + distance * Math.cos(angle), cy + distance * Math.sin(angle),
+                radius, 0, 2 * Math.PI);
         }
+        cr.fill();
     }
 
     _drawTimer(cr, x, y, seconds) {

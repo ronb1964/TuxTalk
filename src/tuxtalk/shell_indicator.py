@@ -16,7 +16,7 @@ from gi.repository import Gio, GLib
 
 from . import indicator_styles
 from .desktop_detect import is_gnome
-from .indicator_styles import RadialGain
+from .indicator_styles import LevelGain
 from .logger import setup_logger
 from .recording_indicator import (
     BASE_HEIGHT,
@@ -124,7 +124,8 @@ class ShellIndicator:
         self._level = 0.0
         self._wave_history = []
         self._spectrum = []
-        self._radial_gain = RadialGain()
+        self._radial_gain = LevelGain()
+        self._orb_gain = LevelGain()
 
     def apply_settings(
         self,
@@ -272,7 +273,7 @@ class ShellIndicator:
     def _send_update(self, session: int) -> bool:
         if session == self._session:
             level = (
-                min(1.0, self._level * self._shown.sensitivity)
+                indicator_styles.orb_level(self._orb_gain, self._level, self._shown.sensitivity)
                 if self.style == "orb"
                 else self._level
             )
@@ -332,6 +333,7 @@ class ShellIndicator:
 
     def set_audio_level(self, level: float):
         self._level = max(0.0, min(1.0, level))
+        self._orb_gain.follow(self._level, time.monotonic())
         if (fallback := self._fallback) is not None:
             fallback.set_audio_level(level)
 

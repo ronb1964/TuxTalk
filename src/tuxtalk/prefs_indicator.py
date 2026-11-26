@@ -197,8 +197,8 @@ class IndicatorSettings(Tab):
             self._suppress_color_popup = False
 
     def _reset_color_to_classic(self, _button):
-        """Back to TuxTalk's classic cyan. With that color the orb draws its
-        original hand-tuned gradient, the look it has out of the box."""
+        """Back to TuxTalk's classic cyan. With that color the orb keeps its
+        classic colors, the look it has out of the box."""
         self.update_config("indicator_color", CLASSIC_CYAN_HEX)
         self._set_color_mode_silently("custom")
         self.update_config("indicator_color_mode", "custom")

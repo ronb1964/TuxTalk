@@ -81,10 +81,9 @@ VALID_INDICATOR_STYLES = {"orb", "waveform", "bars", "radial"}
 # migrated to custom + CLASSIC_CYAN_HEX on load (see _migrate_settings).
 VALID_COLOR_MODES = {"system", "custom"}
 
-# The classic cyan the orb has always drawn, as a hex color. This is the exact
-# blue of the original hand-tuned orb gradient (0.30, 0.70, 1.0), so when it is
-# the chosen custom color the orb uses that original draw path and looks
-# exactly as it always has. It also seeds the first swatch
+# The classic cyan the orb has always drawn, as a hex color: the orb's own blue
+# (0.30, 0.70, 1.0), so when it is the chosen custom color the orb keeps its
+# classic colors (indicator_styles.CLASSIC_ORB). It also seeds the first swatch
 # in the color picker so the classic color is always one click away.
 CLASSIC_CYAN_HEX = "#4db3ff"
 
