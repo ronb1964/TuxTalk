@@ -144,9 +144,11 @@ def _clipboard_privacy(is_flatpak):
     """Privacy's line on the clipboard; none on the Flatpak, which never pastes."""
     if is_flatpak:
         return ""
-    return ("\nPasting puts a dictation on the clipboard for a moment; to keep it off\n"
-            "entirely, pick <b>Keystroke Typing (No Clipboard)</b> in Preferences →\n"
-            "Advanced → Fine-tuning → Text Injection.")
+    return ("\nPasting puts a dictation on the clipboard, where it stays unless <b>Put back\n"
+            "what I'd copied</b> is on; to keep it off entirely, pick <b>Keystroke Typing\n"
+            "(No Clipboard)</b> in Preferences → Advanced → Fine-tuning → Text Injection.\n"
+            "Voice editing still copies the text you select to read it, then puts your\n"
+            "clipboard back.")
 
 
 def _ctrl_space_line(keys):

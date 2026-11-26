@@ -17,8 +17,8 @@ Say the commands in German, as well as in English:
 
 English commands keep working beside them. A few stay English only, like changing your
 mind mid-sentence ("no wait") and the tone word ("make that formal"). Once it's set,
-the Commands tab lists the German words for each command, and says which have none. A new install set
-up for German starts with German commands on.
+the Commands tab lists the German words for each command, and says which have none. A
+new install set up for German starts with German commands on.
 
 To type a mark's word instead of the mark, say <b>wörtlich</b> before it at the start or
 after a pause, or <b>das Wort</b> anywhere (<b>das Wort Punkt</b>). In the middle of a
@@ -163,9 +163,11 @@ number), drops a "not" or pads it out far beyond what you said, your words are
 typed as you said them.
 Your words as you said them are always in <b>Recent Dictations</b> too, rewrite or not.
 "Meet at three, make that four" is still a correction, and so is a tone after
-<b>no wait</b>: with <b>Fix self-corrections with AI</b> on, "the dress code is casual,
-no wait, make that formal" becomes something like "the dress code is formal". The tones are English
-words, also with voice commands in German.
+<b>no wait</b>, "actually" or "sorry", or in a message with "no wait" or "I mean" in it:
+with <b>Fix self-corrections with AI</b> on, "the dress code is casual, no wait, make
+that formal" becomes something like "the dress code is formal"; with it off, the words
+are typed as you said them. The tones are English words, also with voice commands in
+German.
 
 ### What to say
 Say it in your own words; there's no fixed list. Some that work well:

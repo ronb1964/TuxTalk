@@ -322,7 +322,8 @@ def _rewritten(selected, instruction, beeps_on):
             and not voice_edit_rules.restyle_keeps_facts(selected, result)):
         # A tone said on its own, or at the end of a Type at pause recording:
         # the same check as a tone rewritten before typing (restyle).
-        logger.info("Voice edit: the tone rewrite lost a number or a \"not\"; not using it")
+        logger.info("Voice edit: the tone rewrite lost a number or a \"not\", or added too much; "
+                    "not using it")
         notices.edit_problem("tone_unsafe", beeps_on)
         return None
     return result

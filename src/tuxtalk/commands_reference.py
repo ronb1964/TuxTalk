@@ -153,7 +153,8 @@ SECTIONS = (
                  "and <b>wörtlich</b> at the start or after a pause: in the middle of a "
                  "sentence it's the everyday word, so <b>Das meine ich wörtlich "
                  "Ausrufezeichen</b> types \"Das meine ich wörtlich!\". Before "
-                 "<b>Enter drücken</b> it never presses the key, wherever it's said",
+                 "<b>Enter drücken</b> or <b>Tab drücken</b> it never presses the key, "
+                 "wherever it's said",
             commands=(
                 _literal("period", ".", "the word period", german="Punkt"),
                 _literal("comma", ",", "the word comma", german="Komma"),
@@ -219,7 +220,7 @@ SECTIONS = (
                         "die Aufzählungszeichen entfernen", "das löschen")),
         Command(("make this bold", "make this italic", "underline this"),
                 "presses the app's own shortcut, in LibreOffice and other word processors",
-                "format", "Font, size and colour can't be changed by voice",
+                "format", "Font, size and color can't be changed by voice",
                 ("fett machen", "kursiv machen", "unterstreichen")),
         Command(("edit that, make it shorter",), "right after dictating, no keys: changes it",
                 "edit", german=("bearbeite das, mach es kürzer",)),

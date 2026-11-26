@@ -16,8 +16,9 @@ before 0.15.0, so older entries use that name.
 - Help's search finds everything Help shows: the text at the top of a page,
   page titles ("Documents and Email"), the Labs line over a group of
   commands, the Report a Problem button's note and the Commands tab's
-  introduction and examples weren't searchable before. A new Writing card, "Voice commands in German", says how to turn
-  German commands on, which a search for "German" couldn't find until now.
+  introduction and examples weren't searchable before. A new Writing card,
+  "Voice commands in German", says how to turn German commands on, which a
+  search for "German" couldn't find until now.
 - A spoken "comma" followed by a pause isn't lost any more: the speech
   engine often writes a period for the pause ("Dear Anna comma. New line"),
   and TuxTalk kept that period and dropped your comma ("Dear Anna."). Now
@@ -42,8 +43,9 @@ before 0.15.0, so older entries use that name.
   sent automatically, since the AI can get the meaning wrong, and one that
   changes a number (a date, a price), drops a "not" or is padded out far
   beyond what you said isn't used: the words are typed as said, and
-  they're in Recent Dictations as well. A tone after
-  "no wait" is your correction, not a tone.
+  they're in Recent Dictations as well. A tone after "no wait",
+  "actually" or "sorry", or in a message with a correction in it, is your
+  correction, not a tone.
   The tone word came out of the AI writing poll on #42.
 - A better AI: self-corrections, voice editing and the tone word now use
   Qwen3.5-4B instead of Qwen2.5-1.5B. On 100 tone rewrites the old one
@@ -55,7 +57,7 @@ before 0.15.0, so older entries use that name.
   TuxTalk asks once whether to download it, and Preferences → Advanced
   offers it after; until then the old one keeps working, and it's deleted
   once the new one is here.
-- German for every command in the Voice Commands list, with voice commands
+- German for nearly every command in the Voice Commands list, with voice commands
   in German: voice editing's exact changes ("alles in Großbuchstaben", "die
   Kommas entfernen", "das Wort ... entfernen", "als Aufzählung", "das
   einrücken", "das löschen", "fett machen"), "Geviertstrich" for —,

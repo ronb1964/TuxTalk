@@ -49,7 +49,7 @@ NOTICES = {
     "tone_not_changed": "TuxTalk couldn't change the tone, so your words are typed as you "
                         "said them.",
     "tone_unsafe": "The tone wasn't changed: the rewrite changed a number or a \u201cnot\u201d, "
-                   "so your text stays as it was.",
+                   "or added too much, so your text stays as it was.",
 }
 
 
