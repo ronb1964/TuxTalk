@@ -18,6 +18,7 @@ from . import (
     send_countdown,
     virtual_keyboard,
 )
+from . import live_settings as live
 from . import recording_state as rs
 from .logger import setup_logger
 from .normalize import LINE_BREAK
@@ -62,6 +63,10 @@ def determine_injection_method(injection_mode: str) -> tuple[str, str]:
     # output backend types directly — always type, never attempt paste.
     if os.environ.get("FLATPAK_ID"):
         return ("type", "Flatpak: libei typing")
+    # The live setting, not only the dictation's own copy of it: No Clipboard
+    # turned on while this one was transcribed holds for it too.
+    if live.no_clipboard:
+        return ("type", "Keystroke Typing (No Clipboard)")
 
     # If not auto mode, use user's choice directly
     if injection_mode.lower() != "auto":

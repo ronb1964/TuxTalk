@@ -549,3 +549,35 @@ def test_a_failed_wtype_says_whether_it_may_have_typed(monkeypatch, stderr, part
             keyboard_output.type_text_raw("hello")
     else:
         assert keyboard_output.type_text_raw("hello") is False
+
+
+def test_no_clipboard_turned_on_mid_dictation_holds_for_it(monkeypatch, wayland):
+    """The dictation was queued with Auto; No Clipboard came on while it was
+    transcribed (release review, Codex): it's typed, not pasted."""
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(live, "no_clipboard", True)
+    assert delivery.determine_injection_method("auto")[0] == "type"
+    assert delivery.determine_injection_method("paste")[0] == "type"
+
+
+def test_fix_a_word_keeps_to_no_clipboard(monkeypatch, tmp_path):
+    """Fix a Word types its fix in a process of its own, which never read
+    the setting (release review, Claude): it does now, from the settings file."""
+    import json
+    from tuxtalk import config, fix_word_dialog, virtual_keyboard
+    monkeypatch.setattr(live, "no_clipboard", False)
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(injection_mode="type_only"))
+    monkeypatch.setattr(virtual_keyboard, "start", lambda: None)
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    hand_over = tmp_path / "fix.json"
+    hand_over.write_text(json.dumps({"text": "the word", "window": None, "where": None}))
+
+    class Stop(Exception):
+        pass
+
+    def stop(*a, **k):
+        raise Stop
+    monkeypatch.setattr(fix_word_dialog, "_FixWordDialog", stop)
+    with pytest.raises(Stop):
+        fix_word_dialog.main(["--in-place", str(hand_over)])
+    assert live.no_clipboard is True

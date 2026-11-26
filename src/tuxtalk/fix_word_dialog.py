@@ -534,8 +534,13 @@ def main(argv=None):
         # layout) long before the window closes. The service sets the user's
         # typing speed in its own main(); this process has to read it.
         from . import keyboard_output, virtual_keyboard
+        from . import live_settings as live
         from .config import load_config
-        keyboard_output.key_delay_ms = load_config().key_delay
+        cfg = load_config()
+        keyboard_output.key_delay_ms = cfg.key_delay
+        # And Keystroke Typing (No Clipboard), which keyboard_output reads:
+        # set alone, not by live.apply, which would start the AI here too.
+        live.no_clipboard = cfg.injection_mode.lower() == "type_only"
         virtual_keyboard.start()
     dialog = _FixWordDialog(entries, 0, copy_text, before_show=place_over_active_window,
                             in_place=in_place)
