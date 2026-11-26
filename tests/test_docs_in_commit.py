@@ -72,3 +72,20 @@ def test_the_hook_runs_the_check():
     hook = HOOKS / "commit-msg"
     assert os.access(hook, os.X_OK)
     assert "docs_in_commit.py" in hook.read_text()
+
+
+@pytest.mark.parametrize("line, why", [
+    ("Docs:", "names nothing"),
+    ("Docs: pipeline.py", "users don't read"),                       # a code file
+    ("Docs: README.md", "CHANGELOG.md"),                             # no CHANGELOG named
+    ("Docs: nonexistent.md", "doesn't change"),                     # not read as "none"
+])
+def test_a_docs_line_that_names_nothing_useful_is_refused(line, why):
+    """From the release review: each of these used to pass."""
+    staged = [APP, "CHANGELOG.md", "README.md"]
+    assert why in check.problem(f"Change\n\n{line}\n", staged)
+
+
+def test_the_docs_line_doesnt_reach_into_the_next_line():
+    message = "Change\n\nDocs:\nCo-Authored-By: someone\n"
+    assert "names nothing" in check.problem(message, [APP, "CHANGELOG.md"])

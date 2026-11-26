@@ -19,6 +19,7 @@ Merges are let through: what they bring in was checked when it was made.
 Run by .githooks/commit-msg with the message file's path.
 """
 import fnmatch
+import os
 import re
 import subprocess
 import sys
@@ -29,7 +30,8 @@ CODE = ("src/tuxtalk/*", "gnome-extension/*")
 DOCS = ("CHANGELOG.md", "README.md", "docs/*.html", "io.github.ronb1964.TuxTalk.appdata.xml",
         "src/tuxtalk/help/*", "src/tuxtalk/help_text.py", "src/tuxtalk/help_pages.py",
         "src/tuxtalk/commands_reference.py")
-_DOCS_LINE = re.compile(r"^docs:\s*(.*)$", re.IGNORECASE | re.MULTILINE)
+_DOCS_LINE = re.compile(r"^docs:[ \t]*(.*)$", re.IGNORECASE | re.MULTILINE)
+_NONE = re.compile(r"none\b[\s,:;-]*(.*)", re.IGNORECASE)
 
 
 def _matches(path, patterns):
@@ -51,18 +53,30 @@ def problem(message: str, staged: list) -> str:
                 "Commands list) in this same commit and name them: Docs: CHANGELOG.md, ...\n"
                 "If no user can notice the change: Docs: none, <why>")
     said = found.group(1).strip()
-    if said.lower().startswith("none"):
-        why = said[4:].strip(" ,:;-")
-        return "" if len(why.split()) >= 3 else (
+    none = _NONE.fullmatch(said)
+    if none:
+        return "" if len(none.group(1).split()) >= 3 else (
             "Docs: none needs a reason of at least three words, e.g.\n"
             "Docs: none, a refactor with the same behaviour")
     named = [name for name in re.split(r"[,\s]+", said) if name]
-    missing = [name for name in named
-               if not any(p == name or p.endswith("/" + name) for p in staged)]
+    if not named:
+        return "Docs: names nothing: name the texts this commit updated, or say none and why."
+    return _named_problem(named, staged)
+
+
+def _named_problem(named: list, staged: list) -> str:
+    """Why the texts *named* on a Docs: line don't fit the *staged* paths,
+    or "": each one is a text users read, in the commit, CHANGELOG.md too."""
+    found = {name: [p for p in staged if p == name or p.endswith("/" + name)] for name in named}
+    missing = [name for name, paths in found.items() if not paths]
     if missing:
         return ("Docs: names " + ", ".join(missing) + ", which this commit doesn't change.\n"
                 "Stage the updated file, or name only what the commit holds.")
-    if "CHANGELOG.md" not in staged:
+    not_docs = [name for name, paths in found.items() if not _matches(paths[0], DOCS)]
+    if not_docs:
+        return ("Docs: names " + ", ".join(not_docs) + ", which users don't read: name the\n"
+                "Help pages, README, website or CHANGELOG this commit updated.")
+    if "CHANGELOG.md" not in named:
         return ("A change users can notice goes in CHANGELOG.md's [Unreleased] section:\n"
                 "update it in this commit and name it in the Docs: line.")
     return ""
@@ -77,7 +91,10 @@ def main(message_path):
     if subprocess.run(["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"],
                       capture_output=True).returncode == 0:
         return 0
-    staged = _git("diff", "--cached", "--name-only").split()
+    # An --amend's commit is everything since the one before it, not only
+    # what was staged for the amend.
+    amending = os.environ.get("GIT_REFLOG_ACTION", "").startswith("commit (amend)")
+    staged = _git("diff", "--cached", "--name-only", *(["HEAD~1"] if amending else [])).split()
     with open(message_path, encoding="utf-8") as f:
         why_not = problem(f.read(), staged)
     if why_not:
