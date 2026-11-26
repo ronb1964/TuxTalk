@@ -313,6 +313,7 @@ def _typed(text: str) -> str:
                                           for line in paragraph.split("\n"))
     return " <i>(new paragraph)</i> ".join(lines(p) for p in text.split("\n\n"))
 
+
 # Commands right after Start Here: once someone can dictate, "what can I
 # say?" comes next. Problems last.
 _TABS = [
