@@ -198,12 +198,16 @@ _TITLE = re.compile(rf"^(?:{_LEAD}title case|capitali[sz]e (?:the first letter o
 _MARKS = {
     "commas": ",", "periods": ".", "full stops": ".", "dots": ".",
     "exclamation points": "!", "exclamation marks": "!", "question marks": "?",
-    "semicolons": ";", "colons": ":", "quotes": "\"“”„",
-    "quotation marks": "\"“”„", "apostrophes": "'’",
+    "semicolons": ";", "colons": ":", "quotes": "\"“”„«»‹›",
+    "quotation marks": "\"“”„«»‹›", "apostrophes": "'’",
     "dashes": "-–—", "hyphens": "-–—",
     "brackets": "()[]", "parentheses": "()",
-    "punctuation": ",.!?;:\"“”„–—",
+    "punctuation": ",.!?;:\"“”„«»‹›–—",
 }
+# German's single quotes too, ‚so‘, with German commands on: in English ‘ is
+# a single quote's opening, whose closing ’ is also the apostrophe, so
+# taking ‘ alone would leave half a pair.
+_GERMAN_MARKS = {"quotes": "‚‘", "quotation marks": "‚‘", "punctuation": "‚‘"}
 _REMOVE = r"(?:remove|delete|take out|get rid of|drop|strip(?: out)?|lose|cut)"
 _FROM = rf"(?:\s+(?:from|in|out of)\s+{_TARGET})?(?:\s+everywhere)?"
 _REMOVE_MARKS = re.compile(rf"^{_REMOVE}\s+(?:all\s+)?(?:of\s+)?(?:the\s+)?"
@@ -257,17 +261,34 @@ def _tidy(body: str) -> str:
     return body.strip().lstrip(",;: ")
 
 
-def _remove_marks(text: str, marks: str) -> str:
-    """*text* without the punctuation *marks*, line by line."""
+def _marks_named(name: str, lang: str) -> str:
+    """The marks "remove the *name*" takes out; with *lang* "de" German's
+    single quotes are quotes too."""
+    return _MARKS[name] + (_GERMAN_MARKS.get(name, "") if lang == "de" else "")
+
+
+# In German a day's number ends in a period before its month ("am 3. Oktober"),
+# which taking the periods out mustn't take.
+_GERMAN_DATE_PERIOD = re.compile(rf"(?<=\d)\.(?=\s+(?i:{_MONTHS})\b)")
+_KEPT = "\x00"                            # a kept period, while the others go
+
+
+def _remove_marks(text: str, marks: str, lang: str = "en") -> str:
+    """*text* without the punctuation *marks*, line by line; with *lang* "de"
+    a German date keeps its period."""
     cls = re.escape(marks)
     # A mark goes unless it sits between two digits. Dashes become a space, so
     # "well-known" reads "well known" rather than "wellknown".
     pattern = re.compile(rf"(?<!\d)[{cls}]|[{cls}](?!\d)")
+    keep_dates = lang == "de" and "." in marks
 
     def change(body):
+        if keep_dates:
+            body = _GERMAN_DATE_PERIOD.sub(_KEPT, body)
         if not pattern.search(body):
-            return body                   # a line without the mark stays as it is
-        return _tidy(pattern.sub(lambda m: " " if m.group() in "-–—" else "", body))
+            return body.replace(_KEPT, ".")   # a line without the mark stays as it is
+        changed = _tidy(pattern.sub(lambda m: " " if m.group() in "-–—" else "", body))
+        return changed.replace(_KEPT, ".")
     return _per_line(text, change)
 
 
@@ -337,7 +358,7 @@ def mechanical_edit(text: str, instruction: str, lang: str = "en"):
         return _per_line(text, _title)
     m = _REMOVE_MARKS.match(said)
     if m:
-        return _remove_marks(text, _MARKS[m.group(1)])
+        return _remove_marks(text, _marks_named(m.group(1), lang), lang)
     lines = [line for line in text.split("\n") if line.strip()]
     # A list of lines is made exactly. One paragraph into points needs the AI,
     # which decides where the points are.

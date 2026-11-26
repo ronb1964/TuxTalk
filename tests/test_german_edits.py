@@ -81,6 +81,36 @@ def test_german_quotes_go_with_the_other_quotes():
                            "de") == "Er sagte Hallo."
 
 
+@pytest.mark.parametrize("text", ["Er sagte «Hallo».", "Er sagte ‹Hallo›.",
+                                  "Er sagte ‚Hallo‘.", "Er sagte »Hallo«."])
+def test_swiss_austrian_and_single_german_quotes_go_too(text):
+    """They stayed: only "„“ were known (0.26 release review)."""
+    assert mechanical_edit(text, "die Anführungszeichen entfernen", "de") == "Er sagte Hallo."
+
+
+def test_english_single_quotes_stay_whole_with_the_apostrophe():
+    """‘ is German's closing single quote, but in English it opens one whose
+    closing ’ is the apostrophe too: taking ‘ alone would leave half a pair."""
+    assert mechanical_edit("He said ‘hi’ and “bye”.", "remove the quotes") == "He said ‘hi’ and bye."
+
+
+def test_a_german_date_keeps_its_period_when_the_periods_go():
+    """"die Punkte entfernen" typed "am 3 Oktober" (0.26 release review)."""
+    assert mechanical_edit("Wir treffen uns am 3. Oktober. Bis dann.", "die Punkte entfernen",
+                           "de") == "Wir treffen uns am 3. Oktober Bis dann"
+
+
+@pytest.mark.parametrize("said", [
+    "mach das rot", "in Blau", "die Schrift größer machen", "grösser machen",
+    "die Schriftart ändern", "die Farbe ändern", "das zentrieren", "das durchstreichen",
+    "hervorheben",
+])
+def test_german_formatting_no_shortcut_does_is_said_to_be_impossible(said):
+    """Font, size and colour went to the AI, which can't change how text
+    looks: German heard "no change" where English hears it can't be done."""
+    assert formatting(said, "de") == "cant_format"
+
+
 @pytest.mark.parametrize("said", ["das löschen", "Lösch das.", "alles löschen",
                                   "die Auswahl entfernen"])
 def test_german_delete_this_deletes_the_selection(said):

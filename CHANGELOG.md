@@ -96,7 +96,12 @@ before 0.15.0, so older entries use that name.
   made into a list, and "capitalize each word" capitalises ä, ö, ü and
   accented letters too. In German, "die Aufzählungspunkte entfernen" and
   "als Liste mit Aufzählungspunkten" are done exactly, like
-  "Aufzählungszeichen", instead of going to the AI.
+  "Aufzählungszeichen", instead of going to the AI. "Die
+  Anführungszeichen entfernen" takes the Swiss and Austrian «» and ‹› and
+  German's single ‚‘ too, "die Punkte entfernen" leaves a date's period
+  ("am 3. Oktober"), and "mach das rot", "die Schriftart ändern" or "das
+  zentrieren" say it can't be done, as in English, instead of the AI
+  answering with no change.
 
 ## [0.25.0] - 2026-11-24
 

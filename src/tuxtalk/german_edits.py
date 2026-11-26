@@ -26,7 +26,8 @@ _VERBS_FIRST = {
     "lösch": "löschen", "lösche": "löschen", "streich": "streichen", "streiche": "streichen",
     "nummerier": "nummerieren", "nummeriere": "nummerieren", "formatier": "formatieren",
     "formatiere": "formatieren", "unterstreich": "unterstreichen",
-    "unterstreiche": "unterstreichen",
+    "unterstreiche": "unterstreichen", "färb": "färben", "färbe": "färben",
+    "zentrier": "zentrieren", "zentriere": "zentrieren", "änder": "ändern", "ändere": "ändern",
 }
 
 # What the instruction is about, if it says: "das", "alles", "den Text".
@@ -49,6 +50,16 @@ _MARKS = {
 _MARKS = swiss_words(_MARKS)
 _SHORTCUTS = {"fett": "bold", "kursiv": "italic", "unterstrichen": "underlined"}
 _SHORTCUT = rf"(?:in )?(?:{'|'.join(_SHORTCUTS)})"
+# How text looks, which no keyboard shortcut changes: said in English to
+# voice_edit_rules.formatting, whose answer is that it can't be done, rather
+# than the AI's "no change" after it tried.
+_LOOKS = {"größer": "bigger", "kleiner": "smaller", "rot": "red", "blau": "blue",
+          "grün": "green", "gelb": "yellow", "orange": "orange", "lila": "purple",
+          "violett": "purple", "schwarz": "black", "weiß": "white", "grau": "gray",
+          "rosa": "pink", "pink": "pink", "braun": "brown"}
+_LOOKS = swiss_words(_LOOKS)
+_LAYOUT = {"zentrieren": "center this", "durchstreichen": "make this strikethrough",
+           "hervorheben": "highlight this"}
 
 # German instruction (verb last) -> English instruction; the first whose
 # pattern matches all of the words counts.
@@ -84,6 +95,11 @@ _RULES = [
      lambda m: "make this " + " and ".join(_SHORTCUTS[w] for w in m[1].split()
                                            if w in _SHORTCUTS)),
     (rf"{_TARGET}unterstreichen", lambda m: "underline this"),
+    (rf"{_TARGET}(?:die schrift )?(?:in )?({'|'.join(_LOOKS)})(?: (?:machen|färben|schreiben))?",
+     lambda m: f"make this {_LOOKS[m[1]]}"),
+    (r"(?:die |eine andere )?(?:schriftart|schrift|schriftgröße|schriftfarbe|textfarbe|farbe)"
+     r" (?:ändern|wechseln|vergrößern|verkleinern)", lambda m: "change the font"),
+    (rf"{_TARGET}({'|'.join(_LAYOUT)})", lambda m: _LAYOUT[m[1]]),
 ]
 
 
