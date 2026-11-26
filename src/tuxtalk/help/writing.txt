@@ -14,10 +14,16 @@ Say the commands in German, as well as in English:
   3. Hold <b>{hold}</b>, say your words with <b>Komma</b>, <b>Punkt</b>, <b>neue Zeile</b>,
      <b>Enter drücken</b> in them, let go.
 {examples_german}
+
 English commands keep working beside them. A few stay English only, like changing your
 mind mid-sentence ("no wait") and the tone word ("make that formal"): the Commands tab
 lists the German words for each command, and says which have none. A new install set
 up for German starts with German commands on.
+
+To type a mark's word instead of the mark, say <b>wörtlich</b> before it at the start or
+after a pause, or <b>das Wort</b> anywhere (<b>das Wort Punkt</b>). In the middle of a
+sentence <b>wörtlich</b> is the everyday word, and the mark after it is a mark:
+{examples_literal_german}
 
 ### Into the middle of a sentence
 Click where the words should go, hold <b>{hold}</b>, say them, let go. TuxTalk looks at
@@ -46,15 +52,15 @@ elsewhere ("this one", "one of them"), as fractions do.
 {examples_numbers}
 
 ### Email and web addresses
-Say them the way you'd say them out loud. Hold <b>{hold}</b>, say "john at gmail dot com",
-let go: john@gmail.com. "github dot com" types github.com.
+Say them the way you'd say them out loud: hold <b>{hold}</b>, say the address, let go.
+"github dot com" types github.com.
 {examples_addresses}
   • Said on its own, an address gets no period after it, ready for a To: box or a
     browser's address bar.
   • Only the word right before "at" is the name, so "john doe at gmail dot com" types
-    John doe@gmail.com. Say the marks in a longer name: hold <b>{hold}</b>, say "john dot
-    doe at gmail dot com", let go: john.doe@gmail.com. "jane underscore smith" types
-    jane_smith, "john dash doe" john-doe, and "john no space doe" johndoe.
+    John doe@gmail.com. Say the marks in a longer name, as "john dot doe" above:
+    "jane underscore smith" types jane_smith, "john dash doe" john-doe, and "john no
+    space doe" johndoe.
   • Your own address: make it a snippet (Preferences → Words → Add Snippet), then hold
     <b>{hold}</b>, say "my email", let go: your address, with no period after it.
 
@@ -137,6 +143,7 @@ Say the message the way it comes, and end it with the tone you want, all in one 
   2. Say <b>tell him the cabinets are a week late, make that formal</b>.
   3. Let go. It's typed already rewritten, without "make that formal".
 {examples_tone}
+
 The tones: <b>formal</b>, <b>professional</b>, <b>friendlier</b>, <b>casual</b> and
 <b>polite</b> ("make that more formal" works too). Said on its own right after a dictation,
 <b>make that friendlier</b> changes what was just typed, the way "edit that" does.

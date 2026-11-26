@@ -102,6 +102,21 @@ def test_search_reads_the_new_text_after_help_is_rewritten(help_window, monkeypa
     assert _results(stack)
 
 
+def test_help_brought_forward_shows_the_commands_in_the_language_set_now(help_window,
+                                                                         monkeypatch):
+    """Voice commands in changed to Deutsch while Help was open: opening Help
+    again shows and searches the German words, though no page's text changed."""
+    def commands_tab():
+        notebook = _one(help_window, Gtk.Notebook)
+        return " ".join(_texts(notebook.get_nth_page(help_dialog._page_of(notebook, "Commands"))))
+    assert "Beistrich" not in commands_tab()
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(command_language="de"))
+    help_dialog.show_help_dialog()
+    assert "Beistrich" in commands_tab()
+    assert any("Beistrich" in text for r in _results(_search(help_window, "Beistrich"))
+               for text in _texts(r))
+
+
 def test_the_card_jumped_to_is_near_the_top_and_outlined():
     """On a shown Help: the card a result goes to sits near the top of its
     page, not wherever focusing it scrolled, and is outlined."""

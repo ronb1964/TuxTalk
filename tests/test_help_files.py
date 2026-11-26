@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tuxtalk import help_text
+from tuxtalk import help_outline, help_text
 
 FOLDER = Path(help_text.__file__).parent / "help"
 
@@ -48,3 +48,23 @@ def test_each_page_starts_with_its_title(name):
 def test_a_page_read_from_its_file_keeps_no_extra_line_at_the_end():
     """Editors end a file with a line break; the page itself doesn't."""
     assert not help_text.page("tips").endswith("\n")
+
+
+@pytest.mark.parametrize("name", sorted(_named()))
+def test_an_examples_line_ends_its_paragraph(name):
+    """A line of text right under {examples_...} would join the example's
+    last bullet on screen (help_outline flows a line on into the one before),
+    and read as part of what's typed."""
+    lines = help_text.page(name).split("\n")
+    for number, line in enumerate(lines[:-1]):
+        after = lines[number + 1]
+        if line.startswith("{examples_"):
+            assert (not after.strip() or after.startswith(("#", "{examples_"))
+                    or help_outline._ITEM.match(after)), f"help/{name}.txt line {number + 2}"
+
+
+def test_the_commands_examples_page_is_filled_in_like_every_page(monkeypatch):
+    """The test above checks it against every placeholder, so Help must fill
+    them all in: a {hold} there would otherwise keep Help from opening."""
+    monkeypatch.setattr(help_text, "page", lambda _name: "Hold <b>{hold}</b>:\n{examples_commands}")
+    assert help_text.commands_examples().startswith("Hold <b>")

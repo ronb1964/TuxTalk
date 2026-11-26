@@ -535,10 +535,10 @@ With **Voice commands in** set to Deutsch, most commands above can be said in Ge
 | "Enter drücken" / "Tab drücken" (at the end) | Presses the key |
 | "das letzte Wort löschen" / "alles löschen" | Undo, as above |
 | "Wort korrigieren" | Opens Fix a Word |
-| "wörtlich Punkt" | Types the word "Punkt" |
+| "das Wort Punkt", or "wörtlich Punkt" at the start or after a pause | Types the word "Punkt" |
 | "alles in Großbuchstaben" / "die Kommas entfernen" (voice editing) | Done exactly, without the AI |
 
-The same words in an ordinary sentence stay words: "auf den Punkt", "Punkt 12 Uhr", "drei Komma fünf". The Labs commands work in German too ("den letzten Satz markieren", "Firefox öffnen", "Fenster schließen", "Mausraster"), with their Labs setting on. The Voice Commands window shows the German words first once Deutsch is on. Changing your mind mid-sentence ("no wait") stays English.
+The same words in an ordinary sentence stay words: "auf den Punkt", "Punkt 12 Uhr", "drei Komma fünf". So does "wörtlich" in the middle of a sentence: "Das meine ich wörtlich Ausrufezeichen" types "Das meine ich wörtlich!". The Labs commands work in German too ("den letzten Satz markieren", "Firefox öffnen", "Fenster schließen", "Mausraster"), with their Labs setting on. The Voice Commands window shows the German words first once Deutsch is on. Changing your mind mid-sentence ("no wait") stays English.
 
 </details>
 

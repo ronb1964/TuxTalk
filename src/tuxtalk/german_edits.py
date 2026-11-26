@@ -60,12 +60,14 @@ _RULES = [
     (r"(?:jedes wort|alle wörter|jeden anfangsbuchstaben|alle anfangsbuchstaben)"
      r" groß(?: ?schreiben| machen)?", lambda m: "make this title case"),
     (rf"{_ALL}({'|'.join(_MARKS)}) {_TAKE_OUT}", lambda m: f"remove the {_MARKS[m[1]]}"),
-    (rf"{_ALL}(?:aufzählungszeichen|spiegelstriche|nummerierung) {_TAKE_OUT}",
+    (rf"{_ALL}(?:aufzählungszeichen|aufzählungspunkte|spiegelstriche|nummerierung)"
+     rf" {_TAKE_OUT}",
      lambda m: "remove the bullets"),
     (rf"{_TARGET}(?:als |zu |in )?(?:eine[nr]? )?nummerierte[nr]? liste(?: daraus)?{_MAKE}"
      rf"|{_TARGET}nummerieren", lambda m: "make this a numbered list"),
     (rf"{_TARGET}(?:als |zu |in )?(?:eine[nr]? )?(?:aufzählung|stichpunkte|stichpunktliste"
-     rf"|liste mit (?:aufzählungszeichen|spiegelstrichen)|liste)(?: daraus)?{_MAKE}",
+     rf"|liste mit (?:aufzählungszeichen|aufzählungspunkten|spiegelstrichen)|liste)"
+     rf"(?: daraus)?{_MAKE}",
      lambda m: "make this a bulleted list"),
     (rf"{_TARGET}(?:einrücken|einzug vergrößern)", lambda m: "indent this"),
     (rf"{_TARGET}ausrücken|(?:den )?einzug (?:verkleinern|entfernen)"
@@ -73,8 +75,9 @@ _RULES = [
     # The verb said first, its particle last: "rück das ein".
     (r"rücke? (?:das |es |alles )?(ein|aus)",
      lambda m: "indent this" if m[1] == "ein" else "unindent this"),
-    # As an instruction "alles" is the selection ("alles löschen" said as a
-    # dictation of its own, without the editing key, clears the box: undo).
+    # As an instruction "alles" is the selection. Said as a dictation of its
+    # own, without the editing key, "alles löschen" is undo's "clear
+    # everything" instead.
     (rf"(?:das|dies|es|alles|das alles|die auswahl|den text) {_TAKE_OUT}",
      lambda m: "delete this"),
     (rf"{_TARGET}({_SHORTCUT}(?: und {_SHORTCUT})*){_MAKE}",

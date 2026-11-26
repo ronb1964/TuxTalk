@@ -56,9 +56,11 @@ def test_split_press_enter(raw, expected):
     ("drücke die Tab-Taste", ("", "TAB")),
     # English stays understood.
     ("Bis morgen, press enter", ("Bis morgen", "ENTER")),
-    # Only the very end counts, and "wörtlich" types the words.
+    # Only the very end counts, and "wörtlich" after a pause types the words;
+    # in a sentence it's the everyday word.
     ("Enter drücken und weiter", ("Enter drücken und weiter", "")),
-    ("Schreib wörtlich Enter drücken", ("Schreib Enter drücken", "")),
+    ("Schreib, wörtlich Enter drücken", ("Schreib, Enter drücken", "")),
+    ("Ich meine das wörtlich Enter drücken", ("Ich meine das wörtlich", "ENTER")),
     # Either language's literal word keeps either language's command words.
     ("literal Enter drücken", ("Enter drücken", "")),
     ("wörtlich press enter", ("press enter", "")),

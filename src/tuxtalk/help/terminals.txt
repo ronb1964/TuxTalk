@@ -6,17 +6,19 @@ Fine-tuning → Accessibility</b>). One already open when it went on may need cl
 and opening once.
 
 ### Plain text, by itself
-In a terminal a dictation starts without a capital and ends without a period, so
-"git status" is typed as git status. In code editors (VS Code, Zed, JetBrains
-IDEs…) no period is added at the end. Everywhere else, chat apps included,
-punctuation is as usual. (Preferences → Advanced → Fine-tuning → Plain text in
-terminals and code editors.)
+In a terminal a dictation starts without a capital and ends without a period. In
+code editors (VS Code, Zed, JetBrains IDEs…) no period is added at the end.
+Everywhere else, chat apps included, punctuation is as usual. (Preferences →
+Advanced → Fine-tuning → Plain text in terminals and code editors.)
 {examples_terminal}
 
 ### Running a command
-Hold <b>{hold}</b>, say <b>git status, press enter</b>, let go: the command is typed and
-run. Send each dictation automatically doesn't press Enter in a terminal, so nothing
-runs before you've read it: end with <b>press enter</b> when you want it to run.
+Hold <b>{hold}</b>, say the command ending with <b>press enter</b>, let go: it's typed and
+run.
+{examples_run}
+
+Send each dictation automatically doesn't press Enter in a terminal, so nothing runs
+before you've read it: end with <b>press enter</b> when you want it to run.
 
 ### Long commands
 Snippets: say a short phrase and TuxTalk types the full text. Add one in

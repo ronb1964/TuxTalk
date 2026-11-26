@@ -89,7 +89,7 @@ get = "git status"
 app = "terminal"
 
 [[example]]
-group = "terminal"
+group = "run"
 say = "git status, press enter"
 get = "git status"
 press = "Enter"
@@ -109,5 +109,19 @@ get = "First sentence.\nSecond sentence!"
 group = "german"
 say = "Liebe Anna Komma neue Zeile wie geht es dir Fragezeichen"
 get = "Liebe Anna,\nWie geht es dir?"
+when = "Voice commands in set to Deutsch"
+lang = "de"
+
+[[example]]
+group = "literal_german"
+say = "wörtlich Punkt steht am Ende"
+get = "Punkt steht am Ende."
+when = "Voice commands in set to Deutsch"
+lang = "de"
+
+[[example]]
+group = "literal_german"
+say = "Das meine ich wörtlich Ausrufezeichen"
+get = "Das meine ich wörtlich!"
 when = "Voice commands in set to Deutsch"
 lang = "de"

@@ -23,6 +23,7 @@ sending half a sentence can't be taken back (auto_send).
 import re
 
 from .logger import setup_logger
+from .normalize import WOERTLICH
 
 logger = setup_logger(__name__)
 
@@ -47,8 +48,9 @@ US_LETTER_KEYS = dict(zip("abcdefghijklmnopqrstuvwxyz",
 # tab"). "literal" or "the word" before it types the words.
 _LITERAL = r"(?:literal|the\s+words?)"
 # With German on, either language's word for it does, before either's
-# command: "literal Enter drücken" asked for the words as surely.
-_GERMAN_LITERAL = r"(?:literal|the\s+words?|wörtlich|das\s+wort|die\s+wörter)"
+# command: "literal Enter drücken" asked for the words as surely. "wörtlich"
+# only after a pause: "Ich meine das wörtlich Enter drücken" is the word.
+_GERMAN_LITERAL = rf"(?:literal|the\s+words?|das\s+wort|die\s+wörter|{WOERTLICH})"
 
 
 def _english_trailing(literal: str) -> re.Pattern:

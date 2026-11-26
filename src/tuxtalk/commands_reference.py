@@ -72,10 +72,12 @@ def _inline(*said, result, note="", german=(), german_result=""):
 
 def _literal(word, result, *said, german=""):
     """The command that types *word* itself; *said* adds other ways to say
-    it, and *german* names the German word that "wörtlich" types."""
+    it, and *german* names the German word that "wörtlich" types. With
+    German on the row shows both: the English ways still type *word*."""
     return Command((f"literal {word}", *said), f'"{word}" (not {result})', "literal",
                    german=(f"wörtlich {german}", f"das Wort {german}") if german else (),
-                   german_result=f'"{german}" (not {result})' if german else "")
+                   german_result=(f'"{german}" (not {result}); the English ways type "{word}"'
+                                  if german else ""))
 
 
 SECTIONS = (
@@ -147,7 +149,10 @@ SECTIONS = (
                  + ", ".join(LITERAL_REPLACEMENTS) + ". <b>literal</b> before a command "
                  "from Select and Move, Apps and Windows, Keys and Web or Sound and "
                  "System types its words too (<b>literal open Firefox</b>). With voice "
-                 "commands in German, <b>wörtlich</b> does the same (<b>wörtlich Punkt</b>).",
+                 "commands in German, <b>das Wort</b> does the same (<b>das Wort Punkt</b>), "
+                 "and <b>wörtlich</b> at the start or after a pause: in the middle of a "
+                 "sentence it's the everyday word, so <b>Das meine ich wörtlich "
+                 "Ausrufezeichen</b> types \"Das meine ich wörtlich!\"",
             commands=(
                 _literal("period", ".", "the word period", german="Punkt"),
                 _literal("comma", ",", "the word comma", german="Komma"),

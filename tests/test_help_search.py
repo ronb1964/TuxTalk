@@ -173,29 +173,63 @@ def test_uninstalling_says_the_shared_models_go_only_when_their_box_is_ticked(en
     assert "only if you tick that box" in card.text
 
 
-def test_everything_help_shows_can_be_searched():
-    """Every line Help shows is in a card its search can find: each page's
-    own opening lines, every feature and card, and the Commands tab's intro
-    and examples under its cards. Text added anywhere in Help can't be left
-    out of the search (the Commands tab's intro and examples and the top of
-    Terminals once were)."""
-    from tuxtalk import help_outline
-    tabs = help_text.tabs()
-    searched = " ".join(" ".join(entry.text.split()) for entry in help_search.index(tabs))
-    missing = []
-    for tab, markup in tabs:
-        page = help_outline.parse(markup)
-        pieces = [part.intro for part in page.parts]
-        if tab == help_text.COMMANDS_TITLE:
-            pieces.append(help_text.commands_examples())
-        else:
-            pieces += [section.body for part in page.parts for section in part.sections]
-        for piece in pieces:
-            for line in help_search._plain(piece or "").split("\n"):
-                line = " ".join(line.split())
-                if line and line not in searched:
-                    missing.append(f"{tab}: {line[:70]}")
-    assert not missing, "Help shows text its search can't find:\n" + "\n".join(missing)
+def _shown_by_destination(window):
+    """Every line Help's tabs show, by the place a search jumps to for it:
+    the card or paragraph it's in, or for a line between them (a page's
+    title, a feature's, a Labs line over a group of commands) the next one
+    down, or the last one on the page."""
+    from gi.repository import Gtk
+    from gtk_text import widgets
+    from tuxtalk import help_dialog
+    help_window = help_dialog._open_help
+    places = {id(card): key for key, (_focus, card) in help_window.found.items()}
+    shown = {}
+    notebook = help_window.notebook
+    for number in range(notebook.get_n_pages()):
+        here, waiting, inside = None, [], None
+        for widget in widgets(notebook.get_nth_page(number)):
+            if id(widget) in places:
+                here, inside = places[id(widget)], widget
+                shown.setdefault(here, []).extend(waiting)
+                waiting = []
+            if isinstance(widget, Gtk.Label) and widget.get_text().strip():
+                owner = inside and (widget is inside or widget.is_ancestor(inside))
+                (shown.setdefault(here, []) if owner else waiting).append(widget.get_text())
+        shown.setdefault(here, []).extend(waiting)
+    return shown
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_everything_help_shows_can_be_searched_where_it_is(language, monkeypatch):
+    """Every line Help shows is found by its search, at the place a result
+    jumps to: page titles, features' titles and notes, cards, paragraphs, the
+    Labs lines over the Commands groups, the commands themselves in the
+    language they're said in. Text added anywhere in Help can't be left out
+    of the search (page titles, the Labs lines, the Commands tab's intro and
+    examples and the top of Terminals once were)."""
+    from gi.repository import Gtk
+    from tuxtalk import help_dialog
+    monkeypatch.setattr(config, "load_config",
+                        lambda: config.Settings(command_language=language))
+    monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)
+    monkeypatch.setattr(Gtk.Window, "present", lambda self: None)
+    window = help_dialog.show_help_dialog()
+    try:
+        entries = help_dialog._open_help.entries
+        missing = []
+        for key, texts in _shown_by_destination(window).items():
+            here = [e for e in entries if (e.tab, e.part, e.title) == key]
+            searched = " ".join(" ".join(f"{e.tab} {e.page} {e.part} {e.title} {e.note} "
+                                         f"{e.text} {'Labs' if e.labs else ''}".split()) for e in here)
+            for text in texts:
+                for line in text.split("\n"):
+                    line = " ".join(line.split())
+                    if line and line not in searched:
+                        missing.append(f"{key}: {line[:70]}")
+        assert not missing, "Help shows text its search can't find there:\n" + "\n".join(
+            missing)
+    finally:
+        window.destroy()
 
 
 @pytest.mark.parametrize("query, tab, title", [
@@ -203,6 +237,10 @@ def test_everything_help_shows_can_be_searched():
     ("There are two kinds", "Commands", "Voice Commands Reference"),
     ("terminal panel (F4)", "Terminals", "Terminals"),
     ("Deutsch", "Writing", "Voice commands in German"),
+    ("Documents and Email", "Writing", "Punctuation and paragraphs"),
+    ("three steps", "Start Here", "How to dictate"),
+    ("gathers what helps", "Problems", "No key works"),
+    ("Select and move ticked", "Commands", "Editing by Voice"),
 ])
 def test_text_outside_the_cards_is_found_where_it_is(query, tab, title):
     """Among the first few results, as the results page shows them."""

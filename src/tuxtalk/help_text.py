@@ -36,8 +36,13 @@ FEEDBACK_URL = "https://github.com/ronb1964/TuxTalk/discussions"
 ISSUES_URL = "https://github.com/ronb1964/TuxTalk/issues"
 # A link in Help that opens Report a Problem instead of a web page.
 REPORT_LINK = "tuxtalk:report"
-# The section that opens with a Report a Problem button (help_dialog).
+# The section that opens with a Report a Problem button (help_dialog), and
+# the button and the line beside it, which Help's search finds too.
 PROBLEMS_TITLE = "Problems"
+REPORT_BUTTON = "Report a Problem…"
+REPORT_NOTE = ("Gathers what helps find a problem: your system, your settings and the end of "
+               "TuxTalk's log. You see all of it first, then copy it, save it, or open a "
+               "GitHub issue with it.")
 # Help's Commands tab is drawn as cards (commands_cards): its intro here, the
 # cards from commands_reference, then commands_examples().
 COMMANDS_TITLE = "Commands"
@@ -263,9 +268,7 @@ def _values():
             "CUDA_SIZE_TEXT": CUDA_SIZE_TEXT, **examples()}
 
 
-# Each page's words live in help/<name>.txt, Pango markup with the marks
-# above and {placeholders} from _values(); literal braces are doubled. Kept
-# out of the code so Help can grow as far as it needs to without growing it.
+# The pages (see the module's docstring); a brace meant as one is doubled.
 _PAGES = os.path.join(os.path.dirname(__file__), "help")
 
 
@@ -277,7 +280,7 @@ def page(name: str) -> str:
 
 def commands_examples() -> str:
     """The Commands tab's examples, under its cards (help_dialog)."""
-    return page("commands_examples").format(**examples())
+    return page("commands_examples").format(**_values())
 
 
 def examples() -> dict:
@@ -298,7 +301,7 @@ def _example_line(example: dict) -> str:
     if example.get("ai"):
         typed = f"something like {typed}"
     if example.get("press"):
-        typed += f", then {example['press']}"
+        typed += f", then {GLib.markup_escape_text(example['press'])}"
     when = f"With {GLib.markup_escape_text(example['when'])}: " if example.get("when") else ""
     return f"  • {when}\u201c<i>{GLib.markup_escape_text(example['say'])}</i>\u201d → {typed}"
 
@@ -309,6 +312,7 @@ def _typed(text: str) -> str:
         return " <i>(new line)</i> ".join(f"<tt>{GLib.markup_escape_text(line)}</tt>"
                                           for line in paragraph.split("\n"))
     return " <i>(new paragraph)</i> ".join(lines(p) for p in text.split("\n\n"))
+
 
 # Commands right after Start Here: once someone can dictate, "what can I
 # say?" comes next. Problems last.

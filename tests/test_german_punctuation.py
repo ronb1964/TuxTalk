@@ -50,8 +50,8 @@ def test_german_spoken_marks_become_marks(said, typed):
     ("Ich brauche einen neuen Absatz im Text", "Ich brauche einen neuen Absatz im Text."),
     ("Punkt, Punkt, Komma, Strich, fertig ist das Mondgesicht.",
      "Punkt, Punkt, Komma, Strich, fertig ist das Mondgesicht."),
-    # "wörtlich" or "das Wort" types the mark's word itself.
-    ("Schreib wörtlich Komma bitte", "Schreib Komma bitte."),
+    # "wörtlich" after a pause, or "das Wort", types the mark's word itself.
+    ("Schreib, wörtlich Komma bitte", "Schreib, Komma bitte."),
     ("Schreib das Wort Fragezeichen", "Schreib Fragezeichen."),
     # Compound words are never marks.
     ("Der Treffpunkt ist am Bahnhof", "Der Treffpunkt ist am Bahnhof."),
@@ -80,7 +80,7 @@ def test_german_marks_the_engine_wrote_in_two_words_are_marks(said, typed):
     # "Doppel Punkt" ending the dictation: doubles, and a full stop.
     ("Wir spielen heute Doppel Punkt", "Wir spielen heute Doppel."),
     # Held as words when two-word too: "wörtlich", after an article, in a run.
-    ("Schreib wörtlich Doppel Punkt", "Schreib Doppel Punkt."),
+    ("Schreib, wörtlich Doppel Punkt", "Schreib, Doppel Punkt."),
     ("den Doppel Punkt", "Den Doppel Punkt."),
     ("Punkt, Komma, Doppel Punkt", "Punkt, Komma, Doppel Punkt."),
     # Kept as words, both halves are nouns and keep their capitals.
@@ -266,8 +266,8 @@ def test_a_mark_word_ending_the_dictation_is_the_mark():
     """What rules can't tell from a command: the command wins, and
     "wörtlich" types the word."""
     assert normalize_text("Das ist der letzte Punkt", lang="de") == "Das ist der letzte."
-    assert normalize_text("Das ist der letzte wörtlich Punkt", lang="de") == (
-        "Das ist der letzte Punkt.")
+    assert normalize_text("Das ist der letzte, wörtlich Punkt", lang="de") == (
+        "Das ist der letzte, Punkt.")
 
 
 @pytest.mark.parametrize("said, typed", [
@@ -276,8 +276,8 @@ def test_a_mark_word_ending_the_dictation_is_the_mark():
     # A word processor's soft line break is Shift+Enter: TuxTalk's line break.
     ("Erste Zeile weicher Zeilenumbruch zweite Zeile", f"Erste Zeile.{LINE_BREAK}Zweite Zeile."),
     # "wörtlich" types the words themselves, the verb small as German writes it.
-    ("Schreib wörtlich Tab drücken bitte", "Schreib Tab drücken bitte."),
-    ("Schreib wörtlich Geviertstrich", "Schreib Geviertstrich."),
+    ("Schreib, wörtlich Tab drücken bitte", "Schreib, Tab drücken bitte."),
+    ("Schreib. Wörtlich Geviertstrich", "Schreib. Geviertstrich."),
     ("Schreib das Wort neue Zeile", "Schreib neue Zeile."),
     # English's words for it too, as at the end of a dictation (key_commands).
     ("Schreib literal Tab drücken bitte", "Schreib Tab drücken bitte."),
@@ -337,3 +337,26 @@ def test_a_greeting_keeps_its_comma_before_a_new_line(said, typed):
 
 def test_a_spoken_komma_before_german_quotes_isnt_lost():
     assert normalize_text("Liebe Anna Komma. „Wie geht es?“", lang="de").startswith("Liebe Anna, „")
+
+
+@pytest.mark.parametrize("said, typed", [
+    ("Das meine ich wörtlich Ausrufezeichen", "Das meine ich wörtlich!"),
+    ("Hast du das wörtlich Komma oder nur sinngemäß gemeint",
+     "Hast du das wörtlich, oder nur sinngemäß gemeint."),
+    ("Ich zitiere wörtlich Doppelpunkt er sagte nein", "Ich zitiere wörtlich: er sagte nein."),
+])
+def test_woertlich_mid_sentence_is_the_everyday_word(said, typed):
+    """"wörtlich" is also "literally": said in a sentence without a pause it
+    stays, and the mark after it is the mark."""
+    assert normalize_text(said, lang="de") == typed
+
+
+@pytest.mark.parametrize("said, typed", [
+    ("wörtlich Komma", "Komma."),
+    ("Gut, wörtlich Komma", "Gut, Komma."),
+    ("Gut. Wörtlich Punkt steht da", "Gut. Punkt steht da."),
+    # "das Wort" types the word anywhere.
+    ("Ich mag das Wort Komma", "Ich mag Komma."),
+])
+def test_woertlich_starting_or_after_a_pause_types_the_word(said, typed):
+    assert normalize_text(said, lang="de") == typed

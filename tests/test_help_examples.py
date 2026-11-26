@@ -58,9 +58,17 @@ def test_every_group_is_shown_on_some_page():
         assert any(f"{{examples_{group}}}" in text for text in pages), group
 
 
-def test_a_setting_help_names_is_one_the_test_turns_on():
+def test_a_setting_help_names_is_one_the_test_turns_on_and_the_other_way_round():
     """"With Numbers set to digits" and no setting to turn on would test
-    the example without it."""
-    for example in EXAMPLES:
-        if example.get("when") and not example.get("ai"):
-            assert example.get("settings") or example.get("lang"), example["say"]
+    the example without it; a setting turned on and not named would show
+    as what TuxTalk does by default."""
+    for example in EXACT:
+        assert bool(example.get("when")) == bool(example.get("settings") or
+                                                  example.get("lang")), example["say"]
+
+
+def test_the_key_pressed_after_an_example_is_shown_as_text():
+    """A key's name is text in Help's markup, like what's said and typed."""
+    from gi.repository import Pango
+    line = help_text._example_line({"say": "ok", "get": "OK.", "press": "<Enter>"})
+    assert Pango.parse_markup(line, -1, "\0")[2].endswith("then <Enter>")

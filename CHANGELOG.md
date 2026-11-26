@@ -13,9 +13,10 @@ before 0.15.0, so older entries use that name.
   checked against what TuxTalk really types, so Help can't promise
   something it doesn't do. Help's words also moved into a text file per
   page, so Help can keep growing without the code growing with it.
-- Help's search finds everything Help shows: the text at the top of a page
-  and the Commands tab's introduction and examples weren't searchable
-  before. A new Writing card, "Voice commands in German", says how to turn
+- Help's search finds everything Help shows: the text at the top of a page,
+  page titles ("Documents and Email"), the Labs line over a group of
+  commands, the Report a Problem button's note and the Commands tab's
+  introduction and examples weren't searchable before. A new Writing card, "Voice commands in German", says how to turn
   German commands on, which a search for "German" couldn't find until now.
 - A spoken "comma" followed by a pause isn't lost any more: the speech
   engine often writes a period for the pause ("Dear Anna comma. New line"),
@@ -66,9 +67,20 @@ before 0.15.0, so older entries use that name.
   German on, the window says the English words work too. 0.25 left 20 of
   the list's 97 rows without German; a test now fails on a command added
   without German or a reason.
+- With voice commands in German, "wörtlich" in the middle of a sentence is
+  the everyday word: "Das meine ich wörtlich Ausrufezeichen" typed "Das
+  meine ich Ausrufezeichen.", losing the word and the mark, and now types
+  "Das meine ich wörtlich!". To type a mark's word, say "wörtlich" at the
+  start of a dictation or after a pause ("wörtlich Punkt"), or "das Wort"
+  anywhere ("das Wort Punkt").
+- Help and the Voice Commands window, opened again after changing Voice
+  commands in, show the commands in the new language. They kept the old
+  one until they were closed.
 - Voice editing: a line starting with a date ("3. Oktober") keeps it when
   made into a list, and "capitalize each word" capitalises ä, ö, ü and
-  accented letters too.
+  accented letters too. In German, "die Aufzählungspunkte entfernen" and
+  "als Liste mit Aufzählungspunkten" are done exactly, like
+  "Aufzählungszeichen", instead of going to the AI.
 
 ## [0.25.0] - 2026-11-24
 

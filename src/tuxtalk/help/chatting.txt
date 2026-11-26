@@ -1,9 +1,9 @@
 # Chats and Messages
 
 ### Sending a message
-Hold <b>{hold}</b>, say your message ending with <b>press enter</b>, let go:
-"see you at noon, press enter" types "See you at noon." and presses Enter, which
-sends it. Hold <b>{hold}</b> and say only "press enter" to just press Enter.
+Hold <b>{hold}</b>, say your message ending with <b>press enter</b>, let go: it's typed,
+then Enter is pressed, which sends it. Hold <b>{hold}</b> and say only "press enter" to
+just press Enter.
 {examples_send}
 
 <b>new line</b> starts a new line and never sends anything.
