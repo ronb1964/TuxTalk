@@ -201,6 +201,7 @@ def test_mid_recording_the_phrase_is_words(dictate):
     ("Set it to -5.", "Please set it to 5."),             # its sign dropped
     ("Order 2 red and 2 blue.", "Please order 2 red."),   # one of two 2s dropped
     ("Arrive in ten minutes.", "Please arrive soon."),    # a number said as a word
+    ("Pay 1,50 euros.", "Please pay 50,1 euros."),        # a decimal comma's parts swapped
     ("I dont think we should use it.", "We should use it."),   # the "not" dropped
 ])
 def test_a_rewrite_that_changes_a_number_or_the_meaning_is_not_used(before, after):
@@ -237,6 +238,13 @@ def test_the_ai_sees_real_line_breaks_and_a_marker_in_its_answer_is_refused(dict
     events.clear()
     events = dictate("see you there, make that formal", _FakeAI(f"See you{LINE_BREAK}there."))
     assert events[0] == "tone_not_changed"
+
+
+def test_a_section_sign_in_the_rewrite_is_used(dictate):
+    """Only TuxTalk's own line-break marker is refused, not a \u00a7 in the
+    text (release re-check, Codex)."""
+    events = dictate("refer to \u00a75, make that formal", _FakeAI("Please refer to \u00a75."))
+    assert events == [("typed", "Please refer to \u00a75. ")]
 
 
 def test_the_words_as_said_are_kept_in_recent_dictations(dictate, monkeypatch):

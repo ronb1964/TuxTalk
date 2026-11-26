@@ -357,7 +357,7 @@ def restyle(text: str, instruction: str, beeps_on: bool):
         result = ai.edit(plain, instruction)
         if result is not None:
             result = _as_typed(result)
-        if result is None or result.split() == plain.split() or "\xa7" in result:
+        if result is None or result.split() == plain.split() or "SHIFT_ENTER" in result:
             why, result = "no change", None
         elif not voice_edit_rules.restyle_keeps_facts(plain, result):
             why, result = "the rewrite lost a number or a \"not\", or added too much", None

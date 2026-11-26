@@ -427,15 +427,13 @@ def _repo_folder(repo):
     return os.path.join(constants.HF_HUB_CACHE, repo_folder_name(repo_id=repo, repo_type="model"))
 
 
-def cached_repo_files(repo: str) -> set:
+def cached_repo_files(repo: str) -> list:
     """The files of Hugging Face *repo* in the cache, by their names in the
-    repository, from every snapshot: what another app may have fetched too."""
+    repository, once per snapshot they're in: what another app may have
+    fetched too, another revision of the same file included."""
     snapshots = os.path.join(_repo_folder(repo), "snapshots")
-    names = set()
-    for root, _dirs, files in os.walk(snapshots):
-        names.update(os.path.relpath(os.path.join(root, f), snapshots).split(os.sep, 1)[-1]
-                     for f in files)
-    return names
+    return sorted(os.path.relpath(os.path.join(root, f), snapshots).split(os.sep, 1)[-1]
+                  for root, _dirs, files in os.walk(snapshots) for f in files)
 
 
 def remove_cached_repo(repo: str) -> bool:

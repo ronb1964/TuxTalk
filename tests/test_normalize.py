@@ -1245,6 +1245,7 @@ def test_a_greeting_keeps_its_comma_before_a_new_line(said, typed):
 @pytest.mark.parametrize("said, kept", [
     ("Note colon. (Bring snacks)", "Note: (Bring snacks)"),
     ("Dear Anna comma. “How are you?”", "Dear Anna, “How are you?”"),
+    ("Note colon. «Bring snacks»", "Note: «Bring snacks»"),
 ])
 def test_a_spoken_mark_before_a_quote_or_bracket_isnt_lost(said, kept):
     """More follows a quote or bracket too (release review, Codex)."""

@@ -86,12 +86,12 @@ def remove_old_model() -> None:
     """Delete the model before 0.26 once the current one is downloaded, so
     its 1.1 GB doesn't stay on the disk. The download cache is shared: when
     its folder holds anything else (another app's file of the same
-    repository), it's all left alone."""
+    repository, or another revision of TuxTalk's), it's all left alone."""
     from .download_utils import cached_hub_file, cached_repo_files, remove_cached_repo
     if (cached_hub_file(MODEL_REPO, MODEL_FILE) is None
             or cached_hub_file(OLD_MODEL_REPO, OLD_MODEL_FILE) is None):
         return
-    if cached_repo_files(OLD_MODEL_REPO) - {OLD_MODEL_FILE}:
+    if cached_repo_files(OLD_MODEL_REPO) != [OLD_MODEL_FILE]:
         logger.info("Kept the AI model before 0.26: its download folder holds other files too")
     elif remove_cached_repo(OLD_MODEL_REPO):
         logger.info("Removed the AI model before 0.26; the new one is downloaded")

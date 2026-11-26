@@ -115,8 +115,9 @@ def tone_at_end(raw: str):
 
 
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}\b)")
-# A number as written: its sign, and its decimals, time or date parts.
-_NUMBER = re.compile(r"[-\u2212]?\d+(?:[.:/]\d+)*")
+# A number as written: its sign, and its decimals (a German "1,50" too), time
+# or date parts. Thousands' commas are gone by then (_THOUSANDS).
+_NUMBER = re.compile(r"[-\u2212]?\d+(?:[.,:/]\d+)*")
 # A "not" in any spelling the engine writes, "don't" and "dont" alike.
 _NEGATION = re.compile(
     r"\b(?:not|never|no|none|nothing|nobody|cannot)\b|\b\w+n['\u2019]t\b"
@@ -126,7 +127,7 @@ _NEGATION = re.compile(
 
 def _numbers(text: str) -> collections.Counter:
     """The numbers in *text*, counted, spoken ones as digits: "1,500" is 1500,
-    "$1.50" stays 1.50, "-5" keeps its sign, "ten" is 10."""
+    "$1.50" stays 1.50 and "1,50" 1,50, "-5" keeps its sign, "ten" is 10."""
     from .spoken_numbers import to_digits
     plain = _THOUSANDS.sub("", to_digits(text, "en")).replace("\u2212", "-")
     return collections.Counter(_NUMBER.findall(plain))

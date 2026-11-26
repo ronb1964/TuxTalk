@@ -17,6 +17,8 @@ def cache(monkeypatch):
     held = set()
     monkeypatch.setattr(download_utils, "cached_hub_file",
                         lambda repo, name: f"/cache/{name}" if (repo, name) in held else None)
+    monkeypatch.setattr(download_utils, "cached_repo_files",
+                        lambda repo: sorted(name for r, name in held if r == repo))
     monkeypatch.setattr(download_utils, "remove_cached_repo",
                         lambda repo: held.difference_update({k for k in held if k[0] == repo})
                         or True)
@@ -64,6 +66,12 @@ def test_another_apps_files_in_the_old_models_folder_are_left_alone(tmp_path, mo
     ai_download.remove_old_model()
     assert folder.exists()
     (snapshot / "qwen2.5-1.5b-instruct-q8_0.gguf").unlink()
+    other_revision = folder / "snapshots" / "def"
+    other_revision.mkdir()
+    (other_revision / ai_download.OLD_MODEL_FILE).write_text("another app's revision")
+    ai_download.remove_old_model()
+    assert folder.exists()
+    (other_revision / ai_download.OLD_MODEL_FILE).unlink()
     ai_download.remove_old_model()
     assert not folder.exists()
 
