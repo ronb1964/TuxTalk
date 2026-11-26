@@ -4,6 +4,7 @@ RELEASE_CHECKLIST.md: "AI self-corrections", "Voice editing".
 The AI engine and model are copied in from this computer (2.7 GB, the
 pinned commit hub_pins names) rather than downloaded in each VM.
 """
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -72,6 +73,10 @@ def ai_self_correct(run):
     return Outcome("fail", "the correction wasn't made", typed=typed, heard=heard)
 
 
+# What voice editing logs when the rewrite didn't go in (voice_edit.py).
+_EDIT_FAILED = re.compile(r"Voice edit: (?:typing the rewrite|selecting the text) failed")
+
+
 @check(SECTION, "ai_voice_edit", "Voice editing: select, Shift+F8, “make this more formal”")
 def ai_voice_edit(run):
     if run.vm.ssh(f"test -f ~/.cache/huggingface/hub/{MODEL_REPO_DIR}/snapshots/{MODEL_COMMIT}/"
@@ -101,14 +106,15 @@ def ai_voice_edit(run):
             settled = after
             time.sleep(2)
             after = run.sink_text()
+        settled = after == settled
         log = run.log_since(mark)
     shot = run.shot("voice-edit")
     # Rewritten, not added to: the dictation was there to select, the AI's
     # answer replaced it with nothing logged as failed, the request itself
     # wasn't typed, and the point of the message ("file") survived.
     rewritten = after.strip().lower()
-    if (before and after and rewritten != before.strip().lower()
-            and "Voice edit result:" in log and "failed" not in log
+    if (settled and before and after and rewritten != before.strip().lower()
+            and "Voice edit result:" in log and not _EDIT_FAILED.search(log)
             and "more formal" not in rewritten
             and before.strip().lower() not in rewritten and "file" in rewritten):
         return Outcome("pass", "the selection was rewritten", typed=after.strip(),

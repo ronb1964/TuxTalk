@@ -452,6 +452,7 @@ class WaylandSelection:
         """Run *fn* after *delay* seconds; returns its cancel(). Not a daemon
         thread: quitting right after an edit still puts the clipboard back."""
         timer = threading.Timer(delay, fn)
+        timer.daemon = False        # else it inherits the dictation worker's
         timer.start()
         return timer.cancel
 
@@ -469,7 +470,6 @@ class WaylandSelection:
     def text():
         """The clipboard as text, None when it holds none or can't be read."""
         return _read_text()
-
 
     @staticmethod
     def is_empty():

@@ -236,12 +236,13 @@ class X11Board:
 class X11Selection:
     """The X11 clipboard for clipboard.copy_selection, as WaylandSelection is
     Wayland's. The probe is the service's own copy, in a type of its own that
-    no clipboard manager keeps (Xfce's Clipman ignores PASSWORD_HINT), so
-    whether it's still there is asked of this process; the text the app's
+    clipboard managers don't keep as text (Xfce's Clipman ignores
+    PASSWORD_HINT), so whether it's still there is asked of this process; the text the app's
     Ctrl+C put there is asked of that app. The user's copy goes back with
     X11Board's reading and offering, once the copy looked at is one it may
     replace, as on Wayland. PRIMARY is what every X11 app highlights. Each
-    question to another app is given up on after READ_WAIT_S at most."""
+    question to another app is given up on after about twice READ_WAIT_S
+    at most (getting onto GTK's thread, then the answer)."""
 
     read = staticmethod(X11Board.read)
     schedule = staticmethod(X11Board.schedule)
@@ -285,17 +286,21 @@ class X11Selection:
 
     @staticmethod
     def clear():
-        """Leave the clipboard empty while it still holds the probe: with its
-        time, the X server refuses over a copy made since."""
+        """Leave the clipboard empty while it still holds the probe, looked
+        at and done in one go on GTK's thread: never over a dictation
+        offered since, and with the probe's time, the X server refuses over
+        another app's copy made since."""
         from . import gtk_loop
-        gtk_loop.call(lambda: _put_back(EMPTY, _owned_at), timeout=READ_WAIT_S)
+        gtk_loop.call(lambda: _held_probe() is not None and _put_back(EMPTY, _owned_at),
+                      timeout=READ_WAIT_S)
 
     @staticmethod
     def write_back(saved):
         """Put a read() result back; never raises."""
         from . import gtk_loop
         try:
-            gtk_loop.call(_put_back, saved, timeout=READ_WAIT_S)
+            if not gtk_loop.call(_put_back, saved, timeout=READ_WAIT_S):
+                logger.info("Couldn't put the clipboard back after the voice edit")
         except TimeoutError:
             logger.warning("Couldn't restore the clipboard: GTK's thread was busy")
 

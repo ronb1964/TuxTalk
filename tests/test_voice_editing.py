@@ -1338,3 +1338,20 @@ def test_an_edit_says_whether_the_change_went_in(edit_env, monkeypatch, answer, 
                                "org.kde.kwrite", 0.0, rs.state.current.message,
                                expected="We finished the electrical today.")
     assert bool(done) is went_in
+
+
+def test_an_edits_clipboard_restore_outlives_the_dictation_worker():
+    """The restore a second after a pasted rewrite runs on a timer; made
+    from the dictation worker, a daemon thread, it was one too, and quitting
+    meanwhile lost the user's clipboard (release re-check, Codex)."""
+    import threading
+    made = []
+    worker = threading.Thread(target=lambda: made.append(
+        cb.WaylandSelection.schedule(60, lambda: None)), daemon=True)
+    worker.start()
+    worker.join()
+    timer = made[0].__self__
+    try:
+        assert timer.daemon is False
+    finally:
+        made[0]()
