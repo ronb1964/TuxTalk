@@ -11,8 +11,8 @@ The commands are English words, whatever language you dictate in. Most can be sa
 in German too: Preferences → General → Change model, device or language, then set
 <b>Voice commands in</b> to Deutsch, and say <b>Komma</b>, <b>neue Zeile</b>,
 <b>Enter drücken</b>, <b>das letzte Wort löschen</b> or <b>Wort korrigieren</b>,
-and with voice editing, <b>alles in Großbuchstaben</b>. English commands keep working.
-{examples_german}
+and with voice editing, <b>alles in Großbuchstaben</b>. English commands keep working
+(Writing → Voice commands in German).
 Changing your mind mid-sentence ("no wait") and the tone word ("make that formal")
 stay English.
 

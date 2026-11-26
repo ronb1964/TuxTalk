@@ -140,14 +140,23 @@ def group_page(group, extra=None):
     return cards.page(children)
 
 
+# The examples under the Commands tab's cards, as Help's search names them;
+# help/commands_examples.txt starts with the same words.
+EXAMPLES_TITLE = "Usage Examples"
+
+
 def all_groups_page(title, intro, outro, found):
     """Help's Commands tab: its *title*, *intro* (markup), then each group
-    under its own title in its colour, then *outro*. *found* as for
-    _group_children, so Help's search can go to a card."""
+    under its own title in its colour, then *outro* (the examples). *found*
+    as for _group_children, so Help's search can go to a card; the intro and
+    the examples are under the first group, as help_search finds them."""
     say_width = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL)
-    children = [cards.page_title(title), cards.paragraph(intro)]
+    intro_text, examples = cards.paragraph(intro), cards.paragraph(outro)
+    found[(ref.GROUPS[0], title)] = (intro_text, intro_text)
+    found[(ref.GROUPS[0], EXAMPLES_TITLE)] = (examples, examples)
+    children = [cards.page_title(title), intro_text]
     for group in ref.GROUPS:
         children.append(cards.group_title(group, GROUP_LOOK[group][0])[0])
         children.extend(_group_children(group, say_width, found))
-    children.append(cards.paragraph(outro))
+    children.append(examples)
     return cards.page(children)

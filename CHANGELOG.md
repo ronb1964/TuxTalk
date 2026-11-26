@@ -13,6 +13,10 @@ before 0.15.0, so older entries use that name.
   checked against what TuxTalk really types, so Help can't promise
   something it doesn't do. Help's words also moved into a text file per
   page, so Help can keep growing without the code growing with it.
+- Help's search finds everything Help shows: the text at the top of a page
+  and the Commands tab's introduction and examples weren't searchable
+  before. A new Writing card, "Voice commands in German", says how to turn
+  German commands on, which a search for "German" couldn't find until now.
 - A spoken "comma" followed by a pause isn't lost any more: the speech
   engine often writes a period for the pause ("Dear Anna comma. New line"),
   and TuxTalk kept that period and dropped your comma ("Dear Anna."). Now

@@ -25,7 +25,11 @@ worktrees and notes that name it still work; don't delete the link.
   fills in the keys and install-specific parts); a new page is a new file.
   `examples.toml` holds Help's "you say → you get" examples, each one run
   through the real text path by tests/test_help_examples.py: a new feature
-  gets an example there, in the group its page shows
+  gets an example there, in the group its page shows. Everything Help shows
+  must be findable by its search (Ron, 2026-11-25: "an important feature of
+  the entire help menu"): tests/test_help_search.py's
+  `test_everything_help_shows_can_be_searched` fails for any line it can't
+  reach, so text added outside a card needs a search entry with it
 - `tests/`: the suite; `tests/vm/` is the VM release harness
 - `gnome-extension/`: the GNOME Shell extension
 - `packaging/`: deb, rpm, flatpak, licenses, the emoji font script

@@ -7,6 +7,18 @@ forgot one. Help's Commands tab has them all.
 {examples_paragraphs}
 {examples_quotes}
 
+### Voice commands in German
+Say the commands in German, as well as in English:
+  1. Open <b>Preferences → General → Change model, device or language</b>.
+  2. Set <b>Voice commands in</b> to <b>Deutsch</b>.
+  3. Hold <b>{hold}</b>, say your words with <b>Komma</b>, <b>Punkt</b>, <b>neue Zeile</b>,
+     <b>Enter drücken</b> in them, let go.
+{examples_german}
+English commands keep working beside them. A few stay English only, like changing your
+mind mid-sentence ("no wait") and the tone word ("make that formal"): the Commands tab
+lists the German words for each command, and says which have none. A new install set
+up for German starts with German commands on.
+
 ### Into the middle of a sentence
 Click where the words should go, hold <b>{hold}</b>, say them, let go. TuxTalk looks at
 the text on either side of the cursor and fits them in: no capital in the middle of a

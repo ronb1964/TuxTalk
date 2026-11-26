@@ -60,27 +60,38 @@ def _help_entries(tab, markup):
     """The entries of the Help tab *tab*: a feature's opening lines count as
     a card of their own, under the feature's name."""
     for part in help_outline.parse(markup).parts:
-        if part.intro and part.title:
-            yield Entry(tab, part.title, part.title, part.note, part.labs, _plain(part.intro))
+        if part.intro:
+            # A page's own opening lines, before any feature, under its tab's name.
+            yield Entry(tab, part.title, part.title or tab, part.note, part.labs,
+                        _plain(part.intro))
         for section in part.sections:
             yield Entry(tab, part.title, section.title, section.note,
                         section.labs or part.labs, _plain(section.body))
 
 
-def _command_entries():
-    """One entry per card of the Commands tab, under its group's name, with
-    the German words when the cards show them."""
+def _command_entries(markup):
+    """The Commands tab: its intro, one entry per card under its group's
+    name, with the German words when the cards show them, and the examples
+    under the cards. The intro and examples are found under the first
+    group, whose page they're on (commands_cards.all_groups_page)."""
+    from .help_text import commands_examples
+    first = ref.GROUPS[0]
+    page = help_outline.parse(markup)
+    yield Entry(COMMANDS_TITLE, first, page.title, "", False, _plain(page.parts[0].intro))
     german = commands_cards.german_commands()
     for section in ref.SECTIONS:
         yield Entry(COMMANDS_TITLE, section.group, section.title, "", bool(section.labs),
                     commands_cards.spoken(section, german))
+    yield Entry(COMMANDS_TITLE, first, commands_cards.EXAMPLES_TITLE, "", False,
+                _plain(commands_examples()))
 
 
 def index(sections):
     """Every card of *sections* (help_text.tabs()' list), in Help's order."""
     entries = []
     for tab, markup in sections:
-        entries.extend(_command_entries() if tab == COMMANDS_TITLE else _help_entries(tab, markup))
+        entries.extend(_command_entries(markup) if tab == COMMANDS_TITLE
+                       else _help_entries(tab, markup))
     return tuple(entries)
 
 

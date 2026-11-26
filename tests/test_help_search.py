@@ -171,3 +171,40 @@ def test_uninstalling_says_the_shared_models_go_only_when_their_box_is_ticked(en
     card = _card(entries, "Problems", "Uninstalling")
     assert "speech and AI models" in card.text
     assert "only if you tick that box" in card.text
+
+
+def test_everything_help_shows_can_be_searched():
+    """Every line Help shows is in a card its search can find: each page's
+    own opening lines, every feature and card, and the Commands tab's intro
+    and examples under its cards. Text added anywhere in Help can't be left
+    out of the search (the Commands tab's intro and examples and the top of
+    Terminals once were)."""
+    from tuxtalk import help_outline
+    tabs = help_text.tabs()
+    searched = " ".join(" ".join(entry.text.split()) for entry in help_search.index(tabs))
+    missing = []
+    for tab, markup in tabs:
+        page = help_outline.parse(markup)
+        pieces = [part.intro for part in page.parts]
+        if tab == help_text.COMMANDS_TITLE:
+            pieces.append(help_text.commands_examples())
+        else:
+            pieces += [section.body for part in page.parts for section in part.sections]
+        for piece in pieces:
+            for line in help_search._plain(piece or "").split("\n"):
+                line = " ".join(line.split())
+                if line and line not in searched:
+                    missing.append(f"{tab}: {line[:70]}")
+    assert not missing, "Help shows text its search can't find:\n" + "\n".join(missing)
+
+
+@pytest.mark.parametrize("query, tab, title", [
+    ("Hello world comma", "Commands", "Usage Examples"),
+    ("There are two kinds", "Commands", "Voice Commands Reference"),
+    ("terminal panel (F4)", "Terminals", "Terminals"),
+    ("Deutsch", "Writing", "Voice commands in German"),
+])
+def test_text_outside_the_cards_is_found_where_it_is(query, tab, title):
+    """Among the first few results, as the results page shows them."""
+    found = help_search.search(help_search.index(help_text.tabs()), query)
+    assert (tab, title) in [(entry.tab, entry.title) for entry in found[:3]]
