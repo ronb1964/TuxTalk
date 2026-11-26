@@ -93,7 +93,7 @@ only numbers (words, dictations, time), never the text. Recent Dictations keeps
 your last 20 in memory, gone when you log out. The log has your words only if you
 turn on "Log transcribed text" (Preferences → Advanced → Fine-tuning), for a bug
 report; then it has what you said in a password box too, though nothing was
-typed there.
+typed there.{clipboard_privacy}
 
 ### Password fields
 TuxTalk doesn't type into a password box it can recognise. Hold <b>{hold}</b> and talk

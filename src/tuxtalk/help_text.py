@@ -140,6 +140,15 @@ def _key_choice_tip(is_flatpak, keys_where):
             "combination…</b> and press the keys you want, such as <b>Alt+D</b>.")
 
 
+def _clipboard_privacy(is_flatpak):
+    """Privacy's line on the clipboard; none on the Flatpak, which never pastes."""
+    if is_flatpak:
+        return ""
+    return ("\nPasting puts a dictation on the clipboard for a moment; to keep it off\n"
+            "entirely, pick <b>Keystroke Typing (No Clipboard)</b> in Preferences →\n"
+            "Advanced → Fine-tuning → Text Injection.")
+
+
 def _ctrl_space_line(keys):
     """Terminals' note on what Left Ctrl+Space costs, empty unless the hold or
     toggle key (the first two of *keys*) is that key."""
@@ -258,6 +267,7 @@ def _values():
             "paste_line": paste_line, "key_choice_tip": key_choice_tip,
             "mouse_tip": _mouse_tip(hold, is_flatpak),
             "shortcut_line": shortcut_line, "typing_para": typing_para,
+            "clipboard_privacy": _clipboard_privacy(is_flatpak),
             "no_hotkey_block": no_hotkey_block, "kde_notice": kde_notice,
             "update_block": update_block, "uninstall_text": uninstall_text,
             "log_path": f["log_path"],

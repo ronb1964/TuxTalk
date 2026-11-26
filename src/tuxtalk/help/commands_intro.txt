@@ -7,8 +7,8 @@ There are two kinds:
   them right after the dictation they're about, as a dictation by themselves: hold
   your dictation key, say only the command, let go.
 
-The commands are English words, whatever language you dictate in. Most can be said
-in German too: Preferences → General → Change model, device or language, then set
+The commands are English words, whatever language you dictate in, and most can be
+said in German too: Preferences → General → Change model, device or language, then set
 <b>Voice commands in</b> to Deutsch, and say <b>Komma</b>, <b>neue Zeile</b>,
 <b>Enter drücken</b>, <b>das letzte Wort löschen</b> or <b>Wort korrigieren</b>,
 and with voice editing, <b>alles in Großbuchstaben</b>. English commands keep working

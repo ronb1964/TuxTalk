@@ -64,7 +64,7 @@ Plus "one" and "two" turn into digits when numbers are set to digits and they're
   <img src="screenshots/you-say.png" alt="You say: Let's say three o'clock, no wait, make that four o'clock. TuxTalk types: Let's say four o'clock. You say: send the plans to john at gmail dot com. TuxTalk types: Send the plans to john@gmail.com. You say: new paragraph could we meet on Thursday question mark. TuxTalk types a new paragraph with Could we meet on Thursday?" width="760">
 </p>
 
-**It fixes it when you change your mind.** Say "no wait", "scratch that" or "actually" and correct yourself, and a small AI model on your own computer drops the wrong part. Every fix gets checked, and if the AI changed anything else, your words are typed exactly as you said them. It's optional, and it's off until you turn it on.
+**It fixes it when you change your mind.** Say "no wait", "scratch that" or "actually" and correct yourself, and an AI model on your own computer drops the wrong part. Every fix gets checked, and if the AI changed anything else, your words are typed exactly as you said them. It's optional, and it's off until you turn it on.
 
 **Commands and addresses come out right.** Say "comma", "new paragraph" or "question mark" and you get the punctuation. Say an email or a web address the way you'd say it out loud and it's written the way it should be.
 
@@ -157,7 +157,7 @@ I'm Ron, and I don't write code. TuxTalk is written by Claude, Anthropic's AI, a
 
 I know what a lot of people think of AI-written apps, and plenty of the time they've earned it. Thing is, I don't want TuxTalk to be one of those. Keeping the code clean matters to me as much as the app working. That means nothing left lying around that isn't used, no two pieces of code doing the same job, comments that explain why something is there, and a [written checklist](CLAUDE.md#code-a-human-reviewer-would-respect--every-change) every change has to meet before it goes in. The goal is that an experienced developer can open any file and think it's well put together, not just that it happens to work.
 
-And it's not only my word. Over 8,000 automated tests run on every change. Before a release it gets tested in virtual machines on Ubuntu, Linux Mint, Fedora Silverblue, Fedora KDE, Zorin, Pop!_OS, openSUSE Tumbleweed and Debian, plus Nobara, which I use it on every day. The hotkey helper had a security review from another developer, guelz, who went on to contribute a feature too. If you read the code and something looks off, open an issue. I'd rather hear it.
+And it's not only my word. Over 10,000 automated tests run on every change. Before a release it gets tested in virtual machines on Ubuntu, Linux Mint, Fedora Silverblue, Fedora KDE, Zorin, Pop!_OS, openSUSE Tumbleweed and Debian, plus Nobara, which I use it on every day. The hotkey helper had a security review from another developer, guelz, who went on to contribute a feature too. If you read the code and something looks off, open an issue. I'd rather hear it.
 
 There's more about who's behind TuxTalk on the [About page](https://tuxtalk.app/about.html).
 
@@ -424,7 +424,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **A recording indicator you can style.** Orb, waveform, frequency bars or radial, any color. It shows up in the window you're dictating into, or stays in one spot on the screen if you'd rather, and it reacts to your voice so you know it's listening.
 - **Swiss German spelling.** Types ss instead of ß, on by itself when your system is set to Swiss German.
 - **Tells you why when it can't type.** If a dictation can't be typed into the window, TuxTalk says why and what fixes it.
-- **Private.** Everything runs on your computer, and what you dictate is never written to a log unless you turn that on for troubleshooting.
+- **Private.** Everything runs on your computer, and what you dictate is never written to a log unless you turn that on for troubleshooting. Keystroke Typing (No Clipboard) keeps it off the clipboard too.
 - **GNOME extension.** A native panel menu on GNOME that also draws the recording indicator, sharp on a scaled screen, and a tray icon everywhere else.
 - **Updates the right way.** Through your package manager for the .deb and .rpm, in place for the AppImage, or through your AUR helper on Arch.
 
@@ -538,7 +538,7 @@ With **Voice commands in** set to Deutsch, most commands above can be said in Ge
 | "das Wort Punkt", or "wörtlich Punkt" at the start or after a pause | Types the word "Punkt" |
 | "alles in Großbuchstaben" / "die Kommas entfernen" (voice editing) | Done exactly, without the AI |
 
-The same words in an ordinary sentence stay words: "auf den Punkt", "Punkt 12 Uhr", "drei Komma fünf". So does "wörtlich" in the middle of a sentence: "Das meine ich wörtlich Ausrufezeichen" types "Das meine ich wörtlich!". The Labs commands work in German too ("den letzten Satz markieren", "Firefox öffnen", "Fenster schließen", "Mausraster"), with their Labs setting on. The Voice Commands window shows the German words first once Deutsch is on. Changing your mind mid-sentence ("no wait") stays English.
+The same words in an ordinary sentence stay words: "auf den Punkt", "Punkt 12 Uhr", "drei Komma fünf". So does "wörtlich" in the middle of a sentence: "Das meine ich wörtlich Ausrufezeichen" types "Das meine ich wörtlich!". The Labs commands work in German too ("den letzten Satz markieren", "Firefox öffnen", "Fenster schließen", "Mausraster"), with their Labs setting on. The Voice Commands window shows the German words first once Deutsch is on. Changing your mind mid-sentence ("no wait") and the tone word ("make that formal") stay English.
 
 </details>
 
