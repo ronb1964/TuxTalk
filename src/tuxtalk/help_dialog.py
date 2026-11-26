@@ -16,7 +16,8 @@ from gi.repository import Gdk, GLib, Gtk, Pango
 
 from . import cards, commands_cards, help_outline, help_pages, help_results, help_search
 from . import help_text, ui_style
-from .help_text import COMMANDS_TITLE, FEEDBACK_URL, PROBLEMS_TITLE, REPORT_LINK
+from .help_text import (COMMANDS_TITLE, FEEDBACK_URL, PROBLEMS_TITLE, REPORT_BUTTON, REPORT_LINK,
+                        REPORT_NOTE)
 
 # Help's text flows to the cards' width; a line about this many of the
 # font's characters long reads easily, so the window is that plus
@@ -50,12 +51,10 @@ def _on_link(label, uri):
 def _problems_page(markup, found):
     """The Problems section, with a Report a Problem button above its cards:
     the first thing seen there, not a link near the bottom of the page."""
-    report = Gtk.Button(label="Report a Problem…")
+    report = Gtk.Button(label=REPORT_BUTTON)
     report.get_style_context().add_class("suggested-action")
     report.connect("clicked", _open_report)
-    note = Gtk.Label(label="Gathers what helps find a problem: your system, your settings and "
-                           "the end of TuxTalk's log. You see all of it first, then copy it, "
-                           "save it, or open a GitHub issue with it.", xalign=0)
+    note = Gtk.Label(label=REPORT_NOTE, xalign=0)
     note.set_line_wrap(True)
     note.get_style_context().add_class("dim-label")
     row = Gtk.Box(spacing=14)

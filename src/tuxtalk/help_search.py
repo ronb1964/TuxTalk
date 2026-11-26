@@ -2,28 +2,35 @@
 
 Help is sorted by situation (Chatting, Writing, Terminals), so a feature
 known only by its name, a TuxTalk Labs one above all, has no tab to look
-under. The index holds every card as Help shows it to this person (their
-own keys filled in), and every voice command card of the Commands tab;
-help_dialog shows the matches and jumps to the one picked.
+under. The index holds everything Help shows this person (their own keys
+filled in), each under the place a result jumps to: every card, the lines
+at the top of a page or a feature, the voice command cards of the Commands
+tab in the language they're said in, and that tab's intro and examples.
+What stands between those places (a page's title, the Labs line over a
+group of commands, Problems' Report a Problem button) is found with the
+card under it; help_dialog shows the matches and jumps to the one picked.
 """
 import re
 from typing import NamedTuple
 
 from . import cards, commands_cards, help_outline
 from . import commands_reference as ref
-from .help_text import COMMANDS_TITLE
+from .help_text import (COMMANDS_TITLE, PROBLEMS_TITLE, REPORT_BUTTON, REPORT_NOTE,
+                        commands_examples)
 
 
 class Entry(NamedTuple):
     """One card Help can jump to: its tab, the feature it's under ("" for
     none), its heading and dim note, whether it's a Labs one, and its words
-    as plain text."""
+    as plain text; on a page's first card, the page's title, searched as a
+    heading is."""
     tab: str
     part: str
     title: str
     note: str
     labs: bool
     text: str
+    page: str = ""
 
 
 # Everyday words for what Help calls by another name: CPU is always "the
@@ -56,32 +63,48 @@ def _plain(markup):
     return cards.plain(_LINK_TAG.sub("", markup))
 
 
+# What a tab shows above its first card besides its title (help_dialog).
+_ABOVE = {PROBLEMS_TITLE: f"{REPORT_BUTTON}\n{REPORT_NOTE}"}
+
+
 def _help_entries(tab, markup):
     """The entries of the Help tab *tab*: a feature's opening lines count as
-    a card of their own, under the feature's name."""
-    for part in help_outline.parse(markup).parts:
+    a card of their own, under the feature's name. The first carries the
+    page's title and what's shown above it (_ABOVE)."""
+    page = help_outline.parse(markup)
+    entries = []
+    for part in page.parts:
         if part.intro:
             # A page's own opening lines, before any feature, under its tab's name.
-            yield Entry(tab, part.title, part.title or tab, part.note, part.labs,
-                        _plain(part.intro))
-        for section in part.sections:
-            yield Entry(tab, part.title, section.title, section.note,
-                        section.labs or part.labs, _plain(section.body))
+            entries.append(Entry(tab, part.title, part.title or tab, part.note, part.labs,
+                                 _plain(part.intro)))
+        entries.extend(Entry(tab, part.title, section.title, section.note,
+                             section.labs or part.labs, _plain(section.body))
+                       for section in part.sections)
+    above = _ABOVE.get(tab)
+    entries[0] = entries[0]._replace(
+        page=page.title, text=entries[0].text + (f"\n{above}" if above else ""))
+    return entries
 
 
 def _command_entries(markup):
     """The Commands tab: its intro, one entry per card under its group's
     name, with the German words when the cards show them, and the examples
     under the cards. The intro and examples are found under the first
-    group, whose page they're on (commands_cards.all_groups_page)."""
-    from .help_text import commands_examples
+    group, whose page they're on (commands_cards.all_groups_page); the line
+    over a group naming the Labs tickboxes it needs, with its first card."""
     first = ref.GROUPS[0]
     page = help_outline.parse(markup)
     yield Entry(COMMANDS_TITLE, first, page.title, "", False, _plain(page.parts[0].intro))
     german = commands_cards.german_commands()
-    for section in ref.SECTIONS:
-        yield Entry(COMMANDS_TITLE, section.group, section.title, "", bool(section.labs),
-                    commands_cards.spoken(section, german))
+    for group in ref.GROUPS:
+        sections = [s for s in ref.SECTIONS if s.group == group]
+        labs = commands_cards.labs_line(sections)
+        for number, section in enumerate(sections):
+            text = commands_cards.spoken(section, german)
+            if labs and not number:
+                text += "\n" + _plain(labs)
+            yield Entry(COMMANDS_TITLE, group, section.title, "", bool(section.labs), text)
     yield Entry(COMMANDS_TITLE, first, commands_cards.EXAMPLES_TITLE, "", False,
                 _plain(commands_examples()))
 
@@ -139,7 +162,7 @@ def _rank(entry, query):
     heading (0), every word there (1), the phrase or every word anywhere
     (2), then fewer words found (3 and on); None when none is. A Labs card
     answers a word asking for Labs."""
-    heading = f"{entry.part} {entry.title}"
+    heading = f"{entry.page} {entry.part} {entry.title}"
     rest = f"{entry.note} {entry.text} {entry.tab}"
     if query.phrase.search(heading):
         return 0

@@ -36,8 +36,13 @@ FEEDBACK_URL = "https://github.com/ronb1964/TuxTalk/discussions"
 ISSUES_URL = "https://github.com/ronb1964/TuxTalk/issues"
 # A link in Help that opens Report a Problem instead of a web page.
 REPORT_LINK = "tuxtalk:report"
-# The section that opens with a Report a Problem button (help_dialog).
+# The section that opens with a Report a Problem button (help_dialog), and
+# the button and the line beside it, which Help's search finds too.
 PROBLEMS_TITLE = "Problems"
+REPORT_BUTTON = "Report a Problem…"
+REPORT_NOTE = ("Gathers what helps find a problem: your system, your settings and the end of "
+               "TuxTalk's log. You see all of it first, then copy it, save it, or open a "
+               "GitHub issue with it.")
 # Help's Commands tab is drawn as cards (commands_cards): its intro here, the
 # cards from commands_reference, then commands_examples().
 COMMANDS_TITLE = "Commands"
