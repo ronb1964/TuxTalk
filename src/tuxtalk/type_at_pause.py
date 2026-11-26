@@ -243,9 +243,11 @@ def _type_boundary(message, pending: dict, tail: str, injection_mode: str) -> No
     # Only into the phrase's window: the context pass before this can take a while.
     # A failure here costs only the mark or space: the phrase that follows,
     # not yet in Recent Dictations, must still be typed and kept.
+    # Auto mode types it: a key or two take milliseconds where a paste takes
+    # a third of a second, and the phrase that follows waits for them.
+    mode = "type" if injection_mode.lower() == "auto" else injection_mode
     try:
-        outcome = delivery.inject_text(tail, injection_mode, into=pending["where"],
-                                       message=message)
+        outcome = delivery.inject_text(tail, mode, into=pending["where"], message=message)
     except Exception as e:      # a bug in delivery: the next phrase goes on
         logger.error(f"Typing the mark between two phrases failed: {error_without_words(e)}")
         outcome = "failed"
