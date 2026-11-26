@@ -50,6 +50,8 @@ NOTICES = {
                          "that\u201d.",
     "tone_not_changed": "TuxTalk couldn't change the tone, so your words are typed as you "
                         "said them.",
+    "tone_unsafe": "The tone wasn't changed: the rewrite changed a number or a \u201cnot\u201d, "
+                   "so your text stays as it was.",
 }
 
 
@@ -81,4 +83,5 @@ LABELS = {
     "not_the_dictation": "Text changed since, nothing done",
     "already_sent_auto": "Already sent. Tap the hotkey sooner",
     "tone_not_changed": "Tone not changed, typed as said",
+    "tone_unsafe": "Tone not changed, your text kept",
 }

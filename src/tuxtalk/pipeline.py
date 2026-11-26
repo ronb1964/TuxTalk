@@ -38,6 +38,7 @@ from .beeps import CANCEL_BEEP, READY_BEEP
 from .chunk_text import carry_question, engine_period, hold_back_boundary
 from .key_commands import auto_send, ends_unfinished, split_key_command
 from .logger import error_without_words, setup_logger
+from .normalize import LINE_BREAK
 from .window_classes import app_kind, tab_may_send, why_no_automatic_enter
 
 logger = setup_logger(__name__)
@@ -454,13 +455,18 @@ def _tone_said(raw: str, job: _Job) -> tuple[str, str]:
 def _restyled(words: _Words, instruction: str, job: _Job) -> _Words:
     """A whole dictation that ended in a tone, rewritten in it before it's
     typed; as spoken when the AI can't (voice_edit.restyle tells the user).
-    The spaces _shape_text put around the words stay where they were."""
+    The spaces _shape_text put around the words stay where they were, and
+    the words as said are kept in Recent Dictations."""
     core = words.text.strip(" ")
     if not core:
         return words
     result = voice_edit.restyle(core, instruction, job.beeps_on)
     if result is None:
         return words
+    # The words as said go in Recent Dictations too, before the rewrite:
+    # never typed, they'd be nowhere if the AI changed what they meant.
+    from . import history
+    history.add_entry(core.replace(LINE_BREAK, "\n"))
     start = words.text.index(core)
     return words._replace(text=words.text[:start] + result + words.text[start + len(core):])
 

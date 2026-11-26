@@ -192,3 +192,74 @@ def test_mid_recording_the_phrase_is_words(dictate):
     events = dictate("we can do it then, make that formal", _FakeAI("x"), chunk_role="middle")
     assert [(what, text.strip()) for what, text in events] == [
         ("typed", "we can do it then, make that formal")]
+
+
+# --- the release reviews' cases (2026-11-25) -------------------------------------------
+
+@pytest.mark.parametrize("before, after", [
+    ("Pay $1.50.", "Please pay $50.1."),                  # a price's decimals moved
+    ("Set it to -5.", "Please set it to 5."),             # its sign dropped
+    ("Order 2 red and 2 blue.", "Please order 2 red."),   # one of two 2s dropped
+    ("Arrive in ten minutes.", "Please arrive soon."),    # a number said as a word
+    ("I dont think we should use it.", "We should use it."),   # the "not" dropped
+])
+def test_a_rewrite_that_changes_a_number_or_the_meaning_is_not_used(before, after):
+    assert not restyle_keeps_facts(before, after)
+
+
+@pytest.mark.parametrize("before, after", [
+    ("We cant do it for less than 2400 dollars.", "We cannot do it for less than $2,400."),
+    ("I dont think we should use it.", "I do not think we should use it."),
+    ("Meet at 3:30.", "Could we meet at 3:30 PM?"),
+])
+def test_a_fair_rewrite_is_still_used(before, after):
+    assert restyle_keeps_facts(before, after)
+
+
+@pytest.mark.parametrize("raw", [
+    "The dress code is casual, no wait, make that formal.",
+    "Set the heat to low, make that warmer.",
+    "Keep it relaxed, make that relaxed.",
+])
+def test_a_correction_or_a_value_is_not_read_as_a_tone(raw):
+    """"casual, no wait, make that formal" corrects "casual"; rewritten
+    formally it would say the opposite. "warmer" and "relaxed" are values."""
+    assert tone_at_end(raw) is None
+
+
+def test_the_ai_sees_real_line_breaks_and_a_marker_in_its_answer_is_refused(dictate):
+    from tuxtalk.normalize import LINE_BREAK
+    ai = _FakeAI("Hello Anna,\nThank you for the quote.")
+    # The text as shaping leaves it (this fixture's prepare_text passes it on).
+    events = dictate(f"hello anna,{LINE_BREAK}thanks for the quote, make that formal", ai)
+    assert ai.asked[0][0] == "hello anna,\nthanks for the quote"
+    assert events == [("typed", f"Hello Anna,{LINE_BREAK}Thank you for the quote. ")]
+    events.clear()
+    events = dictate("see you there, make that formal", _FakeAI(f"See you{LINE_BREAK}there."))
+    assert events[0] == "tone_not_changed"
+
+
+def test_the_words_as_said_are_kept_in_recent_dictations(dictate, monkeypatch):
+    from tuxtalk import history
+    kept = []
+    monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: kept.append(text))
+    dictate("tell him the van is ready, make that formal", _FakeAI("Please inform him the van is ready."))
+    assert kept[0] == "tell him the van is ready"
+
+
+@pytest.mark.parametrize("answer, kept", [
+    ("Please pay promptly.", False),                # the 1500 is gone
+    ("Kindly remit $1500.", True),
+])
+def test_a_tone_on_text_already_typed_gets_the_same_check(answer, kept, monkeypatch):
+    """Type at pause and a tone said alone change the text on screen through
+    voice editing's own path, which once took any answer."""
+    from tuxtalk import live_settings as live
+    from tuxtalk import notices, voice_edit
+    problems = []
+    monkeypatch.setattr(live, "ai_engine", _FakeAI(answer))
+    monkeypatch.setattr(live, "swiss_spelling", False)
+    monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: problems.append(kind))
+    result = voice_edit._rewritten("Pay $1500.", "make this more formal", False)
+    assert (result == answer) is kept
+    assert problems == ([] if kept else ["tone_unsafe"])

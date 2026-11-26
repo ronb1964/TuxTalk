@@ -29,7 +29,7 @@ from . import live_settings as live
 from . import recording_state as rs
 from .beeps import READY_BEEP
 from .logger import error_without_words, setup_logger
-from .normalize import PLAIN_LOOKALIKES, swiss_spelling
+from .normalize import LINE_BREAK, PLAIN_LOOKALIKES, swiss_spelling
 from .window_classes import KDE_EDITOR_CLASSES_LOWER, is_terminal_class, is_word_processor
 
 logger = setup_logger(__name__)
@@ -315,17 +315,27 @@ def _rewritten(selected, instruction, beeps_on):
     text = _apply_steps(selected, steps, beeps_on)
     if text is None:
         return None
-    result = text if text != selected else None
-    if result and live.swiss_spelling:
-        result = swiss_spelling(result)
-    if result:
-        result = dictation_text.numbers_to_digits(result, live)
+    result = _as_typed(text) if text != selected else None
     # Exact: for an edit done in code, spacing may be the whole change
     # (indenting one line); the AI's spacing-only answers are dropped above.
     if not result or result == selected:
         notices.edit_problem("no_answer", beeps_on)
         return None
+    if (instruction in voice_edit_rules.TONE_INSTRUCTIONS
+            and not voice_edit_rules.restyle_keeps_facts(selected, result)):
+        # A tone said on its own, or at the end of a Type at pause recording:
+        # the same check as a tone rewritten before typing (restyle).
+        logger.info("Voice edit: the tone rewrite lost a number or a \"not\"; not using it")
+        notices.edit_problem("tone_unsafe", beeps_on)
+        return None
     return result
+
+
+def _as_typed(text: str) -> str:
+    """A rewrite as TuxTalk types it: Swiss spelling and digits as set."""
+    if live.swiss_spelling:
+        text = swiss_spelling(text)
+    return dictation_text.numbers_to_digits(text, live)
 
 
 def restyle(text: str, instruction: str, beeps_on: bool):
@@ -337,26 +347,26 @@ def restyle(text: str, instruction: str, beeps_on: bool):
     from . import ai_cleanup
     ai = live.ai_engine
     result, why = None, ""
+    # The AI sees real line breaks, never the marker that stands for them.
+    plain = text.replace(LINE_BREAK, "\n")
     if len(text) > ai_cleanup.MAX_EDIT_CHARS:
         why = "too long"
     elif ai is None or not ai.is_ready():
         why = "the AI is off" if ai is None else "the AI is still starting"
     else:
-        result = ai.edit(text, instruction)
+        result = ai.edit(plain, instruction)
         if result is not None:
-            if live.swiss_spelling:
-                result = swiss_spelling(result)
-            result = dictation_text.numbers_to_digits(result, live)
-        if result is None or result.split() == text.split():
+            result = _as_typed(result)
+        if result is None or result.split() == plain.split() or "\xa7" in result:
             why, result = "no change", None
-        elif not voice_edit_rules.restyle_keeps_facts(text, result):
-            why, result = "the rewrite lost a number or added too much", None
+        elif not voice_edit_rules.restyle_keeps_facts(plain, result):
+            why, result = "the rewrite lost a number or a \"not\", or added too much", None
     if result is None:
         logger.info(f"Tone not changed ({why}); typing the words as spoken")
         notices.edit_problem("tone_not_changed", beeps_on)
         return None
     logger.info("Tone changed before typing")
-    return result
+    return result.replace("\n", LINE_BREAK)
 
 
 def _apply_steps(selected, steps, beeps_on):

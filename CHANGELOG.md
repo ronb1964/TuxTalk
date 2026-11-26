@@ -39,7 +39,9 @@ before 0.15.0, so older entries use that name.
   friendlier, casual and polite; said on its own right after a dictation,
   "make that friendlier" changes what was just typed. A rewrite is never
   sent automatically, since the AI can get the meaning wrong, and one that
-  drops a number (a date, a price) isn't used: the words are typed as said.
+  changes a number (a date, a price) or drops a "not" isn't used: the words
+  are typed as said, and they're in Recent Dictations as well. A tone after
+  "no wait" is your correction, not a tone.
   The tone word came out of the AI writing poll on #42.
 - A better AI: self-corrections, voice editing and the tone word now use
   Qwen3.5-4B instead of Qwen2.5-1.5B. On 100 tone rewrites the old one

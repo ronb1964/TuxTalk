@@ -16,6 +16,7 @@ Every pattern here matches the whole instruction, so anything longer
 voice commands in German, the German wording of these edits counts too
 (german_edits).
 """
+import collections
 import re
 
 from . import german_edits
@@ -80,10 +81,12 @@ _TONES = {
     "formal": "make this more formal",
     "professional": "make it sound more professional",
     "friendly": "make it friendlier", "friendlier": "make it friendlier",
-    "warmer": "make it friendlier",
-    "casual": "make it more casual", "relaxed": "make it more casual",
+    "casual": "make it more casual",
     "polite": "make this more polite", "politer": "make this more polite",
 }
+# What the AI is asked for a tone: such a rewrite, by either path (before
+# typing, or "edit that" on the text on screen), must pass restyle_keeps_facts.
+TONE_INSTRUCTIONS = frozenset(_TONES.values())
 _TONE = (r"make\s+that\s+(?:sound\s+)?(?:a\s+(?:bit|little)\s+)?(?:more\s+)?"
          rf"(?P<tone>{'|'.join(_TONES)})\s*[.!?]*\s*$")
 _TONE_AT_END = re.compile(
@@ -98,9 +101,12 @@ def tone_at_end(raw: str):
     """(the message, the AI's instruction) for a dictation ending in a tone
     ("Tell him Thursday, make that formal." gives "Tell him Thursday" and
     "make this more formal"); None when it doesn't end in one. A sentence end
-    before the phrase stays with the message, a comma or dash doesn't."""
+    before the phrase stays with the message, a comma or dash doesn't. Nor
+    after a self-correction: "the dress code is casual, no wait, make that
+    formal" corrects "casual", and a formal rewrite would say the opposite."""
+    from .ai_cleanup import has_correction
     m = _TONE_AT_END.match(raw or "")
-    if m is None:
+    if m is None or has_correction(m.group("message")):
         return None
     message = m.group("message").rstrip()
     if m.group("pause") in ".!?":
@@ -108,20 +114,33 @@ def tone_at_end(raw: str):
     return message, _TONES[m.group("tone").lower()]
 
 
-_THOUSANDS = re.compile(r"(?<=\d)[,.](?=\d{3}\b)")
+_THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}\b)")
+# A number as written: its sign, and its decimals, time or date parts.
+_NUMBER = re.compile(r"[-\u2212]?\d+(?:[.:/]\d+)*")
+# A "not" in any spelling the engine writes, "don't" and "dont" alike.
+_NEGATION = re.compile(
+    r"\b(?:not|never|no|none|nothing|nobody|cannot)\b|\b\w+n['\u2019]t\b"
+    r"|\b(?:do|does|did|is|are|was|were|wo|ca|could|would|should|has|have|had|ai|must)nt\b",
+    re.IGNORECASE)
 
 
-def _numbers(text: str) -> set:
-    """The digit runs in *text*, "1,500" read as 1500."""
-    return set(re.findall(r"\d+", _THOUSANDS.sub("", text)))
+def _numbers(text: str) -> collections.Counter:
+    """The numbers in *text*, counted, spoken ones as digits: "1,500" is 1500,
+    "$1.50" stays 1.50, "-5" keeps its sign, "ten" is 10."""
+    from .spoken_numbers import to_digits
+    plain = _THOUSANDS.sub("", to_digits(text, "en")).replace("\u2212", "-")
+    return collections.Counter(_NUMBER.findall(plain))
 
 
 def restyle_keeps_facts(before: str, after: str) -> bool:
     """Whether *after*, the AI's rewrite of *before* in another tone, can be
-    typed in its place: every number kept (a date, a price, a phone number
-    dropped is the harm that matters), not empty, and not padded out to
-    several times the length (made-up details)."""
-    if not after.strip() or not _numbers(before) <= _numbers(after):
+    typed in its place: every number kept, as many times and as written (a
+    date, a price or a phone number changed is the harm that matters), a
+    "not" kept where there was one (dropped, the meaning flips), not empty,
+    and not padded out to several times the length (made-up details)."""
+    if not after.strip() or _numbers(before) - _numbers(after):
+        return False
+    if _NEGATION.search(before) and not _NEGATION.search(after):
         return False
     return len(after) <= max(3 * len(before), len(before) + 80)
 
