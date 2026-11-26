@@ -126,8 +126,9 @@ def test_each_german_phrase_listed_works_with_german_commands_on(kind, phrase, r
     else:
         assert kind == "literal"
         word = re.sub(r"^(wörtlich|das Wort) ", "", phrase)
-        typed = normalize.normalize_text(f"Apfel {phrase} Birne", lang="de")
-        assert typed == f"Apfel {word} Birne."
+        # After a pause, where "wörtlich" is the command and not "literally".
+        typed = normalize.normalize_text(f"Apfel, {phrase} Birne", lang="de")
+        assert typed == f"Apfel, {word} Birne."
 
 
 # What each exact edit listed makes of _EDITED: done in code, not by the AI.

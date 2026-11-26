@@ -64,6 +64,12 @@ before 0.15.0, so older entries use that name.
   German on, the window says the English words work too. 0.25 left 20 of
   the list's 97 rows without German; a test now fails on a command added
   without German or a reason.
+- With voice commands in German, "wörtlich" in the middle of a sentence is
+  the everyday word: "Das meine ich wörtlich Ausrufezeichen" typed "Das
+  meine ich Ausrufezeichen.", losing the word and the mark, and now types
+  "Das meine ich wörtlich!". To type a mark's word, say "wörtlich" at the
+  start of a dictation or after a pause ("wörtlich Punkt"), or "das Wort"
+  anywhere ("das Wort Punkt").
 - Voice editing: a line starting with a date ("3. Oktober") keeps it when
   made into a list, and "capitalize each word" capitalises ä, ö, ü and
   accented letters too.

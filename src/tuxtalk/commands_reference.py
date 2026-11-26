@@ -147,7 +147,10 @@ SECTIONS = (
                  + ", ".join(LITERAL_REPLACEMENTS) + ". <b>literal</b> before a command "
                  "from Select and Move, Apps and Windows, Keys and Web or Sound and "
                  "System types its words too (<b>literal open Firefox</b>). With voice "
-                 "commands in German, <b>wörtlich</b> does the same (<b>wörtlich Punkt</b>).",
+                 "commands in German, <b>das Wort</b> does the same (<b>das Wort Punkt</b>), "
+                 "and <b>wörtlich</b> at the start or after a pause: in the middle of a "
+                 "sentence it's the everyday word, so <b>Das meine ich wörtlich "
+                 "Ausrufezeichen</b> types \"Das meine ich wörtlich!\"",
             commands=(
                 _literal("period", ".", "the word period", german="Punkt"),
                 _literal("comma", ",", "the word comma", german="Komma"),

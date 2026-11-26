@@ -289,9 +289,14 @@ _GERMAN_PUNCTUATION_WORDS = (rf"komma|beistrich|punkt|{_DE_QUESTION}|{_DE_EXCLAI
                              rf"hochstrich|{_DE_HYPHEN}|gedankenstrich|{_DE_EM_DASH}|"
                              rf"{_DE_NEW_LINE}|{_DE_NEW_PARAGRAPH}|{_DE_QUOTES}|{_DE_ELLIPSIS}")
 _GERMAN_MARK_WORDS = rf"{_GERMAN_PUNCTUATION_WORDS}|{_DE_TAB}"
+# "wörtlich" as the literal command: only where nobody says the everyday
+# "literally", at the start of the dictation or after a pause (the engine's
+# comma or full stop). "Das meine ich wörtlich Ausrufezeichen" is the word
+# and the mark: "Das meine ich wörtlich!".
+WOERTLICH = r"(?:^\s*|(?<=[,.!?;:])|(?<=[,.!?;:]\s))wörtlich"
 # Before a German mark word, what types the word itself, English's "literal"
 # too. Not "die Wörter": "Ich kenne die Wörter Punkt und Komma" keeps them.
-_GERMAN_LITERAL = r"(?:literal|wörtlich|das\s+wort)"
+_GERMAN_LITERAL = rf"(?:\b(?:literal|das\s+wort)|{WOERTLICH})"
 _RE_GERMAN_HELD = re.compile(r"__LITDE_(\w+?)__")
 # Said with German commands on, a mark word is the mark, as in Dragon, and
 # "wörtlich" before it types the word. Rules can't parse German, so only
@@ -366,7 +371,7 @@ def _hold_german_run(m: re.Match) -> str:
 
 _GERMAN_PROTECT_PATTERNS = [
     # "wörtlich Komma", "das Wort Punkt": the word itself, without "wörtlich".
-    re.compile(rf"\b{_GERMAN_LITERAL}\s+()({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
+    re.compile(rf"{_GERMAN_LITERAL}\s+()({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
     # "Komma-Fehler": a mark word starting a compound.
     re.compile(rf"(\b)({_GERMAN_MARK_WORDS})(?=-\w)", re.IGNORECASE),
     re.compile(rf"({_GERMAN_ARTICLE}|{_GERMAN_STRONG})({_GERMAN_MARK_WORDS})\b", re.IGNORECASE),
