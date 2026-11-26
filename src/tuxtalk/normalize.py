@@ -928,6 +928,9 @@ def _protect_command_words(text: str, lang: str) -> str:
 # engine can write a spoken "comma" as "," itself, which the line-break rule
 # would take for its pause comma and drop. The greeting starts its line: the
 # dictation, a sentence or a line break before it; a few words of name follow.
+# The English mark words, as a greeting's name can't hold them.
+_EN_MARK_WORDS = (r"comma|semicolon|colon|period|full\s+stop|question\s+mark|"
+                  r"exclamation\s+(?:point|mark)|dash|hyphen|ellipsis")
 _GREETINGS = {
     "en": (r"dear|hi|hello|hey|good\s+(?:morning|afternoon|evening)",
            rf"{_EN_NEW_LINE}|{_EN_NEW_PARAGRAPH}"),
@@ -941,7 +944,7 @@ def _greeting_comma(lang: str):
     greeting, breaks = _GREETINGS["de" if lang == "de" else "en"]
     # The name's words are any but a spoken mark: "Hi Bob semicolon, new
     # line" has its mark already, and a comma after it would make two.
-    name_word = r"(?!(?:comma|semicolon|colon|period|komma|semikolon|doppelpunkt|punkt)\b)"
+    name_word = rf"(?!(?:{_EN_MARK_WORDS}|{_GERMAN_PUNCTUATION_WORDS})\b)"
     return re.compile(rf"(^\W*|[.!?]\s+|\b(?:{breaks})\b[,.]?\s+)"
                       rf"((?:{greeting})\b(?:\s+{name_word}[^\s,.!?]+){{0,4}})\s*,\s*"
                       rf"(?=(?:{breaks})\b)", re.IGNORECASE)

@@ -1257,6 +1257,15 @@ def test_a_closing_french_quote_isnt_taken_for_more_to_come():
     assert ": \u00bb" not in normalize_text("He said \u00abNote colon. \u00bb Then left.")
 
 
+@pytest.mark.parametrize("said, lang, written", [
+    ("Hi Bob full stop, new line, see you", "en", f"Hi Bob. {LINE_BREAK}See you."),
+    ("Hallo Bob Strichpunkt, neue Zeile, bis bald", "de", f"Hallo Bob;{LINE_BREAK}Bis bald."),
+])
+def test_a_greeting_ending_in_any_spoken_mark_gets_no_comma_after_it(said, lang, written):
+    """Every mark word, not a few of them (release re-check, Claude)."""
+    assert normalize_text(said, lang=lang) == written
+
+
 def test_a_greeting_with_its_mark_said_gets_no_second_one():
     """"Hi Bob semicolon, new line" typed "Hi Bob;," (release review, Claude)."""
     assert normalize_text("Hi Bob semicolon, new line, see you") == f"Hi Bob;{LINE_BREAK}See you."

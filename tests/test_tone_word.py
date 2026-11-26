@@ -220,6 +220,9 @@ def test_a_fair_rewrite_is_still_used(before, after):
 
 @pytest.mark.parametrize("raw", [
     "The dress code is casual, no wait, make that formal.",
+    "The dress code is casual. Actually, make that formal.",
+    "The dress code is casual. No, make that formal.",
+    "The dress code is casual, wait, make that formal.",
     "Set the heat to low, make that warmer.",
     "Keep it relaxed, make that relaxed.",
 ])

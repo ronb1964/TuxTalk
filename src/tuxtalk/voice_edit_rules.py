@@ -92,6 +92,11 @@ _TONE = (r"make\s+that\s+(?:sound\s+)?(?:a\s+(?:bit|little)\s+)?(?:more\s+)?"
 _TONE_AT_END = re.compile(
     r"^(?P<message>.*?\w.*?)(?P<pause>[,;:]|[.!?]|\s[-–—])\s+" + _TONE,
     re.IGNORECASE | re.DOTALL)
+# A correction cue alone just before the tone: "casual. No, make that formal",
+# "casual, wait, make that formal". After a word ("the answer is no") it's
+# part of the message.
+_BARE_CUE = re.compile(r"(?:^|[.!?,;:])\s*(?:oh\s+)?(?:no|wait|actually|sorry)"
+                       r"(?:,?\s+(?:no|wait))?\s*$", re.IGNORECASE)
 # Said alone, right after a dictation, it changes what was just typed, as
 # "edit that, make it more formal" does (spoken_edit).
 _TONE_ALONE = re.compile(r"^\s*" + _TONE, re.IGNORECASE)
@@ -103,10 +108,13 @@ def tone_at_end(raw: str):
     "make this more formal"); None when it doesn't end in one. A sentence end
     before the phrase stays with the message, a comma or dash doesn't. Nor
     after a self-correction: "the dress code is casual, no wait, make that
-    formal" corrects "casual", and a formal rewrite would say the opposite."""
+    formal" corrects "casual", and a formal rewrite would say the opposite.
+    The pause goes with the message for that check ("casual. Actually, make
+    that formal"), and a bare "No," or "wait," before the phrase counts too."""
     from .ai_cleanup import has_correction
     m = _TONE_AT_END.match(raw or "")
-    if m is None or has_correction(m.group("message")):
+    if (m is None or has_correction(m.group("message") + m.group("pause"))
+            or _BARE_CUE.search(m.group("message"))):
         return None
     message = m.group("message").rstrip()
     if m.group("pause") in ".!?":
