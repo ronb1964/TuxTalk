@@ -64,3 +64,10 @@ def test_a_setting_help_names_is_one_the_test_turns_on():
     for example in EXAMPLES:
         if example.get("when") and not example.get("ai"):
             assert example.get("settings") or example.get("lang"), example["say"]
+
+
+def test_the_key_pressed_after_an_example_is_shown_as_text():
+    """A key's name is text in Help's markup, like what's said and typed."""
+    from gi.repository import Pango
+    line = help_text._example_line({"say": "ok", "get": "OK.", "press": "<Enter>"})
+    assert Pango.parse_markup(line, -1, "\0")[2].endswith("then <Enter>")

@@ -143,6 +143,7 @@ Say the message the way it comes, and end it with the tone you want, all in one 
   2. Say <b>tell him the cabinets are a week late, make that formal</b>.
   3. Let go. It's typed already rewritten, without "make that formal".
 {examples_tone}
+
 The tones: <b>formal</b>, <b>professional</b>, <b>friendlier</b>, <b>casual</b> and
 <b>polite</b> ("make that more formal" works too). Said on its own right after a dictation,
 <b>make that friendlier</b> changes what was just typed, the way "edit that" does.

@@ -277,7 +277,7 @@ def page(name: str) -> str:
 
 def commands_examples() -> str:
     """The Commands tab's examples, under its cards (help_dialog)."""
-    return page("commands_examples").format(**examples())
+    return page("commands_examples").format(**_values())
 
 
 def examples() -> dict:
@@ -298,7 +298,7 @@ def _example_line(example: dict) -> str:
     if example.get("ai"):
         typed = f"something like {typed}"
     if example.get("press"):
-        typed += f", then {example['press']}"
+        typed += f", then {GLib.markup_escape_text(example['press'])}"
     when = f"With {GLib.markup_escape_text(example['when'])}: " if example.get("when") else ""
     return f"  • {when}\u201c<i>{GLib.markup_escape_text(example['say'])}</i>\u201d → {typed}"
 
