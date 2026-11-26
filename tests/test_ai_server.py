@@ -76,6 +76,20 @@ def test_the_engine_key_is_not_on_its_command_line(dead_engine, monkeypatch):
     assert options["env"]["LLAMA_API_KEY"] == dead_engine._key
 
 
+
+def test_the_engine_fits_the_model_to_the_graphics_cards_free_memory(dead_engine, monkeypatch):
+    """The 4B model needs about 3 GB of a graphics card's memory. Forcing every
+    layer onto the card ("-ngl 99") turned llama.cpp's fit off, and on a 4 GB
+    card already holding Whisper the engine failed to start (release review);
+    "auto" puts what fits on the card and runs the rest on the processor."""
+    calls = []
+    monkeypatch.setattr(ai_server.subprocess, "Popen",
+                        lambda *a, **k: calls.append((a, k)) or _Proc())
+    dead_engine.start(_replacing=dead_engine._proc)
+    (argv,), _options = calls[0]
+    assert argv[argv.index("-ngl") + 1] == "auto"
+    assert "--fit" not in argv or argv[argv.index("--fit") + 1] == "on"
+
 # --- an engine that dies is started again ---------------------------------------------------
 
 def _no_output():

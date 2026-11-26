@@ -91,9 +91,13 @@ class AIServer:
             command, env = engine_process.parent_death_command(
                 # 4096 tokens: room for a voice edit (ai_cleanup.MAX_EDIT_CHARS
                 # of text and the rewrite); one slot, so it is all one request's.
+                # -ngl auto lets llama.cpp's fit put on the graphics card as many
+                # layers as its free memory holds (1 GB kept spare) and run the
+                # rest on the processor: forced to "all", the 3 GB model failed
+                # to start on a 4 GB card already holding Whisper.
                 [binary, "-m", ai_download.model_path(), "--host", "127.0.0.1",
                  "--port", str(self._port),
-                 "-c", "4096", "-np", "1", "--jinja", "-ngl", "99", "--no-webui"],
+                 "-c", "4096", "-np", "1", "--jinja", "-ngl", "auto", "--no-webui"],
                 {**os.environ, "LD_LIBRARY_PATH": _engine_libraries(binary),
                  "LLAMA_API_KEY": self._key})
             proc = self._proc = self._launcher.popen(command, stdout=subprocess.DEVNULL,
