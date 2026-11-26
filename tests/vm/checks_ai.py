@@ -74,9 +74,6 @@ def ai_self_correct(run):
 
 @check(SECTION, "ai_voice_edit", "Voice editing: select, Shift+F8, “make this more formal”")
 def ai_voice_edit(run):
-    if "x11" in run.vm.spec.tags:
-        return Outcome("skip", "Voice editing works only in a Wayland session, by design "
-                       "(it reads the selection with wl-paste)")
     if run.vm.ssh(f"test -f ~/.cache/huggingface/hub/{MODEL_REPO_DIR}/snapshots/{MODEL_COMMIT}/"
                   f"{MODEL_FILE}", check=False).returncode != 0:
         return Outcome("skip", "the AI model isn't on this VM (see the self-corrections check)")
