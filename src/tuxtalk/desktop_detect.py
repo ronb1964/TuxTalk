@@ -112,14 +112,17 @@ def tray_host_available(bus=None) -> bool:
 
 
 def is_x11_session(env):
-    """Whether the session is X11: XDG_SESSION_TYPE when it is set; otherwise
-    (startx sets none) an X DISPLAY with no Wayland one.
+    """Whether the session is X11: XDG_SESSION_TYPE when it says x11 or
+    wayland; otherwise an X DISPLAY with no Wayland one. Xfce or i3 started
+    with startx after a console login keeps that login's "tty" (or no type
+    at all), and is X11 all the same; Sway started that way has a
+    WAYLAND_DISPLAY.
 
     The session type wins over WAYLAND_DISPLAY: a Wayland compositor nested in
     an X11 session (a KWin started for testing) sets WAYLAND_DISPLAY for
     its own windows, while the keyboard and the hotkeys stay the X server's.
     """
     session = (env.get("XDG_SESSION_TYPE") or "").lower()
-    if session:
+    if session in ("x11", "wayland"):
         return session == "x11"
     return bool(env.get("DISPLAY")) and not env.get("WAYLAND_DISPLAY")

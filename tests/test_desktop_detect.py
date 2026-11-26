@@ -45,6 +45,11 @@ def test_budgie_on_x11_gets_tuxtalks_own_key_grab(monkeypatch):
     # hotkeys are still the X server's.
     ({"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0", "WAYLAND_DISPLAY": "wayland-1"}, True),
     ({"XDG_SESSION_TYPE": "tty"}, False),
+    # startx after a console login keeps the login's "tty": X11 by its
+    # display, which voice commands and the clipboard need (#52, Xfce);
+    # Sway started from the console is Wayland.
+    ({"XDG_SESSION_TYPE": "tty", "DISPLAY": ":0"}, True),
+    ({"XDG_SESSION_TYPE": "tty", "WAYLAND_DISPLAY": "wayland-1", "DISPLAY": ":0"}, False),
 ])
 def test_one_rule_says_whether_the_session_is_x11(env, x11):
     assert desktop_detect.is_x11_session(env) is x11

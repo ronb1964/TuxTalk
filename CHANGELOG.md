@@ -76,6 +76,10 @@ before 0.15.0, so older entries use that name.
   anywhere ("das Wort Punkt"). Before "Enter drücken" or "Tab drücken",
   "wörtlich" anywhere still keeps the key from being pressed, so a message
   isn't sent by mistake.
+- Xfce, i3 or another X11 desktop started with startx after a text login
+  is X11 to TuxTalk now. Such a session keeps the login's "tty" type, and
+  TuxTalk took it for no desktop at all: voice commands like "new tab" and
+  spoken web searches said they couldn't tell which window had the focus.
 - Help and the Voice Commands window, opened again after changing Voice
   commands in, show the commands in the new language. They kept the old
   one until they were closed.
