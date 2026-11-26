@@ -29,6 +29,8 @@ TEXT = "eins, zwei Test\n    - drei"
     ("das Wort Test entfernen", "eins, zwei\n    - drei"),
     ("lösche das Wort Test", "eins, zwei\n    - drei"),
     ("die Aufzählungszeichen entfernen", "eins, zwei Test\n    drei"),
+    ("die Aufzählungspunkte entfernen", "eins, zwei Test\n    drei"),
+    ("als Liste mit Aufzählungspunkten", "- eins, zwei Test\n    - drei"),
     ("bitte entferne das Wort Test bitte", "eins, zwei\n    - drei"),
     ("entferne bitte das Wort Test", "eins, zwei\n    - drei"),
 ])

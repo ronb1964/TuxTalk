@@ -76,7 +76,9 @@ before 0.15.0, so older entries use that name.
   one until they were closed.
 - Voice editing: a line starting with a date ("3. Oktober") keeps it when
   made into a list, and "capitalize each word" capitalises ä, ö, ü and
-  accented letters too.
+  accented letters too. In German, "die Aufzählungspunkte entfernen" and
+  "als Liste mit Aufzählungspunkten" are done exactly, like
+  "Aufzählungszeichen", instead of going to the AI.
 
 ## [0.25.0] - 2026-11-24
 
