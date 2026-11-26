@@ -61,7 +61,7 @@ def page(text, tab, on_link, found, above=()):
     Report a Problem button); *on_link* handles a link's activate-link.
     *found*, a dict, gets each card's (text, card) by (feature, heading),
     a feature's opening lines by (feature, feature) and the page's own, before
-    any feature, by (None, *tab*), so Help's search can go to one."""
+    any feature, by ("", *tab*), so Help's search can go to one."""
     look, icon = TAB_LOOK[tab]
     content = help_outline.parse(text)
     children = [*above, cards.page_title(content.title)]

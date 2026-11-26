@@ -268,9 +268,7 @@ def _values():
             "CUDA_SIZE_TEXT": CUDA_SIZE_TEXT, **examples()}
 
 
-# Each page's words live in help/<name>.txt, Pango markup with the marks
-# above and {placeholders} from _values(); literal braces are doubled. Kept
-# out of the code so Help can grow as far as it needs to without growing it.
+# The pages (see the module's docstring); a brace meant as one is doubled.
 _PAGES = os.path.join(os.path.dirname(__file__), "help")
 
 
