@@ -283,10 +283,15 @@ _DESKTOP_COMMAND = """<method name="DesktopCommand">
     <arg type="i" direction="in" name="number"/>
     <arg type="s" direction="out" name="answer"/>
   </method>"""
+_SET_CLIPBOARD = """<method name="SetClipboard">
+    <arg type="s" direction="in" name="text"/>
+    <arg type="b" direction="in" name="primary"/>
+  </method>"""
 
 
 _EXTENSION_XML = (f'<node><interface name="{app_focus.EXTENSION_INTERFACE}">'
-                  f"{_ACTIVATE_APP}{_WINDOW_ACTION}{_DESKTOP_COMMAND}</interface></node>")
+                  f"{_ACTIVATE_APP}{_WINDOW_ACTION}{_DESKTOP_COMMAND}{_SET_CLIPBOARD}"
+                  "</interface></node>")
 # GNOME Shell's own: what it says about an installed extension.
 _SHELL_EXTENSIONS_XML = """<node><interface name="org.gnome.Shell.Extensions">
   <method name="GetExtensionInfo">
@@ -302,7 +307,8 @@ class FakeShell(_BusService):
     asked about in *called*, and
     WindowAction with *window_answer*, keeping (action, app_id, every) in
     *window_calls*, and DesktopCommand with *desktop_answer*, keeping
-    (action, number) in *desktop_calls*. *extension* "old" is enabled but
+    (action, number) in *desktop_calls*; SetClipboard keeps the clipboard
+    and the primary selection it was given in *clipboard* and *primary*. *extension* "old" is enabled but
     serves no object, as the 0.21 extension GNOME Shell still runs until the
     user logs out after an update; False: TuxTalk's extension isn't enabled
     at all."""
@@ -313,6 +319,7 @@ class FakeShell(_BusService):
         self.answer = self.window_answer = True
         self.desktop_answer = "done"
         self.called, self.window_calls, self.desktop_calls = [], [], []
+        self.clipboard = self.primary = None
         self._extension = extension
         self._start()
 
@@ -332,6 +339,11 @@ class FakeShell(_BusService):
         if method == "DesktopCommand":
             self.desktop_calls.append(parameters.unpack())
             invocation.return_value(GLib.Variant("(s)", (self.desktop_answer,)))
+            return
+        if method == "SetClipboard":
+            text, primary = parameters.unpack()
+            setattr(self, "primary" if primary else "clipboard", text)
+            invocation.return_value(None)
             return
         self.called.append(parameters.unpack()[0])
         invocation.return_value(GLib.Variant("(b)", (self.answer,)))

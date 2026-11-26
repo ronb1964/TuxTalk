@@ -686,19 +686,27 @@ def _hand_to_wl_copy(proc, text, errors):
     return True
 
 
-def _send_paste(text, keeping):
+def _send_paste(text, keeping, through_shell):
     """With the clipboard set, the paste key. Where the window is unknown the
     primary selection gets the text too, so the key works in a terminal as
     well, unless the paste replaces a selection (over_selection).
-    *keeping*: the user's clipboard is being kept to put back."""
+    *keeping*: the user's clipboard is being kept to put back.
+    *through_shell*: GNOME Shell set the clipboard (clipboard.copy_in_shell),
+    so no wl-copy window has the focus to give back, unless wl-copy sets the
+    primary selection."""
     from . import clipboard
     focused_class = focused_window.acts_as(focused_window.window_class())
     primary_holds_text = False
+    focus_away = not through_shell
     if focused_class is None and not this_thread.over_selection:
         if keeping:
             _clipboard_keeper.before_primary()
-        primary_holds_text = clipboard.copy_to_primary(text, WL_COPY_READY_TIMEOUT_S)
-    if desktop_detect.is_gnome():
+        primary_holds_text = through_shell and clipboard.copy_in_shell(
+            text, True, WL_COPY_READY_TIMEOUT_S)
+        if not primary_holds_text:
+            primary_holds_text = clipboard.copy_to_primary(text, WL_COPY_READY_TIMEOUT_S)
+            focus_away = True
+    if focus_away and desktop_detect.is_gnome():
         time.sleep(WL_COPY_FOCUS_BACK_S)
     keystroke_start = time.time()
     if not send_paste_keystroke(focused_class, primary_holds_text):
@@ -709,10 +717,10 @@ def _send_paste(text, keeping):
 
 
 def paste_text(text: str) -> bool:
-    """Wayland paste: put *text* on the clipboard with wl-copy, then send the
-    paste keystroke (send_paste_keystroke picks Ctrl+V, Ctrl+Shift+V or
-    Shift+Insert), and put the user's clipboard back afterwards where it's
-    kept (_keeping).
+    """Wayland paste: put *text* on the clipboard (through TuxTalk's extension
+    on GNOME, else with wl-copy), then send the paste keystroke
+    (send_paste_keystroke picks Ctrl+V, Ctrl+Shift+V or Shift+Insert), and
+    put the user's clipboard back afterwards where it's kept (_keeping).
 
     Returns True only when the text actually reached the focused app: the undo
     buffer records it, and a paste over an unset clipboard would insert
@@ -738,12 +746,14 @@ def paste_text(text: str) -> bool:
                 _keeper(clipboard.WaylandBoard).before_paste()
             handed_off = False
             try:
-                if not _wl_copy_dictation(text):
+                through_shell = clipboard.copy_in_shell(text, False, WL_COPY_READY_TIMEOUT_S)
+                if not through_shell and not _wl_copy_dictation(text):
                     return False
                 handed_off = True
-                wl_copy_time = time.time() - paste_start
-                logger.info(f"TIMING: wl-copy set the clipboard in {wl_copy_time:.3f}s")
-                if not _send_paste(text, keeping):
+                setter = "GNOME Shell" if through_shell else "wl-copy"
+                set_time = time.time() - paste_start
+                logger.info(f"TIMING: {setter} set the clipboard in {set_time:.3f}s")
+                if not _send_paste(text, keeping, through_shell):
                     return False
                 total_paste_time = time.time() - paste_start
                 logger.info(f"TIMING: Total paste operation time: {total_paste_time:.3f}s")

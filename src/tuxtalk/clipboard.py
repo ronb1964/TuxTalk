@@ -2,7 +2,8 @@
 The clipboard, for TuxTalk's windows and for pasting dictations.
 
 copy_text is a deliberate Copy (the tray's Recent Dictations, Fix a Word).
-The rest is the dictation service's paste mode: dictations offered so that
+The rest is the dictation service's paste mode: dictations set through
+TuxTalk's GNOME extension on GNOME (copy_in_shell), else offered so that
 clipboard managers can skip them on Wayland (wl-copy --sensitive),
 ClipboardKeeper putting the user's clipboard back afterwards (on Wayland
 here, on X11 through x11_clipboard), and copy_selection, which reads the
@@ -352,6 +353,36 @@ def _wl_copy_primary(text, timeout=3):
                             stderr=subprocess.DEVNULL, timeout=timeout)
     if result.returncode != 0:
         raise OSError(f"wl-copy exited {result.returncode}")
+
+
+_shell_failures = FailureNotes()
+
+
+def copy_in_shell(text: str, primary: bool, timeout: float) -> bool:
+    """Put the dictation *text* on GNOME's clipboard, or with *primary* on
+    its primary selection, through TuxTalk's extension inside GNOME Shell.
+
+    wl-copy can only set the clipboard on GNOME from a window of its own,
+    which takes the focus for a moment and flashes on the screen at each
+    paste; GNOME Shell sets it with no window. False where the extension
+    can't (not GNOME, no extension, or one from before SetClipboard, still
+    loaded until the next login): wl-copy sets it then. Shell offers it as
+    plain text only, without wl-copy --sensitive's mark for clipboard
+    managers: GNOME JavaScript can't serve a second type."""
+    from . import app_focus, desktop_detect
+    if not desktop_detect.is_gnome():
+        return False
+    import dbus
+    try:
+        app_focus.call_extension("SetClipboard", "sb", (text, primary), timeout)
+    except dbus.exceptions.DBusException as e:
+        if _shell_failures.failed("SetClipboard", e.get_dbus_name()):
+            logger.info(f"GNOME Shell can't set the clipboard ({e.get_dbus_name()}); "
+                        "using wl-copy, whose window flashes at each paste")
+        return False
+    if _shell_failures.worked("SetClipboard"):
+        logger.info("GNOME Shell sets the clipboard again")
+    return True
 
 
 def copy_to_primary(text: str, timeout: float) -> bool:
