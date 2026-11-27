@@ -16,11 +16,13 @@ before 0.15.0, so older entries use that name.
   took the focus for a moment at every paste; TuxTalk's GNOME extension now
   sets the clipboard inside GNOME Shell, and the paste comes a tenth of a
   second sooner. GNOME Shell can't add the mark that tells a clipboard
-  history to skip a dictation, so while GPaste, Pano or CopyQ is running,
-  which honour that mark, TuxTalk keeps setting it the old way and the
-  flash stays: your dictations stay out of their history. An extension
-  from before this keeps the old way until you log out and back in after
-  updating. Thanks to Bernát Gábor (#54).
+  history to skip a dictation, so while one that honours it is running
+  (GPaste, CopyQ, or a clipboard extension such as Pano or Clipboard
+  History), TuxTalk keeps setting it the old way and the flash stays:
+  your dictations stay out of their history. So it does with "Put back
+  what I'd copied" on, which reads and restores your clipboard the old
+  way, and with a TuxTalk extension from before this, until you log out
+  and back in after updating. Thanks to Bernát Gábor (#54).
 
 - A second orb for the recording indicator: Preferences → Audio →
   Customize… → Style → Crisp orb, a solid core, a thin ring and 16 dots,

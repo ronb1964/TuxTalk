@@ -11,6 +11,7 @@ Every path here must return whether text actually reached the focused app.
 """
 
 import subprocess
+import types
 
 import pytest
 
@@ -152,8 +153,8 @@ def test_in_an_unknown_window_the_extension_sets_the_primary_selection_too(
     assert (fake_extension.clipboard, fake_extension.primary) == ("hello", "hello")
 
 
-def test_an_extension_from_before_set_clipboard_leaves_it_to_wl_copy(monkeypatch, wayland, keyboard,
-                                                                     gnome):
+def test_an_extension_from_before_set_clipboard_leaves_it_to_wl_copy(
+        monkeypatch, wayland, keyboard, gnome, no_clipboard_history):
     """GNOME Shell keeps the old extension until the user logs out after an update."""
     from desktop_fakes import FakeShell
     shell = FakeShell(extension="old")
@@ -167,27 +168,76 @@ def test_an_extension_from_before_set_clipboard_leaves_it_to_wl_copy(monkeypatch
     assert proc.written == b"hello"
 
 
-@pytest.mark.parametrize("history", ["GPaste", "Pano", "CopyQ"])
-def test_with_a_clipboard_history_that_skips_marked_text_wl_copy_sets_it(
-        monkeypatch, wayland, keyboard, gnome, history):
-    """GNOME Shell can't mark a dictation as wl-copy --sensitive does, so
-    GPaste, Pano or CopyQ would keep every one in its history: wl-copy sets
-    it there, and its window still flashes."""
+def _paste_on_gnome(monkeypatch, enabled=(), copyq=False, marks=True, gpaste=False):
+    """Paste "hello" on GNOME with TuxTalk's extension, the extensions
+    *enabled* (None: the list can't be read), CopyQ and GPaste running or
+    not, and a wl-copy that can or can't mark it. (what wl-copy was given,
+    what the extension was)."""
     from desktop_fakes import FakeGPaste, FakeShell
-    shell = FakeShell(others=("pano@elhan.io",) if history == "Pano" else ())
-    gpaste = FakeGPaste() if history == "GPaste" else None
+    from tuxtalk import clipboard
+    monkeypatch.setattr("tuxtalk.gnome_extensions.read_enabled_extensions",
+                        lambda: None if enabled is None else list(enabled))
     monkeypatch.setattr("tuxtalk.running_programs.is_running",
-                        lambda name: history == "CopyQ" and name == "copyq")
+                        lambda name: copyq and name == "copyq")
+    monkeypatch.setattr(clipboard, "_sensitive_supported", lambda: marks)
     proc = FakePopen(returncode=0)
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: proc)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.gnome.TextEditor")
+    shell = FakeShell()
+    daemon = FakeGPaste() if gpaste else None
     try:
         assert keyboard_output.paste_text("hello")
     finally:
         shell.stop()
-        if gpaste:
-            gpaste.stop()
-    assert (proc.written, shell.clipboard) == (b"hello", None)
+        if daemon:
+            daemon.stop()
+    return proc.written, shell.clipboard
+
+
+@pytest.mark.parametrize("history", [
+    {"gpaste": True},
+    {"enabled": ["pano@elhan.io"]},
+    {"enabled": ["clipboard-history@alexsaveau.dev"]},
+    {"copyq": True},
+    {"enabled": None},
+], ids=["GPaste", "Pano", "Clipboard History", "CopyQ", "extensions unreadable"])
+def test_with_a_clipboard_history_that_skips_marked_text_wl_copy_sets_it(
+        monkeypatch, wayland, keyboard, gnome, history):
+    """GNOME Shell can't mark a dictation as wl-copy --sensitive does, so
+    a history that skips marked text would keep every one: wl-copy sets it
+    there, and its window still flashes. So it does when TuxTalk can't tell."""
+    assert _paste_on_gnome(monkeypatch, **history) == (b"hello", None)
+
+
+@pytest.mark.parametrize("setup", [
+    {"enabled": ["clipboard-indicator@tudmotu.com", "caffeine@patapon.info"]},
+    {"gpaste": True, "marks": False},
+], ids=["Clipboard Indicator keeps marked text too", "this wl-copy can't mark it"])
+def test_where_wl_copy_would_keep_nothing_out_the_extension_sets_it(
+        monkeypatch, wayland, keyboard, gnome, setup):
+    assert _paste_on_gnome(monkeypatch, **setup) == (b"", "hello")
+
+
+def test_a_kept_clipboard_is_set_by_wl_copy_and_the_paste_key_waits(
+        monkeypatch, wayland, keyboard, gnome, fake_extension):
+    """Kept, the clipboard is read and put back with wl-paste and wl-copy,
+    whose windows take the focus: a paste key sent before it came back
+    went to wl-paste's closing window, and the dictation was lost."""
+    steps = []
+    proc = FakePopen(returncode=0)
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: proc)
+    monkeypatch.setattr(live, "restore_clipboard", True)
+    monkeypatch.setattr(keyboard_output, "_keeper", lambda board: types.SimpleNamespace(
+        before_paste=lambda: None))
+    monkeypatch.setattr(keyboard_output, "_clipboard_keeper", types.SimpleNamespace(
+        after_paste=lambda text: None))
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.gnome.TextEditor")
+    monkeypatch.setattr("time.sleep", lambda s: steps.append(("wait", s)))
+    monkeypatch.setattr(keyboard_output, "send_paste_keystroke",
+                        lambda *a: steps.append(("key",)) or True)
+    assert keyboard_output.paste_text("hello")
+    assert (proc.written, fake_extension.clipboard) == (b"hello", None)
+    assert steps.index(("wait", keyboard_output.WL_COPY_FOCUS_BACK_S)) < steps.index(("key",))
 
 
 def test_paste_waits_for_wl_copy_to_set_the_clipboard(monkeypatch, wayland, keyboard):

@@ -53,14 +53,14 @@ def test_reads_empty_typed_array(monkeypatch):
     def run(argv, **k):
         return types.SimpleNamespace(returncode=0, stdout="@as []\n", stderr="")
     monkeypatch.setattr(ge.subprocess, "run", run)
-    assert ge._read_enabled_extensions() == []
+    assert ge.read_enabled_extensions() == []
 
 
 def test_reads_populated_array(monkeypatch):
     def run(argv, **k):
         return types.SimpleNamespace(returncode=0, stdout="['a@x', 'b@y']\n", stderr="")
     monkeypatch.setattr(ge.subprocess, "run", run)
-    assert ge._read_enabled_extensions() == ["a@x", "b@y"]
+    assert ge.read_enabled_extensions() == ["a@x", "b@y"]
 
 
 def test_enable_persists_via_gsettings_when_live_enable_fails(monkeypatch):

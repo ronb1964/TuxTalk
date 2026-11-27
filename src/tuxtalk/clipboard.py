@@ -3,7 +3,7 @@ The clipboard, for TuxTalk's windows and for pasting dictations.
 
 copy_text is a deliberate Copy (the tray's Recent Dictations, Fix a Word).
 The rest is the dictation service's paste mode: dictations set through
-TuxTalk's GNOME extension on GNOME (copy_in_shell), else offered so that
+TuxTalk's GNOME extension on GNOME (shell_may_set, copy_in_shell), else offered so that
 clipboard managers can skip them on Wayland (wl-copy --sensitive),
 ClipboardKeeper putting the user's clipboard back afterwards (on Wayland
 here, on X11 through x11_clipboard), and copy_selection, which reads the
@@ -356,54 +356,69 @@ def _wl_copy_primary(text, timeout=3):
 
 
 _shell_failures = FailureNotes()
-# Clipboard histories on GNOME that skip text carrying wl-copy --sensitive's
-# mark but would keep text GNOME Shell sets, which can't carry it: GPaste's
-# daemon, by its D-Bus name, the Pano extension, and CopyQ, which has no D-Bus
-# name, by its program's.
+# GNOME Shell can't offer a second type with the text (GJS refuses the
+# selection source's read_async vfunc), so a dictation it sets lacks
+# wl-copy --sensitive's mark, which most clipboard histories skip. Those
+# found here keep wl-copy: GPaste's daemon by its D-Bus name; clipboard
+# extensions by their ids, any with "clip" in it (Clipboard History, ClipSafe
+# and the rest) and Pano's, except Clipboard Indicator, which keeps marked
+# text too; CopyQ, which has no D-Bus name, by its program's.
 _GPASTE_DAEMON = "org.gnome.GPaste"
 _PANO_UUID = "pano@elhan.io"
+_KEEPS_MARKED_TEXT = ("clipboard-indicator@tudmotu.com",)
 _COPYQ = "copyq"
 
 
 def _history_skipping_marked():
-    """The clipboard history running that skips marked text ("GPaste",
-    "Pano" or "CopyQ"), or None. Raises dbus-python's DBusException when
-    the session bus can't be asked."""
+    """What keeps a clipboard history that skips marked text (GPaste, a
+    clipboard extension's id, CopyQ), or why that can't be told; None when
+    nothing does."""
+    import dbus
     from . import dbus_calls, gnome_extensions, running_programs
-    if dbus_calls.session().name_has_owner(_GPASTE_DAEMON):
-        return "GPaste"
-    if gnome_extensions.is_enabled_in_shell(_PANO_UUID):
-        return "Pano"
+    try:
+        if dbus_calls.session().name_has_owner(_GPASTE_DAEMON):
+            return "GPaste"
+    except dbus.exceptions.DBusException as e:
+        return f"a session bus that can't say whether GPaste runs ({e.get_dbus_name()})"
+    enabled = gnome_extensions.read_enabled_extensions()
+    if enabled is None:
+        return "GNOME's list of extensions, which can't be read"
+    for uuid in enabled:
+        if (uuid == _PANO_UUID or "clip" in uuid.lower()) and uuid not in _KEEPS_MARKED_TEXT:
+            return uuid
     if running_programs.is_running(_COPYQ):
         return "CopyQ"
     return None
 
 
-def copy_in_shell(text: str, primary: bool, timeout: float) -> bool:
-    """Put the dictation *text* on GNOME's clipboard, or with *primary* on
-    its primary selection, through TuxTalk's extension inside GNOME Shell.
-
-    wl-copy can only set the clipboard on GNOME from a window of its own,
-    which takes the focus for a moment and flashes on the screen at each
-    paste; GNOME Shell sets it with no window. Shell offers it as plain text
-    only, without wl-copy --sensitive's mark for clipboard managers (GNOME
-    JavaScript can't serve a second type), so while GPaste, Pano or CopyQ,
-    which honour the mark, keeps a history, wl-copy sets it and the flash
-    stays.
-    False then, and where the extension can't (not GNOME, no extension, or
-    one from before SetClipboard, still loaded until the next login)."""
-    from . import app_focus, desktop_detect
+def shell_may_set() -> bool:
+    """Whether a dictation pasted now may go on the clipboard through
+    TuxTalk's extension inside GNOME Shell (copy_in_shell) rather than
+    wl-copy, which can only set it on GNOME from a window of its own: one
+    that takes the focus for a moment and flashes on the screen at each
+    paste. Not while a clipboard history that skips marked text keeps one,
+    nor when that can't be told, unless this wl-copy can't mark it either."""
+    from . import desktop_detect
     if not desktop_detect.is_gnome():
         return False
+    history = _history_skipping_marked() if _sensitive_supported() else None
+    if history:
+        if _shell_failures.failed("SetClipboard", history):
+            logger.info(f"Clipboard history: {history}. Dictations go through wl-copy, "
+                        "marked so a history skips them, whose window flashes at each paste")
+        return False
+    return True
+
+
+def copy_in_shell(text: str, primary: bool, timeout: float) -> bool:
+    """Put the dictation *text* on GNOME's clipboard, or with *primary* on
+    its primary selection, through TuxTalk's extension inside GNOME Shell,
+    as plain text only (shell_may_set says when). False where the extension
+    can't: none, or one from before SetClipboard, still loaded until the
+    next login."""
     import dbus
+    from . import app_focus
     try:
-        history = _history_skipping_marked()
-        if history:
-            if _shell_failures.failed("SetClipboard", f"{history} keeps a history"):
-                logger.info(f"{history} keeps a clipboard history: dictations go through "
-                            "wl-copy, marked so it skips them, whose window flashes "
-                            "at each paste")
-            return False
         app_focus.call_extension("SetClipboard", "sb", (text, primary), timeout)
     except dbus.exceptions.DBusException as e:
         if _shell_failures.failed("SetClipboard", e.get_dbus_name()):

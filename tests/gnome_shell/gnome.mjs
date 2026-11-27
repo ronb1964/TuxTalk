@@ -157,10 +157,10 @@ class DrawingArea extends Actor {
 export const St = {
     DrawingArea,
     Icon: Actor,
-    ClipboardType: {CLIPBOARD: 0, PRIMARY: 1},
+    ClipboardType: {PRIMARY: 0, CLIPBOARD: 1},     // as St numbers them
     Clipboard: {
         get_default: () => ({
-            set_text: (type, text) => (type === 1 ? (shell.primary = text) : (shell.clipboard = text)),
+            set_text: (type, text) => (type === 0 ? (shell.primary = text) : (shell.clipboard = text)),
         }),
     },
 };

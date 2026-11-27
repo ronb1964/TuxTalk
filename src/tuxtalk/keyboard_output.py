@@ -691,9 +691,9 @@ def _send_paste(text, keeping, through_shell):
     primary selection gets the text too, so the key works in a terminal as
     well, unless the paste replaces a selection (over_selection).
     *keeping*: the user's clipboard is being kept to put back.
-    *through_shell*: GNOME Shell set the clipboard (clipboard.copy_in_shell),
-    so no wl-copy window has the focus to give back, unless wl-copy sets the
-    primary selection."""
+    *through_shell*: GNOME Shell set the clipboard (clipboard.copy_in_shell)
+    and may set the primary selection too, so no wl-copy window has the
+    focus to give back, unless wl-copy sets the primary selection after all."""
     from . import clipboard
     focused_class = focused_window.acts_as(focused_window.window_class())
     primary_holds_text = False
@@ -714,6 +714,17 @@ def _send_paste(text, keeping, through_shell):
     logger.info(f"TIMING: paste keystroke took {time.time() - keystroke_start:.3f}s")
     time.sleep(0.05)        # for the paste to register
     return True
+
+
+def _set_in_shell(text, keeping):
+    """Whether GNOME Shell put *text* on the clipboard for this paste
+    (clipboard.shell_may_set says when it may). Not while the clipboard is
+    *keeping*: it's read and put back with wl-paste and wl-copy, whose
+    windows take the focus anyway, so the paste key must wait for it as it
+    does after wl-copy."""
+    from . import clipboard
+    return (not keeping and clipboard.shell_may_set()
+            and clipboard.copy_in_shell(text, False, WL_COPY_READY_TIMEOUT_S))
 
 
 def paste_text(text: str) -> bool:
@@ -746,7 +757,7 @@ def paste_text(text: str) -> bool:
                 _keeper(clipboard.WaylandBoard).before_paste()
             handed_off = False
             try:
-                through_shell = clipboard.copy_in_shell(text, False, WL_COPY_READY_TIMEOUT_S)
+                through_shell = _set_in_shell(text, keeping)
                 if not through_shell and not _wl_copy_dictation(text):
                     return False
                 handed_off = True

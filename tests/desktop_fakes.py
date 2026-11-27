@@ -311,18 +311,17 @@ class FakeShell(_BusService):
     and the primary selection it was given in *clipboard* and *primary*.
     *extension* "old" is enabled but serves no object, as the 0.21 extension
     GNOME Shell still runs until the user logs out after an update; False:
-    TuxTalk's extension isn't enabled at all. *others*: the uuids of other
-    extensions enabled beside it."""
+    TuxTalk's extension isn't enabled at all."""
 
     names = (app_focus.GNOME_SHELL,)
 
-    def __init__(self, extension=True, others=()):
+    def __init__(self, extension=True):
         self.answer = self.window_answer = True
         self.desktop_answer = "done"
         self.called, self.window_calls, self.desktop_calls = [], [], []
         self.clipboard = self.primary = None
         self._extension = extension
-        self._enabled = set(others) | ({extension_helper.EXTENSION_UUID} if extension else set())
+        self._enabled = {extension_helper.EXTENSION_UUID} if extension else set()
         self._start()
 
     def _register(self, _bus, register):
@@ -374,10 +373,16 @@ class FakeGPaste(_BusService):
 
 
 @pytest.fixture
-def fake_extension(monkeypatch):
-    """GNOME Shell with TuxTalk's extension. CopyQ open on the computer the
-    tests run on doesn't count: it would send every paste to wl-copy."""
+def no_clipboard_history(monkeypatch):
+    """No clipboard history in the way of the extension setting the clipboard:
+    one on the computer the tests run on would send every paste to wl-copy."""
+    monkeypatch.setattr("tuxtalk.gnome_extensions.read_enabled_extensions", lambda: [])
     monkeypatch.setattr("tuxtalk.running_programs.is_running", lambda _name: False)
+
+
+@pytest.fixture
+def fake_extension(no_clipboard_history):
+    """GNOME Shell with TuxTalk's extension, and no clipboard history."""
     shell = FakeShell()
     yield shell
     shell.stop()

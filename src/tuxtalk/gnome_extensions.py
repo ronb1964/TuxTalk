@@ -79,7 +79,8 @@ def is_enabled_in_shell(uuid: str) -> bool:
         return False
 
 
-def _read_enabled_extensions():
+def read_enabled_extensions():
+    """The ids of the extensions GNOME has enabled, or None when they can't be read."""
     return _read_extension_list("enabled-extensions")
 
 
@@ -190,7 +191,7 @@ def enable_extension(uuid: str) -> bool:
     # when the live enable above could not take effect. Only touch the setting if
     # we could actually READ it — a None means the read failed, and writing then
     # would clobber the user's other enabled extensions with just TuxTalk.
-    enabled = _read_enabled_extensions()
+    enabled = read_enabled_extensions()
     if enabled is not None and uuid not in enabled:
         enabled.append(uuid)
         if _write_enabled_extensions(enabled):
@@ -202,5 +203,5 @@ def enable_extension(uuid: str) -> bool:
         return False
 
     # Success if it is enabled now, or will be on the next shell start.
-    final = _read_enabled_extensions()
+    final = read_enabled_extensions()
     return live_enabled or (final is not None and uuid in final)

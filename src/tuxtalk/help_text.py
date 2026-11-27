@@ -145,9 +145,10 @@ def _clipboard_privacy(is_flatpak):
     if is_flatpak:
         return ""
     return ("\nPasting puts a dictation on the clipboard, where it stays unless <b>Put back\n"
-            "what I'd copied</b> is on. It's marked so clipboard histories that honour the\n"
-            "mark (KDE's Klipper, GPaste, Pano, CopyQ) don't keep it; to keep it off the\n"
-            "clipboard entirely, pick <b>Keystroke Typing\n"
+            "what I'd copied</b> is on. It's marked so a clipboard history that honours the\n"
+            "mark (KDE's Klipper, GPaste, CopyQ, most GNOME clipboard extensions) doesn't keep\n"
+            "it. On GNOME with none of those, TuxTalk's extension sets it unmarked, so no\n"
+            "window flashes. To keep it off the clipboard entirely, pick <b>Keystroke Typing\n"
             "(No Clipboard)</b> in Preferences → Advanced → Fine-tuning → Text Injection.\n"
             "Voice editing still copies the text you select to read it, then puts your\n"
             "clipboard back.")

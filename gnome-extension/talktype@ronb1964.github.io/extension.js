@@ -316,7 +316,9 @@ const AppFocus = {
     // primary selection, for TuxTalk's paste key (keyboard_output.paste_text).
     // wl-copy can only set it on GNOME from a window of its own, which takes
     // the focus for a moment and flashes on the screen at every paste.
-    // Any process on the session bus can call this, as it could run wl-copy.
+    // Any process on the session bus can call this, and nothing shows on the
+    // screen, where wl-copy's window took the focus: it can only replace what's
+    // on the clipboard, never read it.
     SetClipboard(text, primary) {
         St.Clipboard.get_default().set_text(
             primary ? St.ClipboardType.PRIMARY : St.ClipboardType.CLIPBOARD, text);
