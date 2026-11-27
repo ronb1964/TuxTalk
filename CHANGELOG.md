@@ -5,6 +5,15 @@ before 0.15.0, so older entries use that name.
 
 ## [0.26.0] - 2026-11-27
 
+- Left Ctrl no longer stays held after the Voice Commands shortcut
+  (Ctrl+Alt+V) or Paste Last Dictation (Ctrl+Alt+P). Still holding Ctrl
+  when TuxTalk let go of the keyboards, TuxTalk pressed it again for the
+  desktop, as it does after a Left Ctrl+Space dictation, but nothing let
+  go of it when you did: for ten seconds every key you typed was a Ctrl
+  shortcut. Thanks to Andy (#52).
+- TuxTalk no longer says it can't type where /dev/uinput lets you write
+  to it but not read it (mode 0620): typing only ever writes to it.
+
 - Type at pause gets each phrase in sooner: the space or mark between two
   phrases is typed now, not pasted, which took a third of a second on its
   own before the phrase itself could go in (with Text Injection on Auto,

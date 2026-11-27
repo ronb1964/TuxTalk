@@ -22,6 +22,7 @@ the recording it just started.
 
 Everything here runs on the input thread.
 """
+import contextlib
 import time
 
 from evdev import ecodes
@@ -155,17 +156,18 @@ def grab_all_devices(devices) -> None:
             logger.warning(f"Could not grab {getattr(dev, 'name', dev)}: {e}")
 
 
-def release_all() -> None:
+def release_all(give_ctrl_back=True) -> None:
     """Release every grab we hold. Idempotent, and safe to call from any path.
 
     One unplugged device must not strand the grabs on every other keyboard, so
     each release is attempted independently and the registry is always cleared.
     A Left Ctrl a hold hid that is still held is pressed again for the
     desktop (ctrl_kept), after typing has been told it's no longer hidden, so
-    the next key typed waits for it.
+    the next key typed waits for it; not with *give_ctrl_back* False
+    (hidden_briefly).
     """
     global grabbed_devices
-    ctrl_hidden = modifier_hotkeys.hidden(ctrl_kept.CODE)
+    ctrl_hidden = give_ctrl_back and modifier_hotkeys.hidden(ctrl_kept.CODE)
     released, grabbed_devices = grabbed_devices, []
     for dev in released:
         try:
@@ -176,6 +178,23 @@ def release_all() -> None:
     modifier_hotkeys.note_hidden(())
     if ctrl_hidden:
         ctrl_kept.press_if_held(released)
+
+
+@contextlib.contextmanager
+def hidden_briefly(devices, codes):
+    """Grab the keyboards while one of TuxTalk's shortcuts acts, so its key
+    doesn't reach the focused app, hiding *codes* (grab_keyboards_hiding).
+
+    Left Ctrl isn't pressed again afterwards: that's for a dictation held
+    with it (ctrl_kept), whose release TuxTalk watches. After a shortcut
+    nothing watched for it, so a Ctrl still held when Ctrl+Alt+V let go was
+    held for the desktop until ctrl_kept.HOLD_LIMIT_S. The desktop saw it go
+    up before the grab, and sees its real release after it."""
+    grab_keyboards_hiding(devices, codes)
+    try:
+        yield
+    finally:
+        release_all(give_ctrl_back=False)
 
 
 def release_if_not_recording() -> bool:

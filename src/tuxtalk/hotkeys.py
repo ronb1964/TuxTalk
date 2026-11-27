@@ -413,8 +413,8 @@ def _on_paste_last(event, combo, held_modifiers, devices, cfg, dictation_keys) -
         if event.code == main_key and check_modifiers_held(required_mods, held_modifiers):
             # Same brief grab as the Voice Commands combo, so the key
             # press doesn't reach the focused app.
-            keyboard_grab.grab_keyboards_hiding(devices, {main_key, *held_modifiers})
-            keyboard_grab.release_all()
+            with keyboard_grab.hidden_briefly(devices, {main_key, *held_modifiers}):
+                pass
             rs.state.paste_last = {"key": main_key, "key_up": False, "at": time.time()}
             return True
     return False
@@ -432,14 +432,11 @@ def _on_voice_commands_combo(event, combo, held_modifiers, devices) -> bool:
         return False
     # Briefly grab the keyboards (not the pointer) to stop the keypress
     # leaking into the focused app. The same tracked grabs as recording,
-    # and a finally that always releases, so a failing tray call can't
-    # strand them. The modifiers are balanced too: a stuck Ctrl in the
-    # desktop would be far worse than a stuck F8.
-    keyboard_grab.grab_keyboards_hiding(devices, {main_key, *held_modifiers})
-    try:
+    # released even when the tray call fails, so it can't strand them. The
+    # modifiers are balanced too: a stuck Ctrl in the desktop would be far
+    # worse than a stuck F8.
+    with keyboard_grab.hidden_briefly(devices, {main_key, *held_modifiers}):
         tray_link.show_voice_commands()
-    finally:
-        keyboard_grab.release_all()
     return True
 
 

@@ -44,13 +44,6 @@ def check_uinput_exists():
     return exists
 
 
-def check_uinput_readable():
-    """Whether this user may read /dev/uinput."""
-    readable = os.access("/dev/uinput", os.R_OK)
-    logger.debug(f"/dev/uinput readable: {readable}")
-    return readable
-
-
 def check_uinput_writable():
     """Whether this user may write to /dev/uinput, which typing needs."""
     writable = os.access("/dev/uinput", os.W_OK)
@@ -60,17 +53,16 @@ def check_uinput_writable():
 
 def check_uinput_permission():
     """(has_access, reason): whether TuxTalk's virtual keyboard can type
-    through /dev/uinput, and why not in words."""
+    through /dev/uinput, and why not in words. Writing is all it needs
+    (python-evdev opens it write-only): a system that lets the user write
+    but not read it, mode 0620, types fine."""
     if not check_uinput_exists():
         return (False, "The /dev/uinput device does not exist. "
                        "The uinput kernel module may not be loaded.")
-    if not check_uinput_readable():
-        return (False, "Cannot read /dev/uinput. "
-                       "You need permission to access this device for typing.")
     if not check_uinput_writable():
         return (False, "Cannot write to /dev/uinput. "
                        "You need write permission for keystroke injection.")
-    return (True, "You have full access to /dev/uinput. Typing should work.")
+    return (True, "TuxTalk can write to /dev/uinput. Typing should work.")
 
 
 def _readable_input_devices():

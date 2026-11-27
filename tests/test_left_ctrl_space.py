@@ -21,7 +21,7 @@ from tuxtalk import (atspi_helper, combo_keys, cosmic_hotkeys, ctrl_kept, ctrl_s
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk.hotkey_helper_client import HelperKeyboard
-from tuxtalk.hotkey_keys import Hotkeys
+from tuxtalk.hotkey_keys import Hotkeys, parse_hotkey_combo
 
 SPACE, LCTRL, RCTRL = ecodes.KEY_SPACE, ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL
 LALT, LSHIFT = ecodes.KEY_LEFTALT, ecodes.KEY_LEFTSHIFT
@@ -606,3 +606,23 @@ def test_voice_editing_claims_shift_with_the_pair():
                           voice_commands_hotkey="", paste_last_hotkey="", voice_editing=True)
     keys = [key for _role, _what, key in hotkey_claims.keys_to_claim(cfg)]
     assert keys == ["Ctrl+Space", "F9", "Shift+Ctrl+Space", "Shift+F9"]
+
+
+@pytest.mark.parametrize("which", ["voice_cmds", "paste_last"])
+def test_a_shortcut_leaves_no_left_ctrl_held_after_it(keyboard, monkeypatch, which):
+    """Ctrl+Alt+V (Voice Commands) grabs the keyboards for a moment. Let go
+    of with Left Ctrl still down, TuxTalk pressed it again for the desktop,
+    and nothing let go of it when the real one came up: Ctrl stayed held
+    for every key the user typed until ctrl_kept.HOLD_LIMIT_S (issue #52)."""
+    combo = parse_hotkey_combo("Ctrl+Alt+V")
+    keys = Hotkeys(SPACE, F9, "Ctrl+Alt+V", combo if which == "voice_cmds" else None,
+                   ecodes.KEY_V, combo if which == "paste_last" else None)
+    monkeypatch.setattr(keyboard_grab, "grabbed_devices", [])
+    monkeypatch.setattr(modifier_hotkeys, "_hidden", (frozenset(), ()))
+    monkeypatch.setattr(hotkeys.tray_link, "show_voice_commands", lambda: None)
+    monkeypatch.setattr(rs.state, "paste_last", None, raising=False)
+    board = Grabbable(lambda look: True, code=LCTRL)
+    svc, held = SimpleNamespace(last_activity=0.0, input_device_idx=0), set()
+    for code in (LCTRL, LALT, ecodes.KEY_V):
+        hotkeys._on_key_event(KeyEvent(code, 1), keys, held, [board], Cfg(), svc, 1.0)
+    assert keyboard.events == [] and not ctrl_kept.pressed()

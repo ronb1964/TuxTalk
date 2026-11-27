@@ -28,7 +28,7 @@ def service(monkeypatch):
         modifier_hotkeys.note_hidden(codes)
         modifier_hotkeys.note_compose_hidden(codes, modifier_hotkeys.compose_press())
 
-    def let_go():
+    def let_go(give_ctrl_back=True):
         done.append("let go")
         modifier_hotkeys.note_hidden(())
 

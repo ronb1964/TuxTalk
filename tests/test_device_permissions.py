@@ -244,3 +244,13 @@ def test_a_hotkey_helper_that_does_not_answer_is_not_called_working(monkeypatch,
     ok, reason = check_input_read_permission()
     assert ok is False and "answering" in reason
 
+
+
+def test_a_uinput_this_user_may_only_write_to_is_enough_to_type(monkeypatch):
+    """Some systems make /dev/uinput writable but not readable for the
+    user (mode 0620): TuxTalk's keyboard only writes to it, and saying it
+    can't type there sent the user to fix permissions for nothing (#52)."""
+    from tuxtalk import uinput_helper
+    monkeypatch.setattr(uinput_helper.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(uinput_helper.os, "access", lambda path, mode: mode == os.W_OK)
+    assert uinput_helper.check_uinput_permission()[0] is True
