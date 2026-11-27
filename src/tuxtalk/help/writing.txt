@@ -312,6 +312,10 @@ and the name is whatever the app is called in your menu: <b>open the calculator<
     distro's. Say <b>open Firefox Flatpak</b> (or <b>Snap</b>, or <b>AppImage</b>) for the
     other.
   • <b>literal open Firefox</b> types the words "open Firefox".
+  • A script of your own opens the same way once it has a menu entry: a file in
+    ~/.local/share/applications ending in .desktop, with the lines [Desktop Entry],
+    Type=Application, Name=Prof One and Exec= the script's full path and what it takes
+    (Exec=/home/you/bin/a_ff prof1). Then say <b>open Prof One</b>.
 
 ### Windows
 Hold <b>{hold}</b>, say <b>close Firefox</b>, let go. Nothing is typed.

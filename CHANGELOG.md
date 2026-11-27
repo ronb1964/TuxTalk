@@ -12,6 +12,10 @@ before 0.15.0, so older entries use that name.
   there, in place of the full stop and space after it: "Is it ready." and
   then "question mark" is "Is it ready?". Thanks to Andy (#52).
 
+- Help says how to open a script of your own by voice: give it a menu
+  entry, a small .desktop file naming the script and what it takes, and
+  say "open" with its name.
+
 - Left Ctrl no longer stays held after the Voice Commands shortcut
   (Ctrl+Alt+V) or Paste Last Dictation (Ctrl+Alt+P). Still holding Ctrl
   when TuxTalk let go of the keyboards, TuxTalk pressed it again for the
