@@ -3,16 +3,18 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [Unreleased]
+## [0.26.0] - 2026-11-27
 
 - On GNOME, pasting a dictation no longer flashes a window on the screen.
   wl-copy can only set the clipboard there from a window of its own, which
   took the focus for a moment at every paste; TuxTalk's GNOME extension now
   sets the clipboard inside GNOME Shell, and the paste comes a tenth of a
-  second sooner. An extension from before this keeps using wl-copy until
-  you log out and back in after updating.
-
-## [0.26.0] - 2026-11-27
+  second sooner. GNOME Shell can't add the mark that tells a clipboard
+  history to skip a dictation, so while GPaste, Pano or CopyQ is running,
+  which honour that mark, TuxTalk keeps setting it the old way and the
+  flash stays: your dictations stay out of their history. An extension
+  from before this keeps the old way until you log out and back in after
+  updating. Thanks to Bernát Gábor (#54).
 
 - A second orb for the recording indicator: Preferences → Audio →
   Customize… → Style → Crisp orb, a solid core, a thin ring and 16 dots,

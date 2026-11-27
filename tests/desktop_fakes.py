@@ -308,19 +308,21 @@ class FakeShell(_BusService):
     WindowAction with *window_answer*, keeping (action, app_id, every) in
     *window_calls*, and DesktopCommand with *desktop_answer*, keeping
     (action, number) in *desktop_calls*; SetClipboard keeps the clipboard
-    and the primary selection it was given in *clipboard* and *primary*. *extension* "old" is enabled but
-    serves no object, as the 0.21 extension GNOME Shell still runs until the
-    user logs out after an update; False: TuxTalk's extension isn't enabled
-    at all."""
+    and the primary selection it was given in *clipboard* and *primary*.
+    *extension* "old" is enabled but serves no object, as the 0.21 extension
+    GNOME Shell still runs until the user logs out after an update; False:
+    TuxTalk's extension isn't enabled at all. *others*: the uuids of other
+    extensions enabled beside it."""
 
     names = (app_focus.GNOME_SHELL,)
 
-    def __init__(self, extension=True):
+    def __init__(self, extension=True, others=()):
         self.answer = self.window_answer = True
         self.desktop_answer = "done"
         self.called, self.window_calls, self.desktop_calls = [], [], []
         self.clipboard = self.primary = None
         self._extension = extension
+        self._enabled = set(others) | ({extension_helper.EXTENSION_UUID} if extension else set())
         self._start()
 
     def _register(self, _bus, register):
@@ -328,8 +330,7 @@ class FakeShell(_BusService):
             interface = Gio.DBusNodeInfo.new_for_xml(_EXTENSION_XML).interfaces[0]
             register(app_focus.EXTENSION_PATH, interface, self._on_call, None, None)
         shell = Gio.DBusNodeInfo.new_for_xml(_SHELL_EXTENSIONS_XML).interfaces[0]
-        register("/org/gnome/Shell", shell, self._extension_info(bool(self._extension)),
-                 None, None)
+        register("/org/gnome/Shell", shell, self._extension_info(self._enabled), None, None)
 
     def _on_call(self, _bus, _sender, _path, _interface, method, parameters, invocation):
         if method == "WindowAction":
@@ -350,18 +351,33 @@ class FakeShell(_BusService):
 
     @staticmethod
     def _extension_info(enabled):
-        """GetExtensionInfo's answer: TuxTalk's extension enabled and running,
-        or, as for an extension GNOME Shell doesn't know, nothing."""
+        """GetExtensionInfo's answer: an extension in *enabled* enabled and
+        running, or, as for one GNOME Shell doesn't know, nothing."""
         info = {"state": GLib.Variant("d", 1.0), "enabled": GLib.Variant("b", True)}
 
         def on_call(_bus, _sender, _path, _interface, _method, parameters, invocation):
-            known = enabled and parameters.unpack()[0] == extension_helper.EXTENSION_UUID
+            known = parameters.unpack()[0] in enabled
             invocation.return_value(GLib.Variant("(a{sv})", (info if known else {},)))
         return on_call
 
 
+class FakeGPaste(_BusService):
+    """GPaste's clipboard-history daemon, running: only its name on the bus."""
+
+    names = ("org.gnome.GPaste",)
+
+    def __init__(self):
+        self._start()
+
+    def _register(self, _bus, _register):
+        pass
+
+
 @pytest.fixture
-def fake_extension():
+def fake_extension(monkeypatch):
+    """GNOME Shell with TuxTalk's extension. CopyQ open on the computer the
+    tests run on doesn't count: it would send every paste to wl-copy."""
+    monkeypatch.setattr("tuxtalk.running_programs.is_running", lambda _name: False)
     shell = FakeShell()
     yield shell
     shell.stop()

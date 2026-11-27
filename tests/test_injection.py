@@ -167,6 +167,29 @@ def test_an_extension_from_before_set_clipboard_leaves_it_to_wl_copy(monkeypatch
     assert proc.written == b"hello"
 
 
+@pytest.mark.parametrize("history", ["GPaste", "Pano", "CopyQ"])
+def test_with_a_clipboard_history_that_skips_marked_text_wl_copy_sets_it(
+        monkeypatch, wayland, keyboard, gnome, history):
+    """GNOME Shell can't mark a dictation as wl-copy --sensitive does, so
+    GPaste, Pano or CopyQ would keep every one in its history: wl-copy sets
+    it there, and its window still flashes."""
+    from desktop_fakes import FakeGPaste, FakeShell
+    shell = FakeShell(others=("pano@elhan.io",) if history == "Pano" else ())
+    gpaste = FakeGPaste() if history == "GPaste" else None
+    monkeypatch.setattr("tuxtalk.running_programs.is_running",
+                        lambda name: history == "CopyQ" and name == "copyq")
+    proc = FakePopen(returncode=0)
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: proc)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.gnome.TextEditor")
+    try:
+        assert keyboard_output.paste_text("hello")
+    finally:
+        shell.stop()
+        if gpaste:
+            gpaste.stop()
+    assert (proc.written, shell.clipboard) == (b"hello", None)
+
+
 def test_paste_waits_for_wl_copy_to_set_the_clipboard(monkeypatch, wayland, keyboard):
     """The wl-copy we start exits once the clipboard is set. One still running
     has not got that far, so Ctrl+V would paste the old clipboard contents,

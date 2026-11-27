@@ -356,6 +356,27 @@ def _wl_copy_primary(text, timeout=3):
 
 
 _shell_failures = FailureNotes()
+# Clipboard histories on GNOME that skip text carrying wl-copy --sensitive's
+# mark but would keep text GNOME Shell sets, which can't carry it: GPaste's
+# daemon, by its D-Bus name, the Pano extension, and CopyQ, which has no D-Bus
+# name, by its program's.
+_GPASTE_DAEMON = "org.gnome.GPaste"
+_PANO_UUID = "pano@elhan.io"
+_COPYQ = "copyq"
+
+
+def _history_skipping_marked():
+    """The clipboard history running that skips marked text ("GPaste",
+    "Pano" or "CopyQ"), or None. Raises dbus-python's DBusException when
+    the session bus can't be asked."""
+    from . import dbus_calls, gnome_extensions, running_programs
+    if dbus_calls.session().name_has_owner(_GPASTE_DAEMON):
+        return "GPaste"
+    if gnome_extensions.is_enabled_in_shell(_PANO_UUID):
+        return "Pano"
+    if running_programs.is_running(_COPYQ):
+        return "CopyQ"
+    return None
 
 
 def copy_in_shell(text: str, primary: bool, timeout: float) -> bool:
@@ -364,16 +385,25 @@ def copy_in_shell(text: str, primary: bool, timeout: float) -> bool:
 
     wl-copy can only set the clipboard on GNOME from a window of its own,
     which takes the focus for a moment and flashes on the screen at each
-    paste; GNOME Shell sets it with no window. False where the extension
-    can't (not GNOME, no extension, or one from before SetClipboard, still
-    loaded until the next login): wl-copy sets it then. Shell offers it as
-    plain text only, without wl-copy --sensitive's mark for clipboard
-    managers: GNOME JavaScript can't serve a second type."""
+    paste; GNOME Shell sets it with no window. Shell offers it as plain text
+    only, without wl-copy --sensitive's mark for clipboard managers (GNOME
+    JavaScript can't serve a second type), so while GPaste, Pano or CopyQ,
+    which honour the mark, keeps a history, wl-copy sets it and the flash
+    stays.
+    False then, and where the extension can't (not GNOME, no extension, or
+    one from before SetClipboard, still loaded until the next login)."""
     from . import app_focus, desktop_detect
     if not desktop_detect.is_gnome():
         return False
     import dbus
     try:
+        history = _history_skipping_marked()
+        if history:
+            if _shell_failures.failed("SetClipboard", f"{history} keeps a history"):
+                logger.info(f"{history} keeps a clipboard history: dictations go through "
+                            "wl-copy, marked so it skips them, whose window flashes "
+                            "at each paste")
+            return False
         app_focus.call_extension("SetClipboard", "sb", (text, primary), timeout)
     except dbus.exceptions.DBusException as e:
         if _shell_failures.failed("SetClipboard", e.get_dbus_name()):

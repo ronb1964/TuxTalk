@@ -16,7 +16,7 @@ def desktop(monkeypatch):
     config, instead of the real computer's."""
     def set_up(running=(), gsettings=None, fcitx5=None, gnome=False, xkb=None):
         answers = gsettings or {}
-        monkeypatch.setattr(csc, "_running", lambda name: name in running)
+        monkeypatch.setattr(csc.running_programs, "is_running", lambda name: name in running)
         monkeypatch.setattr(csc, "gsettings", lambda *args: answers.get(args[1], ""))
         monkeypatch.setattr(csc, "_fcitx5_config", lambda: fcitx5)
         monkeypatch.setattr(csc, "_xkb_options", lambda: xkb)
@@ -39,7 +39,7 @@ def test_which_ibus_trigger_lists_mean_ctrl_space(value, expected):
 
 
 def test_fcitx5_without_a_config_uses_its_default(tmp_path, monkeypatch):
-    monkeypatch.setattr(csc, "_running", lambda name: name == "fcitx5")
+    monkeypatch.setattr(csc.running_programs, "is_running", lambda name: name == "fcitx5")
     monkeypatch.setattr(csc, "fcitx5_config_path", lambda: str(tmp_path / "missing"))
     monkeypatch.setattr(csc, "_xkb_options", lambda: None)
     monkeypatch.setattr(desktop_detect, "get_desktop_environment", lambda: "kde")
@@ -132,23 +132,6 @@ def test_keyboard_options_that_leave_left_ctrl_space_alone_are_no_clash(desktop,
     assert csc.clashes() == []
 
 
-def test_running_finds_this_users_process_by_name(tmp_path):
-    (tmp_path / "123").mkdir()
-    (tmp_path / "123" / "comm").write_text("ibus-daemon\n")
-    (tmp_path / "self").mkdir()
-    assert csc._running("ibus-daemon", str(tmp_path))
-    assert not csc._running("fcitx5", str(tmp_path))
-
-
-def test_a_program_name_cut_mid_character_doesnt_stop_the_lookup(tmp_path):
-    """/proc keeps 15 bytes of a name, which can end inside a character (a
-    Wine program with a Japanese name): the lookup must go on past it."""
-    (tmp_path / "77").mkdir()
-    (tmp_path / "77" / "comm").write_bytes("Wメモ帳のテスト".encode()[:15] + b"\n")
-    (tmp_path / "123").mkdir()
-    (tmp_path / "123" / "comm").write_text("ibus-daemon\n")
-    assert csc._running("ibus-daemon", str(tmp_path))
-    assert not csc._running("fcitx5", str(tmp_path))
 
 
 @pytest.fixture

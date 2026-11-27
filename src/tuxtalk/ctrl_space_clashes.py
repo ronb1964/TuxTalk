@@ -15,7 +15,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 
-from . import desktop_detect, keyboard_layout
+from . import desktop_detect, keyboard_layout, running_programs
 
 logger = logging.getLogger(__name__)
 
@@ -136,31 +136,6 @@ def keyboard_options_clash(options: str | None) -> Clash | None:
                  if o in KEYBOARD_OPTIONS), None)
 
 
-def _running(name: str, proc: str = "/proc") -> bool:
-    """Whether this user has a process called *name* (its /proc/<pid>/comm,
-    which keeps 15 characters: names must stay short)."""
-    uid = os.getuid()
-    try:
-        pids = os.listdir(proc)
-    except OSError as e:
-        logger.info(f"Could not list the running programs: {e}")
-        return False
-    for pid in pids:
-        if not pid.isdigit():
-            continue
-        try:
-            if os.stat(os.path.join(proc, pid)).st_uid != uid:
-                continue
-            # errors="replace": comm's 15 bytes can end inside a character.
-            with open(os.path.join(proc, pid, "comm"), encoding="utf-8",
-                      errors="replace") as f:
-                if f.read().strip() == name:
-                    return True
-        except OSError:     # the process ended while we looked
-            continue
-    return False
-
-
 def gsettings(*args: str) -> str:
     """What `gsettings` prints for *args*; "" when it can't say (no gsettings,
     an unknown schema, too slow)."""
@@ -195,10 +170,10 @@ def _xkb_options() -> str | None:
 def clashes() -> list[Clash]:
     """Everything running or set that also takes Ctrl+Space."""
     found = []
-    if _running("ibus-daemon") and ibus_triggers_ctrl_space(
+    if running_programs.is_running("ibus-daemon") and ibus_triggers_ctrl_space(
             gsettings("get", "org.freedesktop.ibus.general.hotkey", "triggers")):
         found.append(IBUS)
-    if _running("fcitx5") and fcitx5_triggers_ctrl_space(_fcitx5_config()):
+    if running_programs.is_running("fcitx5") and fcitx5_triggers_ctrl_space(_fcitx5_config()):
         found.append(FCITX5)
     if desktop_detect.get_desktop_environment() == "gnome" and gnome_bindings_ctrl_space(
             "\n".join(gsettings("list-recursively", schema) for schema in GNOME_SCHEMAS)):
