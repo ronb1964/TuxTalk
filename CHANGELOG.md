@@ -5,6 +5,13 @@ before 0.15.0, so older entries use that name.
 
 ## [0.26.0] - 2026-11-27
 
+- On Wayland, a dictation starting with "From " now pastes. wl-copy,
+  left to guess what it was given, took it for a mailbox and offered it
+  only as one, which no app pastes: TuxTalk said it had pasted, and
+  nothing came. TuxTalk now tells wl-copy it's text, and does the same
+  for what you copy from Recent Dictations, Fix a Word and Transcribe a
+  File.
+
 - Left Ctrl no longer stays held after the Voice Commands shortcut
   (Ctrl+Alt+V) or Paste Last Dictation (Ctrl+Alt+P). Still holding Ctrl
   when TuxTalk let go of the keyboards, TuxTalk pressed it again for the

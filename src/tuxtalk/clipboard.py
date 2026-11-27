@@ -33,7 +33,8 @@ def copy_text(text):
     """
     try:
         if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-copy"):
-            subprocess.run(["wl-copy"], input=text.encode("utf-8"), timeout=5, check=True)
+            subprocess.run(["wl-copy", "--type", TEXT_TYPES[0]], input=text.encode("utf-8"),
+                           timeout=5, check=True)
         else:
             import gi
             gi.require_version('Gtk', '3.0')
@@ -60,6 +61,8 @@ def copy_text(text):
 
 RESTORE_DELAY_S = 0.5           # apps read the clipboard asynchronously after Ctrl+V
 MAX_SAVED_BYTES = 20 * 1024 * 1024
+# wl-copy is told the first: left to guess, it takes text starting "From "
+# for a mailbox and offers it only as application/mbox, which no app pastes.
 TEXT_TYPES = ("text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "STRING", "TEXT")
 NOTHING = object()          # nothing saved (setting off, or the clipboard couldn't be read)
 EMPTY = object()            # the clipboard was empty before the paste
@@ -88,7 +91,8 @@ def _sensitive_supported():
 
 def wl_copy_command():
     """The wl-copy command for putting a dictation on the clipboard."""
-    return ["wl-copy", "--sensitive"] if _sensitive_supported() else ["wl-copy"]
+    flag = ["--sensitive"] if _sensitive_supported() else []
+    return ["wl-copy", *flag, "--type", TEXT_TYPES[0]]
 
 
 def _wl_paste_types():

@@ -5,6 +5,7 @@ mark (Klipper, CopyQ 8 and later) don't save them to their history, and on
 Wayland, with "Restore clipboard after pasting" on, whatever the user had
 copied comes back after the paste. X11: test_x11_clipboard.py.
 """
+import os
 import subprocess
 import time
 
@@ -303,13 +304,28 @@ def test_a_rewrite_pasted_over_a_selection_leaves_the_primary_selection_alone(mo
 def test_dictations_are_marked_sensitive_when_wl_copy_can(monkeypatch):
     monkeypatch.setattr(cb, "_wl_copy_help", lambda: "  --sensitive  Hint that the content is sensitive.")
     cb._sensitive_supported.cache_clear()
-    assert cb.wl_copy_command() == ["wl-copy", "--sensitive"]
+    assert cb.wl_copy_command() == ["wl-copy", "--sensitive", "--type", cb.TEXT_TYPES[0]]
 
 
 def test_an_older_wl_copy_still_pastes_without_the_hint(monkeypatch):
     monkeypatch.setattr(cb, "_wl_copy_help", lambda: "  -t, --type mime/type  Override the MIME type")
     cb._sensitive_supported.cache_clear()
-    assert cb.wl_copy_command() == ["wl-copy"]
+    assert cb.wl_copy_command() == ["wl-copy", "--type", cb.TEXT_TYPES[0]]
+
+
+@pytest.mark.parametrize("copy", [keyboard_output._wl_copy_dictation, cb._wl_copy_primary,
+                                  cb.copy_text], ids=["paste", "primary selection", "copy"])
+def test_text_starting_with_from_is_offered_as_text(tmp_path, monkeypatch, copy):
+    """Left to guess, wl-copy offers text starting "From " only as a mailbox
+    (application/mbox): TuxTalk said it pasted, and nothing came."""
+    from shell_stubs import stub
+    log = tmp_path / "wl-copy.log"
+    stub(tmp_path, "wl-copy", f'printf "%s\\n" "$@" >> {log}; cat > /dev/null')
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setattr(cb, "_sensitive_supported", lambda: True)
+    copy("From the start of the function")
+    assert "--type\ntext/plain;charset=utf-8\n" in log.read_text()
 
 
 # --- the setting -----------------------------------------------------------------------
