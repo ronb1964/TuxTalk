@@ -252,7 +252,9 @@ class ShellIndicator:
             # What the orb has learned of this mic goes with it: a fresh gain
             # reads the first level as the room's noise and holds the orb still.
             self._x11.orb_gain = self._orb_gain
-            self._x11.set_audio_level(self._level)
+            # The level only: the gain has followed it, and the audio thread
+            # may be following the next one until _fallback is set below.
+            self._x11.audio_level = self._level
             self._x11.set_spectrum(self._spectrum)
             self._x11.show_at_position()
             if self._recording:

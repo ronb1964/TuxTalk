@@ -370,8 +370,9 @@ class LevelGain:
                 a silent room is not stretched into movement.
     normalize() then maps a level to 0..1 between the two.
 
-    follow() runs on the audio thread and normalize() on the GTK thread; they
-    share only plain floats, so no lock is needed.
+    follow() runs on the audio thread, from one caller at a time, and
+    normalize() on the GTK thread; they share only plain floats, so no lock
+    is needed.
     """
     NOISE_RISE_PER_SEC = 0.1
     CEILING_HALF_LIFE = 3.0

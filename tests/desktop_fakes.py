@@ -376,8 +376,12 @@ class FakeGPaste(_BusService):
 def no_clipboard_history(monkeypatch):
     """No clipboard history in the way of the extension setting the clipboard:
     one on the computer the tests run on would send every paste to wl-copy."""
-    monkeypatch.setattr("tuxtalk.gnome_extensions.read_enabled_extensions", lambda: [])
+    monkeypatch.setattr("tuxtalk.gnome_extensions.read_enabled_extensions",
+                        lambda timeout=None: [])
     monkeypatch.setattr("tuxtalk.running_programs.is_running", lambda _name: False)
+    # Cached for the whole run, and asked of the real wl-copy: a test that
+    # left it False would turn the guard off for every test after it.
+    monkeypatch.setattr("tuxtalk.clipboard._sensitive_supported", lambda: True)
 
 
 @pytest.fixture

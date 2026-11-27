@@ -445,7 +445,7 @@ def _gnome_layout():
 def input_method_in_use() -> bool:
     """Whether keys typed now may go through an input method, which can turn
     a typed "." into "。" or take a space for its own use: GNOME's current
-    input source is one (IBus), or fcitx5 runs. True when GNOME can't say."""
+    input source is one (IBus), or fcitx5 runs. True when that can't be told."""
     if _desktop() == "gnome":
         try:
             source = _gnome_source()
@@ -454,7 +454,7 @@ def input_method_in_use() -> bool:
             return True
         if source and source[0] != "xkb":
             return True
-    return running_programs.is_running("fcitx5")
+    return running_programs.is_running("fcitx5") is not False   # unknown: assume one
 
 
 def _cosmic_xkb_config():

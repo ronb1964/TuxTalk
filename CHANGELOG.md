@@ -18,11 +18,11 @@ before 0.15.0, so older entries use that name.
   second sooner. GNOME Shell can't add the mark that tells a clipboard
   history to skip a dictation, so while one that honours it is running
   (GPaste, CopyQ, or a clipboard extension such as Pano or Clipboard
-  History), TuxTalk keeps setting it the old way and the flash stays:
-  your dictations stay out of their history. So it does with "Put back
-  what I'd copied" on, which reads and restores your clipboard the old
-  way, and with a TuxTalk extension from before this, until you log out
-  and back in after updating. Thanks to Bernát Gábor (#54).
+  History), or TuxTalk can't tell, it keeps setting it the old way and the
+  flash stays: your dictations stay out of their history. So it does with
+  "Put back what I'd copied" on, which reads and restores your clipboard
+  the old way, and with a TuxTalk extension from before this, until you
+  log out and back in after updating. Thanks to Bernát Gábor (#54).
 
 - A second orb for the recording indicator: Preferences → Audio →
   Customize… → Style → Crisp orb, a solid core, a thin ring and 16 dots,

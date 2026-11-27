@@ -484,7 +484,7 @@ export class ShellIndicator {
         this._drawTimer(cr, x + 32 * scale, y, elapsed);
     }
 
-    // RecordingIndicator._draw_glow_orb.
+    // indicator_styles._draw_glow_orb.
     _drawGlowOrbCore(cr, x, y, baseSize) {
         const palette = this._palette;
         const size = this._recording ? baseSize : baseSize * (1 + 0.1 * Math.sin(this._pulse));
@@ -509,7 +509,7 @@ export class ShellIndicator {
         cr.fill();
     }
 
-    // RecordingIndicator._draw_glow_particles.
+    // indicator_styles._draw_glow_particles.
     _drawGlowParticles(cr, cx, cy, baseRadius) {
         const palette = this._palette;
         const extend = this._recording ? this._level : 0;
@@ -534,7 +534,7 @@ export class ShellIndicator {
         }
     }
 
-    // RecordingIndicator._draw_crisp_orb: solid shapes only, since a gradient
+    // indicator_styles._draw_crisp_orb: solid shapes only, since a gradient
     // that fades to transparent reads as out of focus on a scaled monitor.
     _drawCrispOrbCore(cr, x, y, baseSize) {
         const palette = this._palette;
@@ -552,7 +552,7 @@ export class ShellIndicator {
         cr.fill();
     }
 
-    // RecordingIndicator._draw_crisp_particles.
+    // indicator_styles._draw_crisp_particles.
     _drawCrispParticles(cr, cx, cy, baseRadius) {
         const palette = this._palette;
         const scale = this._settings.scale;

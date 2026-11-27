@@ -170,15 +170,16 @@ def test_an_extension_from_before_set_clipboard_leaves_it_to_wl_copy(
 
 def _paste_on_gnome(monkeypatch, enabled=(), copyq=False, marks=True, gpaste=False):
     """Paste "hello" on GNOME with TuxTalk's extension, the extensions
-    *enabled* (None: the list can't be read), CopyQ and GPaste running or
-    not, and a wl-copy that can or can't mark it. (what wl-copy was given,
+    *enabled* (None: the list can't be read), CopyQ running or not (None:
+    the running programs can't be listed), GPaste running or not, and a
+    wl-copy that can or can't mark it. (what wl-copy was given,
     what the extension was)."""
     from desktop_fakes import FakeGPaste, FakeShell
     from tuxtalk import clipboard
     monkeypatch.setattr("tuxtalk.gnome_extensions.read_enabled_extensions",
-                        lambda: None if enabled is None else list(enabled))
+                        lambda timeout=None: None if enabled is None else list(enabled))
     monkeypatch.setattr("tuxtalk.running_programs.is_running",
-                        lambda name: copyq and name == "copyq")
+                        lambda name: None if copyq is None else copyq and name == "copyq")
     monkeypatch.setattr(clipboard, "_sensitive_supported", lambda: marks)
     proc = FakePopen(returncode=0)
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: proc)
@@ -200,7 +201,9 @@ def _paste_on_gnome(monkeypatch, enabled=(), copyq=False, marks=True, gpaste=Fal
     {"enabled": ["clipboard-history@alexsaveau.dev"]},
     {"copyq": True},
     {"enabled": None},
-], ids=["GPaste", "Pano", "Clipboard History", "CopyQ", "extensions unreadable"])
+    {"copyq": None},
+], ids=["GPaste", "Pano", "Clipboard History", "CopyQ", "extensions unreadable",
+        "programs unlistable"])
 def test_with_a_clipboard_history_that_skips_marked_text_wl_copy_sets_it(
         monkeypatch, wayland, keyboard, gnome, history):
     """GNOME Shell can't mark a dictation as wl-copy --sensitive does, so

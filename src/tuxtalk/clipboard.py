@@ -380,13 +380,17 @@ def _history_skipping_marked():
             return "GPaste"
     except dbus.exceptions.DBusException as e:
         return f"a session bus that can't say whether GPaste runs ({e.get_dbus_name()})"
-    enabled = gnome_extensions.read_enabled_extensions()
+    # A second at most: a hung dconf holds the paste, and None keeps wl-copy.
+    enabled = gnome_extensions.read_enabled_extensions(timeout=1)
     if enabled is None:
         return "GNOME's list of extensions, which can't be read"
     for uuid in enabled:
         if (uuid == _PANO_UUID or "clip" in uuid.lower()) and uuid not in _KEEPS_MARKED_TEXT:
             return uuid
-    if running_programs.is_running(_COPYQ):
+    copyq = running_programs.is_running(_COPYQ)
+    if copyq is None:
+        return "the running programs, which can't be listed for CopyQ"
+    if copyq:
         return "CopyQ"
     return None
 

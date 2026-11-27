@@ -7,15 +7,16 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 
-def is_running(name: str, proc: str = "/proc") -> bool:
+def is_running(name: str, proc: str = "/proc") -> bool | None:
     """Whether this user has a process called *name* (its /proc/<pid>/comm,
-    which keeps 15 characters: names must stay short)."""
+    which keeps 15 characters: names must stay short); None when the
+    running programs can't be listed, for a caller to decide."""
     uid = os.getuid()
     try:
         pids = os.listdir(proc)
     except OSError as e:
         logger.info(f"Could not list the running programs: {e}")
-        return False
+        return None
     for pid in pids:
         if not pid.isdigit():
             continue

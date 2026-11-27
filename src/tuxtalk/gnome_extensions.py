@@ -79,16 +79,17 @@ def is_enabled_in_shell(uuid: str) -> bool:
         return False
 
 
-def read_enabled_extensions():
-    """The ids of the extensions GNOME has enabled, or None when they can't be read."""
-    return _read_extension_list("enabled-extensions")
+def read_enabled_extensions(timeout=10):
+    """The ids of the extensions GNOME has enabled, or None when they can't
+    be read within *timeout* seconds."""
+    return _read_extension_list("enabled-extensions", timeout)
 
 
 def _write_enabled_extensions(uuids: list) -> bool:
     return _write_extension_list("enabled-extensions", uuids)
 
 
-def _read_extension_list(key):
+def _read_extension_list(key, timeout=10):
     """Return org.gnome.shell *key* (enabled-extensions or disabled-extensions)
     as a list of UUIDs, or None.
 
@@ -105,7 +106,7 @@ def _read_extension_list(key):
     try:
         result = subprocess.run(
             ['gsettings', 'get', 'org.gnome.shell', key],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=timeout,
         )
         if result.returncode != 0:
             return None

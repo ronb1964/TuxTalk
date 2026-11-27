@@ -19,3 +19,8 @@ def test_a_program_name_cut_mid_character_doesnt_stop_the_lookup(tmp_path):
     (tmp_path / "123" / "comm").write_text("ibus-daemon\n")
     assert running_programs.is_running("ibus-daemon", str(tmp_path))
     assert not running_programs.is_running("fcitx5", str(tmp_path))
+
+
+def test_programs_that_cant_be_listed_are_unknown_not_absent(tmp_path):
+    """A clipboard history TuxTalk can't look for must count as there."""
+    assert running_programs.is_running("copyq", str(tmp_path / "no-proc")) is None

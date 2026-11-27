@@ -160,7 +160,8 @@ export const St = {
     ClipboardType: {PRIMARY: 0, CLIPBOARD: 1},     // as St numbers them
     Clipboard: {
         get_default: () => ({
-            set_text: (type, text) => (type === 0 ? (shell.primary = text) : (shell.clipboard = text)),
+            set_text: (type, text) => (type === 0
+                ? (shell.primary = text) : (shell.clipboard = text)),
         }),
     },
 };
