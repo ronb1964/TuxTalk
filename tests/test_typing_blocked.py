@@ -24,6 +24,8 @@ def host(monkeypatch):
                         lambda p: True if p == "/dev/uinput" else real_exists(p))
     state = types.SimpleNamespace(writable=True, in_system=False, in_session=False)
     monkeypatch.setattr(U, "check_uinput_writable", lambda: state.writable)
+    # Readable as well: the real check would ask the machine running the tests.
+    monkeypatch.setattr(U, "check_uinput_readable", lambda: True)
     group = types.SimpleNamespace(gr_gid=4242, gr_mem=[])
     monkeypatch.setattr(U.grp, "getgrnam", lambda name: group)
     monkeypatch.setattr(U, "_username", lambda: "tester")
