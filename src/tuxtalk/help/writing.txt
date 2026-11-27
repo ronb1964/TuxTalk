@@ -4,6 +4,8 @@
 Say <b>period</b>, <b>comma</b>, <b>question mark</b>, <b>new line</b>, <b>new paragraph</b>
 and so on. TuxTalk adds the capitals, and a period at the end if the speech model
 forgot one. Help's Commands tab has them all.
+Said on its own, a mark goes on the end of what's there: hold <b>{hold}</b>, say <b>question
+mark</b>, let go, and "Is it ready." becomes "Is it ready?".
 {examples_paragraphs}
 {examples_quotes}
 

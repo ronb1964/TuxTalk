@@ -155,9 +155,11 @@ def corrects_across_pause(raw: str, chunk_role, message) -> bool:
     return ai_cleanup.opens_with_correction(rs.state.last_inserted_text, raw)
 
 
-def _erase_typed(text: str) -> bool:
-    """Backspace over *text*, just typed by the phrase before the pause. False
-    when it can't be done safely; then nothing more is erased.
+def erase_typed(text: str, what: str = "Correction across a pause") -> bool:
+    """Backspace over *text*, just typed: by the phrase before the pause, or
+    the end of the dictation a mark said on its own joins (pipeline). False
+    when it can't be done safely; then nothing more is erased. *what* names
+    the change in the log and the notification.
 
     The backspaces go only into the window checked here, and never into a
     password field, as a dictation's keys (keyboard_output.delivering): the
@@ -166,24 +168,24 @@ def _erase_typed(text: str) -> bool:
     into another document, whose text they would delete."""
     where = focused_window.look()
     if keyboard_output.not_where_typed(where[0], where):
-        logger.info("Correction across a pause skipped: the phrase is in another window")
+        logger.info(f"{what} skipped: the text is in another window")
         return False
     # The AI that found the correction can take seconds, time enough to
     # click into a password field of the same window.
     if focused_window.is_password():
-        logger.info("Correction across a pause skipped: a password field has the focus")
+        logger.info(f"{what} skipped: a password field has the focus")
         return False
     try:
         with keyboard_output.delivering(where):
             deleted = keyboard_output.output_backend().backspaces(len(text))
     except virtual_keyboard.GaveUp as stop:
-        logger.info(f"Correction across a pause skipped before its backspaces: {stop.reason}")
+        logger.info(f"{what} skipped before its backspaces: {stop.reason}")
         return False
     except virtual_keyboard.StoppedPartway:
-        logger.error("Correction across a pause stopped partway; typing the phrase as said")
+        logger.error(f"{what} stopped partway; typing as said")
         rs.state.last_inserted_text = ""
         last_dictation.forget_shown()
-        notify_module.notify("A correction stopped partway", "Check the text before it.")
+        notify_module.notify(f"{what} stopped partway", "Check the text before it.")
         return False
     if deleted:
         last_dictation.trim_shown(text, len(text))
@@ -218,7 +220,7 @@ def correct_across_pause(text: str, message, lowercase_ok: bool = True):
         # Esc while the AI worked: the phrase before stays as it is.
         logger.info("Correction across a pause skipped: the recording was cancelled")
         return said, ""
-    if not _erase_typed(prev):
+    if not erase_typed(prev):
         return said, ""
     logger.info("AI cleanup fixed a self-correction across a pause")
     return _started_like(prev, fixed, lowercase_ok), prev

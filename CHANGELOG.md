@@ -5,6 +5,13 @@ before 0.15.0, so older entries use that name.
 
 ## [0.26.0] - 2026-11-27
 
+- A punctuation mark said on its own is typed: "question mark" alone
+  typed nothing, nor did "comma" said first ("comma and then he left"),
+  since a mark at the start of a dictation was dropped with the stray ones
+  a speech model leaves there. It goes on the end of what's already
+  there, in place of the full stop and space after it: "Is it ready." and
+  then "question mark" is "Is it ready?". Thanks to Andy (#52).
+
 - Left Ctrl no longer stays held after the Voice Commands shortcut
   (Ctrl+Alt+V) or Paste Last Dictation (Ctrl+Alt+P). Still holding Ctrl
   when TuxTalk let go of the keyboards, TuxTalk pressed it again for the

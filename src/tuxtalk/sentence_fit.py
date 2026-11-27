@@ -36,6 +36,22 @@ _LINE_THEN_MORE = re.compile(r"[\n\r\u2028\u2029]\s*\S")
 _NOUN_CAPITALS = {"de", "lb"}
 
 
+# The marks a dictation can start with when said on its own (dictation_text).
+MARKS = ".,;:!?"
+# What a mark said on its own takes the place of at the end of the text
+# before it: the blanks after the last word, with a full stop right after
+# that word ("Is it ready. " then "question mark" is "Is it ready?"), not
+# the one of "U.S.", a number or an ellipsis.
+_TAKEN_BY_MARK = re.compile(r"(?<=[^\W\d_])(?<!\.[^\W\d_])\.?[ \t]*\Z|[ \t]+\Z")
+
+
+def taken_by_mark(before: str) -> str:
+    """The end of *before* a dictation that starts with a mark said on its
+    own goes in place of; "" when there's none."""
+    found = _TAKEN_BY_MARK.search(before)
+    return found.group() if found else ""
+
+
 def fit(text: str, before: str, after: str, lowercase_ok: bool, words=()) -> str:
     """*text*, a dictation shaped for typing, fitted between *before* and
     *after*, the text on either side of the cursor ("" at the start or end

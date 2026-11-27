@@ -23,6 +23,11 @@ say = "is the van ready question mark"
 get = "Is the van ready?"
 
 [[example]]
+group = "basics"
+say = "question mark"
+get = "?"
+
+[[example]]
 group = "paragraphs"
 say = "Dear Anna comma new line thanks for the quote period new paragraph see you Monday"
 get = "Dear Anna,\nThanks for the quote.\n\nSee you Monday."

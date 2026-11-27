@@ -292,7 +292,7 @@ def test_no_wait_doesnt_backspace_in_a_password_field(desktop, monkeypatch):
                         lambda: types.SimpleNamespace(backspaces=lambda n: erased.append(n)))
     monkeypatch.setattr(rs.state, "last_inserted_window", None)
     desktop["password"] = True
-    assert type_at_pause._erase_typed("Meet at three. ") is False
+    assert type_at_pause.erase_typed("Meet at three. ") is False
     assert erased == []
 
 

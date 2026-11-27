@@ -9,6 +9,7 @@ command_language, remove_fillers, ai_corrections, ai_engine, swiss_spelling,
 loggable), and
 live_settings itself in the service. Whether the dictation carries on the
 last sentence is the caller's to say, since that depends on the window."""
+import re
 from collections.abc import Callable
 
 from . import custom_commands
@@ -43,6 +44,43 @@ def numbers_to_digits(text: str, settings) -> str:
     from .spoken_numbers import to_digits
     return to_digits(text, settings.numbers_language,
                      small_as_words=settings.numbers_mode == "small_as_words")
+
+
+# A made-up word put before a dictation to see whether it starts with a
+# mark said aloud: the normalizer drops the marks a line starts with (the
+# engine's strays), and after a word it keeps them.
+_PROBE = "Zqxv"
+_MARKS = ".,;:!?"
+
+
+# The mark the engine often writes after a word said on its own ("Comma.").
+_ENGINE_END = re.compile(r"(?<=[^\W\d_])[.,;:!?]\s*$")
+
+
+def _mark_alone(text: str, lang: str) -> str | None:
+    """The mark a dictation of nothing else says ("question mark", "Comma."),
+    or None. As said: a comma that ends a dictation is a full stop
+    otherwise, and an auto period isn't put after it."""
+    said = _ENGINE_END.sub("", text.strip())
+    if not said[:1].isalpha():
+        return None
+    probed = normalize_text(f"{_PROBE} {said}", auto_period=False, lang=lang)
+    mark = probed[len(_PROBE):]
+    return mark if probed.startswith(_PROBE) and len(mark) == 1 and mark in _MARKS else None
+
+
+def _normalized(text: str, auto_period: bool, lang: str, whole: bool) -> str:
+    """normalize_text of *text*, keeping a mark said at its start ("question
+    mark", "comma and then he left"), which normalize_text alone drops with
+    the engine's stray ones. Only a whole dictation's: a Type at pause
+    phrase's marks are type_at_pause's to decide."""
+    text_alone = normalize_text(text, auto_period=auto_period, lang=lang)
+    if not whole or not text.lstrip()[:1].isalpha():
+        return text_alone       # an engine's stray mark comes as the mark itself
+    probed = normalize_text(f"{_PROBE} {text}", auto_period=auto_period, lang=lang)
+    if probed.startswith(_PROBE) and probed[len(_PROBE):][:1] in tuple(_MARKS):
+        return probed[len(_PROBE):]
+    return text_alone
 
 
 def clean_up(text, ai, settings):
@@ -124,15 +162,17 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     if address:
         logger.info(f"Normalized text: {settings.loggable(address)} (an address on its own)")
         return address + (" " if auto_space else "")
+    mark = whole and not protected and _mark_alone(processed, settings.command_language)
+    if mark:
+        logger.info(f"Normalized text: {mark!r} (a mark said on its own)")
+        return mark + (" " if auto_space else "")
 
     # Normalize text (capitalization, punctuation, etc.). auto_period is passed
     # through because this pass otherwise ends every line with a full stop of
     # its own, and append_auto_punct below would never get to decide.
-    text = normalize_text(
+    text = _normalized(
         processed if smart_quotes else processed.replace("\u201c","\"").replace("\u201d","\""),
-        auto_period=auto_period,
-        lang=settings.command_language,
-    )
+        auto_period, settings.command_language, whole)
     # A lone "open quote" or "close quote" becomes a curly quote inside
     # normalize_text, so the preference is applied to its output as well.
     if not smart_quotes:

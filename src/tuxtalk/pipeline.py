@@ -222,6 +222,7 @@ def _type_the_words(as_words: str, in_password: bool, audio_f32, job: _Job) -> N
     if not _still_wanted(words, job):
         return
     words = _fit_to_cursor(words, around, job)
+    _join_said_mark(words.text, around, job)
     _tell_done(words.text, job)
     if words.text:
         _deliver(words, audio_f32, job)
@@ -288,6 +289,21 @@ def _fit_to_cursor(words: _Words, around: tuple[str, str] | None, job: _Job) -> 
         return words._replace(text=sentence_fit.fit_end(words.text, around[1]))
     return words._replace(text=sentence_fit.fit(words.text, *around, _lowercase_ok(job),
                                                 live.words))
+
+
+def _join_said_mark(text: str, around: tuple[str, str] | None, job: _Job) -> None:
+    """A whole dictation that starts with a mark said on its own ("question
+    mark", "comma and then he left") goes in place of the space and full
+    stop that end the text before it: "Is it ready?", not "Is it ready. ?".
+    That text is the app's where it says (*around*), else what the last
+    dictation typed; type_at_pause.erase_typed backspaces it only in the
+    window it went to, and never in a password field."""
+    if job.chunk_role is not None or text[:1] not in tuple(sentence_fit.MARKS):
+        return
+    before = around[0] if around is not None else rs.state.last_inserted_text
+    tail = sentence_fit.taken_by_mark(before)
+    if tail:
+        type_at_pause.erase_typed(tail, "Joining a mark to the text before")
 
 
 def _lowercase_ok(job: _Job) -> bool:

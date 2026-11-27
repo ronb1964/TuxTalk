@@ -28,6 +28,10 @@ def desktop(monkeypatch):
             seen["typed"].append(text)
             return True
 
+        def backspaces(self, count):
+            seen["typed"].append(("backspace", count))
+            return True
+
     def read(cancelled=lambda: False):
         seen["reads"] += 1
         seen["cancelled"] = cancelled
@@ -124,7 +128,7 @@ def test_a_correction_takes_the_fitted_start_of_the_phrase_it_replaces(monkeypat
     from tuxtalk import ai_cleanup, type_at_pause
     monkeypatch.setattr(rs.state, "last_inserted_text", " meet at three. ")
     monkeypatch.setattr(ai_cleanup, "fix_self_corrections", lambda text, engine: "Meet at four.")
-    monkeypatch.setattr(type_at_pause, "_erase_typed", lambda text: True)
+    monkeypatch.setattr(type_at_pause, "erase_typed", lambda text, what="": True)
     message = types.SimpleNamespace(held_cue="", cancelled=False)
     fixed, taken_back = type_at_pause.correct_across_pause("no wait, four.", message)
     assert (fixed, taken_back) == (" meet at four.", " meet at three. ")
@@ -134,7 +138,7 @@ def test_a_corrected_german_noun_keeps_its_capital(monkeypatch):
     from tuxtalk import ai_cleanup, type_at_pause
     monkeypatch.setattr(rs.state, "last_inserted_text", " drei Katzen ")
     monkeypatch.setattr(ai_cleanup, "fix_self_corrections", lambda text, engine: "Hunde")
-    monkeypatch.setattr(type_at_pause, "_erase_typed", lambda text: True)
+    monkeypatch.setattr(type_at_pause, "erase_typed", lambda text, what="": True)
     message = types.SimpleNamespace(held_cue="", cancelled=False)
     fixed, _ = type_at_pause.correct_across_pause("nein, Hunde", message, lowercase_ok=False)
     assert fixed == " Hunde"
@@ -198,3 +202,34 @@ def test_type_at_pause_never_reads_a_terminal_at_the_end(desktop, monkeypatch):
     dictate(monkeypatch, "Very.", chunk_role="middle")
     dictate(monkeypatch, "", chunk_role="last")
     assert desktop["reads"] == 0
+
+
+@pytest.mark.parametrize(("before", "typed"), [
+    ("Is it ready. ", [("backspace", 2), "? "]),
+    ("Is it ready ", [("backspace", 1), "? "]),
+    ("Is it ready", ["? "]),
+    ("In the U.S. ", [("backspace", 1), "? "]),
+])
+def test_a_mark_said_on_its_own_joins_the_text_before(desktop, monkeypatch, before, typed):
+    """"question mark" said after "Is it ready" was dictated: the full stop
+    and space after it make way, or it came out "Is it ready. ?"; a full
+    stop that isn't a sentence's own stays."""
+    desktop["around"] = (before, "")
+    dictate(monkeypatch, "Question mark.")
+    assert desktop["typed"] == typed
+
+
+def test_where_the_app_doesnt_say_the_last_dictation_is_what_a_mark_joins(desktop, monkeypatch):
+    monkeypatch.setattr(keyboard_output, "not_where_typed", lambda *a: False)
+    monkeypatch.setattr(rs.state, "last_inserted_text", "Is it ready. ")
+    dictate(monkeypatch, "Comma.")
+    assert desktop["typed"] == [("backspace", 2), ", "]
+
+
+def test_a_mark_said_in_another_window_takes_nothing_back(desktop, monkeypatch):
+    """The text before is another window's: backspacing there would delete
+    what TuxTalk never typed."""
+    monkeypatch.setattr(keyboard_output, "not_where_typed", lambda *a: True)
+    monkeypatch.setattr(rs.state, "last_inserted_text", "Is it ready. ")
+    dictate(monkeypatch, "Question mark.")
+    assert desktop["typed"] == ["? "]
