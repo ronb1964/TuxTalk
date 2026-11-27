@@ -245,12 +245,15 @@ def test_a_hotkey_helper_that_does_not_answer_is_not_called_working(monkeypatch,
     assert ok is False and "answering" in reason
 
 
-
-def test_a_uinput_this_user_may_only_write_to_is_enough_to_type(monkeypatch):
-    """Some systems make /dev/uinput writable but not readable for the
-    user (mode 0620): TuxTalk's keyboard only writes to it, and saying it
-    can't type there sent the user to fix permissions for nothing (#52)."""
+def test_a_uinput_this_user_may_only_write_to_cannot_type(monkeypatch):
+    """python-evdev opens /dev/uinput read-write, so where the user may only
+    write to it (mode 0620) TuxTalk's keyboard can't be made: the setup
+    check and the couldn't-type notice both say so (discussion #52)."""
     from tuxtalk import uinput_helper
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setattr(uinput_helper.os.path, "exists", lambda path: True)
     monkeypatch.setattr(uinput_helper.os, "access", lambda path, mode: mode == os.W_OK)
-    assert uinput_helper.check_uinput_permission()[0] is True
+    monkeypatch.setattr(uinput_helper, "input_group_pending_restart", lambda: False)
+    monkeypatch.setattr("tuxtalk.secure_input.can_install", lambda: (True, ""))
+    assert uinput_helper.check_uinput_permission()[0] is False
+    assert uinput_helper.typing_blocked_reason() is not None

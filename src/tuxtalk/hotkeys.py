@@ -412,7 +412,9 @@ def _on_paste_last(event, combo, held_modifiers, devices, cfg, dictation_keys) -
         required_mods, main_key = combo
         if event.code == main_key and check_modifiers_held(required_mods, held_modifiers):
             # Same brief grab as the Voice Commands combo, so the key
-            # press doesn't reach the focused app.
+            # press doesn't reach the focused app: grabbed and let go at
+            # once, it tells the desktop the keys are up, so nothing repeats
+            # into the app while they're held.
             with keyboard_grab.hidden_briefly(devices, {main_key, *held_modifiers}):
                 pass
             rs.state.paste_last = {"key": main_key, "key_up": False, "at": time.time()}
@@ -855,12 +857,17 @@ def _on_key_event(event, keys: "hotkey_keys.Hotkeys", held_modifiers, devices, c
                   svc, now: float) -> None:
     """Act on one key event read from a keyboard, TuxTalk's own aside."""
     track_modifier(held_modifiers, event)
-    if event.value == 0 and event.code in (_combo_presses.held_with(keys.hold_key)
-                                           | _combo_presses.held_with(keys.toggle_key)):
+    combo_up = event.value == 0 and event.code in (_combo_presses.held_with(keys.hold_key)
+                                                   | _combo_presses.held_with(keys.toggle_key))
+    if combo_up:
         # As for a Right Ctrl dictation key (_hide_modifier_hotkey): typing
         # that found it stuck waits for it again.
         modifier_hotkeys.note_released(event.code)
-        ctrl_kept.let_go(devices)       # once no keyboard holds the real one
+    if combo_up or (event.value == 0 and event.code == ctrl_kept.CODE):
+        # Once no keyboard holds the real one. Any Left Ctrl coming up, not
+        # only a dictation key's: the keys may have changed in Preferences
+        # since TuxTalk pressed it again, and then nothing let go of it.
+        ctrl_kept.let_go(devices)
     passed = _combo_presses.events(event, held_modifiers, (keys.hold_key, keys.toggle_key))
     if event not in passed:
         # A combo dictation key's key typed without its modifiers is still

@@ -189,7 +189,8 @@ def hidden_briefly(devices, codes):
     with it (ctrl_kept), whose release TuxTalk watches. After a shortcut
     nothing watched for it, so a Ctrl still held when Ctrl+Alt+V let go was
     held for the desktop until ctrl_kept.HOLD_LIMIT_S. The desktop saw it go
-    up before the grab, and sees its real release after it."""
+    up before the grab, and drops its real release as a key already up; a
+    Ctrl still held is Ctrl for the desktop again once pressed again."""
     grab_keyboards_hiding(devices, codes)
     try:
         yield

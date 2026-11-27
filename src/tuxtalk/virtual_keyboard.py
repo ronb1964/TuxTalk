@@ -89,7 +89,8 @@ def _capabilities():
 def write_only_device(capabilities, name: str, phys: str):
     """A uinput device TuxTalk only writes to (the keyboard here, the pointer
     in virtual_pointer.py). evdev is imported when one is made, so importing
-    this module needs none."""
+    this module needs none. Write-only in use only: python-evdev still opens
+    /dev/uinput read-write to make it."""
     from evdev import UInput, ecodes
 
     class WriteOnly(UInput):

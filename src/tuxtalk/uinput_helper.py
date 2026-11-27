@@ -44,6 +44,13 @@ def check_uinput_exists():
     return exists
 
 
+def check_uinput_readable():
+    """Whether this user may read /dev/uinput."""
+    readable = os.access("/dev/uinput", os.R_OK)
+    logger.debug(f"/dev/uinput readable: {readable}")
+    return readable
+
+
 def check_uinput_writable():
     """Whether this user may write to /dev/uinput, which typing needs."""
     writable = os.access("/dev/uinput", os.W_OK)
@@ -53,16 +60,17 @@ def check_uinput_writable():
 
 def check_uinput_permission():
     """(has_access, reason): whether TuxTalk's virtual keyboard can type
-    through /dev/uinput, and why not in words. Writing is all it needs
-    (python-evdev opens it write-only): a system that lets the user write
-    but not read it, mode 0620, types fine."""
+    through /dev/uinput, and why not in words."""
     if not check_uinput_exists():
         return (False, "The /dev/uinput device does not exist. "
                        "The uinput kernel module may not be loaded.")
+    if not check_uinput_readable():
+        return (False, "Cannot read /dev/uinput. "
+                       "You need permission to access this device for typing.")
     if not check_uinput_writable():
         return (False, "Cannot write to /dev/uinput. "
                        "You need write permission for keystroke injection.")
-    return (True, "TuxTalk can write to /dev/uinput. Typing should work.")
+    return (True, "You have full access to /dev/uinput. Typing should work.")
 
 
 def _readable_input_devices():
@@ -268,7 +276,9 @@ def typing_blocked_reason():
     (also when there's nothing to check: the Flatpak, or no /dev/uinput)."""
     if os.environ.get("FLATPAK_ID") or not os.path.exists("/dev/uinput"):
         return None
-    if not check_uinput_writable():
+    # Read too: python-evdev opens /dev/uinput read-write, so a node only
+    # writable (mode 0620) can't make the keyboard either.
+    if not (check_uinput_readable() and check_uinput_writable()):
         if input_group_pending_restart():
             return TYPING_RESTART_PENDING
         from .secure_input import can_install

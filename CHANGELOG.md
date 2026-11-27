@@ -10,9 +10,13 @@ before 0.15.0, so older entries use that name.
   when TuxTalk let go of the keyboards, TuxTalk pressed it again for the
   desktop, as it does after a Left Ctrl+Space dictation, but nothing let
   go of it when you did: for ten seconds every key you typed was a Ctrl
-  shortcut. Thanks to Andy (#52).
-- TuxTalk no longer says it can't type where /dev/uinput lets you write
-  to it but not read it (mode 0620): typing only ever writes to it.
+  shortcut. And a Left Ctrl TuxTalk pressed again after a Left Ctrl+Space
+  dictation now goes up with yours even when you changed the dictation
+  keys meanwhile. Thanks to Andy (#52).
+
+- Where /dev/uinput can be written to but not read (mode 0620), TuxTalk
+  can't type, and now says so with the way to fix it, as it does where it
+  can't be written to: its "couldn't type" notice only asked about writing.
 
 - Type at pause gets each phrase in sooner: the space or mark between two
   phrases is typed now, not pasted, which took a third of a second on its

@@ -610,19 +610,34 @@ def test_voice_editing_claims_shift_with_the_pair():
 
 @pytest.mark.parametrize("which", ["voice_cmds", "paste_last"])
 def test_a_shortcut_leaves_no_left_ctrl_held_after_it(keyboard, monkeypatch, which):
-    """Ctrl+Alt+V (Voice Commands) grabs the keyboards for a moment. Let go
-    of with Left Ctrl still down, TuxTalk pressed it again for the desktop,
-    and nothing let go of it when the real one came up: Ctrl stayed held
-    for every key the user typed until ctrl_kept.HOLD_LIMIT_S (issue #52)."""
+    """The Voice Commands and Paste Last Dictation shortcuts grab the
+    keyboards for a moment. With Left Ctrl still down when they let go,
+    TuxTalk pressed it again for the desktop and nothing let go of it: Ctrl
+    stayed held for every key typed until ctrl_kept.HOLD_LIMIT_S
+    (discussion #52)."""
     combo = parse_hotkey_combo("Ctrl+Alt+V")
-    keys = Hotkeys(SPACE, F9, "Ctrl+Alt+V", combo if which == "voice_cmds" else None,
+    keys = Hotkeys(F8, F9, "Ctrl+Alt+V", combo if which == "voice_cmds" else None,
                    ecodes.KEY_V, combo if which == "paste_last" else None)
+    shown = []
     monkeypatch.setattr(keyboard_grab, "grabbed_devices", [])
     monkeypatch.setattr(modifier_hotkeys, "_hidden", (frozenset(), ()))
-    monkeypatch.setattr(hotkeys.tray_link, "show_voice_commands", lambda: None)
+    monkeypatch.setattr(hotkeys.tray_link, "show_voice_commands", lambda: shown.append(True))
     monkeypatch.setattr(rs.state, "paste_last", None, raising=False)
     board = Grabbable(lambda look: True, code=LCTRL)
     svc, held = SimpleNamespace(last_activity=0.0, input_device_idx=0), set()
     for code in (LCTRL, LALT, ecodes.KEY_V):
         hotkeys._on_key_event(KeyEvent(code, 1), keys, held, [board], Cfg(), svc, 1.0)
+    assert bool(shown) if which == "voice_cmds" else rs.state.paste_last is not None
     assert keyboard.events == [] and not ctrl_kept.pressed()
+
+
+def test_the_ctrl_pressed_again_is_let_go_after_the_keys_changed(keyboard, holding_the_pair):
+    """The dictation keys changed in Preferences while Left Ctrl was still
+    held after a Left Ctrl+Space hold: its release isn't a dictation key's
+    any more, and the Ctrl TuxTalk pressed again must still go with it."""
+    holding_the_pair(SPACE, 0)
+    board = modifier_hotkeys._noted[0][0]
+    board.pressed = lambda look: False
+    feed(KeyEvent(LCTRL, 0), set(), SimpleNamespace(last_activity=0.0, input_device_idx=0),
+         hold=F8, toggle=F9, devices=[board])
+    assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)] and not ctrl_kept.pressed()
