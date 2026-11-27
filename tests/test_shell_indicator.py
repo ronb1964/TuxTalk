@@ -151,10 +151,16 @@ def test_recording_starts_after_the_show(shell):
     ind.hide_indicator()
 
 
-def test_the_shell_gets_the_audio_level_while_showing(shell):
-    ind = si.ShellIndicator(sensitivity=2.0)
+def _speak(ind, voice):
+    """A quiet room, then a word at *voice*: the orb's range is the mic's own."""
+    ind.set_audio_level(0.01)
+    ind.set_audio_level(voice)
+
+
+def test_the_shell_gets_the_orb_level_scaled_by_animation_response(shell):
+    ind = si.ShellIndicator(sensitivity=0.5)
     ind.show_at_position()
-    ind.set_audio_level(0.25)
+    _speak(ind, 0.4)
     assert _wait_for(lambda: ("Update", (0.5, [])) in shell)
     ind.hide_indicator()
 
@@ -271,8 +277,8 @@ def test_a_late_show_error_cannot_switch_the_next_dictation_to_x11(shell, caplog
     ind.show_at_position()
     assert _wait_for(lambda: _methods(shell).count("Show") == 2)
     shell.pending.return_dbus_error("org.freedesktop.DBus.Error.Failed", "old dictation")
-    ind.set_audio_level(0.4)
-    assert _wait_for(lambda: ("Update", (0.4, [])) in shell)
+    _speak(ind, 0.4)
+    assert _wait_for(lambda: ("Update", (1.0, [])) in shell)
     assert "Switching to X11" not in caplog.text
     ind.hide_indicator()
 
@@ -428,7 +434,7 @@ def test_unavailable_shell_warns_once_then_logs_at_debug(shell, caplog):
 
 def test_x11_owns_the_radial_history_after_fallback(shell, monkeypatch):
     gains = []
-    gain_class = si.RadialGain
+    gain_class = si.LevelGain
 
     class CountedGain(gain_class):
         def __init__(self):
@@ -440,7 +446,7 @@ def test_x11_owns_the_radial_history_after_fallback(shell, monkeypatch):
             self.blocks.append(list(samples))
             super().update(samples, now)
 
-    monkeypatch.setattr(si, "RadialGain", CountedGain)
+    monkeypatch.setattr(si, "LevelGain", CountedGain)
     ind = si.ShellIndicator(style="radial")
     ind.show_at_position()
     ind.set_waveform([0.1, 0.2])

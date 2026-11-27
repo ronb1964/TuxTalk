@@ -34,32 +34,25 @@ def test_resolve_color_cyan_mode():
 
 
 def test_is_cyan_matches_the_classic_color_and_its_hex():
-    """The orb's classic gradient is re-keyed to the color itself, not a mode
-    name. is_cyan must recognize the CYAN constant and the classic cyan hex
-    (which parses to a hair off CYAN) as cyan, and reject other colors."""
+    """The classic orb colors are keyed to the color itself, not a mode name:
+    is_cyan must recognize the CYAN constant and the classic cyan hex (which
+    parses to a hair off CYAN) as cyan, and reject other colors."""
     assert S.is_cyan(S.CYAN)
     assert S.is_cyan(S.resolve_color("custom", "#4db3ff", (0, 0, 0)))
     assert not S.is_cyan((1.0, 0.0, 0.0))
     assert not S.is_cyan((0.2, 0.4, 0.26))   # a green accent
 
 
-def test_orb_palette_for_cyan_is_none_so_the_classic_path_runs():
-    """A cyan color returns None → the orb draws its classic hand-tuned
-    gradient. Any other color returns a palette that recolors the orb."""
-    assert S.orb_palette_for(S.CYAN) is None
-    assert S.orb_palette_for(S.resolve_color("custom", "#4db3ff", (0, 0, 0))) is None
+def test_the_classic_cyan_orb_keeps_its_own_colors():
+    assert S.orb_palette_for(S.resolve_color("custom", "#4db3ff", (0, 0, 0))) is S.CLASSIC_ORB
+
+
+def test_another_color_recolors_the_whole_orb():
     red = (0.9, 0.2, 0.2)
-    assert S.orb_palette_for(red) == S.orb_palette(red)
-
-
-def test_orb_palette_derives_from_the_base_color():
-    """The orb recolor keeps its structure, only the hue changing."""
-    pal = S.orb_palette((0.9, 0.2, 0.2))   # red
-    assert pal["glow"] == (0.9, 0.2, 0.2)
-    assert pal["p_far"] == (0.9, 0.2, 0.2)
-    # core runs white-hot center to a dark edge
-    assert pal["core"][0][1] == (1.0, 1.0, 1.0)
-    assert len(pal["core"]) == 5
+    pal = S.orb_palette_for(red)
+    assert pal["outer"] == pal["far"] == red
+    for lighter in (pal["inner"], pal["near"]):
+        assert all(c > base for c, base in zip(lighter, red, strict=True))
 
 
 def _ink(draw):
@@ -187,7 +180,7 @@ def test_radial_fills_its_window():
 
 def _run_gain(scale, seconds=2.0):
     """Feed a gain ~64 ms blocks of speech-like audio (with gaps) at `scale`."""
-    g = S.RadialGain()
+    g = S.LevelGain()
     t = 0.0
     for k in range(int(seconds / 0.064)):
         talking = (k % 8) < 6                      # short gaps, like between words
@@ -207,7 +200,7 @@ def test_radial_gain_makes_a_quiet_mic_move_like_a_loud_one():
 
 
 def test_radial_gain_keeps_a_silent_room_still():
-    g = S.RadialGain()
+    g = S.LevelGain()
     for k in range(40):
         g.update(np.random.default_rng(k).normal(0, 0.002, 1024), k * 0.064)
     room = np.random.default_rng(99).normal(0, 0.002, 1024)
@@ -222,10 +215,36 @@ def test_radial_gain_summary_reports_and_resets():
 
 def test_radial_gain_recovers_when_dictation_starts_mid_word():
     # The first block can already be speech; it must not leave the ring dull.
-    g = S.RadialGain()
+    g = S.LevelGain()
     g.update(np.array(_speech(0.03)), 0.0)
     g.update(np.array(_speech(0.03 * 0.02)), 0.064)   # first gap between words
     assert g.normalize(0.03) > 0.9
+
+
+def _orb_after(levels):
+    """The orb's movement for the last of *levels*, one block each 64 ms."""
+    g = S.LevelGain()
+    for k, level in enumerate(levels):
+        g.follow(level, k * 0.064)
+    return S.orb_level(g, levels[-1], 1.0)
+
+
+def _talking(word_level, room_level, blocks=60):
+    return [word_level if k % 8 < 6 else room_level for k in range(blocks)]
+
+
+def test_the_orb_moves_as_far_on_a_quiet_mic_as_on_a_loud_one():
+    """A dynamic mic speaking at about 1.5% of the fixed scale used to keep
+    the orb all but still."""
+    quiet = _orb_after(_talking(0.015, 0.0003))
+    loud = _orb_after(_talking(0.8, 0.02))
+    assert quiet > 0.9
+    assert quiet == pytest.approx(loud, abs=0.05)
+
+
+def test_the_orb_stays_still_in_a_silent_room():
+    rng = np.random.default_rng(3)
+    assert _orb_after(list(rng.uniform(0.0002, 0.0004, 60))) < 0.15
 
 
 def test_a_malformed_custom_color_falls_back_to_cyan():

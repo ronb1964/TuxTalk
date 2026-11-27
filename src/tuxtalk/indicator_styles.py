@@ -49,43 +49,33 @@ def _mix(a, b, t):
     return tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
 
 
-def orb_palette(color):
-    """Build the orb's gradient palette from a single base color.
+# The classic cyan orb's own colors: a lighter core and dots that cool from
+# near-white beside the orb to blue as they move out.
+CLASSIC_ORB = {"outer": CYAN, "inner": (0.5, 0.9, 1.0),
+               "near": (0.7, 0.95, 1.0), "far": (0.4, 0.6, 1.0)}
 
-    Mirrors the classic cyan orb's structure (white-hot core → color → dark
-    edge, particles color-graded near→far) so recoloring keeps its look and
-    only the hue changes. The classic cyan itself keeps the orb's own
-    hand-tuned draw path (see orb_palette_for).
-    """
-    white, black = (1.0, 1.0, 1.0), (0.0, 0.0, 0.0)
-    return {
-        "glow": color,
-        "core": [(0.0, white, 1.0),
-                 (0.4, _mix(color, white, 0.55), 0.9),
-                 (0.7, color, 0.6),
-                 (0.9, _mix(color, black, 0.15), 0.3),
-                 (1.0, _mix(color, black, 0.15), 0.0)],
-        "p_near": _mix(color, white, 0.5),
-        "p_far": color,
-    }
+
+def orb_palette(color):
+    """The orb's colors for a base color: the core disc and ring in it, a
+    lighter center, and dots from light near the orb to the color itself."""
+    white = (1.0, 1.0, 1.0)
+    return {"outer": color, "inner": _mix(color, white, 0.55),
+            "near": _mix(color, white, 0.5), "far": color}
 
 
 def is_cyan(rgb, tol=0.03):
     """True when a color is (within tolerance) the classic orb cyan.
 
-    Whenever the resolved color is this cyan, the orb draws its hand-tuned
-    classic path. The tolerance is needed because the classic cyan hex
-    (#4db3ff) parses a hair off the CYAN constant.
+    The tolerance is needed because the classic cyan hex (#4db3ff) parses a
+    hair off the CYAN constant.
     """
     return all(abs(rgb[i] - CYAN[i]) <= tol for i in range(3))
 
 
 def orb_palette_for(rgb):
-    """The orb palette for a resolved color, or None to draw the classic path.
-
-    None → the classic cyan orb. A dict → recolor the orb to `rgb`.
-    """
-    return None if is_cyan(rgb) else orb_palette(rgb)
+    """The orb's colors for a resolved color: the classic cyan's own, or
+    ones built from *rgb*."""
+    return CLASSIC_ORB if is_cyan(rgb) else orb_palette(rgb)
 
 
 def backing_alpha(r, core, plateau=0.42):
@@ -174,8 +164,8 @@ def draw_bars(cr, w, h, spectrum, color_rgb, sensitivity=1.0):
 # Radial geometry, as fractions of the window's shorter side / of the ring.
 RADIAL_MAX_R = 0.42      # outer reach of the ring
 RADIAL_BASE = 0.42       # resting ring, as a fraction of RADIAL_MAX_R
-RADIAL_GAIN = 2.5        # fixed boost, used only when no RadialGain is given (tests, previews)
-RADIAL_AUTO_GAIN = 0.8   # with RadialGain: a peak as loud as you've recently been ~ 85% out
+RADIAL_GAIN = 2.5        # fixed boost, used only when no LevelGain is given (tests, previews)
+RADIAL_AUTO_GAIN = 0.8   # with LevelGain: a peak as loud as you've recently been ~ 85% out
 RADIAL_BINS = 96
 # Where each time slice sits on the ring: a fixed shuffle (seed 7). A regular
 # stride looks like a star; a shuffle looks organic.
@@ -184,8 +174,9 @@ random.Random(7).shuffle(_RADIAL_SPOTS)
 RADIAL_SMOOTHING = 2     # wrap-around smoothing passes; more = rounder (3 is too round)
 
 
-class RadialGain:
-    """Follows how loud THIS microphone gets, so the radial suits any mic.
+class LevelGain:
+    """Follows how loud THIS microphone gets, so the radial and the orb suit
+    any mic.
 
     A fixed boost tuned on a loud mic barely moves on a quiet one, even at
     high sensitivity. Like the bars, this learns two levels from the audio
@@ -195,9 +186,9 @@ class RadialGain:
       ceiling - how loud you've been lately. Jumps up to any louder block and
                 halves every 3 seconds. Treated as never below 4x the noise, so
                 a silent room is not stretched into movement.
-    normalize() then maps a peak to 0..1 between the two.
+    normalize() then maps a level to 0..1 between the two.
 
-    update() runs on the audio thread and normalize() on the GTK thread; they
+    follow() runs on the audio thread and normalize() on the GTK thread; they
     share only plain floats, so no lock is needed.
     """
     NOISE_RISE_PER_SEC = 0.1
@@ -210,7 +201,11 @@ class RadialGain:
         self.peaks = []          # block peaks of the current dictation, for the log
 
     def update(self, samples, now):
-        p = float(np.max(np.abs(samples))) if len(samples) else 0.0
+        """Follow a block of raw samples by its peak (the radial)."""
+        self.follow(float(np.max(np.abs(samples))) if len(samples) else 0.0, now)
+
+    def follow(self, p, now):
+        """Follow one block's level *p*, measured at *now* (monotonic seconds)."""
         dt = 0.0 if self._last is None else max(0.0, now - self._last)
         self._last = now
         if self.noise is None or p < self.noise:
@@ -242,13 +237,19 @@ class RadialGain:
                 f"max {a[-1]:.4f}; noise {self.noise or 0:.4f}, ceiling {self.ceiling:.4f}")
 
 
+def orb_level(gain, level, sensitivity):
+    """How far (0..1) the orb's ring and dots move for *level*: scaled to this
+    mic's own range by LevelGain *gain*, then by Animation response."""
+    return min(1.0, gain.normalize(level) * sensitivity)
+
+
 def radial_offsets(samples, sensitivity, bins=RADIAL_BINS, gain=None):
     """How far (0..1) each of `bins` points around the ring pushes outward.
 
     Each slice of the sample window gives its PEAK, not a single raw sample:
     raw samples are small and swing negative half the time, which makes a
     ring jitter inward and barely move. A gentle curve
-    (power 0.7) lifts quiet speech more than loud. With a RadialGain the peak is
+    (power 0.7) lifts quiet speech more than loud. With a LevelGain the peak is
     first scaled to this mic's own range; without one a fixed boost is used.
 
     The slices are then spread around the ring out of time order (slice i goes

@@ -23,7 +23,7 @@ import time
 
 from . import indicator_styles, ui_style, x11_desktop
 from .window_geometry import main_monitor_rect, monitor_rect_at
-from .indicator_styles import RadialGain
+from .indicator_styles import LevelGain
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -169,7 +169,8 @@ class RecordingIndicator(Gtk.Window):
         self._wave_history = []          # accumulated rolling window (see set_waveform)
         self._wave_history_max = 1024    # ~23 ms at 44.1 kHz; spans the display
         self.spectrum = None   # band magnitudes for bars
-        self._radial_gain = RadialGain()   # learns this mic's range for the radial
+        self._radial_gain = LevelGain()   # learns this mic's range for the radial
+        self._orb_gain = LevelGain()      # and for the orb, from its levels
         # ((color_mode, custom_color), rgb, orb palette), worked out once
         # rather than on every frame; cleared at each show so a theme
         # accent change is picked up by the next dictation.
@@ -376,13 +377,13 @@ class RecordingIndicator(Gtk.Window):
 
     @property
     def _orb_level(self):
-        """The audio level as the orb shows it, scaled by Animation response
-        (sensitivity) as the other styles' levels are."""
-        return min(1.0, self.audio_level * self.sensitivity)
+        """The audio level as the orb shows it (indicator_styles.orb_level)."""
+        return indicator_styles.orb_level(self._orb_gain, self.audio_level, self.sensitivity)
 
     def set_audio_level(self, level: float):
         """Update the audio level for satellite animation (0.0 - 1.0)"""
         self.audio_level = max(0.0, min(1.0, level))
+        self._orb_gain.follow(self.audio_level, time.monotonic())
 
     def set_waveform(self, samples):
         """Append the latest audio block to a rolling window and expose that as
@@ -471,11 +472,7 @@ class RecordingIndicator(Gtk.Window):
         # Draw pill-shaped background container
         self.draw_pill_background(cr, orb_x, orb_y)
 
-        # Draw the animated orb. For the classic cyan the orb uses its
-        # hand-tuned gradient (palette=None); any other color recolors it via a
-        # palette that keeps the same structure and only changes the hue.
-        orb_palette = self._resolved_colors()[1]
-        self.draw_orb(cr, orb_x, orb_y, orb_palette)
+        self.draw_orb(cr, orb_x, orb_y, self._resolved_colors()[1])
 
         # Draw timer aligned with orb center (scaled position)
         elapsed = int(time.time() - self.start_time)
@@ -515,122 +512,54 @@ class RecordingIndicator(Gtk.Window):
             cr.set_line_width(2.5 * self.scale)
             cr.stroke()
 
-    def draw_orb(self, cr, x, y, palette=None):
-        """Draw the glowing orb with pulsing animation.
+    def draw_orb(self, cr, x, y, palette):
+        """Draw the orb: a solid core, a ring that widens with the voice and
+        16 dots around it, all with hard edges.
 
-        palette=None draws the classic cyan gradient. A palette (from
-        indicator_styles.orb_palette) recolors the glow, core and particles
-        while keeping the same structure.
+        Shapes that fade to transparent read as out of focus on a scaled
+        monitor, so nothing here is a gradient. *palette* holds the colors
+        (indicator_styles.orb_palette_for). At rest the core and ring pulse
+        gently; recording holds them still and the voice moves the ring and
+        dots.
         """
-        # Calculate current size based on gentle pulse (only when not recording)
-        if self.is_recording:
-            # Freeze the pulse when recording - keep orb steady
-            current_size = self.base_size
-        else:
-            # Gentle pulse animation when at rest
-            pulse_scale = 1.0 + 0.1 * math.sin(self.pulse_phase)
-            current_size = self.base_size * pulse_scale
+        level = self._orb_level if self.is_recording else 0.0
+        pulse = 1.0 if self.is_recording else 1.0 + 0.1 * math.sin(self.pulse_phase)
+        size = self.base_size * pulse
+        cr.set_source_rgba(*palette["outer"], 0.35 + 0.5 * level)
+        cr.set_line_width(1.5 * self.scale)
+        cr.arc(x, y, size * (1.05 + 0.3 * level), 0, 2 * math.pi)
+        cr.stroke()
 
-        # Outer glow layers (multiple for softer effect)
-        glow_color = palette["glow"] if palette else (0.3, 0.7, 1.0)  # Cyan
-
-        for i in range(3):
-            glow_radius = current_size * (1.5 - i * 0.15)
-            gradient = cairo.RadialGradient(x, y, current_size * 0.5, x, y, glow_radius)
-
-            alpha = 0.4 * (1.0 - i * 0.3)
-            if self.is_recording:
-                alpha *= self._orb_level
-            gradient.add_color_stop_rgba(0, glow_color[0], glow_color[1], glow_color[2], alpha)
-            gradient.add_color_stop_rgba(1, glow_color[0], glow_color[1], glow_color[2], 0)
-
-            cr.set_source(gradient)
-            cr.arc(x, y, glow_radius, 0, 2 * math.pi)
-            cr.fill()
-
-        # Core orb with soft, hazy edge
-        core_gradient = cairo.RadialGradient(x, y, 0, x, y, current_size * 1.3)
-        if palette:
-            for stop, rgb, a in palette["core"]:
-                core_gradient.add_color_stop_rgba(stop, rgb[0], rgb[1], rgb[2], a)
-        else:
-            core_gradient.add_color_stop_rgba(0, 1.0, 1.0, 1.0, 1.0)  # White center
-            core_gradient.add_color_stop_rgba(0.4, 0.5, 0.9, 1.0, 0.9)  # Light cyan
-            core_gradient.add_color_stop_rgba(0.7, 0.2, 0.6, 0.9, 0.6)  # Blue mid
-            core_gradient.add_color_stop_rgba(0.9, 0.2, 0.5, 0.8, 0.3)  # Soft edge
-            core_gradient.add_color_stop_rgba(1.0, 0.2, 0.5, 0.8, 0.0)  # Fade to transparent
-
-        cr.set_source(core_gradient)
-        cr.arc(x, y, current_size * 1.3, 0, 2 * math.pi)
+        cr.set_source_rgb(*palette["outer"])
+        cr.arc(x, y, size * 0.85, 0, 2 * math.pi)
+        cr.fill()
+        cr.set_source_rgb(*palette["inner"])
+        cr.arc(x, y, size * 0.45, 0, 2 * math.pi)
         cr.fill()
 
-        # Particles around orb - use fixed base_size, not pulsing current_size
         self.draw_particles(cr, x, y, self.base_size * 1.8, palette)
 
-    def draw_particles(self, cr, center_x, center_y, base_radius, palette=None):
-        """Draw small glowing particles that extend radially based on voice.
-
-        palette=None keeps the classic cyan→blue grading; a palette recolors
-        the near→far gradient to match a chosen orb color.
-        """
-        num_particles = 16
-
-        for i in range(num_particles):
-            # Fixed angle for each particle (evenly distributed around circle)
-            angle = i * 2 * math.pi / num_particles
-
-            # Radial distance: start touching orb, limited extension
-            # Quiet/Silence (0.0): 0.7x base radius (very close, almost touching)
-            # Loud (1.0): 1.4x base radius
-            min_distance = 0.7
-            max_distance = 1.4
-
+    def draw_particles(self, cr, center_x, center_y, base_radius, palette):
+        """Draw the 16 dots around the orb: touching it in silence, out to
+        0.88 x *base_radius* at full voice, still inside the pill, shading
+        from light near the orb to the orb's color far from it. At rest each
+        pulses a little, out of step with the next."""
+        level = self._orb_level if self.is_recording else 0.0
+        near, far = palette["near"], palette["far"]
+        rgb = tuple(n + (f - n) * level for n, f in zip(near, far, strict=True))
+        cr.set_source_rgba(*rgb, 0.7 + 0.3 * level)
+        distance = base_radius * (0.7 + 0.18 * level)
+        for i in range(16):
+            angle = i * 2 * math.pi / 16
             if self.is_recording:
-                # Move radially based on audio level
-                particle_radial_extend = self._orb_level
+                radius = (1.6 + 0.8 * level) * self.scale
             else:
-                # Stay at rest position
-                particle_radial_extend = 0.0
-
-            spread = max_distance - min_distance
-            radial_distance = base_radius * (min_distance + spread * particle_radial_extend)
-
-            # Particle position along the radial line
-            px = center_x + radial_distance * math.cos(angle)
-            py = center_y + radial_distance * math.sin(angle)
-
-            # Particle size: subtle pulse at rest, or responds to voice when active
-            if self.is_recording:
-                # Size varies with voice level
-                particle_size = 4 + (self._orb_level * 2)
-            else:
-                # Subtle individual pulse at rest (each particle slightly offset)
-                individual_offset = i * 0.4  # Stagger the pulse per particle
-                pulse = 1.0 + 0.15 * math.sin(self.particle_pulse_phase + individual_offset)
-                particle_size = 4 * pulse
-
-            # Color shifts based on distance from orb: near→far grading.
-            distance_factor = (radial_distance / base_radius - min_distance) / spread
-            if palette:
-                near, far = palette["p_near"], palette["p_far"]
-                r = near[0] + (far[0] - near[0]) * distance_factor
-                g = near[1] + (far[1] - near[1]) * distance_factor
-                b = near[2] + (far[2] - near[2]) * distance_factor
-            else:
-                # Classic: warm cyan/white (0.7,0.95,1.0) → cooler blue (0.4,0.6,1.0)
-                r = 0.7 - (distance_factor * 0.3)
-                g = 0.95 - (distance_factor * 0.35)
-                b = 1.0
-
-            # Particle glow (brighter when more energetic)
-            alpha = 0.6 + (self._orb_level * 0.3) if self.is_recording else 0.6
-            particle_gradient = cairo.RadialGradient(px, py, 0, px, py, particle_size * 1.5)
-            particle_gradient.add_color_stop_rgba(0, r, g, b, alpha)
-            particle_gradient.add_color_stop_rgba(1, r * 0.7, g * 0.7, b * 0.7, 0)
-
-            cr.set_source(particle_gradient)
-            cr.arc(px, py, particle_size * 1.5, 0, 2 * math.pi)
-            cr.fill()
+                pulse = 1.0 + 0.15 * math.sin(self.particle_pulse_phase + i * 0.4)
+                radius = 1.6 * self.scale * pulse
+            cr.new_sub_path()
+            cr.arc(center_x + distance * math.cos(angle), center_y + distance * math.sin(angle),
+                   radius, 0, 2 * math.pi)
+        cr.fill()
 
     def draw_timer(self, cr, x, y, seconds):
         """Draw the timer text centered vertically with orb"""
