@@ -125,6 +125,48 @@ def test_on_gnome_the_paste_key_waits_for_wl_copys_window_to_give_the_focus_back
     assert (("wait", keyboard_output.WL_COPY_FOCUS_BACK_S) in before_key) is gnome
 
 
+def _no_wl_copy(*_args, **_kwargs):
+    raise AssertionError("wl-copy was started")
+
+
+def test_on_gnome_the_extension_sets_the_clipboard_so_no_window_flashes(
+        monkeypatch, wayland, keyboard, gnome, fake_extension):
+    """wl-copy's window took the focus for a moment at every paste: a flash on
+    the screen, and a wait before the paste key for the focus to come back."""
+    steps = []
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", _no_wl_copy)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.gnome.TextEditor")
+    monkeypatch.setattr("time.sleep", lambda s: steps.append(("wait", s)))
+    monkeypatch.setattr(keyboard_output, "send_paste_keystroke",
+                        lambda *a: steps.append(("key",)) or True)
+    assert keyboard_output.paste_text("hello")
+    assert fake_extension.clipboard == "hello"
+    assert steps[0] == ("key",)
+
+
+def test_in_an_unknown_window_the_extension_sets_the_primary_selection_too(
+        monkeypatch, wayland, keyboard, gnome, fake_extension):
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", _no_wl_copy)
+    monkeypatch.setattr(keyboard_output.subprocess, "run", _no_wl_copy)
+    assert keyboard_output.paste_text("hello")
+    assert (fake_extension.clipboard, fake_extension.primary) == ("hello", "hello")
+
+
+def test_an_extension_from_before_set_clipboard_leaves_it_to_wl_copy(monkeypatch, wayland, keyboard,
+                                                                     gnome):
+    """GNOME Shell keeps the old extension until the user logs out after an update."""
+    from desktop_fakes import FakeShell
+    shell = FakeShell(extension="old")
+    proc = FakePopen(returncode=0)
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: proc)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.gnome.TextEditor")
+    try:
+        assert keyboard_output.paste_text("hello")
+    finally:
+        shell.stop()
+    assert proc.written == b"hello"
+
+
 def test_paste_waits_for_wl_copy_to_set_the_clipboard(monkeypatch, wayland, keyboard):
     """The wl-copy we start exits once the clipboard is set. One still running
     has not got that far, so Ctrl+V would paste the old clipboard contents,

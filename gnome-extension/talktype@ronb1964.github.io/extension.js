@@ -117,6 +117,10 @@ const AppFocusIface = `
       <arg type="i" direction="in" name="number"/>
       <arg type="s" direction="out" name="answer"/>
     </method>
+    <method name="SetClipboard">
+      <arg type="s" direction="in" name="text"/>
+      <arg type="b" direction="in" name="primary"/>
+    </method>
   </interface>
 </node>`;
 const APP_FOCUS_PATH = '/io/github/ronb1964/TuxTalk/Extension';
@@ -308,6 +312,15 @@ const FRONT_WINDOW_COMMANDS = {
 };
 
 const AppFocus = {
+    // Put the dictation *text* on the clipboard, or with *primary* on the
+    // primary selection, for TuxTalk's paste key (keyboard_output.paste_text).
+    // wl-copy can only set it on GNOME from a window of its own, which takes
+    // the focus for a moment and flashes on the screen at every paste.
+    SetClipboard(text, primary) {
+        St.Clipboard.get_default().set_text(
+            primary ? St.ClipboardType.PRIMARY : St.ClipboardType.CLIPBOARD, text);
+    },
+
     // Bring forward the window of the menu entry *appId* ("firefox.desktop")
     // used last, as clicking it in the dash does. False when it has none
     // (not running, or only in the background): TuxTalk then starts it.

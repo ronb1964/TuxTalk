@@ -17,6 +17,7 @@ export const shell = {
                             // (methods: name -> its in-args' types)
     statusArea: {},
     clipboard: null,
+    primary: null,          // the primary selection's text
     exported: [],           // {xml, object, path, bus} per object put on D-Bus;
                             // path is null once it's taken off again
     apps: new Map(),        // menu entry id -> its windows, the most recently used first
@@ -156,9 +157,11 @@ class DrawingArea extends Actor {
 export const St = {
     DrawingArea,
     Icon: Actor,
-    ClipboardType: {CLIPBOARD: 0},
+    ClipboardType: {CLIPBOARD: 0, PRIMARY: 1},
     Clipboard: {
-        get_default: () => ({set_text: (_type, text) => (shell.clipboard = text)}),
+        get_default: () => ({
+            set_text: (type, text) => (type === 1 ? (shell.primary = text) : (shell.clipboard = text)),
+        }),
     },
 };
 
