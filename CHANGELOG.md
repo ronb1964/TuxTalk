@@ -7,7 +7,9 @@ before 0.15.0, so older entries use that name.
 
 - Type at pause gets each phrase in sooner: the space or mark between two
   phrases is typed now, not pasted, which took a third of a second on its
-  own before the phrase itself could go in. When you pressed Enter right
+  own before the phrase itself could go in (with Text Injection on Auto,
+  the default; with an input method such as IBus or fcitx5 it's still
+  pasted, so a typed "." can't turn into "。"). When you pressed Enter right
   after you finished talking, the last phrase could arrive too late for
   the message. Thanks to Bernát Gábor (#55).
 

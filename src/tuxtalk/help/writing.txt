@@ -187,7 +187,7 @@ With voice commands in German, the German ones are done exactly too:
   • <b>alles in Großbuchstaben</b>  •  <b>alles in Kleinbuchstaben</b>
   • <b>die Kommas entfernen</b>  •  <b>das Wort ... entfernen</b>
   • <b>als Aufzählung</b>  •  <b>das einrücken</b>  •  <b>das löschen</b>
-  • <b>fett machen</b>  •  <b>kursiv machen</b>
+<b>fett machen</b> and <b>kursiv machen</b> press the app's Ctrl+B and Ctrl+I, as in English.
 Asked to change the font, the size of the lettering or the color, or to center or
 strike through (<b>mach das rot</b>, <b>die Schriftart ändern</b>, <b>das zentrieren</b>),
 TuxTalk says it can't, as in English.
@@ -209,7 +209,7 @@ other word processors, and TuxTalk presses the app's own Ctrl+B, Ctrl+I or
 Ctrl+U for you.
 
 Plain-text apps like KWrite and Kate have no formatting to apply. Font, size and color
-can't be changed by voice.
+can't be changed by voice, nor can text be centered or struck through.
 
 ### What it's good at, and what it isn't
   • Quick, clear changes to your own text work best: tone, length, grammar, lists.

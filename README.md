@@ -425,7 +425,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Swiss German spelling.** Types ss instead of ß, on by itself when your system is set to Swiss German.
 - **Tells you why when it can't type.** If a dictation can't be typed into the window, TuxTalk says why and what fixes it.
 - **Private.** Everything runs on your computer, and what you dictate is never written to a log unless you turn that on for troubleshooting. Keystroke Typing (No Clipboard) keeps it off the clipboard too.
-- **GNOME extension.** A native panel menu on GNOME that also draws the recording indicator, sharp on a scaled screen, and a tray icon everywhere else.
+- **GNOME extension.** A native panel menu on GNOME that also draws the recording indicator, sharp on a scaled screen, and sets the clipboard itself, so pasting doesn't flash a window. A tray icon everywhere else.
 - **Updates the right way.** Through your package manager for the .deb and .rpm, in place for the AppImage, or through your AUR helper on Arch.
 
 ---

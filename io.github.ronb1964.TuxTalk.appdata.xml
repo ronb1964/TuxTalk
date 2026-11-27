@@ -100,14 +100,14 @@
         <p>A tone word, a better AI, and Help that shows what you get</p>
         <ul>
           <li>End a dictation with "make that formal" (or professional, friendlier, casual, polite) and it's typed already rewritten (TuxTalk Labs, with voice editing on). A rewrite is never sent automatically, and one that changes a number or drops a "not" isn't used</li>
-          <li>Self-corrections, voice editing and the tone word use a better AI, Qwen3.5-4B, which changes the meaning far less often. It's a 2.7 GB download, and TuxTalk asks once whether to get it</li>
+          <li>Self-corrections, voice editing and the tone word use a better AI, Qwen3.5-4B, which changes the meaning far less often. It's a 2.7 GB download; if you had the AI on, TuxTalk asks once whether to get it</li>
           <li>Keystroke Typing (No Clipboard), a new Text Injection choice, types your words without ever putting them on the clipboard. Thanks to Christian Reiß</li>
           <li>Nearly every command in the Voice Commands list can be said in German, and the list says which stay English</li>
           <li>Voice editing works on X11 desktops like Xfce and Cinnamon too, and an X11 desktop started with startx is recognized as one</li>
           <li>Help shows what to say and what you get, each example checked against what TuxTalk really types, and its search finds everything Help shows</li>
           <li>A spoken comma before a pause isn't lost, and a greeting keeps its comma before a new line</li>
           <li>A second recording orb, the Crisp orb, sharp on a scaled screen, and both orbs follow a quiet microphone. Thanks to Bernát Gábor</li>
-          <li>On GNOME, pasting no longer flashes a window, except while a clipboard history that skips marked text is running (GPaste, CopyQ, a clipboard extension), which keeps your dictations out of it. Thanks to Bernát Gábor</li>
+          <li>On GNOME, pasting no longer flashes a window, except while a clipboard history that skips marked text is running (GPaste, CopyQ, a clipboard extension), which keeps your dictations out of it, or with Put back what I'd copied on. Thanks to Bernát Gábor</li>
           <li>Type at pause gets each phrase in sooner, so the last one is in before you press Enter. Thanks to Bernát Gábor</li>
         </ul>
       </description>

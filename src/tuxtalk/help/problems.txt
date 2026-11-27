@@ -28,6 +28,16 @@ installed), TuxTalk can't tell which app you're in, and a dictation over selecte
 text can go in beside it. Delete the selection first; voice editing replaces it as it
 should.
 
+### A window flashes at each paste (GNOME)
+On GNOME, TuxTalk's extension puts each dictation on the clipboard without a window.
+It's set the old way, from a window that flashes for a moment, while:
+  • a clipboard history that skips marked text runs (GPaste, CopyQ, a clipboard
+    extension such as Pano or Clipboard History), so your dictations stay out of it
+  • <b>Put back what I'd copied</b> is on (Preferences → Advanced → Fine-tuning)
+  • the extension has just updated: log out and back in once
+To type instead, with no clipboard and no flash, pick <b>Keystroke Typing (No
+Clipboard)</b> in Preferences → Advanced → Fine-tuning → Text Injection.
+
 ### Letters come out wrong
   • Capitals and small letters swapped ("hELLO"): Caps Lock is on. TuxTalk can't
     see it, so turn it off before dictating.

@@ -318,8 +318,10 @@ class AdvancedTab(Tab):
                 "Leave it off if you like to re-paste a dictation that went into the wrong "
                 "window.\n"
                 "Recent Dictations in the tray menu keeps your last 20 either way.\n\n"
-                "Dictations are marked to stay out of clipboard history, which KDE's Klipper\n"
-                "honours (on Wayland that needs wl-clipboard 2.3 or newer).")
+                "Dictations are marked to stay out of clipboard history, which Klipper, GPaste,\n"
+                "CopyQ and most GNOME clipboard extensions honour (on Wayland that needs\n"
+                "wl-clipboard 2.3 or newer). On GNOME, with this on, a window flashes at\n"
+                "each paste.")
             fine.attach(restore_check, 0, frow, 2, 1)
             frow += 1
         return frow

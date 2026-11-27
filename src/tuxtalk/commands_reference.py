@@ -70,13 +70,16 @@ def _inline(*said, result, note="", german=(), german_result=""):
     return Command(said, result, "inline", note, german, german_result)
 
 
-def _literal(word, result, *said, german=""):
+def _literal(word, result, *said, german="", german_not=""):
     """The command that types *word* itself; *said* adds other ways to say
-    it, and *german* names the German word that "wörtlich" types. With
-    German on the row shows both: the English ways still type *word*."""
+    it, and *german* names the German word that "wörtlich" types, instead
+    of *german_not* where the German command does something else than
+    *result*. With German on the row shows both: the English ways still
+    type *word*."""
+    instead = german_not or result
     return Command((f"literal {word}", *said), f'"{word}" (not {result})', "literal",
                    german=(f"wörtlich {german}", f"das Wort {german}") if german else (),
-                   german_result=(f'"{german}" (not {result}); the English ways type "{word}"'
+                   german_result=(f'"{german}" (not {instead}); the English ways type "{word}"'
                                   if german else ""))
 
 
@@ -158,7 +161,8 @@ SECTIONS = (
             commands=(
                 _literal("period", ".", "the word period", german="Punkt"),
                 _literal("comma", ",", "the word comma", german="Komma"),
-                _literal("press tab", "a tab character", german="Tab drücken"),
+                _literal("press tab", "a tab character", german="Tab drücken",
+                         german_not="the Tab key"),
                 _literal("new line", "a line break", "the word new line", german="neue Zeile"),
                 _literal("question mark", "?", german="Fragezeichen"),
                 _literal("exclamation point", "!", german="Ausrufezeichen"),
