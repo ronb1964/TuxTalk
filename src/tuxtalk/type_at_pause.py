@@ -18,6 +18,7 @@ from . import (
     dictation_worker,
     engine,
     focused_window,
+    keyboard_layout,
     keyboard_output,
     last_dictation,
     notices,
@@ -243,9 +244,12 @@ def _type_boundary(message, pending: dict, tail: str, injection_mode: str) -> No
     # Only into the phrase's window: the context pass before this can take a while.
     # A failure here costs only the mark or space: the phrase that follows,
     # not yet in Recent Dictations, must still be typed and kept.
-    # Auto mode types it: a key or two take milliseconds where a paste takes
-    # a third of a second, and the phrase that follows waits for them.
-    mode = "type" if injection_mode.lower() == "auto" else injection_mode
+    # Auto mode types it: a key or two take milliseconds where a paste can
+    # take a third of a second (wl-copy's window on GNOME), and the phrase
+    # that follows waits for them. Not through an input method, which could
+    # turn a "." into "。": pasted, it goes past one.
+    typed = injection_mode.lower() == "auto" and not keyboard_layout.input_method_in_use()
+    mode = "type" if typed else injection_mode
     try:
         outcome = delivery.inject_text(tail, mode, into=pending["where"], message=message)
     except Exception as e:      # a bug in delivery: the next phrase goes on

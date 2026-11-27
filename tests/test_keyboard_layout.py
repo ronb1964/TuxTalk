@@ -420,6 +420,24 @@ def test_gnome_reports_the_active_layout(monkeypatch, mru, sources, options, exp
     assert kl.active_layout() == expected
 
 
+@pytest.mark.parametrize(("desktop", "mru", "fcitx5", "expected"), [
+    ("gnome", "[('ibus', 'libpinyin'), ('xkb', 'us')]", False, True),
+    ("gnome", "[('xkb', 'us'), ('ibus', 'libpinyin')]", False, False),
+    ("gnome", "@a(ss) []", False, False),
+    ("kde", None, True, True),
+    ("kde", None, False, False),
+], ids=["GNOME on Pinyin", "GNOME on a keyboard layout", "GNOME with no sources",
+        "fcitx5 running", "no input method"])
+def test_an_input_method_in_use_is_noticed(monkeypatch, desktop, mru, fcitx5, expected):
+    """A mark typed through an input method can come out changed ("." as
+    "。"), so Type at pause pastes it then."""
+    values = {"mru-sources": mru, "sources": "@a(ss) []"}
+    monkeypatch.setattr(kl, "_gsettings", lambda key: values[key])
+    monkeypatch.setattr(kl, "_desktop", lambda: desktop)
+    monkeypatch.setattr(kl.running_programs, "is_running", lambda name: fcitx5 and name == "fcitx5")
+    assert kl.input_method_in_use() is expected
+
+
 def _cosmic(monkeypatch, tmp_path, xkb_config=None):
     """A COSMIC session; *xkb_config* is what COSMIC Settings saved, if anything."""
     monkeypatch.setattr(kl, "_desktop", lambda: "cosmic")

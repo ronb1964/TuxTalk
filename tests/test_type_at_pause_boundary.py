@@ -21,14 +21,18 @@ def modes(monkeypatch):
     return texts, sent
 
 
-@pytest.mark.parametrize(("mode", "boundary"), [
-    pytest.param("auto", "type", id="auto-types-it"),
-    pytest.param("paste", "paste", id="paste-chosen"),
-    pytest.param("type", "type", id="type-chosen"),
+@pytest.mark.parametrize(("mode", "input_method", "boundary"), [
+    pytest.param("auto", False, "type", id="auto-types-it"),
+    pytest.param("auto", True, "auto", id="auto-pastes-it-past-an-input-method"),
+    pytest.param("paste", False, "paste", id="paste-chosen"),
+    pytest.param("type", False, "type", id="type-chosen"),
 ])
-def test_the_space_between_phrases_is_typed_unless_paste_was_chosen(modes, mode, boundary):
+def test_the_space_between_phrases_is_typed_unless_paste_was_chosen(
+        modes, monkeypatch, mode, input_method, boundary):
     """Each paste took 0.3 s on GNOME: pasted in auto mode, the space held the
-    last phrase back long enough for the user to press Enter before it arrived."""
+    last phrase back long enough for the user to press Enter before it arrived.
+    Through an input method a typed mark can come out changed, so not there."""
+    monkeypatch.setattr("tuxtalk.keyboard_layout.input_method_in_use", lambda: input_method)
     texts, sent = modes
     texts.extend(["see you at noon", "bring snacks", "see you at noon bring snacks"])
     type_chunk(frames_of(speech(1.0)), "middle", injection_mode=mode)

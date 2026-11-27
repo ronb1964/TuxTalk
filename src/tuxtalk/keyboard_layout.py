@@ -52,7 +52,7 @@ import shutil
 import subprocess
 import unicodedata
 
-from . import compositor_ipc, desktop_detect
+from . import compositor_ipc, desktop_detect, running_programs
 from .key_commands import US_LETTER_KEYS
 from .logger import FailureNotes, setup_logger
 
@@ -416,21 +416,45 @@ def _gsettings(key):
                           check=True).stdout
 
 
-def _gnome_layout():
-    """GNOME's current (layout, variant, options), or None for an input method."""
+def _gnome_source():
+    """GNOME's current input source, (kind, name) such as ("xkb", "de+nodeadkeys")
+    or ("ibus", "libpinyin"), or None when it has none set."""
     for key in ("mru-sources", "sources"):
         found = re.findall(r"\('(\w+)',\s*'([^']*)'\)", _gsettings(key))
         if found:
-            kind, name = found[0]
-            if kind != "xkb":
-                return None     # an input method (IBus); its layout isn't knowable here
-            layout, _, variant = name.partition("+")
-            # A list like "['lv3:ralt_switch', 'compose:rctrl']", or "@as []",
-            # which GNOME Shell passes on as "" (keyboardManager.js).
-            options = _options_or_defaults(lambda: ",".join(
-                re.findall(r"'([^']*)'", _gsettings("xkb-options"))))
-            return layout, variant, options
+            return found[0]
     return None
+
+
+def _gnome_layout():
+    """GNOME's current (layout, variant, options), or None for an input method."""
+    source = _gnome_source()
+    if source is None:
+        return None
+    kind, name = source
+    if kind != "xkb":
+        return None     # an input method (IBus); its layout isn't knowable here
+    layout, _, variant = name.partition("+")
+    # A list like "['lv3:ralt_switch', 'compose:rctrl']", or "@as []",
+    # which GNOME Shell passes on as "" (keyboardManager.js).
+    options = _options_or_defaults(lambda: ",".join(
+        re.findall(r"'([^']*)'", _gsettings("xkb-options"))))
+    return layout, variant, options
+
+
+def input_method_in_use() -> bool:
+    """Whether keys typed now may go through an input method, which can turn
+    a typed "." into "。" or take a space for its own use: GNOME's current
+    input source is one (IBus), or fcitx5 runs. True when GNOME can't say."""
+    if _desktop() == "gnome":
+        try:
+            source = _gnome_source()
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.info(f"Could not read GNOME's input source: {e}")
+            return True
+        if source and source[0] != "xkb":
+            return True
+    return running_programs.is_running("fcitx5")
 
 
 def _cosmic_xkb_config():
