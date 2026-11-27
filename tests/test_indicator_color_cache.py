@@ -16,6 +16,7 @@ class _Ind:
 
     def __init__(self, mode, color):
         self.color_mode, self.custom_color = mode, color
+        self.style = "orb"
         self._color_cache = None
 
 
@@ -33,7 +34,7 @@ def test_a_custom_color_never_looks_up_the_accent(accent_lookups):
         ind._resolved_color()
     assert accent_lookups == []
     assert ind._resolved_colors() == (S.resolve_color("custom", "#ff8000", None),
-                                      S.orb_palette_for(S.resolve_color("custom", "#ff8000", None)))
+                                      S.orb_palette_for("orb", S.resolve_color("custom", "#ff8000", None)))
 
 
 def test_the_system_accent_is_looked_up_once(accent_lookups):

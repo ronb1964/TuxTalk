@@ -18,7 +18,8 @@ def test_new_indicator_fields_have_approved_defaults():
 
 
 def test_valid_sets_exist():
-    assert settings_schema.VALID_INDICATOR_STYLES == {"orb", "waveform", "bars", "radial"}
+    assert settings_schema.VALID_INDICATOR_STYLES == {"orb", "crisp_orb", "waveform", "bars",
+                                                      "radial"}
     # There are two choices: match the desktop accent, or pick a color.
     assert settings_schema.VALID_COLOR_MODES == {"system", "custom"}
 

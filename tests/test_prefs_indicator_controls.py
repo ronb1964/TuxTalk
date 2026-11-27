@@ -140,7 +140,7 @@ def test_uses_american_spelling_for_color(window):
 
 
 def test_style_options_present(window):
-    assert combo_ids(_combo(window, "orb")) == ["orb", "waveform", "bars", "radial"]
+    assert combo_ids(_combo(window, "orb")) == ["orb", "crisp_orb", "waveform", "bars", "radial"]
 
 
 def _offset_box(window, hint):

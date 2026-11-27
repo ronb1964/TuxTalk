@@ -11,8 +11,8 @@ from .prefs_tab import Tab, dropdown, fold, tip_label
 from .settings_schema import CLASSIC_CYAN_HEX
 
 _SIZES = (("small", "Small (60%)"), ("medium", "Medium (100%)"), ("large", "Large (140%)"))
-_STYLES = (("orb", "Orb"), ("waveform", "Waveform"), ("bars", "Frequency bars"),
-           ("radial", "Radial"))
+_STYLES = (("orb", "Glowing orb"), ("crisp_orb", "Crisp orb"), ("waveform", "Waveform"),
+           ("bars", "Frequency bars"), ("radial", "Radial"))
 _POSITIONS = (("center", "Center"), ("top-left", "Top Left"), ("top-center", "Top Center"),
               ("top-right", "Top Right"), ("bottom-left", "Bottom Left"),
               ("bottom-center", "Bottom Center"), ("bottom-right", "Bottom Right"),
@@ -197,8 +197,8 @@ class IndicatorSettings(Tab):
             self._suppress_color_popup = False
 
     def _reset_color_to_classic(self, _button):
-        """Back to TuxTalk's classic cyan. With that color the orb keeps its
-        classic colors, the look it has out of the box."""
+        """Back to TuxTalk's classic cyan. With that color the glowing orb
+        draws its original hand-tuned gradient, the look it has out of the box."""
         self.update_config("indicator_color", CLASSIC_CYAN_HEX)
         self._set_color_mode_silently("custom")
         self.update_config("indicator_color_mode", "custom")

@@ -120,17 +120,29 @@ function mix(a, b, t) {
     return a.map((v, i) => v + (b[i] - v) * t);
 }
 
-// The classic cyan orb's own colors (indicator_styles.CLASSIC_ORB).
-const CLASSIC_ORB = {
+// The classic cyan crisp orb's own colors (indicator_styles.CLASSIC_CRISP_ORB).
+const CLASSIC_CRISP_ORB = {
     outer: CYAN, inner: [0.5, 0.9, 1.0], near: [0.7, 0.95, 1.0], far: [0.4, 0.6, 1.0],
 };
 
-// indicator_styles.orb_palette_for.
-function orbPalette(rgb) {
-    if (rgb.every((v, i) => Math.abs(v - CYAN[i]) <= 0.03))
-        return CLASSIC_ORB;
+// indicator_styles.orb_palette_for: the glowing orb keeps its hand-tuned
+// gradient for the classic cyan (null), the crisp one its classic colors.
+function orbPalette(rgb, crisp) {
+    const cyan = rgb.every((v, i) => Math.abs(v - CYAN[i]) <= 0.03);
     const white = [1, 1, 1];
-    return {outer: rgb, inner: mix(rgb, white, 0.55), near: mix(rgb, white, 0.5), far: rgb};
+    if (crisp)
+        return cyan ? CLASSIC_CRISP_ORB
+            : {outer: rgb, inner: mix(rgb, white, 0.55), near: mix(rgb, white, 0.5), far: rgb};
+    if (cyan)
+        return null;
+    const edge = mix(rgb, [0, 0, 0], 0.15);
+    return {
+        glow: rgb,
+        core: [[0.0, white, 1.0], [0.4, mix(rgb, white, 0.55), 0.9], [0.7, rgb, 0.6],
+            [0.9, edge, 0.3], [1.0, edge, 0.0]],
+        near: mix(rgb, white, 0.5),
+        far: rgb,
+    };
 }
 
 function foreground(rgb, intensity, alpha = null) {
@@ -206,6 +218,7 @@ export class ShellIndicator {
         const scale = value('scale') ?? 1.0;
         const position = value('position') ?? 'center';
         const style = value('style') ?? 'orb';
+        const crisp = value('crisp') ?? false;
         const follow = value('follow') ?? false;
         const offsetX = value('offset_x') ?? 0;
         const offsetY = value('offset_y') ?? 0;
@@ -214,11 +227,13 @@ export class ShellIndicator {
             !Number.isFinite(scale) || scale < 0.5 || scale > 2 ||
             typeof position !== 'string' || position.length > 32 ||
             !['orb', 'waveform', 'bars', 'radial'].includes(style) || typeof follow !== 'boolean' ||
+            typeof crisp !== 'boolean' ||
             !Number.isInteger(offsetX) || Math.abs(offsetX) > 10000 ||
             !Number.isInteger(offsetY) || Math.abs(offsetY) > 10000)
             throw new Error('Invalid indicator settings');
         this._settings = {
             style,
+            crisp,
             rgb,
             scale,
             position: position.toLowerCase(),
@@ -226,7 +241,7 @@ export class ShellIndicator {
             offsetX,
             offsetY,
         };
-        this._palette = orbPalette(this._settings.rgb);
+        this._palette = orbPalette(this._settings.rgb, crisp);
         this._recording = false;
         this._level = 0;
         this._values = [];
@@ -458,15 +473,70 @@ export class ShellIndicator {
         } else {
             cr.fill();
         }
-        this._drawOrbCore(cr, x, y, 15 * scale);
-        this._drawParticles(cr, x, y, 15 * scale * 1.8);
+        if (this._settings.crisp) {
+            this._drawCrispOrbCore(cr, x, y, 15 * scale);
+            this._drawCrispParticles(cr, x, y, 15 * scale * 1.8);
+        } else {
+            this._drawGlowOrbCore(cr, x, y, 15 * scale);
+            this._drawGlowParticles(cr, x, y, 15 * scale * 1.8);
+        }
         const elapsed = Math.floor((GLib.get_monotonic_time() - this._startTime) / 1e6);
         this._drawTimer(cr, x + 32 * scale, y, elapsed);
     }
 
-    // RecordingIndicator.draw_orb: solid shapes only, since a gradient that
-    // fades to transparent reads as out of focus on a scaled monitor.
-    _drawOrbCore(cr, x, y, baseSize) {
+    // RecordingIndicator._draw_glow_orb.
+    _drawGlowOrbCore(cr, x, y, baseSize) {
+        const palette = this._palette;
+        const size = this._recording ? baseSize : baseSize * (1 + 0.1 * Math.sin(this._pulse));
+        const glow = palette ? palette.glow : CYAN;
+        for (let i = 0; i < 3; i++) {
+            const radius = size * (1.5 - i * 0.15);
+            const strength = this._recording ? this._level : 1;
+            const gradient = new Cairo.RadialGradient(x, y, size * 0.5, x, y, radius);
+            gradient.addColorStopRGBA(0, ...glow, 0.4 * strength * (1 - i * 0.3));
+            gradient.addColorStopRGBA(1, ...glow, 0);
+            cr.setSource(gradient);
+            cr.arc(x, y, radius, 0, 2 * Math.PI);
+            cr.fill();
+        }
+        const core = new Cairo.RadialGradient(x, y, 0, x, y, size * 1.3);
+        const stops = palette ? palette.core : [[0, [1, 1, 1], 1], [0.4, [0.5, 0.9, 1], 0.9],
+            [0.7, [0.2, 0.6, 0.9], 0.6], [0.9, [0.2, 0.5, 0.8], 0.3], [1, [0.2, 0.5, 0.8], 0]];
+        for (const [stop, color, alpha] of stops)
+            core.addColorStopRGBA(stop, ...color, alpha);
+        cr.setSource(core);
+        cr.arc(x, y, size * 1.3, 0, 2 * Math.PI);
+        cr.fill();
+    }
+
+    // RecordingIndicator._draw_glow_particles.
+    _drawGlowParticles(cr, cx, cy, baseRadius) {
+        const palette = this._palette;
+        const extend = this._recording ? this._level : 0;
+        const distance = 0.7 + 0.7 * extend;
+        const [r, g, b] = palette
+            ? mix(palette.near, palette.far, extend)
+            : mix([0.7, 0.95, 1.0], [0.4, 0.6, 1.0], extend);
+        const alpha = this._recording ? 0.6 + this._level * 0.3 : 0.6;
+        for (let i = 0; i < 16; i++) {
+            const angle = i * 2 * Math.PI / 16;
+            const px = cx + baseRadius * distance * Math.cos(angle);
+            const py = cy + baseRadius * distance * Math.sin(angle);
+            const size = this._recording
+                ? 4 + this._level * 2
+                : 4 * (1 + 0.15 * Math.sin(this._particlePulse + i * 0.4));
+            const gradient = new Cairo.RadialGradient(px, py, 0, px, py, size * 1.5);
+            gradient.addColorStopRGBA(0, r, g, b, alpha);
+            gradient.addColorStopRGBA(1, r * 0.7, g * 0.7, b * 0.7, 0);
+            cr.setSource(gradient);
+            cr.arc(px, py, size * 1.5, 0, 2 * Math.PI);
+            cr.fill();
+        }
+    }
+
+    // RecordingIndicator._draw_crisp_orb: solid shapes only, since a gradient
+    // that fades to transparent reads as out of focus on a scaled monitor.
+    _drawCrispOrbCore(cr, x, y, baseSize) {
         const palette = this._palette;
         const level = this._recording ? this._level : 0;
         const size = this._recording ? baseSize : baseSize * (1 + 0.1 * Math.sin(this._pulse));
@@ -482,8 +552,8 @@ export class ShellIndicator {
         cr.fill();
     }
 
-    // RecordingIndicator.draw_particles.
-    _drawParticles(cr, cx, cy, baseRadius) {
+    // RecordingIndicator._draw_crisp_particles.
+    _drawCrispParticles(cr, cx, cy, baseRadius) {
         const palette = this._palette;
         const scale = this._settings.scale;
         const level = this._recording ? this._level : 0;

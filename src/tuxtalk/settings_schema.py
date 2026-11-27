@@ -76,14 +76,15 @@ VALID_INDICATOR_POSITIONS = {
 }
 
 VALID_INDICATOR_SIZES = {"small", "medium", "large"}
-VALID_INDICATOR_STYLES = {"orb", "waveform", "bars", "radial"}
+VALID_INDICATOR_STYLES = {"orb", "crisp_orb", "waveform", "bars", "radial"}
 # Match the desktop accent, or pick a color. An older config's "cyan" mode is
 # migrated to custom + CLASSIC_CYAN_HEX on load (see _migrate_settings).
 VALID_COLOR_MODES = {"system", "custom"}
 
 # The classic cyan the orb has always drawn, as a hex color: the orb's own blue
-# (0.30, 0.70, 1.0), so when it is the chosen custom color the orb keeps its
-# classic colors (indicator_styles.CLASSIC_ORB). It also seeds the first swatch
+# (0.30, 0.70, 1.0), so when it is the chosen custom color the glowing orb draws
+# its original hand-tuned gradient and the crisp one its classic colors
+# (indicator_styles.orb_palette_for). It also seeds the first swatch
 # in the color picker so the classic color is always one click away.
 CLASSIC_CYAN_HEX = "#4db3ff"
 
@@ -153,7 +154,7 @@ class Settings:
     # custom Y offset from position anchor (pixels, can be negative)
     indicator_offset_y: int = 0
     indicator_size: str = "medium"      # indicator size: small, medium, large
-    indicator_style: str = "orb"        # orb / waveform / bars / radial
+    indicator_style: str = "orb"        # orb (glowing) / crisp_orb / waveform / bars / radial
     indicator_color_mode: str = "custom"  # system / custom (governs every style)
     indicator_color: str = CLASSIC_CYAN_HEX  # the chosen color; defaults to classic cyan
     indicator_sensitivity: float = 1.0  # scales how strongly audio drives the animation (0.5-2.0)

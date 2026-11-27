@@ -43,16 +43,27 @@ def test_is_cyan_matches_the_classic_color_and_its_hex():
     assert not S.is_cyan((0.2, 0.4, 0.26))   # a green accent
 
 
-def test_the_classic_cyan_orb_keeps_its_own_colors():
-    assert S.orb_palette_for(S.resolve_color("custom", "#4db3ff", (0, 0, 0))) is S.CLASSIC_ORB
+def test_the_classic_cyan_orbs_keep_their_own_colors():
+    """The glowing orb draws its hand-tuned gradient (no palette), the crisp
+    one its classic colors."""
+    cyan = S.resolve_color("custom", "#4db3ff", (0, 0, 0))
+    assert S.orb_palette_for("orb", cyan) is None
+    assert S.orb_palette_for("crisp_orb", cyan) is S.CLASSIC_CRISP_ORB
 
 
-def test_another_color_recolors_the_whole_orb():
+def test_another_color_recolors_the_whole_crisp_orb():
     red = (0.9, 0.2, 0.2)
-    pal = S.orb_palette_for(red)
+    pal = S.orb_palette_for("crisp_orb", red)
     assert pal["outer"] == pal["far"] == red
     for lighter in (pal["inner"], pal["near"]):
         assert all(c > base for c, base in zip(lighter, red, strict=True))
+
+
+def test_another_color_recolors_the_glowing_orb_keeping_its_white_core():
+    red = (0.9, 0.2, 0.2)
+    pal = S.orb_palette_for("orb", red)
+    assert pal["glow"] == pal["p_far"] == red
+    assert pal["core"][0][1] == (1.0, 1.0, 1.0)
 
 
 def _ink(draw):

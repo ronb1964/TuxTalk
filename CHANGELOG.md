@@ -3,18 +3,17 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [Unreleased]
-
-- The orb recording indicator is sharp now: a solid core, a thin ring and
-  16 dots, each with a clean edge, instead of soft glows that looked out of
-  focus on a scaled screen. It also follows your voice on a quiet
-  microphone: it used to measure every mic against the same fixed loudness,
-  so a quiet one (a dynamic mic like the RØDE PodMic) barely moved it. Like
-  the radial style, it now learns how loud your mic gets and how quiet the
-  room is, so talking moves the ring and dots and a silent room leaves them
-  still.
-
 ## [0.26.0] - 2026-11-27
+
+- A second orb for the recording indicator: Preferences → Audio →
+  Customize… → Style → Crisp orb, a solid core, a thin ring and 16 dots,
+  each with a clean edge, which stays sharp on a scaled screen where the
+  Glowing orb's soft glow can look out of focus. The Glowing orb stays the
+  default. Both now follow your voice on a quiet microphone: they measured
+  every mic against the same fixed loudness, so a quiet one (a dynamic mic
+  like the RØDE PodMic) barely moved them. Like the radial style, they now
+  learn how loud your mic gets and how quiet the room is, so talking moves
+  them and a silent room leaves them still. Thanks to Bernát Gábor (#53).
 
 - Help shows what to say and what you get, right where each thing is
   explained: "see you tomorrow comma bring snacks period" → See you

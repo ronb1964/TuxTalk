@@ -168,8 +168,13 @@ class ShellIndicator:
         shown = self._shown
         accent = desktop_accent_rgb() if shown.color_mode == "system" else None
         rgb = indicator_styles.resolve_color(shown.color_mode, shown.custom_color, accent)
+        # The crisp orb goes as the orb with "crisp": an extension from
+        # before it (loaded until the user logs out) refuses a style it doesn't
+        # know, and ignores a key it doesn't, so it draws the glowing orb.
+        crisp = shown.style == "crisp_orb"
         settings = {
-            "style": GLib.Variant("s", shown.style),
+            "style": GLib.Variant("s", "orb" if crisp else shown.style),
+            "crisp": GLib.Variant("b", crisp),
             "rgb": GLib.Variant("ad", rgb),
             "scale": GLib.Variant("d", shown.scale),
             "position": GLib.Variant("s", shown.position.lower()),
@@ -244,6 +249,9 @@ class ShellIndicator:
                 self._x11 = RecordingIndicator(**settings)
             else:
                 self._x11.apply_settings(**settings)
+            # What the orb has learned of this mic goes with it: a fresh gain
+            # reads the first level as the room's noise and holds the orb still.
+            self._x11._orb_gain = self._orb_gain
             self._x11.set_audio_level(self._level)
             self._x11.set_spectrum(self._spectrum)
             self._x11.show_at_position()
@@ -274,7 +282,7 @@ class ShellIndicator:
         if session == self._session:
             level = (
                 indicator_styles.orb_level(self._orb_gain, self._level, self._shown.sensitivity)
-                if self.style == "orb"
+                if self.style in indicator_styles.ORB_STYLES
                 else self._level
             )
             self._call("Update", GLib.Variant("(dad)", (level, self._shape())), session)

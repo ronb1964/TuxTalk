@@ -45,37 +45,68 @@ def _fg(base, intensity, alpha=None):
     return (*rgb, alpha if alpha is not None else 0.82 + 0.18 * intensity)
 
 
-def _mix(a, b, t):
+def mix(a, b, t):
     return tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
 
 
-# The classic cyan orb's own colors: a lighter core and dots that cool from
-# near-white beside the orb to blue as they move out.
-CLASSIC_ORB = {"outer": CYAN, "inner": (0.5, 0.9, 1.0),
-               "near": (0.7, 0.95, 1.0), "far": (0.4, 0.6, 1.0)}
+# The two orbs: the glowing one, soft gradients (the default), and the crisp
+# one, solid shapes that stay sharp on a fractionally scaled monitor.
+ORB_STYLES = ("orb", "crisp_orb")
 
 
-def orb_palette(color):
-    """The orb's colors for a base color: the core disc and ring in it, a
-    lighter center, and dots from light near the orb to the color itself."""
+def glow_orb_palette(color):
+    """The glowing orb's gradient palette from a single base color.
+
+    Mirrors the classic cyan orb's structure (white-hot core → color → dark
+    edge, particles color-graded near→far) so recoloring keeps its look and
+    only the hue changes. The classic cyan itself keeps the orb's own
+    hand-tuned draw path (see orb_palette_for).
+    """
+    white, black = (1.0, 1.0, 1.0), (0.0, 0.0, 0.0)
+    return {
+        "glow": color,
+        "core": [(0.0, white, 1.0),
+                 (0.4, mix(color, white, 0.55), 0.9),
+                 (0.7, color, 0.6),
+                 (0.9, mix(color, black, 0.15), 0.3),
+                 (1.0, mix(color, black, 0.15), 0.0)],
+        "p_near": mix(color, white, 0.5),
+        "p_far": color,
+    }
+
+
+# The classic cyan crisp orb's own colors: a lighter core and dots that cool
+# from near-white beside the orb to blue as they move out.
+CLASSIC_CRISP_ORB = {"outer": CYAN, "inner": (0.5, 0.9, 1.0),
+                     "near": (0.7, 0.95, 1.0), "far": (0.4, 0.6, 1.0)}
+
+
+def crisp_orb_palette(color):
+    """The crisp orb's colors for a base color: the core disc and ring in it,
+    a lighter center, and dots from light near the orb to the color itself."""
     white = (1.0, 1.0, 1.0)
-    return {"outer": color, "inner": _mix(color, white, 0.55),
-            "near": _mix(color, white, 0.5), "far": color}
+    return {"outer": color, "inner": mix(color, white, 0.55),
+            "near": mix(color, white, 0.5), "far": color}
 
 
 def is_cyan(rgb, tol=0.03):
     """True when a color is (within tolerance) the classic orb cyan.
 
-    The tolerance is needed because the classic cyan hex (#4db3ff) parses a
-    hair off the CYAN constant.
+    Whenever the resolved color is this cyan, the glowing orb draws its
+    hand-tuned classic path. The tolerance is needed because the classic cyan
+    hex (#4db3ff) parses a hair off the CYAN constant.
     """
     return all(abs(rgb[i] - CYAN[i]) <= tol for i in range(3))
 
 
-def orb_palette_for(rgb):
-    """The orb's colors for a resolved color: the classic cyan's own, or
-    ones built from *rgb*."""
-    return CLASSIC_ORB if is_cyan(rgb) else orb_palette(rgb)
+def orb_palette_for(style, rgb):
+    """The palette *style*'s orb draws in for a resolved color. The glowing
+    orb: None for the classic cyan (its hand-tuned path), else one recolored
+    to *rgb*. The crisp orb: the classic cyan's own colors, or ones built
+    from *rgb*."""
+    if style == "crisp_orb":
+        return CLASSIC_CRISP_ORB if is_cyan(rgb) else crisp_orb_palette(rgb)
+    return None if is_cyan(rgb) else glow_orb_palette(rgb)
 
 
 def backing_alpha(r, core, plateau=0.42):
@@ -198,11 +229,15 @@ class LevelGain:
         self.noise = None
         self.ceiling = 0.0
         self._last = None
-        self.peaks = []          # block peaks of the current dictation, for the log
+        self.peaks = []          # the radial's block peaks this dictation, for the log
 
     def update(self, samples, now):
-        """Follow a block of raw samples by its peak (the radial)."""
-        self.follow(float(np.max(np.abs(samples))) if len(samples) else 0.0, now)
+        """Follow a block of raw samples by its peak, kept for the log's
+        summary (the radial)."""
+        p = float(np.max(np.abs(samples))) if len(samples) else 0.0
+        self.follow(p, now)
+        if len(self.peaks) < 20000:
+            self.peaks.append(p)
 
     def follow(self, p, now):
         """Follow one block's level *p*, measured at *now* (monotonic seconds)."""
@@ -214,8 +249,6 @@ class LevelGain:
             self.noise += (p - self.noise) * min(1.0, dt * self.NOISE_RISE_PER_SEC)
         decayed = self.ceiling * 0.5 ** (dt / self.CEILING_HALF_LIFE)
         self.ceiling = max(p, decayed)
-        if len(self.peaks) < 20000:
-            self.peaks.append(p)
 
     def normalize(self, peak):
         # The 4x-noise floor is applied here, not stored in the ceiling: when a

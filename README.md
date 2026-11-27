@@ -421,7 +421,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Recent Dictations.** Your last 20, one click to copy. Kept in memory only.
 - **Your Stats.** Words dictated and typing time saved, at your own typing speed.
 - **Settings backup.** Save everything to one file and load it on another computer. TuxTalk also keeps your last 10 settings on its own, so you can roll back a change.
-- **A recording indicator you can style.** Orb, waveform, frequency bars or radial, any color. It shows up in the window you're dictating into, or stays in one spot on the screen if you'd rather, and it reacts to your voice so you know it's listening.
+- **A recording indicator you can style.** A glowing or crisp orb, waveform, frequency bars or radial, any color. It shows up in the window you're dictating into, or stays in one spot on the screen if you'd rather, and it reacts to your voice so you know it's listening.
 - **Swiss German spelling.** Types ss instead of ß, on by itself when your system is set to Swiss German.
 - **Tells you why when it can't type.** If a dictation can't be typed into the window, TuxTalk says why and what fixes it.
 - **Private.** Everything runs on your computer, and what you dictate is never written to a log unless you turn that on for troubleshooting. Keystroke Typing (No Clipboard) keeps it off the clipboard too.

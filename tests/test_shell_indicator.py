@@ -132,6 +132,7 @@ def test_showing_tells_the_shell_where_and_how_to_draw(shell):
     (settings,) = dict(shell)["Show"]
     assert settings == {
         "style": "orb",
+        "crisp": False,
         "rgb": [1.0, 0.0, 0.0],
         "scale": 1.4,
         "position": "bottom-center",
@@ -139,6 +140,18 @@ def test_showing_tells_the_shell_where_and_how_to_draw(shell):
         "offset_x": 0,
         "offset_y": 0,
     }
+    ind.hide_indicator()
+
+
+def test_the_crisp_orb_goes_as_the_orb_an_older_extension_knows(shell):
+    """An extension from before the crisp orb, loaded until the next login,
+    refuses a style it doesn't know and ignores a key it doesn't: "orb" with
+    "crisp" lets it draw the glowing orb instead of failing."""
+    ind = si.ShellIndicator(style="crisp_orb")
+    ind.show_at_position()
+    assert _wait_for(lambda: "Show" in _methods(shell))
+    (settings,) = dict(shell)["Show"]
+    assert (settings["style"], settings["crisp"]) == ("orb", True)
     ind.hide_indicator()
 
 
