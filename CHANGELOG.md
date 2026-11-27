@@ -3,15 +3,13 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [Unreleased]
+## [0.26.0] - 2026-11-27
 
 - Type at pause gets each phrase in sooner: the space or mark between two
   phrases is typed now, not pasted, which took a third of a second on its
   own before the phrase itself could go in. When you pressed Enter right
   after you finished talking, the last phrase could arrive too late for
-  the message.
-
-## [0.26.0] - 2026-11-27
+  the message. Thanks to Bernát Gábor (#55).
 
 - On GNOME, pasting a dictation no longer flashes a window on the screen.
   wl-copy can only set the clipboard there from a window of its own, which

@@ -108,6 +108,7 @@
           <li>A spoken comma before a pause isn't lost, and a greeting keeps its comma before a new line</li>
           <li>A second recording orb, the Crisp orb, sharp on a scaled screen, and both orbs follow a quiet microphone. Thanks to Bernát Gábor</li>
           <li>On GNOME, pasting no longer flashes a window, except while a clipboard history that skips marked text (GPaste, Pano, CopyQ) is running, which keeps your dictations out of it. Thanks to Bernát Gábor</li>
+          <li>Type at pause gets each phrase in sooner, so the last one is in before you press Enter. Thanks to Bernát Gábor</li>
         </ul>
       </description>
     </release>
