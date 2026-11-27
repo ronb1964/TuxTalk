@@ -121,11 +121,11 @@ def frames_of(audio):
     return [audio.tobytes()]
 
 
-def type_chunk(frames, role, auto_period=False):
+def type_chunk(frames, role, auto_period=False, injection_mode="type"):
     """One Type at pause phrase through the real pipeline, as *role*
     ("first", "middle", "last")."""
     dictation_pipeline.transcribe_and_inject(frames, SR, True, True, False, None, True,
-                                             auto_period, "type", chunk_role=role,
+                                             auto_period, injection_mode, chunk_role=role,
                                              message=rs.state.current.message)
 
 
