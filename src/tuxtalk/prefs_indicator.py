@@ -115,8 +115,8 @@ class IndicatorSettings(Tab):
         grid.attach(size, 1, row, 1, 1)
         style = self._setting_dropdown("indicator_style", "orb", _STYLES)
         _row_label(grid, row + 1, tip_label(
-            "Style", "Choose how the recording indicator looks.\nOrb is the default."),
-            style)
+            "Style", "Choose how the recording indicator looks.\nGlowing orb is the "
+            "default; Crisp orb\nstays sharp on a scaled screen."), style)
         grid.attach(style, 1, row + 1, 1, 1)
         return row + 2
 

@@ -16,12 +16,14 @@ The Hands-free section has a way to make it stop by itself when you stop talking
 ### How you know it's listening
 • A beep when it starts and when it stops.
 • The recording indicator, an orb on the screen while it records. Change its
-  look and place in <b>Preferences → Audio → Customize…</b>
+  look and place in <b>Preferences → Audio → Customize…</b>: the Glowing orb,
+  the Crisp orb (sharp on a scaled screen), a waveform, frequency bars or a
+  radial ring.
 • If the microphone heard nothing but silence, TuxTalk says so and types nothing.
 • On GNOME, the TuxTalk extension (version 32 or newer) draws the indicator
   itself: it's sharp on a scaled screen and sits where Preferences puts it.
-  After the extension updates, log out and back in once; until then it looks
-  as before.
+  The Crisp orb needs version 33. After the extension updates, log out and
+  back in once; until then it looks as before.
 
 ### Indicator follows your window
 The recording indicator shows up in the window you're dictating into, wherever

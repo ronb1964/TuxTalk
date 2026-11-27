@@ -709,8 +709,8 @@ def test_shell_indicator_rejects_unbounded_dbus_values():
             item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
         const area = t.shell.uiGroup[0];
         const rejected = [];
-        for (const settings of [{scale: t.variant(1e100)},
-                {rgb: t.variant([1, 2, 3])}, {position: t.variant(123)}]) {
+        for (const settings of [{scale: t.variant(1e100)}, {rgb: t.variant([1, 2, 3])},
+                {position: t.variant(123)}, {crisp: t.variant('yes')}]) {
             try { indicator.Show(settings); } catch { rejected.push(true); }
         }
         indicator.Show({});
@@ -719,7 +719,7 @@ def test_shell_indicator_rejects_unbounded_dbus_values():
         }
         t.report([rejected, area.visible, indicator._values]);
     """)
-    assert result == [[True] * 5, True, []]
+    assert result == [[True] * 6, True, []]
 
 
 def test_shell_indicator_hides_after_updates_stop():
@@ -761,6 +761,24 @@ def test_shell_repaints_the_recording_style(style, command, expected):
             op === {json.dumps(command)}).slice(1), area.commands.at(-1)]);
     """)
     assert result == ["TuxTalk Recording", expected, ["$dispose"]]
+
+
+@pytest.mark.parametrize("crisp", [True, False])
+def test_shell_draws_the_crisp_orb_with_no_gradient(crisp):
+    """The crisp orb is solid shapes, sharp on a scaled screen: a gradient
+    is the glowing orb's, the one a user who chose Crisp would not get."""
+    commands, _logs = run(f"""
+        await t.enable();
+        const indicator = t.shell.exported.find(item =>
+            item.path === '/io/github/ronb1964/TuxTalk/Indicator').object;
+        indicator.Show({{style: t.variant('orb'), crisp: t.variant({json.dumps(crisp)})}});
+        indicator.SetRecording(true);
+        indicator.Update(0.5, []);
+        t.shell.timeouts.at(-1).callback();
+        t.report(t.shell.uiGroup[0].commands.map(([op]) => op));
+    """)
+    assert ("setSource" in commands) is not crisp
+    assert (commands.count("newSubPath") >= 16) is crisp     # its 16 dots, one path
 
 
 def test_shell_bars_at_the_small_size_are_real_bars():

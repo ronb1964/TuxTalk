@@ -251,7 +251,7 @@ class ShellIndicator:
                 self._x11.apply_settings(**settings)
             # What the orb has learned of this mic goes with it: a fresh gain
             # reads the first level as the room's noise and holds the orb still.
-            self._x11._orb_gain = self._orb_gain
+            self._x11.orb_gain = self._orb_gain
             self._x11.set_audio_level(self._level)
             self._x11.set_spectrum(self._spectrum)
             self._x11.show_at_position()
@@ -341,9 +341,11 @@ class ShellIndicator:
 
     def set_audio_level(self, level: float):
         self._level = max(0.0, min(1.0, level))
-        self._orb_gain.follow(self._level, time.monotonic())
+        # One writer: the fallback window follows the same gain itself.
         if (fallback := self._fallback) is not None:
             fallback.set_audio_level(level)
+        else:
+            self._orb_gain.follow(self._level, time.monotonic())
 
     def set_waveform(self, samples):
         with self._audio_lock:

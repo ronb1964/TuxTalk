@@ -236,14 +236,13 @@ def test_on_cinnamon_the_indicator_stays_away_while_the_desktop_is_shown(
 _RENDERERS = {"waveform": "draw_waveform", "bars": "draw_bars", "radial": "draw_radial"}
 
 
-@pytest.mark.parametrize("style", ["waveform", "bars", "radial", "orb"])
+@pytest.mark.parametrize("style", ["waveform", "bars", "radial", "orb", "crisp_orb"])
 def test_each_style_is_drawn_by_its_own_renderer(indicator, monkeypatch, style):
     """A style whose renderer isn't called shows a blank indicator."""
     drawn = []
-    for name in _RENDERERS.values():
+    for name in (*_RENDERERS.values(), "draw_orb"):
         monkeypatch.setattr(indicator_styles, name,
                             lambda *args, name=name, **_k: drawn.append((name, args)))
-    monkeypatch.setattr(indicator, "draw_orb", lambda *args: drawn.append(("draw_orb", args)))
     _apply(indicator, "center", "medium", 0, 0, style=style, sensitivity=1.5)
     bands = [0.25, 0.5, 0.75]
     indicator.set_spectrum(bands)
@@ -258,5 +257,7 @@ def test_each_style_is_drawn_by_its_own_renderer(indicator, monkeypatch, style):
     args = drawn[0][1]
     if style == "bars":
         assert args[3] == bands and args[5] == 1.5
-    elif style != "orb":
+    elif style in indicator_styles.ORB_STYLES:
+        assert args[1] == style
+    else:
         assert args[3] and set(args[3]) == {0.5} and args[6] == 1.5

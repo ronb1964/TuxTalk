@@ -1,10 +1,12 @@
-"""Cairo drawing for the recording indicator's non-orb styles + the soft backing.
+"""Cairo drawing for the recording indicator's non-orb styles and the soft
+backing, the orbs' palettes, and LevelGain, which scales each style to the mic.
 
 Pure cairo (no GTK widget), so every renderer is testable by drawing onto an
 ImageSurface with no display.
 """
 import math
 import random
+from dataclasses import dataclass
 
 import cairo
 import numpy as np
@@ -87,6 +89,155 @@ def crisp_orb_palette(color):
     white = (1.0, 1.0, 1.0)
     return {"outer": color, "inner": mix(color, white, 0.55),
             "near": mix(color, white, 0.5), "far": color}
+
+
+# The classic cyan glowing orb's hand-tuned core: a white center fading
+# through cyan and blue to a transparent edge, as (stop, rgb, alpha).
+_CLASSIC_GLOW_CORE = ((0.0, (1.0, 1.0, 1.0), 1.0), (0.4, (0.5, 0.9, 1.0), 0.9),
+                      (0.7, (0.2, 0.6, 0.9), 0.6), (0.9, (0.2, 0.5, 0.8), 0.3),
+                      (1.0, (0.2, 0.5, 0.8), 0.0))
+
+
+@dataclass(frozen=True)
+class OrbFrame:
+    """What one frame of an orb is drawn from: its size, the screen's scale,
+    the voice (orb_level's 0..1 while recording, else 0), whether it is
+    recording, and the two phases of its pulse at rest."""
+    base_size: float
+    scale: float
+    level: float
+    recording: bool
+    pulse_phase: float
+    particle_pulse_phase: float
+
+
+def draw_orb(cr, style, x, y, palette, frame):
+    """Draw the orb of *style* (ORB_STYLES), the glowing one or the crisp
+    one, centred on (*x*, *y*). *palette* is orb_palette_for's for the style."""
+    if style == "crisp_orb":
+        _draw_crisp_orb(cr, x, y, palette, frame)
+    else:
+        _draw_glow_orb(cr, x, y, palette, frame)
+
+
+def _draw_glow_orb(cr, x, y, palette, frame):
+    """Draw the glowing orb with pulsing animation.
+
+    palette=None draws the classic cyan gradient. A palette (from
+    glow_orb_palette) recolors the glow, core and particles while keeping
+    the same structure.
+    """
+    # A gentle pulse at rest; recording holds the orb steady.
+    if frame.recording:
+        current_size = frame.base_size
+    else:
+        current_size = frame.base_size * (1.0 + 0.1 * math.sin(frame.pulse_phase))
+
+    # Outer glow layers (several, for a softer edge)
+    glow_color = palette["glow"] if palette else CYAN
+    for i in range(3):
+        glow_radius = current_size * (1.5 - i * 0.15)
+        gradient = cairo.RadialGradient(x, y, current_size * 0.5, x, y, glow_radius)
+        alpha = 0.4 * (1.0 - i * 0.3)
+        if frame.recording:
+            alpha *= frame.level
+        gradient.add_color_stop_rgba(0, glow_color[0], glow_color[1], glow_color[2], alpha)
+        gradient.add_color_stop_rgba(1, glow_color[0], glow_color[1], glow_color[2], 0)
+        cr.set_source(gradient)
+        cr.arc(x, y, glow_radius, 0, 2 * math.pi)
+        cr.fill()
+
+    # Core orb with a soft, hazy edge
+    core_gradient = cairo.RadialGradient(x, y, 0, x, y, current_size * 1.3)
+    stops = palette["core"] if palette else _CLASSIC_GLOW_CORE
+    for stop, rgb, a in stops:
+        core_gradient.add_color_stop_rgba(stop, rgb[0], rgb[1], rgb[2], a)
+    cr.set_source(core_gradient)
+    cr.arc(x, y, current_size * 1.3, 0, 2 * math.pi)
+    cr.fill()
+
+    # Particles keep to the fixed base_size, not the pulsing size.
+    _draw_glow_particles(cr, x, y, frame.base_size * 1.8, palette, frame)
+
+
+def _draw_glow_particles(cr, center_x, center_y, base_radius, palette, frame):
+    """Draw 16 small glowing particles that move out with the voice, from
+    0.7x *base_radius* (touching the orb) to 1.4x, shading near to far:
+    classic cyan to blue, or a palette's own colors."""
+    min_distance, max_distance = 0.7, 1.4
+    spread = max_distance - min_distance
+    extend = frame.level
+    radial_distance = base_radius * (min_distance + spread * extend)
+    if palette:
+        near, far = palette["p_near"], palette["p_far"]
+    else:
+        near, far = (0.7, 0.95, 1.0), (0.4, 0.6, 1.0)
+    r, g, b = mix(near, far, extend)
+    alpha = 0.6 + extend * 0.3 if frame.recording else 0.6
+    for i in range(16):
+        angle = i * 2 * math.pi / 16
+        px = center_x + radial_distance * math.cos(angle)
+        py = center_y + radial_distance * math.sin(angle)
+        if frame.recording:
+            particle_size = 4 + extend * 2
+        else:
+            # A subtle pulse at rest, each particle a little out of step.
+            particle_size = 4 * (1.0 + 0.15 * math.sin(frame.particle_pulse_phase + i * 0.4))
+        particle_gradient = cairo.RadialGradient(px, py, 0, px, py, particle_size * 1.5)
+        particle_gradient.add_color_stop_rgba(0, r, g, b, alpha)
+        particle_gradient.add_color_stop_rgba(1, r * 0.7, g * 0.7, b * 0.7, 0)
+        cr.set_source(particle_gradient)
+        cr.arc(px, py, particle_size * 1.5, 0, 2 * math.pi)
+        cr.fill()
+
+
+def _draw_crisp_orb(cr, x, y, palette, frame):
+    """Draw the crisp orb: a solid core, a ring that widens with the voice
+    and 16 dots around it, all with hard edges.
+
+    Shapes that fade to transparent read as out of focus on a scaled
+    monitor, so nothing here is a gradient. *palette* holds the colors
+    (crisp_orb_palette). At rest the core and ring pulse gently; recording
+    holds them still and the voice moves the ring and dots.
+    """
+    level = frame.level
+    pulse = 1.0 if frame.recording else 1.0 + 0.1 * math.sin(frame.pulse_phase)
+    size = frame.base_size * pulse
+    cr.set_source_rgba(*palette["outer"], 0.35 + 0.5 * level)
+    cr.set_line_width(1.5 * frame.scale)
+    cr.arc(x, y, size * (1.05 + 0.3 * level), 0, 2 * math.pi)
+    cr.stroke()
+
+    cr.set_source_rgb(*palette["outer"])
+    cr.arc(x, y, size * 0.85, 0, 2 * math.pi)
+    cr.fill()
+    cr.set_source_rgb(*palette["inner"])
+    cr.arc(x, y, size * 0.45, 0, 2 * math.pi)
+    cr.fill()
+
+    _draw_crisp_particles(cr, x, y, frame.base_size * 1.8, palette, frame)
+
+
+def _draw_crisp_particles(cr, center_x, center_y, base_radius, palette, frame):
+    """Draw the crisp orb's 16 dots: touching it in silence, out to
+    0.88 x *base_radius* at full voice, still inside the pill, shading
+    from light near the orb to the orb's color far from it. At rest each
+    pulses a little, out of step with the next."""
+    level = frame.level
+    rgb = mix(palette["near"], palette["far"], level)
+    cr.set_source_rgba(*rgb, 0.7 + 0.3 * level)
+    distance = base_radius * (0.7 + 0.18 * level)
+    for i in range(16):
+        angle = i * 2 * math.pi / 16
+        if frame.recording:
+            radius = (1.6 + 0.8 * level) * frame.scale
+        else:
+            pulse = 1.0 + 0.15 * math.sin(frame.particle_pulse_phase + i * 0.4)
+            radius = 1.6 * frame.scale * pulse
+        cr.new_sub_path()
+        cr.arc(center_x + distance * math.cos(angle), center_y + distance * math.sin(angle),
+               radius, 0, 2 * math.pi)
+    cr.fill()
 
 
 def is_cyan(rgb, tol=0.03):

@@ -28,7 +28,9 @@ before 0.15.0, so older entries use that name.
   Customize… → Style → Crisp orb, a solid core, a thin ring and 16 dots,
   each with a clean edge, which stays sharp on a scaled screen where the
   Glowing orb's soft glow can look out of focus. The Glowing orb stays the
-  default. Both now follow your voice on a quiet microphone: they measured
+  default. On GNOME the Crisp orb needs the TuxTalk extension's version 33:
+  until you log out and back in after it updates, you see the Glowing orb.
+  Both now follow your voice on a quiet microphone: they measured
   every mic against the same fixed loudness, so a quiet one (a dynamic mic
   like the RØDE PodMic) barely moved them. Like the radial style, they now
   learn how loud your mic gets and how quiet the room is, so talking moves

@@ -85,6 +85,21 @@ def _wave():
     return (0.3 * np.sin(np.linspace(0, 20, 800))).astype(np.float32)
 
 
+def _orb(style, level):
+    frame = S.OrbFrame(base_size=14, scale=1.0, level=level, recording=True,
+                       pulse_phase=0.0, particle_pulse_phase=0.0)
+    palette = S.orb_palette_for(style, S.CYAN)
+    return lambda cr: S.draw_orb(cr, style, 70, 60, palette, frame)
+
+
+@pytest.mark.parametrize("style", S.ORB_STYLES)
+def test_each_orb_is_drawn_and_reaches_further_when_you_talk(style):
+    """A misspelt palette key would leave the indicator blank, and a level
+    that moves nothing would leave the orb still while you talk."""
+    quiet, loud = _ink(_orb(style, 0.0)), _ink(_orb(style, 1.0))
+    assert 0 < quiet < loud
+
+
 def test_waveform_draws_something():
     assert _has_ink(lambda cr: S.draw_waveform(cr, 200, 120, _wave(), 0.6, (0.3, 0.7, 0.96), 1.0))
 
