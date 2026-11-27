@@ -217,7 +217,7 @@ def duck_audio(run):
         time.sleep(1.5)
         _t, _h, mark = run.say("basic", wait=False)
         time.sleep(0.2)
-        log = run.wait_log(mark, "Put 1 sound(s) back", timeout=30) or run.log_since(mark)
+        log = run.wait_log(mark, " sound(s) back", timeout=30) or run.log_since(mark)
         run.vm.ssh("pkill -x pw-play", check=False)
     # The phrase is played into the pretend microphone by a stream TuxTalk sees
     # as another app's sound: when it has started first, two are turned down
