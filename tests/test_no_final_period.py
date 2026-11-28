@@ -6,23 +6,34 @@ last mark is left off too."""
 import pytest
 
 from tuxtalk.dictation_text import without_final_period
+from tuxtalk.normalize import LINE_BREAK
 from tuxtalk.prefs_advanced import AdvancedTab, period_choice
 
 
 @pytest.mark.parametrize(("typed", "heard", "left"), [
     ("Send it tomorrow. ", "Send it tomorrow.", "Send it tomorrow "),
     ("prof1. ", "prof1.", "prof1 "),
+    ("I'll be there at 5. ", "I'll be there at 5.", "I'll be there at 5 "),
     ("Is it ready? ", "Is it ready?", "Is it ready? "),
     ("Hello. See you soon. ", "Hello. See you soon.", "Hello. See you soon "),
+    ("\u201cHello.\u201d ", "Hello.", "\u201cHello\u201d "),
+    ("John Smith." + LINE_BREAK, "John Smith. New line.", "John Smith" + LINE_BREAK),
     ("Wait... ", "Wait...", "Wait... "),
     ("We met in the U.S. ", "We met in the U.S.", "We met in the U.S. "),
+    ("and so on etc. ", "and so on etc.", "and so on etc. "),
     ("See you tomorrow. ", "see you tomorrow period", "See you tomorrow. "),
-    ("Bis morgen. ", "Bis morgen Punkt.", "Bis morgen. "),
+    ("Hello. ", "Hello fullstop", "Hello. "),
 ])
 def test_never_leaves_off_the_last_full_stop_only(typed, heard, left):
-    """Question marks, the full stops between sentences, an ellipsis and an
-    abbreviation's dot stay, and so does a full stop the user said."""
-    assert without_final_period(typed, heard) == left
+    """The speech model's full stop goes, inside a closing quote or before
+    a line break said last too. Question marks, the full stops between
+    sentences, an ellipsis and an abbreviation's dot stay, and so does a
+    full stop the user said."""
+    assert without_final_period(typed, heard, "en") == left
+
+
+def test_a_german_full_stop_said_is_kept():
+    assert without_final_period("Bis morgen. ", "Bis morgen Punkt.", "de") == "Bis morgen. "
 
 
 def test_old_settings_keep_their_meaning_in_the_dropdown():

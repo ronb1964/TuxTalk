@@ -1215,6 +1215,19 @@ def test_an_owed_space_never_goes_into_the_window_the_next_dictation_went_to(
     assert typed == [("How are you. ", SECOND[1])]
 
 
+def test_no_owed_space_goes_in_front_of_a_mark_said_on_its_own(chat, keyboard, monkeypatch):
+    """"Is it ready", held during the countdown, then "question mark": the
+    mark goes on the end of the text, not after a space ("Is it ready ?")."""
+    focus, heard, typed, notices = chat
+    monkeypatch.setattr(send_countdown, "_delay", 0.0)
+    monkeypatch.setattr(live, "press_enter_after", False)
+    send_countdown._owe_space({"to": focused_window.destination(), "space": " ", "mode": "type",
+                               "type": delivery.type_onto_dictation})
+    heard.append("question mark")
+    dictate()
+    assert all(text != " " for text, _window in typed)
+
+
 def test_where_the_window_is_never_known_the_space_goes_only_where_the_words_did(
         chat, keyboard, monkeypatch):
     """COSMIC: a click into a terminal as the "Not sent" notice came up.

@@ -8,21 +8,22 @@ before 0.15.0, so older entries use that name.
 - A punctuation mark said on its own is typed: "question mark" alone
   typed nothing, nor did "comma" said first ("comma and then he left"),
   since a mark at the start of a dictation was dropped with the stray ones
-  a speech model leaves there. It goes on the end of what's already
-  there, in place of the full stop and space after it: "Is it ready." and
-  then "question mark" is "Is it ready?". Thanks to Andy (#52).
+  a speech model leaves there. In an app that tells TuxTalk the text
+  before the cursor, it goes on the end of what's already there, in place
+  of the full stop and space after it: "Is it ready." and then "question
+  mark" is "Is it ready?"; an abbreviation's dot stays. Thanks to Andy (#52).
 
 - Period at the end, a new choice in Preferences → Advanced → Fine-tuning
   where "Ensure period at end of sentences" was: Always (a period added
   when the speech model leaves one out, as before), As heard (the box
   unticked), or Never, which leaves off the period a dictation ends with,
   the speech model's own too, for names, short entries and commands. A
-  period you say is still typed, and so are question marks and the
-  periods between sentences. Thanks to Andy (#52).
+  period you say is still typed, and so are question marks, an
+  abbreviation's dot and the periods between sentences. Thanks to Andy (#52).
 
-- Help says how to open a script of your own by voice: give it a menu
-  entry, a small .desktop file naming the script and what it takes, and
-  say "open" with its name.
+- Help says how to open a script of your own by voice (opening apps is in
+  TuxTalk Labs): give it a menu entry, a small .desktop file naming the
+  script and what it takes, and say "open" with its name.
 
 - Left Ctrl no longer stays held after the Voice Commands shortcut
   (Ctrl+Alt+V) or Paste Last Dictation (Ctrl+Alt+P). Still holding Ctrl

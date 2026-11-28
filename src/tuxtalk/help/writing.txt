@@ -5,7 +5,8 @@ Say <b>period</b>, <b>comma</b>, <b>question mark</b>, <b>new line</b>, <b>new p
 and so on. TuxTalk adds the capitals, and a period at the end if the speech model
 forgot one. Help's Commands tab has them all.
 Said on its own, a mark goes on the end of what's there: hold <b>{hold}</b>, say <b>question
-mark</b>, let go, and "Is it ready." becomes "Is it ready?".
+mark</b>, let go, and "Is it ready." becomes "Is it ready?". That needs an app that tells
+TuxTalk the text before the cursor (most do); elsewhere it goes in after the space.
 No period at the end, for names, short entries and commands: <b>Preferences → Advanced →
 Fine-tuning → Period at the end: Never</b>. A period you say is still typed.
 {examples_paragraphs}
@@ -317,7 +318,8 @@ and the name is whatever the app is called in your menu: <b>open the calculator<
   • A script of your own opens the same way once it has a menu entry: a file in
     ~/.local/share/applications ending in .desktop, with the lines [Desktop Entry],
     Type=Application, Name=Prof One and Exec= the script's full path and what it takes
-    (Exec=/home/you/bin/a_ff prof1). Then say <b>open Prof One</b>.
+    (Exec=/home/you/bin/a_ff prof1). The script must be executable (chmod +x). Then say
+    <b>open Prof One</b>.
 
 ### Windows
 Hold <b>{hold}</b>, say <b>close Firefox</b>, let go. Nothing is typed.

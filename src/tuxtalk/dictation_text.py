@@ -15,6 +15,7 @@ from collections.abc import Callable
 from . import custom_commands
 from .logger import setup_logger
 from .normalize import (
+    LINE_BREAK,
     address_alone,
     append_auto_punct,
     leading_line_breaks,
@@ -23,6 +24,7 @@ from .normalize import (
     safe_to_lowercase_first_word,
     swiss_spelling,
 )
+from .sentence_fit import MARKS, is_abbreviation
 
 logger = setup_logger(__name__)
 
@@ -50,11 +52,10 @@ def numbers_to_digits(text: str, settings) -> str:
 # mark said aloud: the normalizer drops the marks a line starts with (the
 # engine's strays), and after a word it keeps them.
 _PROBE = "Zqxv"
-_MARKS = ".,;:!?"
 
 
 # The mark the engine often writes after a word said on its own ("Comma.").
-_ENGINE_END = re.compile(r"(?<=[^\W\d_])[.,;:!?]\s*$")
+_ENGINE_END = re.compile(rf"(?<=\w)[{re.escape(MARKS)}]\s*$")
 
 
 def _mark_alone(text: str, lang: str) -> str | None:
@@ -66,7 +67,7 @@ def _mark_alone(text: str, lang: str) -> str | None:
         return None
     probed = normalize_text(f"{_PROBE} {said}", auto_period=False, lang=lang)
     mark = probed[len(_PROBE):]
-    return mark if probed.startswith(_PROBE) and len(mark) == 1 and mark in _MARKS else None
+    return mark if probed.startswith(_PROBE) and len(mark) == 1 and mark in MARKS else None
 
 
 def _normalized(text: str, auto_period: bool, lang: str, whole: bool) -> str:
@@ -80,25 +81,41 @@ def _normalized(text: str, auto_period: bool, lang: str, whole: bool) -> str:
     # Asked with no auto-period: that would end the made-up word's line with
     # a full stop of its own where a line break is said first ("new line, ...").
     probed = normalize_text(f"{_PROBE} {text}", auto_period=False, lang=lang)
-    if probed.startswith(_PROBE) and probed[len(_PROBE):][:1] in tuple(_MARKS):
+    # A tuple, so an empty rest isn't "in" it as "" is in a string.
+    if probed.startswith(_PROBE) and probed[len(_PROBE):][:1] in tuple(MARKS):
         return normalize_text(f"{_PROBE} {text}", auto_period=auto_period, lang=lang)[len(_PROBE):]
     return text_alone
 
 
-# The full stop a dictation ends with, before the auto-space: not a dot of
-# an ellipsis or of "U.S.".
-_FINAL_PERIOD = re.compile(r"(?<![.\s])(?<!\.[^\W\d_])\.(?=\s*\Z)")
-# "period" said last, as the engine heard it ("Period.", "full stop", "Punkt").
-_SAID_PERIOD = re.compile(r"\b(?:period|full\s+stop|punkt)\W*\Z", re.IGNORECASE)
+# The full stop a dictation ends with: before the auto-space, a closing
+# quote or bracket, and a line break said last; not one of an ellipsis.
+_FINAL_STOP = re.compile(r"(?<![.\s])\.(?=[\"'\u201d\u2019)\]}]*(?:\s|"
+                         + re.escape(LINE_BREAK) + r")*\Z)")
+_LAST_WORD = re.compile(r"[\w.]*\Z")
+# A full stop the engine wrote itself, after a word (not inside "U.S.").
+_ENGINE_STOPS = re.compile(r"(?<=\w)\.(?=[\s\"'\u201d\u2019)\]}]|\Z)")
 
 
-def without_final_period(text: str, heard: str) -> str:
+def _said_last_stop(heard: str, lang: str) -> bool:
+    """Whether *heard*, the dictation as the engine wrote it, ends with a
+    full stop said ("... period", "full stop", "Punkt"), as the normalizer
+    reads it: the engine's own full stops taken off, does one still end it?"""
+    said = _ENGINE_STOPS.sub("", heard)
+    text = normalize_text(said, auto_period=False, lang=lang).replace(LINE_BREAK, " ")
+    return text.rstrip().rstrip("\"'\u201d\u2019)]}").endswith(".")
+
+
+def without_final_period(text: str, heard: str, lang: str) -> str:
     """*text*, ready to type, without the full stop it ends with (Period at
-    the end: Never), unless *heard*, the dictation as the engine wrote it,
-    ended with "period" said: a full stop asked for is typed."""
-    if _SAID_PERIOD.search(heard):
+    the end: Never): not an abbreviation's (sentence_fit.is_abbreviation),
+    nor one said (_said_last_stop, *heard* in command language *lang*)."""
+    found = _FINAL_STOP.search(text)
+    if found is None:
         return text
-    return _FINAL_PERIOD.sub("", text, count=1)
+    if is_abbreviation(_LAST_WORD.search(text[:found.start()]).group()) \
+            or _said_last_stop(heard, lang):
+        return text
+    return text[:found.start()] + text[found.end():]
 
 
 def clean_up(text, ai, settings):
@@ -155,7 +172,7 @@ def _said_alone(processed: str, protected: dict[str, str], settings) -> str | No
         return address
     mark = not protected and _mark_alone(processed, settings.command_language)
     if mark:
-        logger.info(f"Normalized text: {mark!r} (a mark said on its own)")
+        logger.info(f"Normalized text: {settings.loggable(mark)} (a mark said on its own)")
         return mark
     return None
 
@@ -239,7 +256,7 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     # added, so "hello new line" leaves no orphan ". " on the next line.
     text = append_auto_punct(text, auto_period, auto_space)
     if whole and settings.no_final_period:
-        text = without_final_period(text, raw)
+        text = without_final_period(text, raw, settings.command_language)
     if app_kind:
         text = plain_for_app(text, app_kind)
     logger.info(f"Normalized text: {settings.loggable(text)}")

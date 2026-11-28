@@ -15,6 +15,7 @@ from . import (
     beeps,
     chunking,
     delivery,
+    dictation_text,
     dictation_worker,
     engine,
     focused_window,
@@ -155,11 +156,14 @@ def corrects_across_pause(raw: str, chunk_role, message) -> bool:
     return ai_cleanup.opens_with_correction(rs.state.last_inserted_text, raw)
 
 
-def erase_typed(text: str, what: str = "Correction across a pause") -> bool:
-    """Backspace over *text*, just typed: by the phrase before the pause, or
-    the end of the dictation a mark said on its own joins (pipeline). False
-    when it can't be done safely; then nothing more is erased. *what* names
-    the change in the log and the notification.
+def erase_typed(text: str, what: str = "Correction across a pause", read_in=None) -> bool:
+    """Backspace over *text*, the end of the text before the cursor: the
+    phrase before the pause, just typed, or what a mark said on its own goes
+    in place of (pipeline._join_said_mark). False when it can't be done
+    safely; then nothing more is erased. *what* names the change in the log
+    and the notification. *read_in*: the look *text* was read from the app
+    in; then the focus must still be there, else in the window the last
+    dictation went to.
 
     The backspaces go only into the window checked here, and never into a
     password field, as a dictation's keys (keyboard_output.delivering): the
@@ -167,11 +171,13 @@ def erase_typed(text: str, what: str = "Correction across a pause") -> bool:
     Right Ctrl dictation key held makes them wait, time enough to click
     into another document, whose text they would delete."""
     where = focused_window.look()
-    if keyboard_output.not_where_typed(where[0], where):
+    elsewhere = (focused_window.changed(read_in, where) if read_in is not None
+                 else keyboard_output.not_where_typed(where[0], where))
+    if elsewhere:
         logger.info(f"{what} skipped: the text is in another window")
         return False
-    # The AI that found the correction can take seconds, time enough to
-    # click into a password field of the same window.
+    # Time enough since the text was read (the AI that found a correction,
+    # the app's own answer) to click into a password field of the same window.
     if focused_window.is_password():
         logger.info(f"{what} skipped: a password field has the focus")
         return False
@@ -314,7 +320,7 @@ def resolve_boundary(message, audio_f32, language, injection_mode, raw="",
         return raw
     if enter:
         logger.info(f"Heard \"press enter\" in context ({live.loggable(raw)} alone)")
-        _type_boundary(message, pending, mark, injection_mode)
+        _type_boundary(message, pending, _last_mark(mark, pending["typed"]), injection_mode)
         rs.state.continue_mid_sentence = False
         return "press enter"
     if joint and len(audio_f32) <= SHORT_CHUNK_S * engine.SAMPLE_RATE:
@@ -451,10 +457,15 @@ def _short_phrase_in_context(raw: str, before: str, joint: str) -> str:
     return raw
 
 
-def _last_mark(mark: str) -> str:
-    """The mark a recording that ended in a pause ends with: none for a full
-    stop where Period at the end is Never."""
-    return "" if live.no_final_period and mark == "." else mark
+def _last_mark(mark: str, typed: str) -> str:
+    """The mark that ends a recording or a message after *typed*, the phrase
+    before it: none for a full stop where Period at the end is Never, as
+    dictation_text.without_final_period decides (an abbreviation's stays).
+    A said full stop is never held back to be typed here."""
+    if not live.no_final_period or mark != ".":
+        return mark
+    kept = dictation_text.without_final_period(typed + mark, "", live.command_language)
+    return mark if kept.endswith(".") else ""
 
 
 def flush_boundary(message, auto_period: bool, auto_space: bool, injection_mode: str,
@@ -475,7 +486,7 @@ def flush_boundary(message, auto_period: bool, auto_space: bool, injection_mode:
                             None, language, pending.get("may_change", False))
     if message.cancelled:
         return  # Esc while the engine heard the whole sentence
-    tail = _last_mark(mark) + (" " if auto_space and not kind else "")
+    tail = _last_mark(mark, pending["typed"]) + (" " if auto_space and not kind else "")
     # Mid-line the end goes before the next word: no period or second space
     # there. A terminal's text is its prompt, whatever the settings.
     if tail and app_kind(acting) != "terminal":

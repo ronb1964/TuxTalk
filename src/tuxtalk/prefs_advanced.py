@@ -627,7 +627,7 @@ class AdvancedTab(Tab):
             "Period at the end",
             "How a dictation ends.\n"
             "Always: a period is added when the speech model leaves one out.\n"
-            "As heard: only the punctuation the speech model writes.\n"
+            "As heard: only the punctuation the speech model writes, and what you say.\n"
             "Never: no period at the end, for short entries, names and commands.\n"
             "A period you say (\u201cperiod\u201d) is still typed, and so are question\n"
             "marks, exclamation points and the periods between sentences.")
@@ -644,6 +644,8 @@ class AdvancedTab(Tab):
 
     def _period_changed(self, combo):
         choice = combo.get_active_id()
+        if choice is None:
+            return      # the combo being built, not a choice made
         self.update_config("auto_period", choice == "always")
         self.update_config("no_final_period", choice == "never")
 

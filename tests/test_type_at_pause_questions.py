@@ -48,6 +48,28 @@ def test_a_question_said_over_two_pauses_ends_with_a_question_mark(pipeline):
     assert rs.state.current.message.sentence_audio == []
 
 
+def test_with_period_at_the_end_never_a_question_over_pauses_keeps_its_mark(
+        pipeline, monkeypatch):
+    """The question is worked out from the last phrase's full stop: Never
+    takes off a full stop, not the question mark that took its place."""
+    from tuxtalk import live_settings as live
+    monkeypatch.setattr(live, "no_final_period", True)
+    texts, typed = pipeline
+    texts.extend([
+        "but don't you think it would be smart to pick multiple holiday",
+        "items",
+        "smart to pick multiple holiday items",
+        "depending on the people you are buying for.",
+        "items depending on the people you are buying for",
+        "But don't you think it would be smart to pick multiple holiday items "
+        "depending on the people you are buying for?",
+    ])
+    type_chunk(frames_of(speech(2.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(2.0)), "last", auto_period=False)
+    assert typed[-1].rstrip() == "depending on the people you are buying for?"
+
+
 def test_a_statement_said_over_a_pause_keeps_its_period(pipeline):
     texts, typed = pipeline
     texts.extend(["we should change the settings", "so people can pick more.",

@@ -16,8 +16,6 @@ from .normalize import safe_to_lowercase_first_word
 WINDOW = 8
 
 _SENTENCE_ENDS = ".!?"
-# What a dictation can start with that joins the text before it as it is.
-_PUNCTUATION = ".,;:!?"
 # A line break as apps report it: Qt's rich text boxes give U+2029.
 _LINE_BREAKS = "\n\r\u2028\u2029"
 # After one of these, a dictation goes in without a space in front; a
@@ -36,20 +34,28 @@ _LINE_THEN_MORE = re.compile(r"[\n\r\u2028\u2029]\s*\S")
 _NOUN_CAPITALS = {"de", "lb"}
 
 
-# The marks a dictation can start with when said on its own (dictation_text).
+# The marks a dictation can start with when said on its own (dictation_text),
+# which join the text before it as they are (_fit_start).
 MARKS = ".,;:!?"
-# What a mark said on its own takes the place of at the end of the text
-# before it: the blanks after the last word, with a full stop right after
-# that word ("Is it ready. " then "question mark" is "Is it ready?"), not
-# the one of "U.S.", a number or an ellipsis.
-_TAKEN_BY_MARK = re.compile(r"(?<=[^\W\d_])(?<!\.[^\W\d_])\.?[ \t]*\Z|[ \t]+\Z")
+_BLANKS_AT_END = re.compile(r"[ \t]*\Z")
+# The word a full stop ends, its own dots with it ("U.S" of "U.S.").
+_WORD_BEFORE_STOP = re.compile(r"[\w.]*(?=\.\Z)")
 
 
 def taken_by_mark(before: str) -> str:
-    """The end of *before* a dictation that starts with a mark said on its
-    own goes in place of; "" when there's none."""
-    found = _TAKEN_BY_MARK.search(before)
-    return found.group() if found else ""
+    """The end of *before*, the text before the cursor, that a dictation
+    starting with a mark said on its own goes in place of: the blanks after
+    the last word, with the full stop after it ("Is it ready. " then
+    "question mark" is "Is it ready?"), not an ellipsis's nor an
+    abbreviation's (is_abbreviation). Nothing past a line break."""
+    blanks = _BLANKS_AT_END.search(before).group()
+    text = before[:len(before) - len(blanks)]
+    if not text or text[-1] in _LINE_BREAKS:
+        return ""       # the mark starts the line: nothing before it on it
+    if not text.endswith(".") or text.endswith(".."):
+        return blanks
+    word = _WORD_BEFORE_STOP.search(text).group()
+    return blanks if not word or is_abbreviation(word) else "." + blanks
 
 
 def fit(text: str, before: str, after: str, lowercase_ok: bool, words=()) -> str:
@@ -87,7 +93,7 @@ def _fit_start(text, before, lowercase_ok, words):
     middle of a sentence, with a space in front where one is missing.
     Punctuation said on its own and a line break go in as they are."""
     visible = before.rstrip(_BLANKS)
-    if text[0] in _PUNCTUATION + _LINE_BREAKS + _BLANKS or not visible \
+    if text[0] in MARKS + _LINE_BREAKS + _BLANKS or not visible \
             or visible[-1] in _LINE_BREAKS:
         return text     # joins as it is, or a new line: a new sentence, as always
     if not _starts_sentence(before) and lowercase_ok \
@@ -104,11 +110,11 @@ def _breaks_inside(text):
     initial) ends none."""
     if _LINE_THEN_MORE.search(text):
         return True
-    return any(mark != "." or not _abbreviation(word)
+    return any(mark != "." or not is_abbreviation(word)
                for word, mark in _MARK_THEN_MORE.findall(text))
 
 
-def _abbreviation(word):
+def is_abbreviation(word):
     """Whether *word*, before a period, is an abbreviation: single letters
     with periods between ("U.S", "e.g"), an initial, or a known one
     (chunk_text). A number ("3.14") or an address ("github.com") isn't."""

@@ -624,9 +624,8 @@ def test_auto_punct_still_adds_a_period_to_a_normal_sentence():
 
 def test_normalize_can_be_told_not_to_add_a_period():
     """_prepare_text calls normalize_text BEFORE append_auto_punct, so
-    normalize_text must honour the "Ensure period at end of sentences"
-    preference itself, or the period is already there by the time the
-    preference is consulted."""
+    normalize_text must honour Period at the end's As heard itself, or the
+    period is already there by the time the preference is consulted."""
     assert normalize_text("this is a sentence", auto_period=False) == "This is a sentence"
 
 

@@ -219,10 +219,11 @@ def _type_the_words(as_words: str, in_password: bool, audio_f32, job: _Job) -> N
         words = _restyled(words, tone, job)
     # Before _still_wanted: hearing the whole sentence takes a moment too.
     words = _end_of_sentence(words, audio_f32, job)
+    # Last, once a question carried across a pause or a rewrite has the end.
+    words = words._replace(text=_final_period_as_set(words, job))
     if not _still_wanted(words, job):
         return
     words = _fit_to_cursor(words, around, job)
-    _join_said_mark(words.text, around, job)
     _tell_done(words.text, job)
     if words.text:
         _deliver(words, audio_f32, job)
@@ -291,29 +292,39 @@ def _fit_to_cursor(words: _Words, around: tuple[str, str] | None, job: _Job) -> 
                                                 live.words))
 
 
-def _final_period_as_set(text: str, raw: str, job: _Job) -> str:
-    """*text* without its last full stop where Period at the end is Never,
-    for a Type at pause recording's last phrase (prepare_text does a whole
-    dictation's). A middle phrase's mark is the sentence's end between two
-    phrases."""
-    if live.no_final_period and job.chunk_role == "last":
-        return dictation_text.without_final_period(text, raw)
-    return text
+def _final_period_as_set(words: _Words, job: _Job) -> str:
+    """*words*' text without its last full stop where Period at the end is
+    Never: a whole dictation's (prepare_text did it before a tone rewrite,
+    which can add one), a Type at pause recording's last phrase's, and a
+    middle phrase's that "press enter" sends. Any other middle phrase's mark
+    is the sentence's end between two phrases."""
+    if live.no_final_period and (job.chunk_role != "middle" or words.said == "ENTER"):
+        return dictation_text.without_final_period(words.text, words.raw,
+                                                   live.command_language)
+    return words.text
 
 
-def _join_said_mark(text: str, around: tuple[str, str] | None, job: _Job) -> None:
+def _join_said_mark(text: str, job: _Job) -> None:
     """A whole dictation that starts with a mark said on its own ("question
     mark", "comma and then he left") goes in place of the space and full
     stop that end the text before it: "Is it ready?", not "Is it ready. ?".
-    That text is the app's where it says (*around*), else what the last
-    dictation typed; type_at_pause.erase_typed backspaces it only in the
-    window it went to, and never in a password field."""
-    if job.chunk_role is not None or text[:1] not in tuple(sentence_fit.MARKS):
+    Only that text as the app reports it now, read again right before the
+    keys, so what was typed or clicked since counts; where the app doesn't
+    say (a terminal, an app without accessibility), nothing is taken back.
+    Inside the recording's Esc (_deliver): nothing is erased once it's
+    cancelled."""
+    if job.chunk_role is not None or text[:1] not in tuple(sentence_fit.MARKS) \
+            or job.message.cancelled:
         return
-    before = around[0] if around is not None else rs.state.last_inserted_text
-    tail = sentence_fit.taken_by_mark(before)
+    where = focused_window.look()
+    if app_kind(focused_window.acts_as(where[0])) == "terminal":
+        return      # its "text" is the prompt and what scrolled by
+    around = focused_window.text_around_cursor(lambda: job.message.cancelled)
+    if around is None or job.message.cancelled:
+        return
+    tail = sentence_fit.taken_by_mark(around[0])
     if tail:
-        type_at_pause.erase_typed(tail, "Joining a mark to the text before")
+        type_at_pause.erase_typed(tail, "Fitting the mark", read_in=where)
 
 
 def _lowercase_ok(job: _Job) -> bool:
@@ -555,7 +566,6 @@ def _shape_text(raw: str, said: str, key, job: _Job):
     # four") goes to the AI together with the phrase it corrects.
     across = type_at_pause.corrects_across_pause(raw, job.chunk_role, job.message)
     text = _prepared(raw, job, chunk_period, kind, ai=not across)
-    text = _final_period_as_set(text, raw, job)
     if cut_off:
         # The engine may have put its own period after the "and".
         text = re.sub(r"\.(\s*)$", r"\1", text)
@@ -634,6 +644,7 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
         # window. Not a correction that took the phrase before back
         # (_still_wanted).
         with keyboard_output.until_cancelled(None if words.taken_back else job.message):
+            _join_said_mark(text, job)
             outcome = delivery.inject_text(text, job.injection_mode, message=job.message)
     except Exception as e:
         # The transcription worked; only getting it into the window

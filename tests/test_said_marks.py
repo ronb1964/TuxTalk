@@ -46,10 +46,24 @@ def test_a_comma_said_last_after_words_is_still_a_full_stop(monkeypatch):
 
 @pytest.mark.parametrize(("before", "taken"), [
     ("Is it ready. ", ". "), ("Is it ready ", " "), ("Is it ready", ""),
-    ("Is it ready? ", " "), ("In the U.S. ", " "), ("Wait... ", " "),
-    ("Item 3. ", " "), ("Hello.\n", ""), ("", ""),
+    ("Is it ready? ", " "), ("I'll be there at 5. ", ". "), ("In the U.S. ", " "),
+    ("and so on etc. ", " "), ("Ask Dr. ", " "), ("John F. ", " "), ("Wait... ", " "),
+    ("Hello.\n", ""), ("Hello.\n  ", ""), ("", ""),
 ])
 def test_what_a_said_mark_goes_in_place_of(before, taken):
-    """The space after the last word, and its full stop: not one of an
-    abbreviation, a number or an ellipsis, and nothing past a line break."""
+    """The space after the last word, and its full stop: not an
+    abbreviation's, an initial's or an ellipsis's, and nothing at the start
+    of a line."""
     assert taken_by_mark(before) == taken
+
+
+def test_comma_separated_values_stay_words(monkeypatch):
+    """Said first, "comma" now goes on the end of the text before: the
+    term must not be taken for the mark."""
+    monkeypatch.setattr(live, "ai_engine", None)
+    assert typed("comma separated values are easy") == "Comma separated values are easy."
+
+
+def test_a_german_comma_said_first_is_kept(monkeypatch):
+    monkeypatch.setattr(live, "ai_engine", None)
+    assert typed("Komma und dann ging er", "de") == ", und dann ging er."

@@ -490,6 +490,8 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 | "open quote" / "close quote" | " " (smart quotes) |
 | "dot dot dot" / "ellipsis" | … |
 
+Said on its own, a mark goes on the end of what's already there: "Is it ready." then "question mark" gives "Is it ready?", in apps that tell TuxTalk the text before the cursor. For no period at the end of a dictation, as for names, short entries and commands, set Preferences → Advanced → Fine-tuning → Period at the end to Never; a period you say is still typed.
+
 ### Formatting
 | Say This | Result |
 |----------|--------|

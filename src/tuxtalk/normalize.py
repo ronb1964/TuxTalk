@@ -191,8 +191,9 @@ _CONTEXT_PROTECT_PATTERNS = [
     (re.compile(r"\bcolon(\s+(?:cancer|surgery|polyps?|health|cleanse|screening|"
                 r"exam|biopsy))\b", re.IGNORECASE), r"__LIT_COLON__\1"),
 
-    # "comma operator/splice/key" — programming / writing terminology
-    (re.compile(r"\bcomma\s+(operator|splice|key)\b", re.IGNORECASE),
+    # "comma operator/splice/key", "comma separated values": programming
+    # and writing terminology
+    (re.compile(r"\bcomma\s+(operator|splice|key|separated|delimited)\b", re.IGNORECASE),
      r"__LIT_COMMA__ \1"),
     # "Oxford/serial comma" — writing style
     (re.compile(r"\b(oxford|serial)\s+comma\b", re.IGNORECASE),
@@ -1062,7 +1063,7 @@ def _finish_addresses(text: str) -> str:
 def normalize_text(text: str, auto_period: bool = True, lang: str = "en") -> str:
     """Spoken punctuation -> symbols; tidy punctuation; auto-capitalize; keep newlines/tabs.
 
-    auto_period mirrors the "Ensure period at end of sentences" preference;
+    auto_period mirrors Period at the end's Always (As heard: off);
     *lang* is the command language, "de" adding the German mark words.
     It is honoured *here* as well as in append_auto_punct: this pass ends every
     line with a full stop and runs first, so otherwise unchecking the

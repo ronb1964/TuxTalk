@@ -39,7 +39,7 @@ onto the dictation.
 """
 import threading
 
-from . import focused_window, virtual_keyboard
+from . import focused_window, sentence_fit, virtual_keyboard
 from .logger import setup_logger
 from .recording_state import Message
 
@@ -579,10 +579,13 @@ def type_owed_space(before: str) -> None:
     dictation, whose text is *before*, in the window the send's text went
     to. On its own and held to that window, never as part of the next
     dictation's text: a dictation goes wherever the focus is, and a space
-    in it would go along. Dropped when that dictation is empty or brings
-    its own space."""
+    in it would go along. Dropped when that dictation is empty, brings its
+    own space, or starts with a mark that goes on the end of the text."""
     pending = _take_owed()
-    if pending is None or _focus_left(pending) or not before or before[0].isspace():
+    # A mark said on its own goes on the end of the text, space or no space
+    # (pipeline._join_said_mark): "Is it ready?", not "Is it ready ?".
+    if pending is None or _focus_left(pending) or not before or before[0].isspace() \
+            or before[0] in sentence_fit.MARKS:
         return
     # Held to that window up to the key: the focus can move after this look.
     pending["type"](pending["space"], pending["mode"], into=pending["to"])

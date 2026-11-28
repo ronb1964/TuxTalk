@@ -1371,3 +1371,15 @@ def test_period_at_the_end_never_leaves_off_the_recordings_last_full_stop(
         type_chunk(frames_of(speech(1.0)), "middle")
         type_chunk([], "last")
         assert typed == ["We meet", ". ", "The end", " "]
+
+
+def test_period_at_the_end_never_keeps_an_abbreviations_dot_after_the_pause(
+        pipeline, monkeypatch):
+    """The recording's last mark held back after "U.S" is its dot, not a
+    sentence's full stop."""
+    monkeypatch.setattr(live, "no_final_period", True)
+    texts, typed, _ = pipeline
+    texts.append("we live in the U.S.")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk([], "last")
+    assert "".join(typed).rstrip() == "We live in the U.S."

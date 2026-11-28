@@ -219,26 +219,44 @@ def test_a_mark_said_on_its_own_joins_the_text_before(desktop, monkeypatch, befo
     assert desktop["typed"] == typed
 
 
-def test_where_the_app_doesnt_say_the_last_dictation_is_what_a_mark_joins(desktop, monkeypatch):
+def test_where_the_app_doesnt_say_a_mark_takes_nothing_back(desktop, monkeypatch):
+    """The last dictation's text isn't enough: the user may have typed or
+    clicked since, and backspaces there would delete their text."""
     monkeypatch.setattr(keyboard_output, "not_where_typed", lambda *a: False)
     monkeypatch.setattr(rs.state, "last_inserted_text", "Is it ready. ")
     dictate(monkeypatch, "Comma.")
-    assert desktop["typed"] == [("backspace", 2), ", "]
+    assert desktop["typed"] == [", "]
 
 
-def test_a_mark_said_in_another_window_takes_nothing_back(desktop, monkeypatch):
-    """The text before is another window's: backspacing there would delete
-    what TuxTalk never typed."""
-    monkeypatch.setattr(keyboard_output, "not_where_typed", lambda *a: True)
-    monkeypatch.setattr(rs.state, "last_inserted_text", "Is it ready. ")
+def test_a_mark_takes_nothing_back_once_the_focus_moved(desktop, monkeypatch):
+    """Read in one window or field, the text before isn't the one in front
+    of the cursor now."""
+    desktop["around"] = ("Is it ready. ", "")
+    monkeypatch.setattr(focused_window, "changed", lambda before, after: True)
     dictate(monkeypatch, "Question mark.")
     assert desktop["typed"] == ["? "]
+
+
+def test_esc_while_the_text_before_is_read_erases_nothing(desktop, monkeypatch):
+    """Cancelled then, the mark isn't typed: the full stop before it must
+    stay too."""
+    reads = []
+
+    def read_then_cancel(cancelled=lambda: False):
+        reads.append(True)
+        if len(reads) > 1:              # the join's own read, after the fit's
+            rs.state.current.message.cancelled = True
+        return ("Is it ready. ", "")
+    monkeypatch.setattr(focused_window, "text_around_cursor", read_then_cancel)
+    dictate(monkeypatch, "Question mark.")
+    assert all(not isinstance(key, tuple) for key in desktop["typed"])
 
 
 @pytest.mark.parametrize(("heard", "typed"), [
     ("Send it tomorrow.", "Send it tomorrow "),
     ("Send it tomorrow period", "Send it tomorrow. "),
     ("Is it ready?", "Is it ready? "),
+    ("We met in the U.S.", "We met in the U.S. "),
 ])
 def test_with_period_at_the_end_never_a_dictation_ends_without_one(desktop, monkeypatch,
                                                                     heard, typed):
