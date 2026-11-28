@@ -313,10 +313,13 @@ def test_an_older_wl_copy_still_pastes_without_the_hint(monkeypatch):
     assert cb.wl_copy_command() == ["wl-copy", "--type", cb.TEXT_TYPES[0]]
 
 
-def test_a_wl_copy_that_timed_out_is_asked_again(monkeypatch):
-    """Kept as "can't mark", one slow answer at the first paste left every
-    dictation of the session unmarked for clipboard histories."""
-    answers = [subprocess.TimeoutExpired("wl-copy", 3), "  --sensitive  Hint ..."]
+@pytest.mark.parametrize("failure", [subprocess.TimeoutExpired("wl-copy", 3),
+                                     subprocess.CalledProcessError(1, "wl-copy --help")])
+def test_a_wl_copy_that_failed_to_answer_is_asked_again_a_minute_later(monkeypatch, failure):
+    """Kept as "can't mark", one slow or failed answer at the first paste
+    left every dictation of the session unmarked for clipboard histories;
+    asked at every paste, it could add its wait to each one."""
+    answers, now = [failure, "  --sensitive  Hint ..."], [100.0]
 
     def help_text():
         answer = answers.pop(0)
@@ -324,8 +327,13 @@ def test_a_wl_copy_that_timed_out_is_asked_again(monkeypatch):
             raise answer
         return answer
     monkeypatch.setattr(cb, "_wl_copy_help", help_text)
+    monkeypatch.setattr(cb, "_help_failed_at", None)
+    monkeypatch.setattr(cb.time, "monotonic", lambda: now[0])
     cb._wl_copy_marks.cache_clear()
     assert cb._sensitive_supported() is False
+    now[0] += cb.HELP_RETRY_S - 1
+    assert cb._sensitive_supported() is False and answers     # not asked yet
+    now[0] += 1
     assert cb._sensitive_supported() is True
 
 

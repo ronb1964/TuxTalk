@@ -76,8 +76,12 @@ PASSWORD_HINT = "x-kde-passwordManagerHint"
 
 
 def _wl_copy_help():
+    """What wl-copy --help prints. Raises when it fails: an error's text
+    isn't its list of options."""
     result = subprocess.run(["wl-copy", "--help"], capture_output=True, text=True,
                             errors="replace", timeout=3)
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(result.returncode, "wl-copy --help")
     return result.stdout + result.stderr
 
 
@@ -90,22 +94,31 @@ def _wl_copy_marks():
 
 
 _help_failures = FailureNotes()
+# After wl-copy failed to answer, how long before it's asked again: each
+# ask can wait its whole timeout, and one paste asks up to four times.
+HELP_RETRY_S = 60.0
+_help_failed_at = None
 
 
 def _sensitive_supported():
     """Whether a dictation can be marked for clipboard histories to skip.
-    False with no wl-copy, and while it can't be asked (a timeout, said in
-    the log): kept as the answer, that would leave every dictation of the
-    session unmarked."""
+    False with no wl-copy, and while it can't be asked (a timeout or an
+    error, said in the log), asked again after HELP_RETRY_S: kept as the
+    answer, that would leave every dictation of the session unmarked."""
+    global _help_failed_at
+    if _help_failed_at is not None and time.monotonic() - _help_failed_at < HELP_RETRY_S:
+        return False
     try:
         marks = _wl_copy_marks()
     except FileNotFoundError:
         return False    # no wl-copy: nothing to mark
     except (OSError, subprocess.SubprocessError) as e:
+        _help_failed_at = time.monotonic()
         if _help_failures.failed("wl-copy --help", type(e).__name__):
             logger.info(f"Could not ask wl-copy whether it can mark a dictation ({e}); "
-                        "asked again at the next paste")
+                        f"asked again in {HELP_RETRY_S:g} s")
         return False
+    _help_failed_at = None
     if _help_failures.worked("wl-copy --help"):
         logger.info("wl-copy answers again")
     return marks
