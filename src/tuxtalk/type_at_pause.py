@@ -451,6 +451,12 @@ def _short_phrase_in_context(raw: str, before: str, joint: str) -> str:
     return raw
 
 
+def _last_mark(mark: str) -> str:
+    """The mark a recording that ended in a pause ends with: none for a full
+    stop where Period at the end is Never."""
+    return "" if live.no_final_period and mark == "." else mark
+
+
 def flush_boundary(message, auto_period: bool, auto_space: bool, injection_mode: str,
                    language) -> None:
     """*message*'s dictation ended in a pause: type the mark held back after
@@ -469,7 +475,7 @@ def flush_boundary(message, auto_period: bool, auto_space: bool, injection_mode:
                             None, language, pending.get("may_change", False))
     if message.cancelled:
         return  # Esc while the engine heard the whole sentence
-    tail = mark + (" " if auto_space and not kind else "")
+    tail = _last_mark(mark) + (" " if auto_space and not kind else "")
     # Mid-line the end goes before the next word: no period or second space
     # there. A terminal's text is its prompt, whatever the settings.
     if tail and app_kind(acting) != "terminal":

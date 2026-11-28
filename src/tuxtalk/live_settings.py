@@ -79,6 +79,9 @@ live_text = False
 # Plain text in terminals and code editors (app_kind, plain_for_app).
 adapt_to_app = True
 
+# Period at the end: Never (dictation_text.without_final_period).
+no_final_period = False
+
 # Press Enter after every dictation, as if each ended with "press enter"
 # (key_commands.py).
 press_enter_after = False      # after send_countdown's wait
@@ -118,7 +121,7 @@ def apply(cfg):
     settings reload; start or stop the AI engine."""
     global remove_fillers, ai_engine, auto_stop_seconds, ai_corrections, voice_editing
     global swiss_spelling, numbers_mode, numbers_language, command_language
-    global voice_navigation, adapt_to_app
+    global voice_navigation, adapt_to_app, no_final_period
     global open_apps, live_text
     global auto_languages, press_enter_after
     global chunk_pause_seconds, settings, chunk_context_marks
@@ -149,6 +152,7 @@ def apply(cfg):
     open_apps = _labs(cfg.open_apps)
     live_text = _labs(cfg.live_text)
     adapt_to_app = bool(cfg.adapt_to_app)
+    no_final_period = bool(cfg.no_final_period)
     press_enter_after = bool(cfg.press_enter_after)
     send_countdown.configure(cfg)
     from . import language_limit

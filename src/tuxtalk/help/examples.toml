@@ -29,6 +29,13 @@ get = "?"
 
 [[example]]
 group = "paragraphs"
+say = "see you at three"
+get = "See you at three"
+when = "Period at the end: Never"
+settings = { no_final_period = true }
+
+[[example]]
+group = "paragraphs"
 say = "Dear Anna comma new line thanks for the quote period new paragraph see you Monday"
 get = "Dear Anna,\nThanks for the quote.\n\nSee you Monday."
 

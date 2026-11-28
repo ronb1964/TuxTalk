@@ -600,6 +600,7 @@ beeps = true              # Audio feedback sounds
 smart_quotes = true       # Use curly quotes " "
 auto_space = true         # Auto-space between utterances
 auto_period = true        # Add period at end of sentences
+no_final_period = false   # Period at the end: Never (leave the last one off)
 command_language = "en"   # Voice commands in: "en", or "de" for German too
 ```
 

@@ -6,7 +6,7 @@ and the AI's self-corrections when they're on.
 What the user's settings say comes in as *settings*: anything with
 live_settings' names (commands, words, numbers_mode, numbers_language,
 command_language, remove_fillers, ai_corrections, ai_engine, swiss_spelling,
-loggable), and
+no_final_period, loggable), and
 live_settings itself in the service. Whether the dictation carries on the
 last sentence is the caller's to say, since that depends on the window."""
 import re
@@ -77,10 +77,28 @@ def _normalized(text: str, auto_period: bool, lang: str, whole: bool) -> str:
     text_alone = normalize_text(text, auto_period=auto_period, lang=lang)
     if not whole or not text.lstrip()[:1].isalpha():
         return text_alone       # an engine's stray mark comes as the mark itself
-    probed = normalize_text(f"{_PROBE} {text}", auto_period=auto_period, lang=lang)
+    # Asked with no auto-period: that would end the made-up word's line with
+    # a full stop of its own where a line break is said first ("new line, ...").
+    probed = normalize_text(f"{_PROBE} {text}", auto_period=False, lang=lang)
     if probed.startswith(_PROBE) and probed[len(_PROBE):][:1] in tuple(_MARKS):
-        return probed[len(_PROBE):]
+        return normalize_text(f"{_PROBE} {text}", auto_period=auto_period, lang=lang)[len(_PROBE):]
     return text_alone
+
+
+# The full stop a dictation ends with, before the auto-space: not a dot of
+# an ellipsis or of "U.S.".
+_FINAL_PERIOD = re.compile(r"(?<![.\s])(?<!\.[^\W\d_])\.(?=\s*\Z)")
+# "period" said last, as the engine heard it ("Period.", "full stop", "Punkt").
+_SAID_PERIOD = re.compile(r"\b(?:period|full\s+stop|punkt)\W*\Z", re.IGNORECASE)
+
+
+def without_final_period(text: str, heard: str) -> str:
+    """*text*, ready to type, without the full stop it ends with (Period at
+    the end: Never), unless *heard*, the dictation as the engine wrote it,
+    ended with "period" said: a full stop asked for is typed."""
+    if _SAID_PERIOD.search(heard):
+        return text
+    return _FINAL_PERIOD.sub("", text, count=1)
 
 
 def clean_up(text, ai, settings):
@@ -128,6 +146,20 @@ def _address_on_its_own(processed: str, protected: dict[str, str], settings) -> 
     return breaks + address if address else None
 
 
+def _said_alone(processed: str, protected: dict[str, str], settings) -> str | None:
+    """What a whole dictation of only an address or only a mark types, as
+    it is, with none of the rules for sentences; None for anything else."""
+    address = _address_on_its_own(processed, protected, settings)
+    if address:
+        logger.info(f"Normalized text: {settings.loggable(address)} (an address on its own)")
+        return address
+    mark = not protected and _mark_alone(processed, settings.command_language)
+    if mark:
+        logger.info(f"Normalized text: {mark!r} (a mark said on its own)")
+        return mark
+    return None
+
+
 def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool,
                  app_kind: str = "", ai: bool = True, whole: bool = True, *,
                  settings, continues: Callable[[], bool] | None = None) -> str:
@@ -158,14 +190,9 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     if settings.words:
         from .word_spelling import fix_spelling
         processed = fix_spelling(processed, settings.words)
-    address = whole and _address_on_its_own(processed, protected, settings)
-    if address:
-        logger.info(f"Normalized text: {settings.loggable(address)} (an address on its own)")
-        return address + (" " if auto_space else "")
-    mark = whole and not protected and _mark_alone(processed, settings.command_language)
-    if mark:
-        logger.info(f"Normalized text: {mark!r} (a mark said on its own)")
-        return mark + (" " if auto_space else "")
+    alone = whole and _said_alone(processed, protected, settings)
+    if alone:
+        return alone + (" " if auto_space else "")
 
     # Normalize text (capitalization, punctuation, etc.). auto_period is passed
     # through because this pass otherwise ends every line with a full stop of
@@ -211,6 +238,8 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     # command, the period lands BEFORE the break and no trailing space is
     # added, so "hello new line" leaves no orphan ". " on the next line.
     text = append_auto_punct(text, auto_period, auto_space)
+    if whole and settings.no_final_period:
+        text = without_final_period(text, raw)
     if app_kind:
         text = plain_for_app(text, app_kind)
     logger.info(f"Normalized text: {settings.loggable(text)}")

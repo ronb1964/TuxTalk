@@ -13,6 +13,18 @@ from .prefs_tab import LABS_INDENT, Tab, dropdown, fold, subheading, tip_label
 from .prefs_type_at_pause import TypeAtPause
 from .ui_style import show_message
 
+# Period at the end: one question over two settings, so old configs keep
+# their meaning (auto_period alone was the checkbox).
+PERIOD_CHOICES = (("always", "Always"), ("as_heard", "As heard"), ("never", "Never"))
+
+
+def period_choice(config) -> str:
+    """The Period at the end choice *config*'s settings make."""
+    if config.get("no_final_period", False):
+        return "never"
+    return "always" if config.get("auto_period", True) else "as_heard"
+
+
 # The Numbers dropdown: (label, numbers_as_digits, numbers_small_as_words).
 # "As written" leaves the one-to-nine choice as it was (None), for next time.
 NUMBER_CHOICES = {
@@ -223,18 +235,7 @@ class AdvancedTab(Tab):
         fine.attach(space_check, 0, frow, 2, 1)
         frow += 1
 
-        period_check = Gtk.CheckButton(label="Ensure period at end of sentences")
-        period_check.set_active(bool(self.config.get("auto_period", True)))
-        period_check.connect("toggled", lambda x: self.update_config("auto_period", x.get_active()))
-        period_check.set_tooltip_text(
-            "Ensure every sentence ends with punctuation.\n"
-            "\n"
-            "The speech model usually adds periods by itself, but sometimes misses one.\n"
-            "This option adds the period when it does, so punctuation stays consistent.\n"
-            "\n"
-            "Unchecked: no period is added at the end; spoken commands and capitals still apply\n"
-            "Checked: every sentence ends with punctuation")
-        fine.attach(period_check, 0, frow, 2, 1)
+        fine.attach(self._period_row(), 0, frow, 2, 1)
         frow += 1
 
         # No closing period in terminals and code editors, no starting capital
@@ -618,6 +619,33 @@ class AdvancedTab(Tab):
                                        "(TuxTalk Discussions on GitHub)")
         labs_links.pack_start(labs_feedback, False, False, 0)
         grid.attach(labs_links, 0, row, 2, 1)
+
+    def _period_row(self):
+        """Period at the end: one dropdown over auto_period and
+        no_final_period, beside its label."""
+        label = tip_label(
+            "Period at the end",
+            "How a dictation ends.\n"
+            "Always: a period is added when the speech model leaves one out.\n"
+            "As heard: only the punctuation the speech model writes.\n"
+            "Never: no period at the end, for short entries, names and commands.\n"
+            "A period you say (\u201cperiod\u201d) is still typed, and so are question\n"
+            "marks, exclamation points and the periods between sentences.")
+        combo = dropdown(Gtk.ComboBoxText())
+        for choice, text in PERIOD_CHOICES:
+            combo.append(choice, text)
+        combo.set_active_id(period_choice(self.config))
+        combo.connect("changed", self._period_changed)
+        label.set_mnemonic_widget(combo)
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        row.pack_start(label, False, False, 0)
+        row.pack_start(combo, False, False, 0)
+        return row
+
+    def _period_changed(self, combo):
+        choice = combo.get_active_id()
+        self.update_config("auto_period", choice == "always")
+        self.update_config("no_final_period", choice == "never")
 
     def _swiss_spelling_check(self):
         """The "Swiss German spelling" checkbox, bound to swiss_spelling."""

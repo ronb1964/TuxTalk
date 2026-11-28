@@ -1353,3 +1353,21 @@ def test_the_screen_copy_survives_the_two_spellings_of_one_app(monkeypatch):
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
     last_dictation.remember_shown(" Bye.", chunked=True, ok=True, message=message)
     assert message.shown is None                       # another app: not trusted
+
+
+@pytest.mark.parametrize("last", ["chunk", "pause"])
+def test_period_at_the_end_never_leaves_off_the_recordings_last_full_stop(
+        pipeline, monkeypatch, last):
+    """The full stop between two phrases stays; only the one ending the
+    recording goes, typed with the last phrase or after the pause it ended in."""
+    monkeypatch.setattr(live, "no_final_period", True)
+    texts, typed, _ = pipeline
+    texts.extend(["we meet.", "the end.", "we meet. The end."])
+    type_chunk(frames_of(speech(1.0)), "middle")
+    if last == "chunk":
+        type_chunk(frames_of(speech(1.0)), "last")
+        assert typed == ["We meet", ". ", "The end "]
+    else:
+        type_chunk(frames_of(speech(1.0)), "middle")
+        type_chunk([], "last")
+        assert typed == ["We meet", ". ", "The end", " "]

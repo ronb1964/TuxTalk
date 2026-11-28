@@ -135,6 +135,9 @@ class Settings:
     # after a line break); TuxTalk can't see what's typed by hand before one
     auto_space: bool = True
     auto_period: bool = True   # append a period when an utterance ends without terminal punctuation
+    # Period at the end: Never. The full stop a dictation ends with is left
+    # off, the engine's own too, unless the user said it (dictation_text).
+    no_final_period: bool = False
     # "auto" (smart detection), "type" (the virtual keyboard), "type_only" (the
     # keyboard, never the clipboard: Keystroke Typing (No Clipboard)), or
     # "paste" (wl-copy + Ctrl+V)
@@ -565,6 +568,7 @@ LIVE_APPLIED_KEYS = {
     "open_apps",
     "live_text",
     "adapt_to_app",
+    "no_final_period",
     "press_enter_after",
     "press_enter_delay",
     "ai_corrections",

@@ -12,6 +12,14 @@ before 0.15.0, so older entries use that name.
   there, in place of the full stop and space after it: "Is it ready." and
   then "question mark" is "Is it ready?". Thanks to Andy (#52).
 
+- Period at the end, a new choice in Preferences → Advanced → Fine-tuning
+  where "Ensure period at end of sentences" was: Always (a period added
+  when the speech model leaves one out, as before), As heard (the box
+  unticked), or Never, which leaves off the period a dictation ends with,
+  the speech model's own too, for names, short entries and commands. A
+  period you say is still typed, and so are question marks and the
+  periods between sentences. Thanks to Andy (#52).
+
 - Help says how to open a script of your own by voice: give it a menu
   entry, a small .desktop file naming the script and what it takes, and
   say "open" with its name.

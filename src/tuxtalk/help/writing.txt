@@ -6,6 +6,8 @@ and so on. TuxTalk adds the capitals, and a period at the end if the speech mode
 forgot one. Help's Commands tab has them all.
 Said on its own, a mark goes on the end of what's there: hold <b>{hold}</b>, say <b>question
 mark</b>, let go, and "Is it ready." becomes "Is it ready?".
+No period at the end, for names, short entries and commands: <b>Preferences → Advanced →
+Fine-tuning → Period at the end: Never</b>. A period you say is still typed.
 {examples_paragraphs}
 {examples_quotes}
 

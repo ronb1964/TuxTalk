@@ -233,3 +233,20 @@ def test_a_mark_said_in_another_window_takes_nothing_back(desktop, monkeypatch):
     monkeypatch.setattr(rs.state, "last_inserted_text", "Is it ready. ")
     dictate(monkeypatch, "Question mark.")
     assert desktop["typed"] == ["? "]
+
+
+@pytest.mark.parametrize(("heard", "typed"), [
+    ("Send it tomorrow.", "Send it tomorrow "),
+    ("Send it tomorrow period", "Send it tomorrow. "),
+    ("Is it ready?", "Is it ready? "),
+])
+def test_with_period_at_the_end_never_a_dictation_ends_without_one(desktop, monkeypatch,
+                                                                    heard, typed):
+    """A full stop said is still typed, and a question mark stays."""
+    monkeypatch.setattr(live, "no_final_period", True)
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: heard)
+    frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
+                                   smart_quotes=False, notify_on=False, auto_period=False,
+                                   message=rs.state.current.message)
+    assert desktop["typed"] == [typed]

@@ -149,6 +149,7 @@ _MIRRORED = [
     ({"open_apps": True}, "open_apps", True),
     ({"live_text": True}, "live_text", True),
     ({"adapt_to_app": False}, "adapt_to_app", False),
+    ({"no_final_period": True}, "no_final_period", True),
     ({"press_enter_after": True}, "press_enter_after", True),
     ({"auto_languages": "en,es"}, "auto_languages", ("en", "es")),
     ({"numbers_as_digits": True}, "numbers_mode", "all"),

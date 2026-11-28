@@ -291,6 +291,16 @@ def _fit_to_cursor(words: _Words, around: tuple[str, str] | None, job: _Job) -> 
                                                 live.words))
 
 
+def _final_period_as_set(text: str, raw: str, job: _Job) -> str:
+    """*text* without its last full stop where Period at the end is Never,
+    for a Type at pause recording's last phrase (prepare_text does a whole
+    dictation's). A middle phrase's mark is the sentence's end between two
+    phrases."""
+    if live.no_final_period and job.chunk_role == "last":
+        return dictation_text.without_final_period(text, raw)
+    return text
+
+
 def _join_said_mark(text: str, around: tuple[str, str] | None, job: _Job) -> None:
     """A whole dictation that starts with a mark said on its own ("question
     mark", "comma and then he left") goes in place of the space and full
@@ -545,6 +555,7 @@ def _shape_text(raw: str, said: str, key, job: _Job):
     # four") goes to the AI together with the phrase it corrects.
     across = type_at_pause.corrects_across_pause(raw, job.chunk_role, job.message)
     text = _prepared(raw, job, chunk_period, kind, ai=not across)
+    text = _final_period_as_set(text, raw, job)
     if cut_off:
         # The engine may have put its own period after the "and".
         text = re.sub(r"\.(\s*)$", r"\1", text)
