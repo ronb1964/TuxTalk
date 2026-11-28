@@ -257,6 +257,8 @@ def test_esc_while_the_text_before_is_read_erases_nothing(desktop, monkeypatch):
     ("Send it tomorrow period", "Send it tomorrow. "),
     ("Is it ready?", "Is it ready? "),
     ("We met in the U.S.", "We met in the U.S. "),
+    ("Period.", ". "),
+    ("Neither do I.", "Neither do I "),
 ])
 def test_with_period_at_the_end_never_a_dictation_ends_without_one(desktop, monkeypatch,
                                                                     heard, typed):

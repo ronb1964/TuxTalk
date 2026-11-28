@@ -11,7 +11,8 @@ before 0.15.0, so older entries use that name.
   a speech model leaves there. In an app that tells TuxTalk the text
   before the cursor, it goes on the end of what's already there, in place
   of the full stop and space after it: "Is it ready." and then "question
-  mark" is "Is it ready?"; an abbreviation's dot stays. Thanks to Andy (#52).
+  mark" is "Is it ready?"; an abbreviation's or an initial's dot stays.
+  Thanks to Andy (#52).
 
 - Period at the end, a new choice in Preferences → Advanced → Fine-tuning
   where "Ensure period at end of sentences" was: Always (a period added

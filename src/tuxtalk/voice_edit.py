@@ -312,7 +312,7 @@ def _rewritten(selected, instruction, beeps_on):
     text = _apply_steps(selected, steps, beeps_on)
     if text is None:
         return None
-    result = _as_typed(text) if text != selected else None
+    result = _as_typed(text, selected) if text != selected else None
     # Exact: for an edit done in code, spacing may be the whole change
     # (indenting one line); the AI's spacing-only answers are dropped above.
     if not result or result == selected:
@@ -329,11 +329,17 @@ def _rewritten(selected, instruction, beeps_on):
     return result
 
 
-def _as_typed(text: str) -> str:
-    """A rewrite as TuxTalk types it: Swiss spelling and digits as set."""
+def _as_typed(text: str, selected: str) -> str:
+    """A rewrite of *selected* as TuxTalk types it: Swiss spelling and
+    digits as set, and with Period at the end: Never, no full stop at its
+    end where *selected* had none (a dictation typed so, made formal
+    after a pause)."""
     if live.swiss_spelling:
         text = swiss_spelling(text)
-    return dictation_text.numbers_to_digits(text, live)
+    text = dictation_text.numbers_to_digits(text, live)
+    if live.no_final_period and not selected.rstrip().endswith("."):
+        text = dictation_text.without_final_period(text, "", live.command_language)
+    return text
 
 
 def restyle(text: str, instruction: str, beeps_on: bool):
@@ -354,7 +360,7 @@ def restyle(text: str, instruction: str, beeps_on: bool):
     else:
         result = ai.edit(plain, instruction)
         if result is not None:
-            result = _as_typed(result)
+            result = _as_typed(result, plain)
         if result is None or result.split() == plain.split() or "SHIFT_ENTER" in result:
             why, result = "no change", None
         elif not voice_edit_rules.restyle_keeps_facts(plain, result):

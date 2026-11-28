@@ -55,7 +55,7 @@ def taken_by_mark(before: str) -> str:
     if not text.endswith(".") or text.endswith(".."):
         return blanks
     word = _WORD_BEFORE_STOP.search(text).group()
-    return blanks if not word or is_abbreviation(word) else "." + blanks
+    return blanks if ends_abbreviation(word) else "." + blanks
 
 
 def fit(text: str, before: str, after: str, lowercase_ok: bool, words=()) -> str:
@@ -112,6 +112,13 @@ def _breaks_inside(text):
         return True
     return any(mark != "." or not is_abbreviation(word)
                for word, mark in _MARK_THEN_MORE.findall(text))
+
+
+def ends_abbreviation(word):
+    """Whether a full stop after *word*, the last one before it, is the
+    abbreviation's (is_abbreviation), not a sentence's: "I" and "a", alone,
+    end sentences ("Neither do I."). False for no word."""
+    return bool(word) and word not in ("I", "a", "A") and is_abbreviation(word)
 
 
 def is_abbreviation(word):
