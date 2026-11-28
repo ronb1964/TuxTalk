@@ -61,8 +61,9 @@ def copy_text(text):
 
 RESTORE_DELAY_S = 0.5           # apps read the clipboard asynchronously after Ctrl+V
 MAX_SAVED_BYTES = 20 * 1024 * 1024
-# wl-copy is told the first: left to guess, it takes text starting "From "
-# for a mailbox and offers it only as application/mbox, which no app pastes.
+# wl-copy is given TEXT_TYPES[0]: left to guess, it takes text starting
+# "From " for a mailbox and offers it only as application/mbox, which no
+# app pastes.
 TEXT_TYPES = ("text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "STRING", "TEXT")
 NOTHING = object()          # nothing saved (setting off, or the clipboard couldn't be read)
 EMPTY = object()            # the clipboard was empty before the paste
@@ -81,12 +82,33 @@ def _wl_copy_help():
 
 
 @functools.lru_cache(maxsize=1)
+def _wl_copy_marks():
+    """Whether wl-copy has --sensitive (wl-clipboard 2.3.0, some distros
+    back-port it), asked once a session. Raises when it can't be asked: an
+    error isn't kept, so the next paste asks again."""
+    return "--sensitive" in _wl_copy_help()
+
+
+_help_failures = FailureNotes()
+
+
 def _sensitive_supported():
-    """wl-copy --sensitive arrived in wl-clipboard 2.3.0 (some distros back-port it)."""
+    """Whether a dictation can be marked for clipboard histories to skip.
+    False with no wl-copy, and while it can't be asked (a timeout, said in
+    the log): kept as the answer, that would leave every dictation of the
+    session unmarked."""
     try:
-        return "--sensitive" in _wl_copy_help()
-    except (OSError, subprocess.SubprocessError):   # no wl-copy: nothing to mark
+        marks = _wl_copy_marks()
+    except FileNotFoundError:
+        return False    # no wl-copy: nothing to mark
+    except (OSError, subprocess.SubprocessError) as e:
+        if _help_failures.failed("wl-copy --help", type(e).__name__):
+            logger.info(f"Could not ask wl-copy whether it can mark a dictation ({e}); "
+                        "asked again at the next paste")
         return False
+    if _help_failures.worked("wl-copy --help"):
+        logger.info("wl-copy answers again")
+    return marks
 
 
 def wl_copy_command():

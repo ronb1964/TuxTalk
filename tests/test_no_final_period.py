@@ -34,20 +34,35 @@ def test_never_leaves_off_the_last_full_stop_only(typed, heard, left):
 
 def test_a_german_full_stop_said_is_kept_and_a_quote_closed_the_german_way_is_reached():
     assert without_final_period("Bis morgen. ", "Bis morgen Punkt.", "de") == "Bis morgen. "
-    assert without_final_period("\u201eHallo.\u201c ", "Hallo.", "de") == "\u201eHallo\u201c "
+    assert without_final_period("Er sagte \u201eHallo.\u201c ", "Er sagte \u201eHallo.\u201c",
+                                "de") == "Er sagte \u201eHallo\u201c "
 
 
-def test_a_tone_rewrite_of_a_dictation_typed_without_one_gets_no_full_stop(monkeypatch):
-    """Type at pause's "make that formal" rewrites the last phrase, typed
-    with Never, after the full stop was left off it: the AI puts one back."""
+@pytest.fixture
+def never(monkeypatch):
     from tuxtalk import live_settings as live
-    from tuxtalk import voice_edit
     monkeypatch.setattr(live, "no_final_period", True)
     monkeypatch.setattr(live, "swiss_spelling", False)
     monkeypatch.setattr(live, "numbers_mode", None)
-    assert voice_edit._as_typed("The cabinets are delayed.", "cabinets are late") == \
+
+
+def test_a_tone_rewrite_of_a_dictation_typed_without_one_gets_no_full_stop(never):
+    """Type at pause's "make that formal" rewrites the last phrase, typed
+    with Never, after the full stop was left off it: the AI puts one back."""
+    from tuxtalk import voice_edit
+    assert voice_edit._ending_as_before("The cabinets are delayed.", "cabinets are late") == \
         "The cabinets are delayed"
-    assert voice_edit._as_typed("It is ready.", "It's ready.") == "It is ready."
+    assert voice_edit._ending_as_before("It is ready.", "It\u2019s ready.") == "It is ready."
+    assert voice_edit._ending_as_before("He said \u201cGo.\u201d", "he said \u201cgo.\u201d") == \
+        "He said \u201cGo.\u201d"
+
+
+def test_an_edit_in_code_keeps_the_full_stop_it_leaves(never):
+    """Never is about how a dictation ends, not the user's own text: "remove
+    the quotes" on a quoted sentence keeps its full stop."""
+    from tuxtalk import voice_edit
+    assert voice_edit._rewritten('He said "Go home."', "remove the quotes", False) == \
+        "He said Go home."
 
 
 def test_old_settings_keep_their_meaning_in_the_dropdown():

@@ -24,7 +24,7 @@ from .normalize import (
     safe_to_lowercase_first_word,
     swiss_spelling,
 )
-from .sentence_fit import MARKS, ends_abbreviation
+from .sentence_fit import MARKS, is_abbreviation_stop
 
 logger = setup_logger(__name__)
 
@@ -87,14 +87,21 @@ def _normalized(text: str, auto_period: bool, lang: str, whole: bool) -> str:
     return text_alone
 
 
-# The full stop a dictation ends with: before the auto-space, a closing
-# quote (German closes with “ and ‘) or bracket, and a line break said
-# last; not one of an ellipsis.
-_FINAL_STOP = re.compile(r"(?<![.\s])\.(?=[\"'\u201c\u201d\u2018\u2019)\]}]*(?:\s|"
-                         + re.escape(LINE_BREAK) + r")*\Z)")
+# What can close a sentence after its full stop: quotes (German closes
+# with “ and ‘) and brackets.
+_CLOSING = "\"'\u201c\u201d\u2018\u2019)]}"
+# The full stop a dictation ends with: before the auto-space, what closes
+# it, and a line break said last; not one of an ellipsis.
+_FINAL_STOP = re.compile(rf"(?<![.\s])\.(?=[{re.escape(_CLOSING)}]*"
+                         rf"(?:\s|{re.escape(LINE_BREAK)})*\Z)")
 _LAST_WORD = re.compile(r"[\w.]*\Z")
 # A full stop the engine wrote itself, after a word (not inside "U.S.").
-_ENGINE_STOPS = re.compile(r"(?<=\w)\.(?=[\s\"'\u201d\u2019)\]}]|\Z)")
+_ENGINE_STOPS = re.compile(rf"(?<=\w)\.(?=[\s{re.escape(_CLOSING)}]|\Z)")
+
+
+def ends_with_full_stop(text: str) -> bool:
+    """Whether *text* ends with a full stop, what closes it aside."""
+    return _FINAL_STOP.search(text) is not None
 
 
 def _said_last_stop(heard: str, lang: str) -> bool:
@@ -105,17 +112,17 @@ def _said_last_stop(heard: str, lang: str) -> bool:
     # _normalized, not normalize_text alone: that drops a mark a line starts
     # with, and with it a "period" said on its own.
     text = _normalized(said, False, lang, True).replace(LINE_BREAK, " ")
-    return text.rstrip().rstrip("\"'\u201c\u201d\u2018\u2019)]}").endswith(".")
+    return text.rstrip().rstrip(_CLOSING).endswith(".")
 
 
 def without_final_period(text: str, heard: str, lang: str) -> str:
     """*text*, ready to type, without the full stop it ends with (Period at
-    the end: Never): not an abbreviation's (sentence_fit.ends_abbreviation),
+    the end: Never): not an abbreviation's (sentence_fit.is_abbreviation_stop),
     nor one said (_said_last_stop, *heard* in command language *lang*)."""
     found = _FINAL_STOP.search(text)
     if found is None:
         return text
-    if ends_abbreviation(_LAST_WORD.search(text[:found.start()]).group()) \
+    if is_abbreviation_stop(_LAST_WORD.search(text[:found.start()]).group()) \
             or _said_last_stop(heard, lang):
         return text
     return text[:found.start()] + text[found.end():]

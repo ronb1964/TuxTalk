@@ -20,7 +20,9 @@ before 0.15.0, so older entries use that name.
   unticked), or Never, which leaves off the period a dictation ends with,
   the speech model's own too, for names, short entries and commands. A
   period you say is still typed, and so are question marks, an
-  abbreviation's dot and the periods between sentences. Thanks to Andy (#52).
+  abbreviation's dot and the periods between sentences. A tone rewrite
+  ("make that formal") of a dictation typed so ends without one too.
+  Thanks to Andy (#52).
 
 - Help says how to open a script of your own by voice (opening apps is in
   TuxTalk Labs): give it a menu entry, a small .desktop file naming the
@@ -32,6 +34,10 @@ before 0.15.0, so older entries use that name.
   nothing came. TuxTalk now tells wl-copy it's text, and does the same
   for what you copy from Recent Dictations, Fix a Word and Transcribe a
   File. Thanks to Jacob Thompson (#56).
+
+- One slow answer from wl-copy, asked at the first paste whether it can
+  mark a dictation for clipboard histories to skip, no longer leaves every
+  dictation of the session unmarked: it's asked again at the next paste.
 
 - Left Ctrl no longer stays held after the Voice Commands shortcut
   (Ctrl+Alt+V) or Paste Last Dictation (Ctrl+Alt+P). Still holding Ctrl

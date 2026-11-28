@@ -47,7 +47,7 @@ def taken_by_mark(before: str) -> str:
     starting with a mark said on its own goes in place of: the blanks after
     the last word, with the full stop after it ("Is it ready. " then
     "question mark" is "Is it ready?"), not an ellipsis's nor an
-    abbreviation's (is_abbreviation). Nothing past a line break."""
+    abbreviation's (is_abbreviation_stop). Nothing past a line break."""
     blanks = _BLANKS_AT_END.search(before).group()
     text = before[:len(before) - len(blanks)]
     if not text or text[-1] in _LINE_BREAKS:
@@ -55,7 +55,7 @@ def taken_by_mark(before: str) -> str:
     if not text.endswith(".") or text.endswith(".."):
         return blanks
     word = _WORD_BEFORE_STOP.search(text).group()
-    return blanks if ends_abbreviation(word) else "." + blanks
+    return blanks if is_abbreviation_stop(word) else "." + blanks
 
 
 def fit(text: str, before: str, after: str, lowercase_ok: bool, words=()) -> str:
@@ -110,14 +110,14 @@ def _breaks_inside(text):
     initial) ends none."""
     if _LINE_THEN_MORE.search(text):
         return True
-    return any(mark != "." or not is_abbreviation(word)
+    return any(mark != "." or not is_abbreviation_stop(word)
                for word, mark in _MARK_THEN_MORE.findall(text))
 
 
-def ends_abbreviation(word):
-    """Whether a full stop after *word*, the last one before it, is the
-    abbreviation's (is_abbreviation), not a sentence's: "I" and "a", alone,
-    end sentences ("Neither do I."). False for no word."""
+def is_abbreviation_stop(word):
+    """Whether a full stop after *word* is the abbreviation's
+    (is_abbreviation), not a sentence's: "I" and "a" alone end sentences
+    ("Neither do I."). False for no word, as after a closing quote."""
     return bool(word) and word not in ("I", "a", "A") and is_abbreviation(word)
 
 

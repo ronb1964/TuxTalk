@@ -303,14 +303,30 @@ def test_a_rewrite_pasted_over_a_selection_leaves_the_primary_selection_alone(mo
 
 def test_dictations_are_marked_sensitive_when_wl_copy_can(monkeypatch):
     monkeypatch.setattr(cb, "_wl_copy_help", lambda: "  --sensitive  Hint that the content is sensitive.")
-    cb._sensitive_supported.cache_clear()
+    cb._wl_copy_marks.cache_clear()
     assert cb.wl_copy_command() == ["wl-copy", "--sensitive", "--type", cb.TEXT_TYPES[0]]
 
 
 def test_an_older_wl_copy_still_pastes_without_the_hint(monkeypatch):
     monkeypatch.setattr(cb, "_wl_copy_help", lambda: "  -t, --type mime/type  Override the MIME type")
-    cb._sensitive_supported.cache_clear()
+    cb._wl_copy_marks.cache_clear()
     assert cb.wl_copy_command() == ["wl-copy", "--type", cb.TEXT_TYPES[0]]
+
+
+def test_a_wl_copy_that_timed_out_is_asked_again(monkeypatch):
+    """Kept as "can't mark", one slow answer at the first paste left every
+    dictation of the session unmarked for clipboard histories."""
+    answers = [subprocess.TimeoutExpired("wl-copy", 3), "  --sensitive  Hint ..."]
+
+    def help_text():
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+    monkeypatch.setattr(cb, "_wl_copy_help", help_text)
+    cb._wl_copy_marks.cache_clear()
+    assert cb._sensitive_supported() is False
+    assert cb._sensitive_supported() is True
 
 
 @pytest.mark.parametrize("copy", [keyboard_output._wl_copy_dictation, cb._wl_copy_primary,

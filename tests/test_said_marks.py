@@ -48,7 +48,7 @@ def test_a_comma_said_last_after_words_is_still_a_full_stop(monkeypatch):
     ("Is it ready. ", ". "), ("Is it ready ", " "), ("Is it ready", ""),
     ("Is it ready? ", " "), ("I'll be there at 5. ", ". "), ("In the U.S. ", " "),
     ("and so on etc. ", " "), ("Ask Dr. ", " "), ("John F. ", " "), ("Wait... ", " "),
-    ("Neither do I. ", ". "),
+    ("Neither do I. ", ". "), ('He said "Go". ', ". "),
     ("Hello.\n", ""), ("Hello.\n  ", ""), ("", ""),
 ])
 def test_what_a_said_mark_goes_in_place_of(before, taken):
